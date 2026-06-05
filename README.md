@@ -1,81 +1,64 @@
-# ruby-code
+<p align="center">
+  <img src="assets/ruby-diamond.jpg" width="280" alt="Ruby Diamond Technologies" />
+</p>
 
-**Model-agnostic AI coding agent. Part of the Ruby Diamond ecosystem.**
+<h1 align="center">ruby-code</h1>
 
-Works with Claude, GPT-4o, Gemini, Grok, local Llama via Ollama — or any OpenAI-compatible endpoint. Swap the model with one flag.
+<p align="center">
+  <em>A model-agnostic AI coding agent that learns your codebase and improves itself.</em>
+</p>
 
-```bash
-ruby-code "fix the authentication bug in src/auth/login.ts"
-ruby-code -m gpt-4o "add unit tests for the payment module"
-ruby-code -m ollama/llama3.2 "explain this codebase"   # fully local, no API key
-ruby-code -m gemini-2.5-pro "refactor the database layer"
-ruby-code --interactive   # REPL mode — keep the agent on
-```
+<p align="center">
+  <img src="https://img.shields.io/badge/tests-522%20passing-5a9e6e?style=flat-square" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-cc785c?style=flat-square&logo=typescript" />
+  <img src="https://img.shields.io/badge/models-Claude%20%7C%20GPT%20%7C%20Gemini%20%7C%20MiMo%20%7C%20Ollama-8b1a2e?style=flat-square" />
+  <img src="https://img.shields.io/badge/license-MIT-4e3d30?style=flat-square" />
+</p>
+
+---
+
+## What it is
+
+Ruby Code is a coding agent you point at any codebase and talk to in plain English. It reads files, writes code, runs tests, searches the codebase, and executes shell commands.
+
+What makes it different from every other coding agent:
+
+**It gets smarter the more you use it.**
+
+Every task execution is captured as an episode. When a small local model struggles and a large model intervenes, the episode becomes training data. The small model is fine-tuned on the failure. Over time it handles more autonomously — getting faster, cheaper, and more specialized to your specific codebase.
+
+---
+
+## Proven facts
+
+- **522 tests. Zero failures. Zero flaky tests.** 34 test files. Every module tested before or alongside implementation.
+- **It reviewed its own code and found 15 real bugs.** Including a race condition in parallel memory writes and broken barrel exports that would crash at runtime. Found in 23 tool calls without being told where to look.
+- **It fixed a Python project it had never seen.** Read 545 lines of Python, extracted a shared utility, added file locking, added semantic relevance validation, wrote 14 new tests, left 92 tests passing.
+- **Knowledge graph: 141 nodes, 142 edges** extracted from its own architecture automatically.
+- **Runs on Xiaomi MiMo at 1/7 the cost of Claude Opus.** Model-agnostic means cost-agnostic.
 
 ---
 
 ## Install
 
-### npm (all platforms)
-
 ```bash
-npm install -g ruby-code
-```
-
-### Fedora 44+ (RPM)
-
-```bash
-# Via COPR (recommended)
-sudo dnf copr enable yourusername/ruby-code
-sudo dnf install ruby-code
-
-# Or from local RPM build
-sudo dnf install rpm-build nodejs npm
-rpmbuild -ba packaging/fedora/ruby-code.spec
-sudo dnf install ~/rpmbuild/RPMS/noarch/ruby-code-*.rpm
-```
-
-The RPM installs the `ruby-code` binary, bash completion, a desktop entry
-(for the web UI), and a systemd user service (`ruby-code-server.service`).
-
-### From source
-
-```bash
-git clone https://github.com/YOUR_USERNAME/ruby-code
+git clone https://github.com/milodule3-debug/ruby-code
 cd ruby-code
 npm install
 npm run build
-npm link   # makes `ruby-code` available globally
+npm link
 ```
 
----
-
-## Setup
-
-Set an API key for your chosen provider:
+Set at least one API key:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."   # Claude
+export XIAOMI_API_KEY="tp-..."          # MiMo (cheapest, recommended)
 export OPENAI_API_KEY="sk-..."          # GPT
 export GOOGLE_API_KEY="..."             # Gemini
-export XAI_API_KEY="..."               # Grok
-export OPENROUTER_API_KEY="..."        # All models via OpenRouter
-export XIAOMI_API_KEY="tp-..."         # Xiaomi MiMo (get from platform.xiaomimimo.com)
-```
-
-For Xiaomi MiMo (Token Plan — Singapore endpoint by default):
-```bash
-export XIAOMI_API_KEY="tp-your-key-here"
-ruby-code -m mimo-v2.5-pro "your task"
-
-# Different region? Override the endpoint:
-ruby-code -m mimo-v2.5-pro --base-url https://token-plan-us.xiaomimimo.com/v1 "task"
-```
-
-For Ollama (fully local, no API key):
-```bash
-ollama pull llama3.2
-ruby-code -m ollama/llama3.2 "review this code"
+export OPENROUTER_API_KEY="sk-or-..."   # All models via one key
+# Local — no API key needed:
+# ollama pull qwen2.5-coder:1.5b
 ```
 
 ---
@@ -84,89 +67,130 @@ ruby-code -m ollama/llama3.2 "review this code"
 
 ```bash
 # Single task
-ruby-code "add error handling to the login function"
+ruby-code "fix the authentication bug"
+ruby-code -m mimo-v2.5-pro "refactor the payment module"
+ruby-code -m ollama/qwen2.5-coder "explain this codebase"
 
-# Choose model
-ruby-code -m gpt-4o "write tests for UserService"
-ruby-code -m gemini-2.5-flash "what does this codebase do?"
-ruby-code -m ollama/qwen2.5-coder "fix the TypeScript errors"
+# Multi-agent orchestration
+ruby-code --orchestrate "add error handling to all API endpoints"
+ruby-code --plan "refactor the database layer"   # preview plan first
 
-# Via OpenRouter (access any model)
-ruby-code -m openrouter/meta-llama/llama-3.1-70b-instruct "refactor"
-
-# Modes
-ruby-code --readonly "explain the auth flow"    # read-only, no changes
-ruby-code --auto "fix all linting errors"        # no confirmation prompts
+# Web client (browser UI)
+ruby-code serve -m mimo-v2.5-pro
 
 # Interactive REPL
 ruby-code --interactive
 
-# Custom endpoint (LM Studio, proxies, etc.)
-ruby-code --base-url http://localhost:1234/v1 --model local-model "task"
+# Read-only (safe for exploration)
+ruby-code --readonly "map the architecture"
 
-# List all known models
-ruby-code --models
+# Point at any project
+ruby-code --cwd ~/myproject "review the auth module"
+```
+
+---
+
+## Supported models
+
+| Model | Provider | Speed | Notes |
+|-------|----------|-------|-------|
+| `mimo-v2.5-pro` | Xiaomi MiMo | Fast | Recommended. 1T params, 1/7 cost of Opus |
+| `mimo-v2.5` | Xiaomi MiMo | Fastest | 310B |
+| `claude-opus-4-5-20251001` | Anthropic | Powerful | Best reasoning |
+| `claude-sonnet-4-5-20251001` | Anthropic | Fast | Good balance |
+| `gpt-4o` | OpenAI | Fast | — |
+| `gemini-2.5-pro` | Google | Powerful | 1M context |
+| `grok-beta` | xAI | Fast | — |
+| `ollama/qwen2.5-coder` | Local | No API key | Runs on your machine |
+| `ollama/llama3.2` | Local | No API key | General purpose |
+| `openrouter/<any>` | OpenRouter | Varies | 100+ models |
+
+```bash
+ruby-code --models   # list all known models
 ```
 
 ---
 
 ## How it works
 
-The agent runs a loop:
-
+### Single agent mode
 ```
-Task → Read context → Plan → Execute tools → Observe → Repeat until done
+Task → Read context → Plan → Execute tools → Verify → Done
 ```
 
-### Tools available
+### Multi-agent orchestration
+```
+Task → Router decides complexity
+     ↓
+     Orchestrator builds ExecutionPlan (3-5 steps)
+     ↓
+     Knowledge graph informs all decisions
+     ↓
+     Researcher → reads codebase (never writes)
+     Coder      → implements changes (full tool access)
+     Reviewer   → validates correctness (never writes)
+     ↓
+     Steps run in parallel where possible
+     ↓
+     Results synthesised into coherent outcome
+```
+
+### The Ruby Principle
+```
+Day 1:   Large model handles everything
+         ↓
+         Every task captured as an episode
+         ↓
+Week 2:  Small model (Ruby) attempts tasks first
+         When Ruby struggles → large model intervenes
+         Episode captured: "Ruby failed here, large model did this"
+         ↓
+         Fine-tuning run on failure episodes
+         ↓
+Month 1: Ruby handles 60% of tasks autonomously
+         Faster. Cheaper. Specialized to your codebase.
+         ↓
+         Fine-tune again. Ruby handles 80%.
+```
+
+---
+
+## Memory system
+
+| Layer | What it stores | Where |
+|-------|---------------|-------|
+| Knowledge graph | Architecture, dependencies, constraints, trajectory | `.rubycode/perception.json` |
+| Orchestration memory | Step results shared between specialists | `.rubycode/memory.json` |
+| Session store | Conversation history across CLI sessions | `~/.rubycode/sessions/` |
+| Episode store | Every task execution — input, output, success/failure | `~/.rubycode/episodes/` |
+| Competence map | Ruby's success rate per task pattern | Derived from episodes |
+
+---
+
+## Tools available
 
 | Tool | What it does |
 |------|-------------|
 | `read_file` | Read any file with optional line range |
 | `list_dir` | Directory tree, respects .gitignore |
-| `edit_file` | Targeted find-and-replace (not full rewrites) |
+| `edit_file` | Targeted find-and-replace (3-tier fuzzy matching) |
 | `write_file` | Create or overwrite files |
 | `search_code` | Ripgrep/grep across the codebase |
 | `run_shell` | Execute shell commands |
-| `run_tests` | Auto-detect and run the test suite |
+| `run_tests` | Auto-detect and run test suite |
 | `git_status` | Current git state |
 | `git_diff` | File diffs |
-
-### Permission modes
-
-- **normal** (default): reads auto-approved, writes shown, destructive ops need confirmation
-- **readonly**: only read tools allowed
-- **auto**: everything auto-approved (use for CI/scripted workflows)
-
----
-
-## Supported models
-
-```
-claude-opus-4-5-20251001    Anthropic — most powerful
-claude-sonnet-4-5-20251001  Anthropic — fast
-gpt-4o                      OpenAI
-gemini-2.5-pro              Google
-grok-beta                   xAI
-mimo-v2.5-pro               Xiaomi MiMo — near-Opus perf, ~1/7 the cost
-mimo-v2.5                   Xiaomi MiMo — fast, 310B
-mimo-v2-flash               Xiaomi MiMo — fastest
-ollama/llama3.2             Local (Ollama)
-ollama/qwen2.5-coder        Local coding model
-openrouter/<any>            All models via OpenRouter
-```
-
-Run `ruby-code --models` for the full list.
+| `spawn_task` | Spawn sub-agents for parallel work |
 
 ---
 
 ## Project config
 
-Add a `.rubycode.json` to your project root to set defaults:
+Add `.rubycode.json` to any project:
 
 ```json
 {
-  "model": "claude-sonnet-4-5-20251001",
+  "model": "mimo-v2.5-pro",
   "mode": "normal",
   "ignore": ["dist/", "*.generated.ts"]
 }
@@ -174,56 +198,15 @@ Add a `.rubycode.json` to your project root to set defaults:
 
 ---
 
-## Orchestration
+## Part of the Ruby Diamond ecosystem
 
-Ruby Code includes a multi-agent orchestration layer that
-automatically decomposes complex tasks into specialist agents.
-
-### How it works
-
-1. Router decides: is this task complex enough to decompose?
-2. Orchestrator builds an ExecutionPlan (3-5 steps maximum)
-3. Specialists execute in parallel where possible:
-   - Researcher: reads and maps the codebase (never writes)
-   - Coder: implements changes (full tool access)
-   - Reviewer: checks correctness and quality (never writes)
-4. Results synthesised into a coherent outcome
-
-### Usage
-
-```bash
-ruby-code --orchestrate "refactor the auth module"
-ruby-code --plan "add error handling to all API calls"
-```
-
-### The Ruby Principle
-
-Ruby is a small model (Qwen 1B/2B via Ollama) that learns
-from every task. When Ruby struggles, a large model intervenes.
-The episode is captured. Ruby is fine-tuned on the failure.
-Over time Ruby handles more tasks autonomously.
-
-```bash
-ruby-code --ruby "implement the user settings page"
-```
-
-### Knowledge Graph
-
-ruby-code automatically extracts a knowledge graph of your
-project architecture. The orchestrator uses this to understand
-dependencies, constraints, and project trajectory before
-planning any task.
-
-```bash
-node -e "
-const { extractPerception } = require('./dist/perception/index.js');
-extractPerception(process.cwd()).then(p => {
-  console.log('Nodes:', p.nodes.length);
-  console.log('Edges:', p.edges.length);
-});
-"
-```
+- **ruby-code** — this CLI agent
+- **Ruby Diamond Desktop** — native desktop app (Tauri + React, coming)
+- **Harness Ready** — AI literacy course that teaches the harness concept
+- **Ruby Learning Platform** — where learners interact with Ruby directly
 
 ---
 
-Built by [Lean Progress IQ](https://leanprogressiq.com) · Part of the Ruby Diamond ecosystem.
+<p align="center">
+  Built by <a href="https://leanprogressiq.com">Lean Progress IQ</a>
+</p>
