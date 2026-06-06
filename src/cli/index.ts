@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
+import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
@@ -606,6 +607,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :context                Show loaded project context',
       '  :graph                  Show codebase knowledge graph summary',
       '  :graph refresh          Reload graph from graphify-out/graph.json',
+      '  :plans                  List saved execution plans',
+      '  :viz, :dashboard        Generate and open the memory dashboard',
       '  /stats, /usage          Show token + cost usage this session',
       '  /clear, /reset          Reset cumulative usage stats',
       '',
@@ -732,6 +735,42 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
       console.log(chalk.hex('#8a7768')(summary));
+      console.log();
+    }
+    return { handled: true };
+  }
+
+  if (input === ':viz' || input === ':dashboard') {
+    console.log(chalk.hex('#8a7768')('\n  Generating dashboard…\n'));
+    try {
+      const outPath = generateDashboard(c.ctx.root);
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Dashboard written to ${outPath}`));
+      console.log(chalk.hex('#8a7768')('  Opening in browser…\n'));
+      openDashboard(outPath);
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+
+  if (input === ':plans') {
+    const { planStore } = await import('../orchestration/plan-store.js');
+    const plans = await planStore.list();
+    if (!plans.length) {
+      console.log(chalk.hex('#8a7768')('\n  No execution plans found.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Execution plans:\n'));
+      for (const p of plans.slice(0, 15)) {
+        const created = new Date(p.created).toLocaleString();
+        const dur = p.completed ? `${Math.round((p.completed - p.created) / 1000)}s` : '—';
+        const statusColor = p.status === 'done' ? '#5a9e6e' : p.status === 'failed' ? '#b15439' : '#cc9e5c';
+        console.log(
+          `  ${chalk.hex(statusColor)(p.status.padEnd(8))} ` +
+          `${chalk.hex('#cc785c')(p.id.slice(0, 12).padEnd(14))} ` +
+          `${chalk.hex('#ede0cc')(p.goal.slice(0, 50).padEnd(51))} ` +
+          `${chalk.hex('#4e3d30')(`${p.steps.length}s · ${dur} · ${created}`)}`,
+        );
+      }
       console.log();
     }
     return { handled: true };
