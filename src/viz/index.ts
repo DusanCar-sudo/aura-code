@@ -75,106 +75,128 @@ function buildHtml(data: {
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   :root {
-    --bg:      #110d06;
-    --surface: #1e1509;
-    --card:    #261b0d;
-    --border:  #3a2a18;
-    --primary: #cc785c;
-    --secondary:#8a7768;
-    --text:    #ede0cc;
-    --muted:   #6b5645;
-    --success: #5a9e6e;
-    --error:   #b15439;
-    --amber:   #cc9e5c;
-    --blue:    #7a9ecc;
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --canvas:  #1c2128;
+    --card:    #21262d;
+    --border:  #30363d;
+    --border2: #484f58;
+    --primary: #f0883e;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --dim:     #6e7681;
+    --success: #3fb950;
+    --error:   #f85149;
+    --amber:   #d29922;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; min-height: 100vh; }
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
-  header h1 { color: var(--primary); font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+  body { background: var(--bg); color: var(--text); font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { color: var(--primary); font-size: 14px; font-weight: 700; letter-spacing: 0.03em; }
   header .meta { color: var(--muted); font-size: 11px; }
-  nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 0; }
-  nav button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--secondary); cursor: pointer; font: inherit; font-size: 12px; padding: 10px 20px; transition: all .15s; }
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; }
+  nav button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; padding: 9px 18px; transition: color .12s; }
   nav button:hover { color: var(--text); }
   nav button.active { border-bottom-color: var(--primary); color: var(--primary); }
-  .panel { display: none; padding: 20px; height: calc(100vh - 88px); overflow: auto; }
-  .panel.active { display: flex; flex-direction: column; gap: 16px; }
+  .panel { display: none; padding: 20px; height: calc(100vh - 82px); overflow: auto; }
+  .panel.active { display: flex; flex-direction: column; gap: 14px; }
 
   /* Overview */
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; }
-  .stat-card .num { color: var(--primary); font-size: 28px; font-weight: 700; }
-  .stat-card .label { color: var(--muted); font-size: 11px; margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+  .stat-card .num { color: var(--primary); font-size: 30px; font-weight: 700; line-height: 1; }
+  .stat-card .lbl { color: var(--muted); font-size: 10px; margin-top: 5px; text-transform: uppercase; letter-spacing: .08em; }
 
-  /* Graph */
-  #graph-svg { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; flex: 1; min-height: 0; }
+  /* Graph panel */
+  #graph-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; cursor: grab; }
+  #graph-svg:active { cursor: grabbing; }
   .graph-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .graph-controls input { background: var(--card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font: inherit; font-size: 12px; padding: 6px 10px; width: 200px; }
-  .graph-controls input:focus { border-color: var(--primary); outline: none; }
-  .type-filter { display: flex; gap: 6px; flex-wrap: wrap; }
-  .type-pill { background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--secondary); cursor: pointer; font-size: 11px; padding: 3px 10px; user-select: none; }
-  .type-pill.on { border-color: currentColor; }
-  .tooltip { position: fixed; background: #1a1209ee; border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-size: 11px; max-width: 280px; padding: 8px 12px; pointer-events: none; z-index: 999; }
-  .tooltip strong { color: var(--primary); }
+  .graph-controls input {
+    background: var(--card); border: 1px solid var(--border2); border-radius: 6px;
+    color: var(--text); font: inherit; font-size: 12px; padding: 6px 12px; width: 220px; outline: none;
+  }
+  .graph-controls input:focus { border-color: var(--primary); }
+  .legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; padding: 3px 9px; border-radius: 12px; border: 1.5px solid transparent; font-size: 11px; color: var(--muted); transition: all .12s; }
+  .legend-item.on { border-color: currentColor; color: var(--text); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .hint { color: var(--dim); font-size: 10px; }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed; background: #161b22f0; border: 1px solid var(--border2);
+    border-radius: 7px; color: var(--text); font-size: 11px; max-width: 300px;
+    padding: 9px 13px; pointer-events: none; z-index: 999; line-height: 1.6;
+    box-shadow: 0 4px 20px #0008;
+  }
+  .tooltip strong { color: var(--primary); font-size: 12px; }
+  .tooltip .t-type { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+  .tooltip .t-file { color: var(--blue); font-size: 10px; }
 
   /* Sessions */
   .session-list { display: flex; flex-direction: column; gap: 8px; }
-  .session-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; padding: 12px 16px; transition: border-color .15s; }
-  .session-card:hover { border-color: var(--primary); }
-  .session-card .s-header { display: flex; justify-content: space-between; align-items: baseline; }
-  .session-card .s-title { color: var(--primary); font-size: 13px; }
-  .session-card .s-meta { color: var(--muted); font-size: 11px; }
+  .session-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 12px 16px; transition: border-color .12s; }
+  .session-card:hover { border-color: var(--border2); }
+  .session-card.expanded { border-color: var(--primary); }
+  .s-header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .s-title { color: var(--text); font-size: 13px; font-weight: 600; }
+  .s-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .s-id { color: var(--dim); font-size: 10px; margin-top: 3px; }
   .session-messages { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; display: none; }
   .session-card.expanded .session-messages { display: block; }
-  .msg { display: flex; gap: 8px; margin-bottom: 8px; }
-  .msg-role { color: var(--muted); font-size: 10px; min-width: 60px; padding-top: 1px; text-align: right; text-transform: uppercase; }
+  .msg { display: flex; gap: 10px; margin-bottom: 8px; }
+  .msg-role { font-size: 10px; min-width: 64px; padding-top: 1px; text-align: right; text-transform: uppercase; font-weight: 700; letter-spacing: .04em; flex-shrink: 0; }
   .msg-role.user { color: var(--amber); }
   .msg-role.assistant { color: var(--blue); }
-  .msg-content { color: var(--secondary); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: auto; }
+  .msg-role.tool_result { color: var(--success); }
+  .msg-content { color: var(--muted); font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 100px; overflow: auto; }
 
   /* Plans */
-  .plans-layout { display: flex; gap: 16px; flex: 1; min-height: 0; }
-  .plan-list-panel { display: flex; flex-direction: column; gap: 8px; min-width: 280px; overflow-y: auto; }
-  .plan-detail { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  .plan-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; padding: 10px 14px; transition: border-color .15s; }
-  .plan-card:hover { border-color: var(--primary); }
-  .plan-card.selected { border-color: var(--primary); }
-  .plan-card .p-goal { color: var(--text); font-size: 12px; }
-  .plan-card .p-meta { color: var(--muted); font-size: 10px; margin-top: 4px; }
-  .status-badge { border-radius: 10px; font-size: 10px; padding: 2px 7px; display: inline-block; }
-  .status-done    { background: #1a3d28; color: var(--success); }
-  .status-failed  { background: #3d1a10; color: var(--error); }
-  .status-running { background: #2a2010; color: var(--amber); }
-  .status-pending { background: #1a1a2a; color: var(--blue); }
-  .status-aborted { background: #2a1a2a; color: var(--secondary); }
-  #dag-svg { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; flex: 1; min-height: 0; }
-  .step-result { background: var(--card); border: 1px solid var(--border); border-radius: 6px; font-size: 11px; line-height: 1.5; max-height: 200px; overflow-y: auto; padding: 12px; white-space: pre-wrap; word-break: break-word; }
+  .plans-layout { display: flex; gap: 14px; flex: 1; min-height: 0; }
+  .plan-list-panel { display: flex; flex-direction: column; gap: 7px; width: 290px; flex-shrink: 0; overflow-y: auto; }
+  .plan-detail { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; min-width: 0; }
+  .plan-card { background: var(--card); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; padding: 10px 13px; transition: border-color .12s; }
+  .plan-card:hover { border-color: var(--border2); }
+  .plan-card.selected { border-color: var(--primary); background: #21262dcc; }
+  .p-goal { color: var(--text); font-size: 12px; line-height: 1.4; }
+  .p-meta { color: var(--muted); font-size: 10px; margin-top: 5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .status-badge { border-radius: 10px; font-size: 10px; font-weight: 700; padding: 2px 8px; display: inline-block; letter-spacing: .03em; }
+  .status-done    { background: #1f3a2a; color: #3fb950; border: 1px solid #3fb95050; }
+  .status-failed  { background: #3a1f1f; color: #f85149; border: 1px solid #f8514950; }
+  .status-running { background: #332a1a; color: #d29922; border: 1px solid #d2992250; }
+  .status-pending { background: #1a2233; color: #58a6ff; border: 1px solid #58a6ff50; }
+  .status-aborted { background: #252530; color: #8b949e; border: 1px solid #8b949e50; }
+  #dag-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 300px; cursor: grab; }
+  #dag-svg:active { cursor: grabbing; }
+  .step-result { background: var(--canvas); border: 1px solid var(--border); border-radius: 7px; color: var(--muted); font-size: 11px; line-height: 1.55; max-height: 180px; overflow-y: auto; padding: 12px 14px; white-space: pre-wrap; word-break: break-word; }
 
-  /* Memory */
+  /* Memory table */
   .memory-table { border-collapse: collapse; width: 100%; }
-  .memory-table th { background: var(--card); border-bottom: 2px solid var(--border); color: var(--muted); font-size: 10px; letter-spacing: .06em; padding: 8px 12px; text-align: left; text-transform: uppercase; }
-  .memory-table td { border-bottom: 1px solid var(--border); color: var(--secondary); font-size: 11px; padding: 7px 12px; vertical-align: top; }
-  .memory-table td:first-child { color: var(--primary); white-space: nowrap; }
+  .memory-table th { background: var(--card); border-bottom: 2px solid var(--border); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 9px 13px; text-align: left; text-transform: uppercase; }
+  .memory-table td { border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; padding: 8px 13px; vertical-align: top; }
+  .memory-table td:first-child { color: var(--primary); white-space: nowrap; font-weight: 600; }
   .memory-table tr:hover td { background: var(--card); }
-  .memory-val { max-width: 600px; white-space: pre-wrap; word-break: break-word; }
+  .memory-val { max-width: 560px; white-space: pre-wrap; word-break: break-word; color: var(--text); }
 
-  .empty { color: var(--muted); font-size: 12px; padding: 20px; text-align: center; }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--surface); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .empty { color: var(--dim); font-size: 12px; padding: 32px; text-align: center; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>⬡ ruby-code memory dashboard</h1>
-  <span class="meta">project: <strong style="color:var(--primary)">${data.projectName}</strong> &nbsp;·&nbsp; generated ${data.generatedAt}</span>
+  <h1>◈ ruby-code / memory dashboard</h1>
+  <span class="meta">project: <strong style="color:var(--primary)">${data.projectName}</strong> &nbsp;·&nbsp; ${data.generatedAt}</span>
 </header>
 <nav>
-  <button class="active" onclick="showPanel('overview')">Overview</button>
-  <button onclick="showPanel('graph')">Codebase Graph</button>
-  <button onclick="showPanel('sessions')">Sessions</button>
-  <button onclick="showPanel('plans')">Execution Plans</button>
-  <button onclick="showPanel('memory')">Agent Memory</button>
+  <button class="active" onclick="showPanel('overview',this)">Overview</button>
+  <button onclick="showPanel('graph',this)">Codebase Graph</button>
+  <button onclick="showPanel('sessions',this)">Sessions</button>
+  <button onclick="showPanel('plans',this)">Execution Plans</button>
+  <button onclick="showPanel('memory',this)">Agent Memory</button>
 </nav>
 
 <div id="overview" class="panel active"></div>
@@ -188,51 +210,49 @@ function buildHtml(data: {
 <script>
 const DATA = ${json};
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
-function showPanel(id) {
+function showPanel(id, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  document.querySelectorAll('nav button').forEach(b => {
-    if (b.textContent.toLowerCase().replace(/\\s+/g,'').includes(id.slice(0,4))) b.classList.add('active');
-  });
-  if (id === 'graph' && !graphInit) initGraph();
-  if (id === 'plans' && !plansInit) initPlans();
+  if (btn) btn.classList.add('active');
+  if (id === 'graph'   && !graphInit) initGraph();
+  if (id === 'plans'   && !plansInit) initPlans();
 }
 
-// ── Overview ──────────────────────────────────────────────────────────────────
+// ── Overview ─────────────────────────────────────────────────────────────────
 (function() {
   const g = DATA.graph;
-  const nodeCount = g ? g.nodes.length : 0;
-  const edgeCount = g ? g.edges.length : 0;
-  const sessionCount = DATA.sessions.length;
-  const planCount = DATA.plans.length;
-  const memCount = DATA.memory.length;
-  const donePlans = DATA.plans.filter(p => p.status === 'done').length;
-  const lastActive = DATA.sessions.length
-    ? new Date(DATA.sessions[0].updatedAt).toLocaleString()
-    : (DATA.plans.length ? new Date(DATA.plans[0].created).toLocaleString() : '—');
+  const nc = g ? g.nodes.length : 0, ec = g ? g.edges.length : 0;
+  const sc = DATA.sessions.length, pc = DATA.plans.length;
+  const mc = DATA.memory.length, dc = DATA.plans.filter(p=>p.status==='done').length;
+  const last = sc ? new Date(DATA.sessions[0].updatedAt).toLocaleString()
+             : pc ? new Date(DATA.plans[0].created).toLocaleString() : '—';
 
-  const types = g ? g.nodes.reduce((a,n) => { a[n.type||'node'] = (a[n.type||'node']||0)+1; return a; }, {}) : {};
-  const topTypes = Object.entries(types).sort((a,b) => b[1]-a[1]).slice(0,6)
-    .map(([t,c]) => \`<span style="color:var(--primary)">\${c}</span> <span style="color:var(--muted)">\${t}s</span>\`).join(' · ');
+  const NODE_C = {file:'#58a6ff',function:'#ff7b72',class:'#d2a8ff',interface:'#3fb950',const:'#ffa657',type:'#79c0ff',enum:'#f85149'};
+  const types = g ? g.nodes.reduce((a,n)=>{const t=n.type||'node';a[t]=(a[t]||0)+1;return a;},{}) : {};
+  const breakdown = Object.entries(types).sort((a,b)=>b[1]-a[1]).slice(0,8)
+    .map(([t,c])=>\`<span style="display:inline-flex;align-items:center;gap:5px;margin:3px 6px 3px 0">
+      <span style="width:9px;height:9px;border-radius:50%;background:\${NODE_C[t]||'#8b949e'};flex-shrink:0"></span>
+      <strong style="color:var(--text)">\${c}</strong>
+      <span style="color:var(--muted)">\${t}s</span>
+    </span>\`).join('');
 
   document.getElementById('overview').innerHTML = \`
     <div class="stats-grid">
-      <div class="stat-card"><div class="num">\${nodeCount}</div><div class="label">Graph Nodes</div></div>
-      <div class="stat-card"><div class="num">\${edgeCount}</div><div class="label">Graph Edges</div></div>
-      <div class="stat-card"><div class="num">\${sessionCount}</div><div class="label">Chat Sessions</div></div>
-      <div class="stat-card"><div class="num">\${planCount}</div><div class="label">Execution Plans</div></div>
-      <div class="stat-card"><div class="num">\${donePlans}</div><div class="label">Plans Completed</div></div>
-      <div class="stat-card"><div class="num">\${memCount}</div><div class="label">Memory Entries</div></div>
+      <div class="stat-card"><div class="num">\${nc}</div><div class="lbl">Graph Nodes</div></div>
+      <div class="stat-card"><div class="num">\${ec}</div><div class="lbl">Graph Edges</div></div>
+      <div class="stat-card"><div class="num">\${sc}</div><div class="lbl">Chat Sessions</div></div>
+      <div class="stat-card"><div class="num">\${pc}</div><div class="lbl">Exec Plans</div></div>
+      <div class="stat-card"><div class="num">\${dc}</div><div class="lbl">Plans Done</div></div>
+      <div class="stat-card"><div class="num">\${mc}</div><div class="lbl">Memory Entries</div></div>
     </div>
-    <div class="stat-card" style="max-width:600px">
-      <div class="label" style="margin-bottom:8px">Codebase Breakdown</div>
-      <div>\${topTypes || '<span style="color:var(--muted)">no graph data</span>'}</div>
+    <div class="stat-card" style="max-width:640px">
+      <div class="lbl" style="margin-bottom:10px">Codebase Breakdown</div>
+      <div style="display:flex;flex-wrap:wrap">\${breakdown||'<span style="color:var(--dim)">no graph data</span>'}</div>
     </div>
-    <div class="stat-card" style="max-width:400px">
-      <div class="label" style="margin-bottom:4px">Last Activity</div>
-      <div style="color:var(--primary)">\${lastActive}</div>
+    <div class="stat-card" style="max-width:360px">
+      <div class="lbl" style="margin-bottom:5px">Last Activity</div>
+      <div style="color:var(--blue);font-size:12px">\${last}</div>
     </div>
   \`;
 })();
@@ -243,111 +263,139 @@ function initGraph() {
   graphInit = true;
   const panel = document.getElementById('graph');
   if (!DATA.graph || !DATA.graph.nodes.length) {
-    panel.innerHTML = '<div class="empty">No graph.json found. Run :graph refresh in the REPL.</div>';
+    panel.innerHTML = '<div class="empty">No graph.json found — run :graph refresh in the REPL first.</div>';
     return;
   }
 
   const NODE_COLORS = {
-    file: '#4e3d30', function: '#cc785c', class: '#7a9ecc',
-    interface: '#5a9e6e', const: '#cc9e5c', type: '#8a7768', enum: '#b15439',
+    file:      '#58a6ff',
+    function:  '#ff7b72',
+    class:     '#d2a8ff',
+    interface: '#3fb950',
+    const:     '#ffa657',
+    type:      '#79c0ff',
+    enum:      '#f85149',
+    node:      '#8b949e',
   };
+  const NODE_R = { file: 13, class: 11, interface: 10, function: 8, const: 7, type: 7, enum: 8, node: 7 };
 
   const allTypes = [...new Set(DATA.graph.nodes.map(n => n.type || 'node'))];
   const activeTypes = new Set(allTypes);
 
   panel.innerHTML = \`
     <div class="graph-controls">
-      <input id="graph-search" placeholder="Search nodes…" oninput="filterGraph()">
-      <div class="type-filter" id="type-filter"></div>
+      <input id="graph-search" placeholder="🔍  Search nodes, files…" oninput="filterGraph()">
+      <div class="legend" id="legend"></div>
+      <span class="hint">scroll to zoom · drag to pan · drag nodes</span>
     </div>
     <svg id="graph-svg"></svg>
   \`;
 
-  const filterDiv = document.getElementById('type-filter');
+  const legendEl = document.getElementById('legend');
   allTypes.forEach(t => {
-    const pill = document.createElement('span');
-    pill.className = 'type-pill on';
-    pill.style.color = NODE_COLORS[t] || '#8a7768';
-    pill.textContent = t;
-    pill.onclick = () => {
-      if (activeTypes.has(t)) { activeTypes.delete(t); pill.classList.remove('on'); }
-      else { activeTypes.add(t); pill.classList.add('on'); }
+    const item = document.createElement('span');
+    item.className = 'legend-item on';
+    item.style.color = NODE_COLORS[t] || '#8b949e';
+    item.innerHTML = \`<span class="legend-dot" style="background:\${NODE_COLORS[t]||'#8b949e'}"></span>\${t}\`;
+    item.onclick = () => {
+      if (activeTypes.has(t)) { activeTypes.delete(t); item.classList.remove('on'); }
+      else { activeTypes.add(t); item.classList.add('on'); }
       filterGraph();
     };
-    filterDiv.appendChild(pill);
+    legendEl.appendChild(item);
   });
 
-  const svg = d3.select('#graph-svg');
-  const rect = document.getElementById('graph-svg').getBoundingClientRect();
-  const W = rect.width || 900, H = rect.height || 600;
-  svg.attr('width', W).attr('height', H);
-
+  const svgEl = document.getElementById('graph-svg');
+  const W = svgEl.clientWidth || 900, H = svgEl.clientHeight || 580;
+  const svg = d3.select('#graph-svg').attr('width', W).attr('height', H);
   const g = svg.append('g');
-  svg.call(d3.zoom().scaleExtent([0.1, 4]).on('zoom', e => g.attr('transform', e.transform)));
 
+  svg.call(d3.zoom().scaleExtent([0.05, 6]).on('zoom', e => g.attr('transform', e.transform)));
+
+  // Arrow marker — bright color
   svg.append('defs').append('marker')
-    .attr('id','arrow').attr('viewBox','0 -4 8 8').attr('refX',16).attr('refY',0)
+    .attr('id','arr').attr('viewBox','0 -5 10 10').attr('refX',2).attr('refY',0)
     .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
-    .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','#3a2a18');
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#484f58');
 
-  let nodes = DATA.graph.nodes.map(n => ({...n}));
-  let edges = DATA.graph.edges.map(e => ({...e}));
-  let searchTerm = '';
-
+  const nodes = DATA.graph.nodes.map(n => ({...n}));
+  const edges = DATA.graph.edges.map(e => ({...e}));
   const tooltip = document.getElementById('tooltip');
 
+  // Show labels for important node types always; others on hover
+  const ALWAYS_LABEL = new Set(['file','class','interface']);
+
   function filterGraph() {
-    searchTerm = document.getElementById('graph-search').value.toLowerCase();
-    const visibleIds = new Set(
+    const term = document.getElementById('graph-search').value.toLowerCase();
+    const vis = new Set(
       nodes.filter(n =>
         activeTypes.has(n.type || 'node') &&
-        (!searchTerm || n.label.toLowerCase().includes(searchTerm) || (n.file||'').toLowerCase().includes(searchTerm))
+        (!term || n.label.toLowerCase().includes(term) || (n.file||'').toLowerCase().includes(term))
       ).map(n => n.id)
     );
-    g.selectAll('.node').style('opacity', d => visibleIds.has(d.id) ? 1 : 0.07);
-    g.selectAll('.link').style('opacity', d => visibleIds.has(d.source.id||d.source) && visibleIds.has(d.target.id||d.target) ? 0.4 : 0.03);
+    gNodes.style('opacity', d => vis.has(d.id) ? 1 : 0.06);
+    gLinks.style('opacity', d => {
+      const si = d.source.id || d.source, ti = d.target.id || d.target;
+      return vis.has(si) && vis.has(ti) ? 0.55 : 0.03;
+    });
+    gLabels.style('opacity', d => vis.has(d.id) ? 1 : 0.06);
   }
-
   window.filterGraph = filterGraph;
 
   const sim = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(edges).id(d => d.id).distance(55).strength(0.5))
-    .force('charge', d3.forceManyBody().strength(-120))
-    .force('center', d3.forceCenter(W/2, H/2))
-    .force('collision', d3.forceCollide(14));
+    .force('link',      d3.forceLink(edges).id(d=>d.id).distance(d => {
+      const st = d.source.type || 'node', tt = d.target.type || 'node';
+      if (st==='file'||tt==='file') return 90;
+      return 60;
+    }).strength(0.6))
+    .force('charge',    d3.forceManyBody().strength(d => d.type==='file' ? -300 : -160))
+    .force('center',    d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide(d => (NODE_R[d.type||'node']||7) + 6));
 
-  const link = g.append('g').selectAll('.link').data(edges).enter().append('line')
-    .attr('class','link').attr('stroke','#3a2a18').attr('stroke-width',1).attr('opacity',0.4)
-    .attr('marker-end','url(#arrow)');
+  const gLinks = g.append('g').selectAll('line').data(edges).enter().append('line')
+    .attr('stroke','#484f58').attr('stroke-width', d => {
+      const r = d.relation || '';
+      return r === 'imports' ? 1.5 : 1;
+    })
+    .attr('opacity', 0.55)
+    .attr('marker-end','url(#arr)');
 
-  const node = g.append('g').selectAll('.node').data(nodes).enter().append('circle')
-    .attr('class','node').attr('r', d => d.type === 'file' ? 7 : 5)
-    .attr('fill', d => NODE_COLORS[d.type||'node'] || '#8a7768')
-    .attr('stroke', '#1e1509').attr('stroke-width', 1.5)
+  const gNodes = g.append('g').selectAll('circle').data(nodes).enter().append('circle')
+    .attr('r', d => NODE_R[d.type||'node'] || 7)
+    .attr('fill', d => NODE_COLORS[d.type||'node'] || '#8b949e')
+    .attr('stroke', '#0d1117').attr('stroke-width', 2)
+    .style('cursor','pointer')
     .call(d3.drag()
-      .on('start', (e,d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
       .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
-      .on('end',   (e,d) => { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
+      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
     .on('mouseover', (e,d) => {
-      tooltip.style.display = 'block';
-      tooltip.innerHTML = \`<strong>\${d.label}</strong><br><span style="color:var(--muted)">\${d.type||'node'}</span>\${d.file ? \`<br>\${d.file}\` : ''}\${d.source_location ? \` · \${d.source_location}\` : ''}\`;
+      tooltip.style.display='block';
+      tooltip.innerHTML = \`<strong>\${d.label}</strong><br>
+        <span class="t-type">\${d.type||'node'}</span>
+        \${d.file ? \`<br><span class="t-file">\${d.file}\${d.source_location?' · '+d.source_location:''}</span>\` : ''}\`;
     })
-    .on('mousemove', e => {
-      tooltip.style.left = (e.clientX+14)+'px';
-      tooltip.style.top  = (e.clientY-6)+'px';
-    })
-    .on('mouseout', () => { tooltip.style.display='none'; });
+    .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
+    .on('mouseout',  () => { tooltip.style.display='none'; });
 
-  const label = g.append('g').selectAll('.label').data(nodes.filter(n => n.type === 'file' || n.type === 'class' || n.type === 'interface')).enter()
-    .append('text').attr('class','label').text(d => d.label.length > 18 ? d.label.slice(0,16)+'..' : d.label)
-    .attr('fill','#8a7768').attr('font-size','9px').attr('pointer-events','none')
-    .attr('dx', 8).attr('dy', 3);
+  const gLabels = g.append('g').selectAll('text')
+    .data(nodes.filter(n => ALWAYS_LABEL.has(n.type||'')))
+    .enter().append('text')
+    .text(d => d.label.length > 22 ? d.label.slice(0,20)+'…' : d.label)
+    .attr('fill', d => NODE_COLORS[d.type||'node'] || '#8b949e')
+    .attr('font-size', d => d.type==='file' ? '11px' : '10px')
+    .attr('font-weight', d => d.type==='file' ? '700' : '500')
+    .attr('pointer-events','none')
+    .attr('paint-order','stroke')
+    .attr('stroke','#0d1117').attr('stroke-width','3px')
+    .attr('dx', d => (NODE_R[d.type||'node']||7) + 4)
+    .attr('dy', '0.35em');
 
   sim.on('tick', () => {
-    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-        .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
-    node.attr('cx',d=>d.x).attr('cy',d=>d.y);
-    label.attr('x',d=>d.x).attr('y',d=>d.y);
+    gLinks.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+          .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    gNodes.attr('cx',d=>d.x).attr('cy',d=>d.y);
+    gLabels.attr('x',d=>d.x).attr('y',d=>d.y);
   });
 }
 
@@ -361,151 +409,160 @@ function initGraph() {
   const html = DATA.sessions.map(s => {
     const turns = Math.floor(s.history.length / 2);
     const updated = new Date(s.updatedAt).toLocaleString();
-    const msgs = s.history.slice(0, 20).map(m => {
-      const role = m.role;
-      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      return \`<div class="msg"><span class="msg-role \${role}">\${role}</span><div class="msg-content">\${content.slice(0,400).replace(/</g,'&lt;')}\${content.length>400?'…':''}</div></div>\`;
+    const msgs = s.history.slice(0, 24).map(m => {
+      const role = m.role || 'unknown';
+      const content = typeof m.content === 'string' ? m.content
+        : Array.isArray(m.content) ? m.content.map(c=>c.text||'').join('') : JSON.stringify(m.content);
+      return \`<div class="msg">
+        <span class="msg-role \${role}">\${role === 'tool_result' ? 'tool' : role}</span>
+        <div class="msg-content">\${content.slice(0,500).replace(/</g,'&lt;')}\${content.length>500?'…':''}</div>
+      </div>\`;
     }).join('');
-    return \`<div class="session-card" onclick="toggleSession(this)">
+    return \`<div class="session-card" onclick="this.classList.toggle('expanded')">
       <div class="s-header">
         <span class="s-title">\${s.title.replace(/</g,'&lt;')}</span>
         <span class="s-meta">\${turns} turn\${turns!==1?'s':''} · \${updated}</span>
       </div>
-      <div class="s-meta" style="margin-top:4px;font-size:10px">\${s.id}</div>
+      <div class="s-id">\${s.id}</div>
       <div class="session-messages">\${msgs}</div>
     </div>\`;
   }).join('');
   panel.innerHTML = \`<div class="session-list">\${html}</div>\`;
 })();
 
-window.toggleSession = function(el) { el.classList.toggle('expanded'); };
-
 // ── Execution Plans ───────────────────────────────────────────────────────────
-let plansInit = false;
-let dagSim = null;
+let plansInit = false, dagSim = null;
 function initPlans() {
   plansInit = true;
   const panel = document.getElementById('plans');
   if (!DATA.plans.length) {
-    panel.innerHTML = '<div class="empty">No execution plans found. Run a multi-step task first.</div>';
+    panel.innerHTML = '<div class="empty">No execution plans found. Run a multi-step orchestrated task first.</div>';
     return;
   }
-
   panel.innerHTML = \`
     <div class="plans-layout">
       <div class="plan-list-panel" id="plan-list"></div>
-      <div class="plan-detail" id="plan-detail">
-        <div class="empty">Select a plan to view its DAG.</div>
-      </div>
+      <div class="plan-detail" id="plan-detail"><div class="empty">← Select a plan</div></div>
     </div>
   \`;
-
   const listEl = document.getElementById('plan-list');
   DATA.plans.forEach((plan, i) => {
     const card = document.createElement('div');
     card.className = 'plan-card' + (i===0?' selected':'');
     const created = new Date(plan.created).toLocaleString();
-    const dur = plan.completed ? Math.round((plan.completed - plan.created)/1000) + 's' : '—';
+    const dur = plan.completed ? Math.round((plan.completed-plan.created)/1000)+'s' : '—';
     card.innerHTML = \`
-      <div class="p-goal">\${plan.goal.slice(0,80).replace(/</g,'&lt;')}\${plan.goal.length>80?'…':''}</div>
+      <div class="p-goal">\${plan.goal.slice(0,90).replace(/</g,'&lt;')}\${plan.goal.length>90?'…':''}</div>
       <div class="p-meta">
         <span class="status-badge status-\${plan.status}">\${plan.status}</span>
-        &nbsp;\${plan.steps.length} steps · \${dur} · \${created}
-      </div>
-    \`;
+        <span>\${plan.steps.length} steps</span>
+        <span>\${dur}</span>
+        <span style="color:var(--dim)">\${created}</span>
+      </div>\`;
     card.onclick = () => {
-      document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+      document.querySelectorAll('.plan-card').forEach(c=>c.classList.remove('selected'));
       card.classList.add('selected');
       renderDag(plan);
     };
     listEl.appendChild(card);
   });
-
   if (DATA.plans.length) renderDag(DATA.plans[0]);
 }
 
 function renderDag(plan) {
-  const SPEC_COLORS = { researcher:'#5a9e6e', coder:'#cc785c', reviewer:'#7a9ecc', planner:'#cc9e5c' };
-  const STATUS_OPACITY = { done:1, failed:0.9, skipped:0.35, running:1, waiting:0.5 };
+  const SPEC = { researcher:'#3fb950', coder:'#ff7b72', reviewer:'#58a6ff', planner:'#ffa657' };
+  const SPEC_BG = { researcher:'#1f3a2a', coder:'#3a1f1f', reviewer:'#1a2233', planner:'#332a1a' };
+  const S_ALPHA = { done:1, failed:0.85, skipped:0.3, running:1, waiting:0.55 };
 
   const detail = document.getElementById('plan-detail');
-  const outcome = plan.outcome ? \`<div class="step-result">\${plan.outcome.replace(/</g,'&lt;')}</div>\` : '';
+  const outcome = plan.outcome
+    ? \`<div class="step-result">\${plan.outcome.replace(/</g,'&lt;')}</div>\` : '';
   detail.innerHTML = \`
-    <div style="display:flex;align-items:baseline;gap:12px">
-      <span style="color:var(--primary);font-size:13px">\${plan.goal.replace(/</g,'&lt;')}</span>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="color:var(--text);font-size:13px;font-weight:600">\${plan.goal.replace(/</g,'&lt;')}</span>
       <span class="status-badge status-\${plan.status}">\${plan.status}</span>
     </div>
     \${outcome}
     <svg id="dag-svg"></svg>
   \`;
 
-  const steps = plan.steps;
-  const nodeData = steps.map(s => ({ ...s }));
+  const nodeData = plan.steps.map(s=>({...s}));
   const edgeData = [];
-  steps.forEach(s => {
-    s.dependsOn.forEach(dep => edgeData.push({ source: dep, target: s.id }));
-  });
+  plan.steps.forEach(s => s.dependsOn.forEach(dep => edgeData.push({source:dep,target:s.id})));
 
-  const svg = d3.select('#dag-svg');
-  const rect = document.getElementById('dag-svg').getBoundingClientRect();
-  const W = rect.width || 600, H = Math.max(rect.height || 300, 300);
-  svg.attr('width', W).attr('height', H).selectAll('*').remove();
+  const svgEl = document.getElementById('dag-svg');
+  const W = svgEl.clientWidth || 640, H = Math.max(svgEl.clientHeight||320, 320);
+  const svg = d3.select('#dag-svg').attr('width',W).attr('height',H).selectAll('*').remove().select(function(){return this;});
+  const root = d3.select('#dag-svg');
+  const g = root.append('g');
+  root.call(d3.zoom().scaleExtent([0.2,4]).on('zoom',e=>g.attr('transform',e.transform)));
 
-  const g = svg.append('g');
-  svg.call(d3.zoom().scaleExtent([0.3,3]).on('zoom', e => g.attr('transform', e.transform)));
-
-  svg.append('defs').append('marker')
-    .attr('id','dag-arrow').attr('viewBox','0 -4 8 8').attr('refX',28).attr('refY',0)
-    .attr('markerWidth',8).attr('markerHeight',8).attr('orient','auto')
-    .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','#3a2a18');
+  root.append('defs').append('marker')
+    .attr('id','darr').attr('viewBox','0 -5 10 10').attr('refX',68).attr('refY',0)
+    .attr('markerWidth',7).attr('markerHeight',7).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#8b949e');
 
   if (dagSim) dagSim.stop();
   dagSim = d3.forceSimulation(nodeData)
-    .force('link', d3.forceLink(edgeData).id(d=>d.id).distance(120).strength(1))
-    .force('charge', d3.forceManyBody().strength(-300))
-    .force('center', d3.forceCenter(W/2, H/2))
-    .force('y', d3.forceY().strength(0.1));
+    .force('link',   d3.forceLink(edgeData).id(d=>d.id).distance(180).strength(1))
+    .force('charge', d3.forceManyBody().strength(-500))
+    .force('center', d3.forceCenter(W/2,H/2))
+    .force('x',      d3.forceX(W/2).strength(0.04))
+    .force('y',      d3.forceY(H/2).strength(0.04));
 
-  const link = g.append('g').selectAll('.dlink').data(edgeData).enter().append('line')
-    .attr('class','dlink').attr('stroke','#3a2a18').attr('stroke-width',1.5)
-    .attr('marker-end','url(#dag-arrow)');
+  const links = g.append('g').selectAll('line').data(edgeData).enter().append('line')
+    .attr('stroke','#8b949e').attr('stroke-width',2).attr('opacity',0.8)
+    .attr('marker-end','url(#darr)');
 
-  const nodeG = g.append('g').selectAll('.dnode').data(nodeData).enter().append('g')
-    .attr('class','dnode').style('cursor','pointer')
+  const nodeGs = g.append('g').selectAll('g').data(nodeData).enter().append('g')
+    .style('cursor','pointer')
     .call(d3.drag()
       .on('start',(e,d)=>{if(!e.active)dagSim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
       .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;})
       .on('end',  (e,d)=>{if(!e.active)dagSim.alphaTarget(0);d.fx=null;d.fy=null;}));
 
-  nodeG.append('rect').attr('width',120).attr('height',48).attr('rx',6)
-    .attr('x',-60).attr('y',-24)
-    .attr('fill', d => SPEC_COLORS[d.specialist] || '#8a7768')
-    .attr('fill-opacity', d => STATUS_OPACITY[d.status] || 0.5)
-    .attr('stroke','#1e1509').attr('stroke-width',1.5);
+  // Background rect
+  nodeGs.append('rect').attr('width',140).attr('height',60).attr('rx',8)
+    .attr('x',-70).attr('y',-30)
+    .attr('fill', d=>SPEC_BG[d.specialist]||'#21262d')
+    .attr('stroke', d=>SPEC[d.specialist]||'#484f58')
+    .attr('stroke-width', d=>d.status==='done'?2.5:1.5)
+    .attr('opacity', d=>S_ALPHA[d.status]||0.6);
 
-  nodeG.append('text').text(d => d.specialist).attr('text-anchor','middle').attr('y',-8)
-    .attr('fill','#110d06').attr('font-size','10px').attr('font-weight','700')
+  // Specialist label
+  nodeGs.append('text').text(d=>d.specialist.toUpperCase())
+    .attr('text-anchor','middle').attr('y',-11)
+    .attr('fill',d=>SPEC[d.specialist]||'#8b949e')
+    .attr('font-size','10px').attr('font-weight','800').attr('letter-spacing','.05em')
     .attr('font-family','monospace');
 
-  nodeG.append('text').text(d => d.id).attr('text-anchor','middle').attr('y',6)
-    .attr('fill','#110d06bb').attr('font-size','9px').attr('font-family','monospace');
+  // Step ID
+  nodeGs.append('text').text(d=>d.id)
+    .attr('text-anchor','middle').attr('y',4)
+    .attr('fill','#e6edf3').attr('font-size','11px').attr('font-weight','600')
+    .attr('font-family','monospace');
 
-  nodeG.append('text').text(d => d.status === 'done' ? '✓' : d.status === 'failed' ? '✗' : d.status === 'skipped' ? '—' : '⋯')
-    .attr('text-anchor','middle').attr('y',18)
-    .attr('fill','#110d06cc').attr('font-size','9px');
+  // Status icon
+  nodeGs.append('text')
+    .text(d=>({done:'✓',failed:'✗',skipped:'⊘',running:'⟳',waiting:'…'}[d.status]||'?'))
+    .attr('text-anchor','middle').attr('y',19)
+    .attr('fill',d=>({done:'#3fb950',failed:'#f85149',skipped:'#484f58',running:'#ffa657',waiting:'#8b949e'}[d.status]||'#8b949e'))
+    .attr('font-size','11px');
 
   const tooltip = document.getElementById('tooltip');
-  nodeG.on('mouseover', (e,d) => {
+  nodeGs.on('mouseover',(e,d)=>{
+    const taskSnip = d.task.slice(0,160).replace(/</g,'&lt;');
+    const resultSnip = d.result ? \`<br><span style="color:var(--muted);font-size:10px">\${d.result.slice(0,200).replace(/</g,'&lt;')}\${d.result.length>200?'…':''}</span>\` : '';
     tooltip.style.display='block';
-    tooltip.innerHTML = \`<strong>\${d.id}</strong> [<span style="color:var(--amber)">\${d.specialist}</span>]<br><span style="color:var(--secondary)">\${d.task.slice(0,120).replace(/</g,'&lt;')}</span>\${d.result ? \`<br><br><span style="color:var(--muted)">\${d.result.slice(0,200).replace(/</g,'&lt;')}…</span>\` : ''}\`;
-  }).on('mousemove', e => {
-    tooltip.style.left=(e.clientX+14)+'px'; tooltip.style.top=(e.clientY-6)+'px';
-  }).on('mouseout', () => tooltip.style.display='none');
+    tooltip.innerHTML=\`<strong>\${d.id}</strong> &nbsp;<span style="color:\${SPEC[d.specialist]||'#8b949e'}">\${d.specialist}</span><br>\${taskSnip}\${resultSnip}\`;
+  }).on('mousemove',e=>{
+    tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px';
+  }).on('mouseout',()=>tooltip.style.display='none');
 
-  dagSim.on('tick', () => {
-    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-        .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
-    nodeG.attr('transform',d=>\`translate(\${d.x},\${d.y})\`);
+  dagSim.on('tick',()=>{
+    links.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+         .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    nodeGs.attr('transform',d=>\`translate(\${d.x},\${d.y})\`);
   });
 }
 
@@ -518,12 +575,12 @@ function renderDag(plan) {
   }
   const rows = DATA.memory.map(m => {
     const ts = new Date(m.timestamp).toLocaleString();
-    const val = typeof m.value === 'string' ? m.value : JSON.stringify(m.value);
+    const val = typeof m.value === 'string' ? m.value : JSON.stringify(m.value, null, 2);
     return \`<tr>
       <td>\${(m.key||'').replace(/</g,'&lt;')}</td>
-      <td>\${(m.stepId||'').replace(/</g,'&lt;')}</td>
-      <td style="color:var(--muted)">\${ts}</td>
-      <td class="memory-val">\${val.slice(0,300).replace(/</g,'&lt;')}\${val.length>300?'…':''}</td>
+      <td style="color:var(--muted)">\${(m.stepId||'').replace(/</g,'&lt;')}</td>
+      <td style="color:var(--dim);white-space:nowrap">\${ts}</td>
+      <td class="memory-val">\${val.slice(0,400).replace(/</g,'&lt;')}\${val.length>400?'…':''}</td>
     </tr>\`;
   }).join('');
   panel.innerHTML = \`
