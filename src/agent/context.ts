@@ -12,6 +12,7 @@ export interface ProjectContext {
   tree: string;          // directory tree
   config: string;        // package.json / requirements.txt / Cargo.toml
   recentCommits: string; // last 5 git commits
+  graphSummary?: string; // top nodes from graphify-out/graph.json, if present
 }
 
 export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
@@ -28,7 +29,29 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     tree:          buildTree(root),
     config:        readConfig(root),
     recentCommits: readGitLog(root),
+    graphSummary:  loadGraphSummary(root),
   };
+}
+
+export function loadGraphSummary(root: string): string | undefined {
+  const graphPath = path.join(root, 'graphify-out', 'graph.json');
+  if (!fs.existsSync(graphPath)) return undefined;
+  try {
+    const raw = fs.readFileSync(graphPath, 'utf8');
+    const graph = JSON.parse(raw) as {
+      nodes?: Array<{ id: string; label?: string; summary?: string; type?: string; file?: string }>;
+    };
+    if (!Array.isArray(graph.nodes) || graph.nodes.length === 0) return undefined;
+    const top = graph.nodes.slice(0, 40);
+    const lines = top.map(n => {
+      const loc = n.file ? ` (${n.file})` : '';
+      const summary = n.summary ? `: ${n.summary.slice(0, 120)}` : '';
+      return `  ${n.type ?? 'node'} ${n.label ?? n.id}${loc}${summary}`;
+    });
+    return `Top ${top.length} of ${graph.nodes.length} nodes:\n${lines.join('\n')}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function detectProjectName(root: string): string {

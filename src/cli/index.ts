@@ -7,7 +7,7 @@ import chalk from 'chalk';
 
 import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
 import { createResilientProvider } from '../providers/resilient-factory.js';
-import { loadProjectContext } from '../agent/context.js';
+import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
@@ -27,8 +27,8 @@ import { loadPerception, isStale, extractPerception } from '../perception/index.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'fallback'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'fallback', 'resume', 'chat-id'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.RUBY_MODEL,
@@ -80,6 +80,27 @@ if (argv.models) {
   console.log(chalk.hex('#4e3d30')('\n  Use --model <id> or set RUBY_MODEL env var'));
   console.log(chalk.hex('#4e3d30')('  For Ollama: --model ollama/llama3.2'));
   console.log(chalk.hex('#4e3d30')('  For OpenRouter: --model openrouter/<provider>/<name>\n'));
+  process.exit(0);
+}
+
+if (argv['list-sessions']) {
+  const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
+  const sessions = sessionStore.listSessions(root);
+  if (sessions.length === 0) {
+    console.log(chalk.hex('#8a7768')('\n  No saved sessions for this project.\n'));
+  } else {
+    console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
+    for (const s of sessions) {
+      const updated = new Date(s.updatedAt).toLocaleString();
+      const turns = Math.floor(s.history.length / 2);
+      console.log(
+        `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
+        `${chalk.hex('#ede0cc')(s.title.slice(0, 45).padEnd(46))} ` +
+        `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}`,
+      );
+    }
+    console.log();
+  }
   process.exit(0);
 }
 
@@ -247,13 +268,63 @@ async function main() {
   }
 
   const permissions = new PermissionSystem(permissionLevel);
-  const sessionPath = argv['no-session'] ? undefined : path.join(sessionStore.defaultDir(),
-    (ctx.root || cwd).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
+
+  // ── Session / chat-ID resolution ───────────────────────────────────────────
+  const noSession = argv['no-session'] === true;
+  const projectRoot = ctx.root || cwd;
+
+  // Active session state (mutable — commands can swap it)
+  let activeChatId: string | undefined;
+  let activeChatHistory: import('../providers/types.js').HistoryMessage[] = [];
+  let activeChatTitle: string | undefined;
+
+  if (!noSession) {
+    if (argv['new-session']) {
+      // Force a brand-new session
+      activeChatId = sessionStore.generateId();
+    } else if (typeof argv['resume'] === 'string' && argv['resume']) {
+      // --resume <id>
+      const loaded = await sessionStore.loadSession(projectRoot, argv['resume']);
+      if (!loaded) {
+        console.error(chalk.hex('#b15439')(`\n  ✗ Session not found: ${argv['resume']}\n`));
+        process.exit(1);
+      }
+      activeChatId = loaded.id;
+      activeChatHistory = loaded.history;
+      activeChatTitle = loaded.title;
+      console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming session ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
+    } else if (argv['resume'] === true || argv['resume'] === '') {
+      // --resume with no value → resume latest
+      const latest = sessionStore.findLatestSession(projectRoot);
+      if (latest) {
+        activeChatId = latest.id;
+        activeChatHistory = latest.history;
+        activeChatTitle = latest.title;
+        console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming latest session ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
+      } else {
+        activeChatId = sessionStore.generateId();
+      }
+    } else if (typeof argv['chat-id'] === 'string' && argv['chat-id']) {
+      activeChatId = argv['chat-id'];
+      const existing = await sessionStore.loadSession(projectRoot, activeChatId);
+      if (existing) {
+        activeChatHistory = existing.history;
+        activeChatTitle = existing.title;
+      }
+    } else {
+      activeChatId = sessionStore.generateId();
+    }
+  }
+
+  // Legacy sessionPath kept for single-task one-shot mode
+  const sessionPath = noSession ? undefined : path.join(sessionStore.defaultDir(),
+    projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
 
   display.header(
     `ruby-code — ${ctx.name}`,
     `${provider.name} · ${runtimeConfig.model} · ${ctx.language} · ${permissionLevel} mode` +
-    (fileConfig.model ? ` · .rubycode.json loaded` : ''),
+    (fileConfig.model ? ` · .rubycode.json loaded` : '') +
+    (activeChatId ? ` · chat ${activeChatId}` : ''),
   );
 
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
@@ -265,13 +336,11 @@ async function main() {
 
     const doOrchestrate = argv.orchestrate === true;
 
-    // If --orchestrate or auto-detection, try the orchestrator path
     if (doOrchestrate) {
       await runOrchestratedTask(task, provider, ctx, display, doOrchestrate);
       return;
     }
 
-    // Auto-detect: run router, decompose if high confidence
     try {
       let perception = await loadPerception(ctx.root);
       if (!perception || isStale(perception)) {
@@ -288,15 +357,19 @@ async function main() {
       // Router failed — fall through to single agent
     }
 
-    // Single agent (existing behaviour)
     const result = await runAgentLoop({
       provider, task, context: ctx, permissions, display,
+      initialHistory: activeChatHistory,
       spawnConfig: {
         apiKey: argv['api-key'] ?? undefined,
         baseUrl: resolved.baseUrl ?? undefined,
       },
       sessionPath,
     });
+
+    if (activeChatId && !noSession) {
+      await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
+    }
 
     if (result.success) {
       display.summary(result.summary, result.turns, result.toolCallCount);
@@ -308,32 +381,44 @@ async function main() {
     return;
   }
 
-  // ── Interactive REPL mode: ruby-code --interactive ─────────────────────────
+  // ── Interactive REPL mode ──────────────────────────────────────────────────
+  if (activeChatHistory.length > 0) {
+    console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
+  }
   console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.\n'));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   const ask = () => {
-    rl.question(chalk.hex('#cc785c')('  ▸ '), async (line) => {
+    const idTag = activeChatId ? chalk.hex('#4e3d30')(` [${activeChatId}]`) : '';
+    rl.question(chalk.hex('#cc785c')('  ▸ ') + idTag + (idTag ? ' ' : ''), async (line) => {
       const input = line.trim();
       if (!input) { ask(); return; }
 
       // Slash / colon commands
-      if (handleReplCommand(input, {
+      const replCtx: ReplCtx = {
         ctx, display,
         providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
         permissions, cumulative,
-      })) {
+        chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+      };
+      const cmdResult = await handleReplCommand(input, replCtx);
+      if (cmdResult.handled) {
+        // Commands may update chat state
+        if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
+        if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
+        if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
         ask();
         return;
       }
 
-      // Run task
+      // Run task — pass current conversation history for stay-active mode
       let result;
       try {
         const currentProvider = buildProvider(display);
         result = await runAgentLoop({
           provider: currentProvider, task: input,
           context: ctx, permissions, display,
+          initialHistory: activeChatHistory,
           spawnConfig: {
             apiKey: runtimeConfig.apiKey,
             baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -345,6 +430,14 @@ async function main() {
         console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
         ask();
         return;
+      }
+
+      // Update stay-active history
+      activeChatHistory = result.history;
+
+      // Persist session
+      if (activeChatId && !noSession) {
+        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
       }
 
       cumulative.turns += result.turns;
@@ -388,12 +481,28 @@ async function main() {
 // REPL command handler
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface ChatState {
+  projectRoot: string;
+  activeChatId: string | undefined;
+  activeChatHistory: import('../providers/types.js').HistoryMessage[];
+  activeChatTitle: string | undefined;
+  noSession: boolean;
+}
+
 interface ReplCtx {
   ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   display: ReturnType<typeof createTerminalDisplay>;
   providerConfig: { model: string; apiKey?: string; baseUrl?: string };
   permissions: PermissionSystem;
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
+  chatState: ChatState;
+}
+
+interface ReplCommandResult {
+  handled: boolean;
+  newChatId?: string | undefined;
+  newHistory?: import('../providers/types.js').HistoryMessage[];
+  newTitle?: string | undefined;
 }
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
@@ -466,32 +575,190 @@ function showModelSelector(c: ReplCtx): void {
   });
 }
 
-function handleReplCommand(input: string, c: ReplCtx): boolean {
+async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
+  const unhandled: ReplCommandResult = { handled: false };
+
   if (input === ':quit' || input === ':q' || input === '/exit') {
     process.exit(0);
   }
+
   if (input === ':help' || input === '/help') {
     console.log(chalk.hex('#8a7768')([
       '',
-      '  :quit, :q, /exit        Exit',
+      '  ── Session ──────────────────────────────────────',
+      '  :id                     Show current chat ID',
+      '  :sessions               List all saved sessions',
+      '  :resume                 Resume the latest session',
+      '  :resume <id>            Resume a specific session by ID',
+      '  :new                    Start a new session (fresh history)',
+      '  :history                Show turn count in current session',
+      '  :clear-history          Wipe conversation history (keep session ID)',
+      '  :save [title]           Rename / save current session',
+      '  :delete <id>            Delete a saved session',
+      '',
+      '  ── Model / API ──────────────────────────────────',
       '  :model                  Interactive model selector',
       '  :model <id>             Switch to a specific model',
-      '  :apikey <key>           Set API key for current session',
-      '  :mode <level>           Switch permission level (read-only/normal/auto)',
-      '  :context                Show loaded project context',
       '  :models                 List all available models',
+      '  :apikey <key>           Set API key for current session',
+      '',
+      '  ── Context / Stats ──────────────────────────────',
+      '  :context                Show loaded project context',
+      '  :graph                  Show codebase knowledge graph summary',
+      '  :graph refresh          Reload graph from graphify-out/graph.json',
+      '  /stats, /usage          Show token + cost usage this session',
       '  /clear, /reset          Reset cumulative usage stats',
-      '  /stats                  Show token + cost usage this session',
-      '  /usage                  Same as /stats',
+      '',
+      '  ── General ──────────────────────────────────────',
+      '  :quit, :q, /exit        Exit',
       '',
     ].join('\n')));
-    return true;
+    return { handled: true };
   }
+
+  // ── Session commands ─────────────────────────────────────────────────────
+
+  if (input === ':id') {
+    const cs = c.chatState;
+    if (cs.activeChatId) {
+      console.log(chalk.hex('#8a7768')(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
+      if (cs.activeChatTitle) console.log(chalk.hex('#8a7768')(`  Title:   ${cs.activeChatTitle}`));
+      console.log(chalk.hex('#4e3d30')(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
+    } else {
+      console.log(chalk.hex('#8a7768')('\n  No active session (--no-session mode).\n'));
+    }
+    return { handled: true };
+  }
+
+  if (input === ':sessions') {
+    const sessions = sessionStore.listSessions(c.chatState.projectRoot);
+    if (sessions.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No saved sessions.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
+      for (const s of sessions) {
+        const updated = new Date(s.updatedAt).toLocaleString();
+        const turns = Math.floor(s.history.length / 2);
+        const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
+        console.log(
+          `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
+          `${chalk.hex('#ede0cc')(s.title.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}${marker}`,
+        );
+      }
+      console.log();
+    }
+    return { handled: true };
+  }
+
+  if (input === ':resume' || input === ':resume ') {
+    const latest = sessionStore.findLatestSession(c.chatState.projectRoot);
+    if (!latest) {
+      console.log(chalk.hex('#8a7768')('\n  No saved sessions to resume.\n'));
+      return { handled: true };
+    }
+    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
+    return { handled: true, newChatId: latest.id, newHistory: latest.history, newTitle: latest.title };
+  }
+
+  if (input.startsWith(':resume ')) {
+    const id = input.slice(':resume '.length).trim();
+    const loaded = await sessionStore.loadSession(c.chatState.projectRoot, id);
+    if (!loaded) {
+      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
+      return { handled: true };
+    }
+    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
+    return { handled: true, newChatId: loaded.id, newHistory: loaded.history, newTitle: loaded.title };
+  }
+
+  if (input === ':new') {
+    const newId = sessionStore.generateId();
+    console.log(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
+    return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
+  }
+
+  if (input === ':history') {
+    const turns = Math.floor(c.chatState.activeChatHistory.length / 2);
+    console.log(chalk.hex('#8a7768')(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
+    return { handled: true };
+  }
+
+  if (input === ':clear-history') {
+    console.log(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
+    return { handled: true, newHistory: [] };
+  }
+
+  if (input === ':save' || input.startsWith(':save ')) {
+    const title = input.startsWith(':save ') ? input.slice(':save '.length).trim() : undefined;
+    const cs = c.chatState;
+    if (!cs.activeChatId) {
+      console.log(chalk.hex('#8a7768')('\n  No active session to save (--no-session mode).\n'));
+      return { handled: true };
+    }
+    const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
+    console.log(chalk.hex('#5a9e6e')(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
+    return { handled: true, newTitle: session.title };
+  }
+
+  if (input.startsWith(':delete ')) {
+    const id = input.slice(':delete '.length).trim();
+    const deleted = await sessionStore.deleteSession(c.chatState.projectRoot, id);
+    if (deleted) {
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
+      if (id === c.chatState.activeChatId) {
+        const newId = sessionStore.generateId();
+        console.log(chalk.hex('#8a7768')(`  Starting new session: ${newId}\n`));
+        return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
+      }
+    } else {
+      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
+    }
+    return { handled: true };
+  }
+
+  // ── Model / API commands ─────────────────────────────────────────────────
+
   if (input === ':context') {
     console.log(chalk.hex('#8a7768')(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
     console.log(chalk.hex('#4e3d30')(`  Root: ${c.ctx.root}\n`));
-    return true;
+    return { handled: true };
   }
+
+  if (input === ':graph') {
+    const summary = loadGraphSummary(c.ctx.root);
+    if (!summary) {
+      console.log(chalk.hex('#8a7768')('\n  No graph.json found. Run :graph refresh to extract.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
+      console.log(chalk.hex('#8a7768')(summary));
+      console.log();
+    }
+    return { handled: true };
+  }
+
+  if (input === ':graph refresh') {
+    console.log(chalk.hex('#8a7768')('\n  Refreshing codebase graph...\n'));
+    const { execSync } = await import('child_process');
+    try {
+      execSync(
+        'python3 -c "' +
+        'import json,os,re,glob; ' +
+        'root=\\\"' + c.ctx.root + '/src\\\"; ' +
+        'print(\\\"Scanning\\\", root)" ',
+        { stdio: 'inherit' }
+      );
+    } catch { /* ignore */ }
+    // Reload context graph
+    c.ctx.graphSummary = loadGraphSummary(c.ctx.root);
+    if (c.ctx.graphSummary) {
+      console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
+    } else {
+      console.log(chalk.hex('#8a7768')('  No graph.json found after refresh. Run graphify extract first.\n'));
+    }
+    return { handled: true };
+  }
+
   if (input === ':models') {
     const allModels = getAllModels();
     const byProvider = allModels.reduce<Record<string, typeof allModels>>((acc, m) => {
@@ -505,28 +772,31 @@ function handleReplCommand(input: string, c: ReplCtx): boolean {
       }
     }
     console.log();
-    return true;
+    return { handled: true };
   }
+
   if (input === ':model' || input === '/model') {
-    // Interactive model selector
     showModelSelector(c);
-    return true;   // model switch is async — handled inside
+    return { handled: true };
   }
+
   if (input.startsWith(':model ') || input.startsWith('/model ')) {
     const sep = input.startsWith(':model ') ? ':model ' : '/model ';
     const newModel = input.slice(sep.length).trim();
     const r = trySetModel(c, newModel);
     if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
-    return true;
+    return { handled: true };
   }
+
   if (input.startsWith(':apikey ') || input.startsWith('/apikey ')) {
     const sep = input.startsWith(':apikey ') ? ':apikey ' : '/apikey ';
     const newKey = input.slice(sep.length).trim();
     runtimeConfig.apiKey = newKey;
-    c.providerConfig.apiKey = newKey; // Need to update the active config if used later
+    c.providerConfig.apiKey = newKey;
     console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session.'));
-    return true;
+    return { handled: true };
   }
+
   if (input === '/clear' || input === '/reset') {
     c.cumulative.turns = 0;
     c.cumulative.toolCalls = 0;
@@ -534,8 +804,9 @@ function handleReplCommand(input: string, c: ReplCtx): boolean {
     c.cumulative.outputTokens = 0;
     c.cumulative.costUsd = 0;
     console.log(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
-    return true;
+    return { handled: true };
   }
+
   if (input === '/stats' || input === '/usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
@@ -550,9 +821,10 @@ function handleReplCommand(input: string, c: ReplCtx): boolean {
       `    Est. cost:    $${u.costUsd.toFixed(4)}`,
       '',
     ].join('\n')));
-    return true;
+    return { handled: true };
   }
-  return false;
+
+  return unhandled;
 }
 
 async function runOrchestratedTask(
@@ -647,6 +919,10 @@ ${chalk.hex('#cc785c').bold('  ruby-code')} ${chalk.hex('#8a7768')('— model-ag
     --cwd <path>             Working directory (default: current)
     --models                 List all known model IDs
     --no-session             Disable conversation history persistence
+    --new-session            Force a fresh session (ignore any prior history)
+    --resume [id]            Resume latest session, or a specific session by ID
+    --chat-id <id>           Attach to a specific chat ID (creates if missing)
+    --list-sessions          List all saved sessions for this project
     --no-setup               Skip the first-run setup wizard
     --reset-setup            Wipe saved config and re-run the setup wizard
     --orchestrate            Force multi-agent orchestration mode

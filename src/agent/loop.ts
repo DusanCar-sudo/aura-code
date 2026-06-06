@@ -20,6 +20,8 @@ export interface LoopOptions {
   pricingModel?: string;
   /** Path to a session file to persist history to; undefined = ephemeral */
   sessionPath?: string;
+  /** Pre-existing conversation history to resume from (e.g. loaded session). */
+  initialHistory?: HistoryMessage[];
   /** Base config passed to spawned sub-agents. If undefined, spawn_task returns an error. */
   spawnConfig?: { apiKey?: string; baseUrl?: string };
   /** Disables subagent tool entirely (e.g. for tests) */
@@ -33,6 +35,8 @@ export interface LoopResult {
   toolCallCount: number;
   usage: TokenUsage;
   costUsd: number;
+  /** Full conversation history after the loop (including prior turns if resumed). */
+  history: HistoryMessage[];
 }
 
 export interface TokenUsage {
@@ -67,6 +71,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
   const system = buildSystemPrompt(context, provider.name);
   const history: HistoryMessage[] = [
+    ...(opts.initialHistory ?? []),
     { role: 'user', content: task },
   ];
 
@@ -153,7 +158,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: false,
         summary: `Provider error on turn ${turns}: ${String(e)}`,
-        turns, toolCallCount, usage,
+        turns, toolCallCount, usage, history,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
@@ -167,7 +172,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: true,
         summary: responseText || '(Task completed with no output)',
-        turns, toolCallCount, usage,
+        turns, toolCallCount, usage, history,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
@@ -230,7 +235,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   return {
     success: false,
     summary: `Loop ended after ${turns} turns (max: ${maxTurns})`,
-    turns, toolCallCount, usage,
+    turns, toolCallCount, usage, history,
     costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
   };
 }

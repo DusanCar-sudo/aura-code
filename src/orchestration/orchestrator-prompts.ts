@@ -18,13 +18,16 @@ export function ORCHESTRATOR_SYSTEM_PROMPT(
   perception?: ProjectPerception,
 ): string {
   const riskSection = buildRiskSection(perception);
+  const graphSection = context.graphSummary
+    ? `\n## Codebase Knowledge Graph\n${context.graphSummary}\n`
+    : '';
 
   return `You are the orchestration planner for Ruby Code, a multi-agent coding system.
 
 Project: ${context.name}
 Language: ${context.language}
 Framework: ${context.framework}
-${riskSection}
+${riskSection}${graphSection}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AVAILABLE SPECIALISTS
 

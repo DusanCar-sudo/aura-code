@@ -1,0 +1,4657 @@
+{
+  "directed": true,
+  "nodes": [
+    {
+      "id": "file_src_agent_context_ts",
+      "label": "context.ts",
+      "type": "file",
+      "file": "src/agent/context.ts"
+    },
+    {
+      "id": "src_agent_context_ts_ProjectContext",
+      "label": "ProjectContext",
+      "type": "interface",
+      "file": "src/agent/context.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_agent_context_ts_loadProjectContext",
+      "label": "loadProjectContext",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_agent_context_ts_loadGraphSummary",
+      "label": "loadGraphSummary",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L36"
+    },
+    {
+      "id": "src_agent_context_ts_detectProjectName",
+      "label": "detectProjectName",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L57"
+    },
+    {
+      "id": "src_agent_context_ts_detectStack",
+      "label": "detectStack",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L67"
+    },
+    {
+      "id": "src_agent_context_ts_readTruncated",
+      "label": "readTruncated",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L95"
+    },
+    {
+      "id": "src_agent_context_ts_buildTree",
+      "label": "buildTree",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L110"
+    },
+    {
+      "id": "src_agent_context_ts_walk",
+      "label": "walk",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L112"
+    },
+    {
+      "id": "src_agent_context_ts_readConfig",
+      "label": "readConfig",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L136"
+    },
+    {
+      "id": "src_agent_context_ts_readGitLog",
+      "label": "readGitLog",
+      "type": "function",
+      "file": "src/agent/context.ts",
+      "source_location": "L149"
+    },
+    {
+      "id": "file_src_agent_loop_ts",
+      "label": "loop.ts",
+      "type": "file",
+      "file": "src/agent/loop.ts"
+    },
+    {
+      "id": "src_agent_loop_ts_LoopOptions",
+      "label": "LoopOptions",
+      "type": "interface",
+      "file": "src/agent/loop.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "src_agent_loop_ts_LoopResult",
+      "label": "LoopResult",
+      "type": "interface",
+      "file": "src/agent/loop.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "src_agent_loop_ts_TokenUsage",
+      "label": "TokenUsage",
+      "type": "interface",
+      "file": "src/agent/loop.ts",
+      "source_location": "L42"
+    },
+    {
+      "id": "src_agent_loop_ts_costFor",
+      "label": "costFor",
+      "type": "function",
+      "file": "src/agent/loop.ts",
+      "source_location": "L62"
+    },
+    {
+      "id": "src_agent_loop_ts_runAgentLoop",
+      "label": "runAgentLoop",
+      "type": "function",
+      "file": "src/agent/loop.ts",
+      "source_location": "L67"
+    },
+    {
+      "id": "src_agent_loop_ts_BodyArgs",
+      "label": "BodyArgs",
+      "type": "interface",
+      "file": "src/agent/loop.ts",
+      "source_location": "L98"
+    },
+    {
+      "id": "src_agent_loop_ts_runLoopBody",
+      "label": "runLoopBody",
+      "type": "function",
+      "file": "src/agent/loop.ts",
+      "source_location": "L112"
+    },
+    {
+      "id": "src_agent_loop_ts_persist",
+      "label": "persist",
+      "type": "function",
+      "file": "src/agent/loop.ts",
+      "source_location": "L243"
+    },
+    {
+      "id": "src_agent_loop_ts_formatCallForConfirmation",
+      "label": "formatCallForConfirmation",
+      "type": "function",
+      "file": "src/agent/loop.ts",
+      "source_location": "L249"
+    },
+    {
+      "id": "file_src_agent_session_store_ts",
+      "label": "session-store.ts",
+      "type": "file",
+      "file": "src/agent/session-store.ts"
+    },
+    {
+      "id": "src_agent_session_store_ts_ChatSession",
+      "label": "ChatSession",
+      "type": "interface",
+      "file": "src/agent/session-store.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_agent_session_store_ts_sessionStore",
+      "label": "sessionStore",
+      "type": "const",
+      "file": "src/agent/session-store.ts",
+      "source_location": "L20"
+    },
+    {
+      "id": "file_src_agent_spawner_ts",
+      "label": "spawner.ts",
+      "type": "file",
+      "file": "src/agent/spawner.ts"
+    },
+    {
+      "id": "src_agent_spawner_ts_SpawnOptions",
+      "label": "SpawnOptions",
+      "type": "interface",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "src_agent_spawner_ts_Spawner",
+      "label": "Spawner",
+      "type": "interface",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_agent_spawner_ts_ActiveSpawner",
+      "label": "ActiveSpawner",
+      "type": "interface",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L20"
+    },
+    {
+      "id": "src_agent_spawner_ts_registerSpawner",
+      "label": "registerSpawner",
+      "type": "function",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "src_agent_spawner_ts_clearSpawner",
+      "label": "clearSpawner",
+      "type": "function",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L35"
+    },
+    {
+      "id": "src_agent_spawner_ts_makeDefaultSpawner",
+      "label": "makeDefaultSpawner",
+      "type": "function",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L42"
+    },
+    {
+      "id": "src_agent_spawner_ts_executeSpawnTask",
+      "label": "executeSpawnTask",
+      "type": "function",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L73"
+    },
+    {
+      "id": "src_agent_spawner_ts_SPAWN_TASK_DEFINITION",
+      "label": "SPAWN_TASK_DEFINITION",
+      "type": "const",
+      "file": "src/agent/spawner.ts",
+      "source_location": "L86"
+    },
+    {
+      "id": "file_src_agent_system_prompt_ts",
+      "label": "system-prompt.ts",
+      "type": "file",
+      "file": "src/agent/system-prompt.ts"
+    },
+    {
+      "id": "src_agent_system_prompt_ts_buildSystemPrompt",
+      "label": "buildSystemPrompt",
+      "type": "function",
+      "file": "src/agent/system-prompt.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "file_src_cli_display_ts",
+      "label": "display.ts",
+      "type": "file",
+      "file": "src/cli/display.ts"
+    },
+    {
+      "id": "src_cli_display_ts_Display",
+      "label": "Display",
+      "type": "interface",
+      "file": "src/cli/display.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "src_cli_display_ts_createTerminalDisplay",
+      "label": "createTerminalDisplay",
+      "type": "function",
+      "file": "src/cli/display.ts",
+      "source_location": "L32"
+    },
+    {
+      "id": "src_cli_display_ts_toolIcon",
+      "label": "toolIcon",
+      "type": "function",
+      "file": "src/cli/display.ts",
+      "source_location": "L179"
+    },
+    {
+      "id": "src_cli_display_ts_formatInput",
+      "label": "formatInput",
+      "type": "function",
+      "file": "src/cli/display.ts",
+      "source_location": "L188"
+    },
+    {
+      "id": "file_src_cli_index_ts",
+      "label": "index.ts",
+      "type": "file",
+      "file": "src/cli/index.ts"
+    },
+    {
+      "id": "src_cli_index_ts_num",
+      "label": "num",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L39"
+    },
+    {
+      "id": "src_cli_index_ts_buildProvider",
+      "label": "buildProvider",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L168"
+    },
+    {
+      "id": "src_cli_index_ts_main",
+      "label": "main",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L191"
+    },
+    {
+      "id": "src_cli_index_ts_ChatState",
+      "label": "ChatState",
+      "type": "interface",
+      "file": "src/cli/index.ts",
+      "source_location": "L484"
+    },
+    {
+      "id": "src_cli_index_ts_ReplCtx",
+      "label": "ReplCtx",
+      "type": "interface",
+      "file": "src/cli/index.ts",
+      "source_location": "L492"
+    },
+    {
+      "id": "src_cli_index_ts_ReplCommandResult",
+      "label": "ReplCommandResult",
+      "type": "interface",
+      "file": "src/cli/index.ts",
+      "source_location": "L501"
+    },
+    {
+      "id": "src_cli_index_ts_trySetModel",
+      "label": "trySetModel",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L508"
+    },
+    {
+      "id": "src_cli_index_ts_showModelSelector",
+      "label": "showModelSelector",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L526"
+    },
+    {
+      "id": "src_cli_index_ts_handleReplCommand",
+      "label": "handleReplCommand",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L578"
+    },
+    {
+      "id": "src_cli_index_ts_runOrchestratedTask",
+      "label": "runOrchestratedTask",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L794"
+    },
+    {
+      "id": "src_cli_index_ts_printUsageFooter",
+      "label": "printUsageFooter",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L857"
+    },
+    {
+      "id": "src_cli_index_ts_printHelp",
+      "label": "printHelp",
+      "type": "function",
+      "file": "src/cli/index.ts",
+      "source_location": "L868"
+    },
+    {
+      "id": "file_src_config_defaults_ts",
+      "label": "defaults.ts",
+      "type": "file",
+      "file": "src/config/defaults.ts"
+    },
+    {
+      "id": "src_config_defaults_ts_DEFAULTS",
+      "label": "DEFAULTS",
+      "type": "const",
+      "file": "src/config/defaults.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_config_defaults_ts_DANGEROUS_COMMANDS",
+      "label": "DANGEROUS_COMMANDS",
+      "type": "const",
+      "file": "src/config/defaults.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_config_defaults_ts_DANGEROUS_PATTERNS",
+      "label": "DANGEROUS_PATTERNS",
+      "type": "const",
+      "file": "src/config/defaults.ts",
+      "source_location": "L22"
+    },
+    {
+      "id": "src_config_defaults_ts_SAFE_SHELL_COMMANDS",
+      "label": "SAFE_SHELL_COMMANDS",
+      "type": "const",
+      "file": "src/config/defaults.ts",
+      "source_location": "L43"
+    },
+    {
+      "id": "src_config_defaults_ts_IGNORE_PATTERNS",
+      "label": "IGNORE_PATTERNS",
+      "type": "const",
+      "file": "src/config/defaults.ts",
+      "source_location": "L53"
+    },
+    {
+      "id": "src_config_defaults_ts_BINARY_EXTENSIONS",
+      "label": "BINARY_EXTENSIONS",
+      "type": "const",
+      "file": "src/config/defaults.ts",
+      "source_location": "L60"
+    },
+    {
+      "id": "file_src_config_project_config_ts",
+      "label": "project-config.ts",
+      "type": "file",
+      "file": "src/config/project-config.ts"
+    },
+    {
+      "id": "src_config_project_config_ts_ProviderDef",
+      "label": "ProviderDef",
+      "type": "interface",
+      "file": "src/config/project-config.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "src_config_project_config_ts_ProjectConfig",
+      "label": "ProjectConfig",
+      "type": "interface",
+      "file": "src/config/project-config.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "src_config_project_config_ts_loadProjectConfig",
+      "label": "loadProjectConfig",
+      "type": "function",
+      "file": "src/config/project-config.ts",
+      "source_location": "L47"
+    },
+    {
+      "id": "src_config_project_config_ts_normalise",
+      "label": "normalise",
+      "type": "function",
+      "file": "src/config/project-config.ts",
+      "source_location": "L65"
+    },
+    {
+      "id": "src_config_project_config_ts_ResolvedConfig",
+      "label": "ResolvedConfig",
+      "type": "interface",
+      "file": "src/config/project-config.ts",
+      "source_location": "L113"
+    },
+    {
+      "id": "src_config_project_config_ts_resolveConfig",
+      "label": "resolveConfig",
+      "type": "function",
+      "file": "src/config/project-config.ts",
+      "source_location": "L129"
+    },
+    {
+      "id": "file_src_integrations_harnesses_ts",
+      "label": "harnesses.ts",
+      "type": "file",
+      "file": "src/integrations/harnesses.ts"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_ExternalHarness",
+      "label": "ExternalHarness",
+      "type": "interface",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_HermesStatus",
+      "label": "HermesStatus",
+      "type": "interface",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_getHarnessStatus",
+      "label": "getHarnessStatus",
+      "type": "function",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L69"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_getHermesStatus",
+      "label": "getHermesStatus",
+      "type": "function",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L83"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_which",
+      "label": "which",
+      "type": "function",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L103"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_getVersion",
+      "label": "getVersion",
+      "type": "function",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L111"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_listFiles",
+      "label": "listFiles",
+      "type": "function",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L124"
+    },
+    {
+      "id": "src_integrations_harnesses_ts_listSkillNames",
+      "label": "listSkillNames",
+      "type": "function",
+      "file": "src/integrations/harnesses.ts",
+      "source_location": "L136"
+    },
+    {
+      "id": "file_src_orchestration_competence_ts",
+      "label": "competence.ts",
+      "type": "file",
+      "file": "src/orchestration/competence.ts"
+    },
+    {
+      "id": "src_orchestration_competence_ts_SpecialistRole",
+      "label": "SpecialistRole",
+      "type": "type",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "src_orchestration_competence_ts_CompetenceDomain",
+      "label": "CompetenceDomain",
+      "type": "type",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_orchestration_competence_ts_CompetenceScore",
+      "label": "CompetenceScore",
+      "type": "interface",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L25"
+    },
+    {
+      "id": "src_orchestration_competence_ts_ProjectCompetence",
+      "label": "ProjectCompetence",
+      "type": "interface",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L37"
+    },
+    {
+      "id": "src_orchestration_competence_ts_StepOutcome",
+      "label": "StepOutcome",
+      "type": "interface",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L44"
+    },
+    {
+      "id": "src_orchestration_competence_ts_PRIMARY_DOMAIN",
+      "label": "PRIMARY_DOMAIN",
+      "type": "const",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L65"
+    },
+    {
+      "id": "src_orchestration_competence_ts_key",
+      "label": "key",
+      "type": "function",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L72"
+    },
+    {
+      "id": "src_orchestration_competence_ts_clamp01",
+      "label": "clamp01",
+      "type": "function",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L76"
+    },
+    {
+      "id": "src_orchestration_competence_ts_defaultCompetenceMatrix",
+      "label": "defaultCompetenceMatrix",
+      "type": "function",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L81"
+    },
+    {
+      "id": "src_orchestration_competence_ts_recommendSpecialist",
+      "label": "recommendSpecialist",
+      "type": "function",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L102"
+    },
+    {
+      "id": "src_orchestration_competence_ts_applyOutcome",
+      "label": "applyOutcome",
+      "type": "function",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L121"
+    },
+    {
+      "id": "src_orchestration_competence_ts_competenceStore",
+      "label": "competenceStore",
+      "type": "const",
+      "file": "src/orchestration/competence.ts",
+      "source_location": "L161"
+    },
+    {
+      "id": "file_src_orchestration_executor_ts",
+      "label": "executor.ts",
+      "type": "file",
+      "file": "src/orchestration/executor.ts"
+    },
+    {
+      "id": "src_orchestration_executor_ts_ExecutorOptions",
+      "label": "ExecutorOptions",
+      "type": "interface",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_orchestration_executor_ts_executePlan",
+      "label": "executePlan",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L43"
+    },
+    {
+      "id": "src_orchestration_executor_ts_synthesise",
+      "label": "synthesise",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L147"
+    },
+    {
+      "id": "src_orchestration_executor_ts_findReadySteps",
+      "label": "findReadySteps",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L192"
+    },
+    {
+      "id": "src_orchestration_executor_ts_propagateSkips",
+      "label": "propagateSkips",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L203"
+    },
+    {
+      "id": "src_orchestration_executor_ts_propagateAllSkips",
+      "label": "propagateAllSkips",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L224"
+    },
+    {
+      "id": "src_orchestration_executor_ts_isTerminal",
+      "label": "isTerminal",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L243"
+    },
+    {
+      "id": "src_orchestration_executor_ts_fallbackSynthesis",
+      "label": "fallbackSynthesis",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L247"
+    },
+    {
+      "id": "src_orchestration_executor_ts_persist",
+      "label": "persist",
+      "type": "function",
+      "file": "src/orchestration/executor.ts",
+      "source_location": "L253"
+    },
+    {
+      "id": "file_src_orchestration_index_ts",
+      "label": "index.ts",
+      "type": "file",
+      "file": "src/orchestration/index.ts"
+    },
+    {
+      "id": "src_orchestration_index_ts_savePlan",
+      "label": "savePlan",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "src_orchestration_index_ts_loadPlan",
+      "label": "loadPlan",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "src_orchestration_index_ts_listPlans",
+      "label": "listPlans",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "src_orchestration_index_ts_deletePlan",
+      "label": "deletePlan",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "src_orchestration_index_ts_saveMemory",
+      "label": "saveMemory",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L11"
+    },
+    {
+      "id": "src_orchestration_index_ts_getMemory",
+      "label": "getMemory",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "src_orchestration_index_ts_listMemory",
+      "label": "listMemory",
+      "type": "const",
+      "file": "src/orchestration/index.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "file_src_orchestration_orchestrator_prompts_ts",
+      "label": "orchestrator-prompts.ts",
+      "type": "file",
+      "file": "src/orchestration/orchestrator-prompts.ts"
+    },
+    {
+      "id": "src_orchestration_orchestrator_prompts_ts_ORCHESTRATOR_SYSTEM_PROMPT",
+      "label": "ORCHESTRATOR_SYSTEM_PROMPT",
+      "type": "function",
+      "file": "src/orchestration/orchestrator-prompts.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_orchestration_orchestrator_prompts_ts_buildRiskSection",
+      "label": "buildRiskSection",
+      "type": "function",
+      "file": "src/orchestration/orchestrator-prompts.ts",
+      "source_location": "L144"
+    },
+    {
+      "id": "file_src_orchestration_orchestrator_ts",
+      "label": "orchestrator.ts",
+      "type": "file",
+      "file": "src/orchestration/orchestrator.ts"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_OrchestratorOptions",
+      "label": "OrchestratorOptions",
+      "type": "interface",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_createPlan",
+      "label": "createPlan",
+      "type": "function",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L35"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_buildUserMessage",
+      "label": "buildUserMessage",
+      "type": "function",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L57"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_RawPlan",
+      "label": "RawPlan",
+      "type": "interface",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L71"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_RawStep",
+      "label": "RawStep",
+      "type": "interface",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L77"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_parsePlan",
+      "label": "parsePlan",
+      "type": "function",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L87"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_hasCycle",
+      "label": "hasCycle",
+      "type": "function",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L168"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_dfs",
+      "label": "dfs",
+      "type": "function",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L178"
+    },
+    {
+      "id": "src_orchestration_orchestrator_ts_fallbackPlan",
+      "label": "fallbackPlan",
+      "type": "function",
+      "file": "src/orchestration/orchestrator.ts",
+      "source_location": "L198"
+    },
+    {
+      "id": "file_src_orchestration_plan_store_ts",
+      "label": "plan-store.ts",
+      "type": "file",
+      "file": "src/orchestration/plan-store.ts"
+    },
+    {
+      "id": "src_orchestration_plan_store_ts_planStore",
+      "label": "planStore",
+      "type": "const",
+      "file": "src/orchestration/plan-store.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "file_src_orchestration_router_prompts_ts",
+      "label": "router-prompts.ts",
+      "type": "file",
+      "file": "src/orchestration/router-prompts.ts"
+    },
+    {
+      "id": "src_orchestration_router_prompts_ts_ROUTER_SYSTEM_PROMPT",
+      "label": "ROUTER_SYSTEM_PROMPT",
+      "type": "const",
+      "file": "src/orchestration/router-prompts.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "file_src_orchestration_router_ts",
+      "label": "router.ts",
+      "type": "file",
+      "file": "src/orchestration/router.ts"
+    },
+    {
+      "id": "src_orchestration_router_ts_RouterOptions",
+      "label": "RouterOptions",
+      "type": "interface",
+      "file": "src/orchestration/router.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "src_orchestration_router_ts_routeTask",
+      "label": "routeTask",
+      "type": "function",
+      "file": "src/orchestration/router.ts",
+      "source_location": "L30"
+    },
+    {
+      "id": "src_orchestration_router_ts_buildUserMessage",
+      "label": "buildUserMessage",
+      "type": "function",
+      "file": "src/orchestration/router.ts",
+      "source_location": "L51"
+    },
+    {
+      "id": "src_orchestration_router_ts_RawDecision",
+      "label": "RawDecision",
+      "type": "interface",
+      "file": "src/orchestration/router.ts",
+      "source_location": "L72"
+    },
+    {
+      "id": "src_orchestration_router_ts_parseDecision",
+      "label": "parseDecision",
+      "type": "function",
+      "file": "src/orchestration/router.ts",
+      "source_location": "L79"
+    },
+    {
+      "id": "src_orchestration_router_ts_safeDefault",
+      "label": "safeDefault",
+      "type": "function",
+      "file": "src/orchestration/router.ts",
+      "source_location": "L111"
+    },
+    {
+      "id": "file_src_orchestration_ruby_detect_ts",
+      "label": "ruby-detect.ts",
+      "type": "file",
+      "file": "src/orchestration/ruby-detect.ts"
+    },
+    {
+      "id": "src_orchestration_ruby_detect_ts_readTextIfExists",
+      "label": "readTextIfExists",
+      "type": "function",
+      "file": "src/orchestration/ruby-detect.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "src_orchestration_ruby_detect_ts_detectRubyVersion",
+      "label": "detectRubyVersion",
+      "type": "function",
+      "file": "src/orchestration/ruby-detect.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_orchestration_ruby_detect_ts_detectFramework",
+      "label": "detectFramework",
+      "type": "function",
+      "file": "src/orchestration/ruby-detect.ts",
+      "source_location": "L24"
+    },
+    {
+      "id": "src_orchestration_ruby_detect_ts_detectTestFramework",
+      "label": "detectTestFramework",
+      "type": "function",
+      "file": "src/orchestration/ruby-detect.ts",
+      "source_location": "L37"
+    },
+    {
+      "id": "src_orchestration_ruby_detect_ts_detectEntrypoints",
+      "label": "detectEntrypoints",
+      "type": "function",
+      "file": "src/orchestration/ruby-detect.ts",
+      "source_location": "L45"
+    },
+    {
+      "id": "src_orchestration_ruby_detect_ts_detectRubyProject",
+      "label": "detectRubyProject",
+      "type": "function",
+      "file": "src/orchestration/ruby-detect.ts",
+      "source_location": "L70"
+    },
+    {
+      "id": "file_src_orchestration_ruby_types_ts",
+      "label": "ruby-types.ts",
+      "type": "file",
+      "file": "src/orchestration/ruby-types.ts"
+    },
+    {
+      "id": "src_orchestration_ruby_types_ts_RubyFramework",
+      "label": "RubyFramework",
+      "type": "type",
+      "file": "src/orchestration/ruby-types.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_orchestration_ruby_types_ts_RubyTestFramework",
+      "label": "RubyTestFramework",
+      "type": "type",
+      "file": "src/orchestration/ruby-types.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "src_orchestration_ruby_types_ts_RubyProjectContext",
+      "label": "RubyProjectContext",
+      "type": "interface",
+      "file": "src/orchestration/ruby-types.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_orchestration_ruby_types_ts_RubyDiamondSurface",
+      "label": "RubyDiamondSurface",
+      "type": "type",
+      "file": "src/orchestration/ruby-types.ts",
+      "source_location": "L39"
+    },
+    {
+      "id": "src_orchestration_ruby_types_ts_RubyDiamondEnvelope",
+      "label": "RubyDiamondEnvelope",
+      "type": "interface",
+      "file": "src/orchestration/ruby-types.ts",
+      "source_location": "L45"
+    },
+    {
+      "id": "file_src_orchestration_specialist_prompts_ts",
+      "label": "specialist-prompts.ts",
+      "type": "file",
+      "file": "src/orchestration/specialist-prompts.ts"
+    },
+    {
+      "id": "src_orchestration_specialist_prompts_ts_RESEARCHER_SYSTEM_PROMPT",
+      "label": "RESEARCHER_SYSTEM_PROMPT",
+      "type": "const",
+      "file": "src/orchestration/specialist-prompts.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "src_orchestration_specialist_prompts_ts_REVIEWER_SYSTEM_PROMPT",
+      "label": "REVIEWER_SYSTEM_PROMPT",
+      "type": "const",
+      "file": "src/orchestration/specialist-prompts.ts",
+      "source_location": "L67"
+    },
+    {
+      "id": "src_orchestration_specialist_prompts_ts_CODER_CONTEXT_TEMPLATE",
+      "label": "CODER_CONTEXT_TEMPLATE",
+      "type": "function",
+      "file": "src/orchestration/specialist-prompts.ts",
+      "source_location": "L121"
+    },
+    {
+      "id": "file_src_orchestration_specialists_ts",
+      "label": "specialists.ts",
+      "type": "file",
+      "file": "src/orchestration/specialists.ts"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_SpecialistOptions",
+      "label": "SpecialistOptions",
+      "type": "interface",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_SpecialistResult",
+      "label": "SpecialistResult",
+      "type": "interface",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L34"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_runResearcher",
+      "label": "runResearcher",
+      "type": "function",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L57"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_runReviewer",
+      "label": "runReviewer",
+      "type": "function",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L94"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_runCoder",
+      "label": "runCoder",
+      "type": "function",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L131"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_runSpecialist",
+      "label": "runSpecialist",
+      "type": "function",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L171"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_buildTask",
+      "label": "buildTask",
+      "type": "function",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L194"
+    },
+    {
+      "id": "src_orchestration_specialists_ts_failResult",
+      "label": "failResult",
+      "type": "function",
+      "file": "src/orchestration/specialists.ts",
+      "source_location": "L217"
+    },
+    {
+      "id": "file_src_orchestration_types_ts",
+      "label": "types.ts",
+      "type": "file",
+      "file": "src/orchestration/types.ts"
+    },
+    {
+      "id": "src_orchestration_types_ts_PlanStep",
+      "label": "PlanStep",
+      "type": "interface",
+      "file": "src/orchestration/types.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_orchestration_types_ts_ExecutionPlan",
+      "label": "ExecutionPlan",
+      "type": "interface",
+      "file": "src/orchestration/types.ts",
+      "source_location": "L45"
+    },
+    {
+      "id": "src_orchestration_types_ts_OrchestrationMemory",
+      "label": "OrchestrationMemory",
+      "type": "interface",
+      "file": "src/orchestration/types.ts",
+      "source_location": "L76"
+    },
+    {
+      "id": "src_orchestration_types_ts_RouterDecision",
+      "label": "RouterDecision",
+      "type": "interface",
+      "file": "src/orchestration/types.ts",
+      "source_location": "L92"
+    },
+    {
+      "id": "file_src_perception_extractor_ts",
+      "label": "extractor.ts",
+      "type": "file",
+      "file": "src/perception/extractor.ts"
+    },
+    {
+      "id": "src_perception_extractor_ts_extractPerception",
+      "label": "extractPerception",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_perception_extractor_ts_walkFiles",
+      "label": "walkFiles",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L268"
+    },
+    {
+      "id": "src_perception_extractor_ts_walk",
+      "label": "walk",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L270"
+    },
+    {
+      "id": "src_perception_extractor_ts_readFile",
+      "label": "readFile",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L294"
+    },
+    {
+      "id": "src_perception_extractor_ts_ParsedImport",
+      "label": "ParsedImport",
+      "type": "interface",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L305"
+    },
+    {
+      "id": "src_perception_extractor_ts_parseImports",
+      "label": "parseImports",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L310"
+    },
+    {
+      "id": "src_perception_extractor_ts_resolveRelativeImport",
+      "label": "resolveRelativeImport",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L332"
+    },
+    {
+      "id": "src_perception_extractor_ts_ParsedComment",
+      "label": "ParsedComment",
+      "type": "interface",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L350"
+    },
+    {
+      "id": "src_perception_extractor_ts_parseComments",
+      "label": "parseComments",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L355"
+    },
+    {
+      "id": "src_perception_extractor_ts_readVision",
+      "label": "readVision",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L382"
+    },
+    {
+      "id": "src_perception_extractor_ts_parseMustConstraints",
+      "label": "parseMustConstraints",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L396"
+    },
+    {
+      "id": "src_perception_extractor_ts_RubyConfigData",
+      "label": "RubyConfigData",
+      "type": "interface",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L408"
+    },
+    {
+      "id": "src_perception_extractor_ts_readRubyConfig",
+      "label": "readRubyConfig",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L413"
+    },
+    {
+      "id": "src_perception_extractor_ts_PkgJson",
+      "label": "PkgJson",
+      "type": "interface",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L427"
+    },
+    {
+      "id": "src_perception_extractor_ts_readPackageJson",
+      "label": "readPackageJson",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L432"
+    },
+    {
+      "id": "src_perception_extractor_ts_buildFileNode",
+      "label": "buildFileNode",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L443"
+    },
+    {
+      "id": "src_perception_extractor_ts_buildModuleNode",
+      "label": "buildModuleNode",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L453"
+    },
+    {
+      "id": "src_perception_extractor_ts_buildDepNode",
+      "label": "buildDepNode",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L463"
+    },
+    {
+      "id": "src_perception_extractor_ts_buildEdge",
+      "label": "buildEdge",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L473"
+    },
+    {
+      "id": "src_perception_extractor_ts_classifyTestCoverage",
+      "label": "classifyTestCoverage",
+      "type": "function",
+      "file": "src/perception/extractor.ts",
+      "source_location": "L481"
+    },
+    {
+      "id": "file_src_perception_graph_store_ts",
+      "label": "graph-store.ts",
+      "type": "file",
+      "file": "src/perception/graph-store.ts"
+    },
+    {
+      "id": "src_perception_graph_store_ts_savePerception",
+      "label": "savePerception",
+      "type": "function",
+      "file": "src/perception/graph-store.ts",
+      "source_location": "L21"
+    },
+    {
+      "id": "src_perception_graph_store_ts_loadPerception",
+      "label": "loadPerception",
+      "type": "function",
+      "file": "src/perception/graph-store.ts",
+      "source_location": "L35"
+    },
+    {
+      "id": "src_perception_graph_store_ts_isStale",
+      "label": "isStale",
+      "type": "function",
+      "file": "src/perception/graph-store.ts",
+      "source_location": "L55"
+    },
+    {
+      "id": "src_perception_graph_store_ts_clearPerception",
+      "label": "clearPerception",
+      "type": "function",
+      "file": "src/perception/graph-store.ts",
+      "source_location": "L64"
+    },
+    {
+      "id": "src_perception_graph_store_ts_defaultPath",
+      "label": "defaultPath",
+      "type": "function",
+      "file": "src/perception/graph-store.ts",
+      "source_location": "L74"
+    },
+    {
+      "id": "file_src_perception_index_ts",
+      "label": "index.ts",
+      "type": "file",
+      "file": "src/perception/index.ts"
+    },
+    {
+      "id": "file_src_perception_queries_ts",
+      "label": "queries.ts",
+      "type": "file",
+      "file": "src/perception/queries.ts"
+    },
+    {
+      "id": "src_perception_queries_ts_emptyResult",
+      "label": "emptyResult",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "src_perception_queries_ts_resolveTarget",
+      "label": "resolveTarget",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L17"
+    },
+    {
+      "id": "src_perception_queries_ts_BfsResult",
+      "label": "BfsResult",
+      "type": "interface",
+      "file": "src/perception/queries.ts",
+      "source_location": "L41"
+    },
+    {
+      "id": "src_perception_queries_ts_bfsTraverse",
+      "label": "bfsTraverse",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L46"
+    },
+    {
+      "id": "src_perception_queries_ts_getDependencies",
+      "label": "getDependencies",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L93"
+    },
+    {
+      "id": "src_perception_queries_ts_getImpact",
+      "label": "getImpact",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L147"
+    },
+    {
+      "id": "src_perception_queries_ts_getConstraints",
+      "label": "getConstraints",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L183"
+    },
+    {
+      "id": "src_perception_queries_ts_getRiskAreas",
+      "label": "getRiskAreas",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L262"
+    },
+    {
+      "id": "src_perception_queries_ts_getTrajectory",
+      "label": "getTrajectory",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L298"
+    },
+    {
+      "id": "src_perception_queries_ts_findRelated",
+      "label": "findRelated",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L354"
+    },
+    {
+      "id": "src_perception_queries_ts_pathDir",
+      "label": "pathDir",
+      "type": "function",
+      "file": "src/perception/queries.ts",
+      "source_location": "L402"
+    },
+    {
+      "id": "file_src_perception_types_ts",
+      "label": "types.ts",
+      "type": "file",
+      "file": "src/perception/types.ts"
+    },
+    {
+      "id": "src_perception_types_ts_ArchitectureNode",
+      "label": "ArchitectureNode",
+      "type": "interface",
+      "file": "src/perception/types.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_perception_types_ts_ArchitectureEdge",
+      "label": "ArchitectureEdge",
+      "type": "interface",
+      "file": "src/perception/types.ts",
+      "source_location": "L24"
+    },
+    {
+      "id": "src_perception_types_ts_ProjectPerception",
+      "label": "ProjectPerception",
+      "type": "interface",
+      "file": "src/perception/types.ts",
+      "source_location": "L60"
+    },
+    {
+      "id": "src_perception_types_ts_PerceptionQuery",
+      "label": "PerceptionQuery",
+      "type": "interface",
+      "file": "src/perception/types.ts",
+      "source_location": "L105"
+    },
+    {
+      "id": "src_perception_types_ts_PerceptionQueryResult",
+      "label": "PerceptionQueryResult",
+      "type": "interface",
+      "file": "src/perception/types.ts",
+      "source_location": "L122"
+    },
+    {
+      "id": "file_src_providers_anthropic_ts",
+      "label": "anthropic.ts",
+      "type": "file",
+      "file": "src/providers/anthropic.ts"
+    },
+    {
+      "id": "src_providers_anthropic_ts_AnthropicProvider",
+      "label": "AnthropicProvider",
+      "type": "class",
+      "file": "src/providers/anthropic.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "src_providers_anthropic_ts_PendingTool",
+      "label": "PendingTool",
+      "type": "interface",
+      "file": "src/providers/anthropic.ts",
+      "source_location": "L54"
+    },
+    {
+      "id": "src_providers_anthropic_ts_toAnthropicTool",
+      "label": "toAnthropicTool",
+      "type": "function",
+      "file": "src/providers/anthropic.ts",
+      "source_location": "L123"
+    },
+    {
+      "id": "src_providers_anthropic_ts_toAnthropicMessages",
+      "label": "toAnthropicMessages",
+      "type": "function",
+      "file": "src/providers/anthropic.ts",
+      "source_location": "L131"
+    },
+    {
+      "id": "src_providers_anthropic_ts_fromAnthropicResponse",
+      "label": "fromAnthropicResponse",
+      "type": "function",
+      "file": "src/providers/anthropic.ts",
+      "source_location": "L161"
+    },
+    {
+      "id": "file_src_providers_factory_ts",
+      "label": "factory.ts",
+      "type": "file",
+      "file": "src/providers/factory.ts"
+    },
+    {
+      "id": "src_providers_factory_ts_registerCustomProviders",
+      "label": "registerCustomProviders",
+      "type": "function",
+      "file": "src/providers/factory.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_providers_factory_ts_getCustomProviders",
+      "label": "getCustomProviders",
+      "type": "function",
+      "file": "src/providers/factory.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "src_providers_factory_ts_detectProviderKind",
+      "label": "detectProviderKind",
+      "type": "function",
+      "file": "src/providers/factory.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "src_providers_factory_ts_createProvider",
+      "label": "createProvider",
+      "type": "function",
+      "file": "src/providers/factory.ts",
+      "source_location": "L51"
+    },
+    {
+      "id": "src_providers_factory_ts_KNOWN_MODELS",
+      "label": "KNOWN_MODELS",
+      "type": "const",
+      "file": "src/providers/factory.ts",
+      "source_location": "L143"
+    },
+    {
+      "id": "src_providers_factory_ts_getAllModels",
+      "label": "getAllModels",
+      "type": "function",
+      "file": "src/providers/factory.ts",
+      "source_location": "L226"
+    },
+    {
+      "id": "file_src_providers_fallback_ts",
+      "label": "fallback.ts",
+      "type": "file",
+      "file": "src/providers/fallback.ts"
+    },
+    {
+      "id": "src_providers_fallback_ts_FallbackChainProvider",
+      "label": "FallbackChainProvider",
+      "type": "class",
+      "file": "src/providers/fallback.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "file_src_providers_google_ts",
+      "label": "google.ts",
+      "type": "file",
+      "file": "src/providers/google.ts"
+    },
+    {
+      "id": "src_providers_google_ts_GoogleProvider",
+      "label": "GoogleProvider",
+      "type": "class",
+      "file": "src/providers/google.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "src_providers_google_ts_toGoogleTool",
+      "label": "toGoogleTool",
+      "type": "function",
+      "file": "src/providers/google.ts",
+      "source_location": "L94"
+    },
+    {
+      "id": "src_providers_google_ts_GoogleContent",
+      "label": "GoogleContent",
+      "type": "interface",
+      "file": "src/providers/google.ts",
+      "source_location": "L102"
+    },
+    {
+      "id": "src_providers_google_ts_toGoogleHistory",
+      "label": "toGoogleHistory",
+      "type": "function",
+      "file": "src/providers/google.ts",
+      "source_location": "L104"
+    },
+    {
+      "id": "src_providers_google_ts_fromGoogleResponse",
+      "label": "fromGoogleResponse",
+      "type": "function",
+      "file": "src/providers/google.ts",
+      "source_location": "L131"
+    },
+    {
+      "id": "file_src_providers_openai_compatible_ts",
+      "label": "openai-compatible.ts",
+      "type": "file",
+      "file": "src/providers/openai-compatible.ts"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_OpenAICompatibleProvider",
+      "label": "OpenAICompatibleProvider",
+      "type": "class",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L20"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_toOpenAITool",
+      "label": "toOpenAITool",
+      "type": "function",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L137"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_toOpenAIMessages",
+      "label": "toOpenAIMessages",
+      "type": "function",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L144"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_fromOpenAIResponse",
+      "label": "fromOpenAIResponse",
+      "type": "function",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L177"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_deriveProviderName",
+      "label": "deriveProviderName",
+      "type": "function",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L201"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_resolveApiKey",
+      "label": "resolveApiKey",
+      "type": "function",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L212"
+    },
+    {
+      "id": "src_providers_openai_compatible_ts_resolveBaseUrl",
+      "label": "resolveBaseUrl",
+      "type": "function",
+      "file": "src/providers/openai-compatible.ts",
+      "source_location": "L221"
+    },
+    {
+      "id": "file_src_providers_resilient_factory_ts",
+      "label": "resilient-factory.ts",
+      "type": "file",
+      "file": "src/providers/resilient-factory.ts"
+    },
+    {
+      "id": "src_providers_resilient_factory_ts_ResilienceConfig",
+      "label": "ResilienceConfig",
+      "type": "interface",
+      "file": "src/providers/resilient-factory.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "src_providers_resilient_factory_ts_createResilientProvider",
+      "label": "createResilientProvider",
+      "type": "function",
+      "file": "src/providers/resilient-factory.ts",
+      "source_location": "L36"
+    },
+    {
+      "id": "file_src_providers_resilient_ts",
+      "label": "resilient.ts",
+      "type": "file",
+      "file": "src/providers/resilient.ts"
+    },
+    {
+      "id": "src_providers_resilient_ts_ResilientOptions",
+      "label": "ResilientOptions",
+      "type": "interface",
+      "file": "src/providers/resilient.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "src_providers_resilient_ts_ResilientProvider",
+      "label": "ResilientProvider",
+      "type": "class",
+      "file": "src/providers/resilient.ts",
+      "source_location": "L35"
+    },
+    {
+      "id": "file_src_providers_types_ts",
+      "label": "types.ts",
+      "type": "file",
+      "file": "src/providers/types.ts"
+    },
+    {
+      "id": "src_providers_types_ts_ToolDefinition",
+      "label": "ToolDefinition",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "src_providers_types_ts_JSONSchemaProperty",
+      "label": "JSONSchemaProperty",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_providers_types_ts_ToolCall",
+      "label": "ToolCall",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L27"
+    },
+    {
+      "id": "src_providers_types_ts_ToolResult",
+      "label": "ToolResult",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L33"
+    },
+    {
+      "id": "src_providers_types_ts_HistoryMessage",
+      "label": "HistoryMessage",
+      "type": "type",
+      "file": "src/providers/types.ts",
+      "source_location": "L44"
+    },
+    {
+      "id": "src_providers_types_ts_LLMResponse",
+      "label": "LLMResponse",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L53"
+    },
+    {
+      "id": "src_providers_types_ts_StreamChunk",
+      "label": "StreamChunk",
+      "type": "type",
+      "file": "src/providers/types.ts",
+      "source_location": "L64"
+    },
+    {
+      "id": "src_providers_types_ts_LLMProvider",
+      "label": "LLMProvider",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L75"
+    },
+    {
+      "id": "src_providers_types_ts_ProviderConfig",
+      "label": "ProviderConfig",
+      "type": "interface",
+      "file": "src/providers/types.ts",
+      "source_location": "L104"
+    },
+    {
+      "id": "file_src_ruby_alternator_ts",
+      "label": "alternator.ts",
+      "type": "file",
+      "file": "src/ruby/alternator.ts"
+    },
+    {
+      "id": "src_ruby_alternator_ts_AlternatorOptions",
+      "label": "AlternatorOptions",
+      "type": "interface",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "src_ruby_alternator_ts_AlternatorRunResult",
+      "label": "AlternatorRunResult",
+      "type": "interface",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L32"
+    },
+    {
+      "id": "src_ruby_alternator_ts_createNoopDisplay",
+      "label": "createNoopDisplay",
+      "type": "function",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L46"
+    },
+    {
+      "id": "src_ruby_alternator_ts_inferTaskCategory",
+      "label": "inferTaskCategory",
+      "type": "function",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L70"
+    },
+    {
+      "id": "src_ruby_alternator_ts_isNonEmptyResult",
+      "label": "isNonEmptyResult",
+      "type": "function",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L79"
+    },
+    {
+      "id": "src_ruby_alternator_ts_isOllamaAvailable",
+      "label": "isOllamaAvailable",
+      "type": "function",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L87"
+    },
+    {
+      "id": "src_ruby_alternator_ts_buildRubyProvider",
+      "label": "buildRubyProvider",
+      "type": "function",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L105"
+    },
+    {
+      "id": "src_ruby_alternator_ts_RubyAlternator",
+      "label": "RubyAlternator",
+      "type": "class",
+      "file": "src/ruby/alternator.ts",
+      "source_location": "L124"
+    },
+    {
+      "id": "file_src_ruby_competence_ts",
+      "label": "competence.ts",
+      "type": "file",
+      "file": "src/ruby/competence.ts"
+    },
+    {
+      "id": "src_ruby_competence_ts_DEFAULT_FALLBACK_MODEL",
+      "label": "DEFAULT_FALLBACK_MODEL",
+      "type": "const",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_ruby_competence_ts_DEFAULT_MIN_FAILURES",
+      "label": "DEFAULT_MIN_FAILURES",
+      "type": "const",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L17"
+    },
+    {
+      "id": "src_ruby_competence_ts_clamp01",
+      "label": "clamp01",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L29"
+    },
+    {
+      "id": "src_ruby_competence_ts_safeConfig",
+      "label": "safeConfig",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L34"
+    },
+    {
+      "id": "src_ruby_competence_ts_tokenize",
+      "label": "tokenize",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L46"
+    },
+    {
+      "id": "src_ruby_competence_ts_similarity",
+      "label": "similarity",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L55"
+    },
+    {
+      "id": "src_ruby_competence_ts_tasksSimilar",
+      "label": "tasksSimilar",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L67"
+    },
+    {
+      "id": "src_ruby_competence_ts_taskPatternFrom",
+      "label": "taskPatternFrom",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L79"
+    },
+    {
+      "id": "src_ruby_competence_ts_safeEpisodes",
+      "label": "safeEpisodes",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L86"
+    },
+    {
+      "id": "src_ruby_competence_ts_buildLevelFromEpisodes",
+      "label": "buildLevelFromEpisodes",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L93"
+    },
+    {
+      "id": "src_ruby_competence_ts_safeDecision",
+      "label": "safeDecision",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L117"
+    },
+    {
+      "id": "src_ruby_competence_ts_assessCompetence",
+      "label": "assessCompetence",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L137"
+    },
+    {
+      "id": "src_ruby_competence_ts_updateCompetence",
+      "label": "updateCompetence",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L208"
+    },
+    {
+      "id": "src_ruby_competence_ts_getCompetenceReport",
+      "label": "getCompetenceReport",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L256"
+    },
+    {
+      "id": "src_ruby_competence_ts_shouldFineTune",
+      "label": "shouldFineTune",
+      "type": "function",
+      "file": "src/ruby/competence.ts",
+      "source_location": "L295"
+    },
+    {
+      "id": "file_src_ruby_episode_capture_ts",
+      "label": "episode-capture.ts",
+      "type": "file",
+      "file": "src/ruby/episode-capture.ts"
+    },
+    {
+      "id": "src_ruby_episode_capture_ts_EpisodeStats",
+      "label": "EpisodeStats",
+      "type": "interface",
+      "file": "src/ruby/episode-capture.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_ruby_episode_capture_ts_episodeStore",
+      "label": "episodeStore",
+      "type": "const",
+      "file": "src/ruby/episode-capture.ts",
+      "source_location": "L26"
+    },
+    {
+      "id": "src_ruby_episode_capture_ts_saveEpisode",
+      "label": "saveEpisode",
+      "type": "const",
+      "file": "src/ruby/episode-capture.ts",
+      "source_location": "L142"
+    },
+    {
+      "id": "src_ruby_episode_capture_ts_loadEpisodes",
+      "label": "loadEpisodes",
+      "type": "const",
+      "file": "src/ruby/episode-capture.ts",
+      "source_location": "L143"
+    },
+    {
+      "id": "src_ruby_episode_capture_ts_deleteEpisode",
+      "label": "deleteEpisode",
+      "type": "const",
+      "file": "src/ruby/episode-capture.ts",
+      "source_location": "L144"
+    },
+    {
+      "id": "src_ruby_episode_capture_ts_getEpisodeStats",
+      "label": "getEpisodeStats",
+      "type": "const",
+      "file": "src/ruby/episode-capture.ts",
+      "source_location": "L145"
+    },
+    {
+      "id": "file_src_ruby_fine_tune_ts",
+      "label": "fine-tune.ts",
+      "type": "file",
+      "file": "src/ruby/fine-tune.ts"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_JsonlRow",
+      "label": "JsonlRow",
+      "type": "interface",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_OllamaTagsResponse",
+      "label": "OllamaTagsResponse",
+      "type": "interface",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L17"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_fineTuneWithOllama",
+      "label": "fineTuneWithOllama",
+      "type": "function",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L29"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_fineTuneWithOpenAI",
+      "label": "fineTuneWithOpenAI",
+      "type": "function",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L109"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_checkJobStatus",
+      "label": "checkJobStatus",
+      "type": "function",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L174"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_checkOllamaJobStatus",
+      "label": "checkOllamaJobStatus",
+      "type": "function",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L187"
+    },
+    {
+      "id": "src_ruby_fine_tune_ts_checkOpenAIJobStatus",
+      "label": "checkOpenAIJobStatus",
+      "type": "function",
+      "file": "src/ruby/fine-tune.ts",
+      "source_location": "L210"
+    },
+    {
+      "id": "file_src_ruby_index_ts",
+      "label": "index.ts",
+      "type": "file",
+      "file": "src/ruby/index.ts"
+    },
+    {
+      "id": "file_src_ruby_ruby_model_ts",
+      "label": "ruby-model.ts",
+      "type": "file",
+      "file": "src/ruby/ruby-model.ts"
+    },
+    {
+      "id": "src_ruby_ruby_model_ts_OllamaTagsResponse",
+      "label": "OllamaTagsResponse",
+      "type": "interface",
+      "file": "src/ruby/ruby-model.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_ruby_ruby_model_ts_RubyModel",
+      "label": "RubyModel",
+      "type": "class",
+      "file": "src/ruby/ruby-model.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "src_ruby_ruby_model_ts_ollamaRoot",
+      "label": "ollamaRoot",
+      "type": "function",
+      "file": "src/ruby/ruby-model.ts",
+      "source_location": "L110"
+    },
+    {
+      "id": "file_src_ruby_training_data_ts",
+      "label": "training-data.ts",
+      "type": "file",
+      "file": "src/ruby/training-data.ts"
+    },
+    {
+      "id": "src_ruby_training_data_ts_generateTrainingData",
+      "label": "generateTrainingData",
+      "type": "function",
+      "file": "src/ruby/training-data.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "src_ruby_training_data_ts_exportJSONL",
+      "label": "exportJSONL",
+      "type": "function",
+      "file": "src/ruby/training-data.ts",
+      "source_location": "L59"
+    },
+    {
+      "id": "file_src_ruby_types_ts",
+      "label": "types.ts",
+      "type": "file",
+      "file": "src/ruby/types.ts"
+    },
+    {
+      "id": "src_ruby_types_ts_CompetenceLevel",
+      "label": "CompetenceLevel",
+      "type": "interface",
+      "file": "src/ruby/types.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_ruby_types_ts_RubyConfig",
+      "label": "RubyConfig",
+      "type": "interface",
+      "file": "src/ruby/types.ts",
+      "source_location": "L39"
+    },
+    {
+      "id": "src_ruby_types_ts_DEFAULT_RUBY_CONFIG",
+      "label": "DEFAULT_RUBY_CONFIG",
+      "type": "const",
+      "file": "src/ruby/types.ts",
+      "source_location": "L59"
+    },
+    {
+      "id": "src_ruby_types_ts_TaskCategory",
+      "label": "TaskCategory",
+      "type": "type",
+      "file": "src/ruby/types.ts",
+      "source_location": "L72"
+    },
+    {
+      "id": "src_ruby_types_ts_Episode",
+      "label": "Episode",
+      "type": "interface",
+      "file": "src/ruby/types.ts",
+      "source_location": "L78"
+    },
+    {
+      "id": "src_ruby_types_ts_AlternationDecision",
+      "label": "AlternationDecision",
+      "type": "interface",
+      "file": "src/ruby/types.ts",
+      "source_location": "L115"
+    },
+    {
+      "id": "src_ruby_types_ts_TrainingExample",
+      "label": "TrainingExample",
+      "type": "interface",
+      "file": "src/ruby/types.ts",
+      "source_location": "L136"
+    },
+    {
+      "id": "src_ruby_types_ts_FineTuneJob",
+      "label": "FineTuneJob",
+      "type": "interface",
+      "file": "src/ruby/types.ts",
+      "source_location": "L155"
+    },
+    {
+      "id": "file_src_safety_permissions_ts",
+      "label": "permissions.ts",
+      "type": "file",
+      "file": "src/safety/permissions.ts"
+    },
+    {
+      "id": "src_safety_permissions_ts_PermissionLevel",
+      "label": "PermissionLevel",
+      "type": "type",
+      "file": "src/safety/permissions.ts",
+      "source_location": "L4"
+    },
+    {
+      "id": "src_safety_permissions_ts_PermissionResult",
+      "label": "PermissionResult",
+      "type": "interface",
+      "file": "src/safety/permissions.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_safety_permissions_ts_PermissionSystem",
+      "label": "PermissionSystem",
+      "type": "class",
+      "file": "src/safety/permissions.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "src_safety_permissions_ts_confirm",
+      "label": "confirm",
+      "type": "function",
+      "file": "src/safety/permissions.ts",
+      "source_location": "L77"
+    },
+    {
+      "id": "file_src_server_index_ts",
+      "label": "index.ts",
+      "type": "file",
+      "file": "src/server/index.ts"
+    },
+    {
+      "id": "src_server_index_ts_ServeOptions",
+      "label": "ServeOptions",
+      "type": "interface",
+      "file": "src/server/index.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "src_server_index_ts_startServer",
+      "label": "startServer",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_server_index_ts_runTask",
+      "label": "runTask",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L51"
+    },
+    {
+      "id": "src_server_index_ts_send",
+      "label": "send",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L109"
+    },
+    {
+      "id": "src_server_index_ts_buildUI",
+      "label": "buildUI",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L113"
+    },
+    {
+      "id": "src_server_index_ts_conn",
+      "label": "conn",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L212"
+    },
+    {
+      "id": "src_server_index_ts_hv",
+      "label": "hv",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L219"
+    },
+    {
+      "id": "src_server_index_ts_rp",
+      "label": "rp",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L234"
+    },
+    {
+      "id": "src_server_index_ts_us",
+      "label": "us",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L245"
+    },
+    {
+      "id": "src_server_index_ts_uf",
+      "label": "uf",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L250"
+    },
+    {
+      "id": "src_server_index_ts_rt",
+      "label": "rt",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L262"
+    },
+    {
+      "id": "src_server_index_ts_fn",
+      "label": "fn",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L263"
+    },
+    {
+      "id": "src_server_index_ts_idle",
+      "label": "idle",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L264"
+    },
+    {
+      "id": "src_server_index_ts_mk",
+      "label": "mk",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L265"
+    },
+    {
+      "id": "src_server_index_ts_ex",
+      "label": "ex",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L266"
+    },
+    {
+      "id": "src_server_index_ts_sc",
+      "label": "sc",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L267"
+    },
+    {
+      "id": "src_server_index_ts_ic",
+      "label": "ic",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L268"
+    },
+    {
+      "id": "src_server_index_ts_si",
+      "label": "si",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L269"
+    },
+    {
+      "id": "src_server_index_ts_go",
+      "label": "go",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L271"
+    },
+    {
+      "id": "src_server_index_ts_ar",
+      "label": "ar",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L280"
+    },
+    {
+      "id": "src_server_index_ts_lh",
+      "label": "lh",
+      "type": "function",
+      "file": "src/server/index.ts",
+      "source_location": "L282"
+    },
+    {
+      "id": "file_src_server_session_ts",
+      "label": "session.ts",
+      "type": "file",
+      "file": "src/server/session.ts"
+    },
+    {
+      "id": "src_server_session_ts_SessionMessage",
+      "label": "SessionMessage",
+      "type": "interface",
+      "file": "src/server/session.ts",
+      "source_location": "L2"
+    },
+    {
+      "id": "src_server_session_ts_Session",
+      "label": "Session",
+      "type": "class",
+      "file": "src/server/session.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "file_src_setup_first_run_ts",
+      "label": "first-run.ts",
+      "type": "file",
+      "file": "src/setup/first-run.ts"
+    },
+    {
+      "id": "src_setup_first_run_ts_ProviderChoice",
+      "label": "ProviderChoice",
+      "type": "interface",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "src_setup_first_run_ts_PROVIDER_CHOICES",
+      "label": "PROVIDER_CHOICES",
+      "type": "const",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L29"
+    },
+    {
+      "id": "src_setup_first_run_ts_hasGlobalConfig",
+      "label": "hasGlobalConfig",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L117"
+    },
+    {
+      "id": "src_setup_first_run_ts_hasAnyEnvKey",
+      "label": "hasAnyEnvKey",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L122"
+    },
+    {
+      "id": "src_setup_first_run_ts_needsWizard",
+      "label": "needsWizard",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L137"
+    },
+    {
+      "id": "src_setup_first_run_ts_detectProviderFromEnv",
+      "label": "detectProviderFromEnv",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L150"
+    },
+    {
+      "id": "src_setup_first_run_ts_hasAnyProvider",
+      "label": "hasAnyProvider",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L163"
+    },
+    {
+      "id": "src_setup_first_run_ts_pad",
+      "label": "pad",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L168"
+    },
+    {
+      "id": "src_setup_first_run_ts_askMenu",
+      "label": "askMenu",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L171"
+    },
+    {
+      "id": "src_setup_first_run_ts_ask",
+      "label": "ask",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L200"
+    },
+    {
+      "id": "src_setup_first_run_ts_readLine",
+      "label": "readLine",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L213"
+    },
+    {
+      "id": "src_setup_first_run_ts_drainQueue",
+      "label": "drainQueue",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L245"
+    },
+    {
+      "id": "src_setup_first_run_ts_runFirstRunWizard",
+      "label": "runFirstRunWizard",
+      "type": "function",
+      "file": "src/setup/first-run.ts",
+      "source_location": "L256"
+    },
+    {
+      "id": "file_src_setup_global_config_ts",
+      "label": "global-config.ts",
+      "type": "file",
+      "file": "src/setup/global-config.ts"
+    },
+    {
+      "id": "src_setup_global_config_ts_GlobalConfig",
+      "label": "GlobalConfig",
+      "type": "interface",
+      "file": "src/setup/global-config.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "src_setup_global_config_ts_configDir",
+      "label": "configDir",
+      "type": "function",
+      "file": "src/setup/global-config.ts",
+      "source_location": "L38"
+    },
+    {
+      "id": "src_setup_global_config_ts_configPath",
+      "label": "configPath",
+      "type": "function",
+      "file": "src/setup/global-config.ts",
+      "source_location": "L43"
+    },
+    {
+      "id": "src_setup_global_config_ts_loadGlobalConfig",
+      "label": "loadGlobalConfig",
+      "type": "function",
+      "file": "src/setup/global-config.ts",
+      "source_location": "L47"
+    },
+    {
+      "id": "src_setup_global_config_ts_saveGlobalConfig",
+      "label": "saveGlobalConfig",
+      "type": "function",
+      "file": "src/setup/global-config.ts",
+      "source_location": "L58"
+    },
+    {
+      "id": "src_setup_global_config_ts_globalConfigPath",
+      "label": "globalConfigPath",
+      "type": "function",
+      "file": "src/setup/global-config.ts",
+      "source_location": "L75"
+    },
+    {
+      "id": "file_src_tools_edit_file_ts",
+      "label": "edit-file.ts",
+      "type": "file",
+      "file": "src/tools/edit-file.ts"
+    },
+    {
+      "id": "src_tools_edit_file_ts_EditFileInput",
+      "label": "EditFileInput",
+      "type": "interface",
+      "file": "src/tools/edit-file.ts",
+      "source_location": "L4"
+    },
+    {
+      "id": "src_tools_edit_file_ts_editFile",
+      "label": "editFile",
+      "type": "function",
+      "file": "src/tools/edit-file.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "file_src_tools_git_ts",
+      "label": "git.ts",
+      "type": "file",
+      "file": "src/tools/git.ts"
+    },
+    {
+      "id": "file_src_tools_index_ts",
+      "label": "index.ts",
+      "type": "file",
+      "file": "src/tools/index.ts"
+    },
+    {
+      "id": "src_tools_index_ts_TOOL_DEFINITIONS",
+      "label": "TOOL_DEFINITIONS",
+      "type": "const",
+      "file": "src/tools/index.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_tools_index_ts_executeTool",
+      "label": "executeTool",
+      "type": "function",
+      "file": "src/tools/index.ts",
+      "source_location": "L134"
+    },
+    {
+      "id": "file_src_tools_list_dir_ts",
+      "label": "list-dir.ts",
+      "type": "file",
+      "file": "src/tools/list-dir.ts"
+    },
+    {
+      "id": "file_src_tools_read_file_ts",
+      "label": "read-file.ts",
+      "type": "file",
+      "file": "src/tools/read-file.ts"
+    },
+    {
+      "id": "src_tools_read_file_ts_ReadFileInput",
+      "label": "ReadFileInput",
+      "type": "interface",
+      "file": "src/tools/read-file.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "src_tools_read_file_ts_readFile",
+      "label": "readFile",
+      "type": "function",
+      "file": "src/tools/read-file.ts",
+      "source_location": "L11"
+    },
+    {
+      "id": "file_src_tools_run_shell_ts",
+      "label": "run-shell.ts",
+      "type": "file",
+      "file": "src/tools/run-shell.ts"
+    },
+    {
+      "id": "file_src_tools_run_tests_ts",
+      "label": "run-tests.ts",
+      "type": "file",
+      "file": "src/tools/run-tests.ts"
+    },
+    {
+      "id": "file_src_tools_search_code_ts",
+      "label": "search-code.ts",
+      "type": "file",
+      "file": "src/tools/search-code.ts"
+    },
+    {
+      "id": "file_src_tools_tools_ts",
+      "label": "tools.ts",
+      "type": "file",
+      "file": "src/tools/tools.ts"
+    },
+    {
+      "id": "src_tools_tools_ts_ListDirInput",
+      "label": "ListDirInput",
+      "type": "interface",
+      "file": "src/tools/tools.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "src_tools_tools_ts_listDir",
+      "label": "listDir",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L11"
+    },
+    {
+      "id": "src_tools_tools_ts_walk",
+      "label": "walk",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_tools_tools_ts_WriteFileInput",
+      "label": "WriteFileInput",
+      "type": "interface",
+      "file": "src/tools/tools.ts",
+      "source_location": "L53"
+    },
+    {
+      "id": "src_tools_tools_ts_writeFile",
+      "label": "writeFile",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L55"
+    },
+    {
+      "id": "src_tools_tools_ts_SearchCodeInput",
+      "label": "SearchCodeInput",
+      "type": "interface",
+      "file": "src/tools/tools.ts",
+      "source_location": "L69"
+    },
+    {
+      "id": "src_tools_tools_ts_searchCode",
+      "label": "searchCode",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L78"
+    },
+    {
+      "id": "src_tools_tools_ts_RunShellInput",
+      "label": "RunShellInput",
+      "type": "interface",
+      "file": "src/tools/tools.ts",
+      "source_location": "L119"
+    },
+    {
+      "id": "src_tools_tools_ts_runShell",
+      "label": "runShell",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L121"
+    },
+    {
+      "id": "src_tools_tools_ts_RunTestsInput",
+      "label": "RunTestsInput",
+      "type": "interface",
+      "file": "src/tools/tools.ts",
+      "source_location": "L148"
+    },
+    {
+      "id": "src_tools_tools_ts_runTests",
+      "label": "runTests",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L150"
+    },
+    {
+      "id": "src_tools_tools_ts_detectTestCommand",
+      "label": "detectTestCommand",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L156"
+    },
+    {
+      "id": "src_tools_tools_ts_gitStatus",
+      "label": "gitStatus",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L183"
+    },
+    {
+      "id": "src_tools_tools_ts_GitDiffInput",
+      "label": "GitDiffInput",
+      "type": "interface",
+      "file": "src/tools/tools.ts",
+      "source_location": "L198"
+    },
+    {
+      "id": "src_tools_tools_ts_gitDiff",
+      "label": "gitDiff",
+      "type": "function",
+      "file": "src/tools/tools.ts",
+      "source_location": "L200"
+    },
+    {
+      "id": "file_src_tools_write_file_ts",
+      "label": "write-file.ts",
+      "type": "file",
+      "file": "src/tools/write-file.ts"
+    },
+    {
+      "id": "file_src_util_circuit_breaker_ts",
+      "label": "circuit-breaker.ts",
+      "type": "file",
+      "file": "src/util/circuit-breaker.ts"
+    },
+    {
+      "id": "src_util_circuit_breaker_ts_CircuitState",
+      "label": "CircuitState",
+      "type": "type",
+      "file": "src/util/circuit-breaker.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_util_circuit_breaker_ts_CircuitBreakerOptions",
+      "label": "CircuitBreakerOptions",
+      "type": "interface",
+      "file": "src/util/circuit-breaker.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "src_util_circuit_breaker_ts_CircuitOpenError",
+      "label": "CircuitOpenError",
+      "type": "class",
+      "file": "src/util/circuit-breaker.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "src_util_circuit_breaker_ts_CircuitBreaker",
+      "label": "CircuitBreaker",
+      "type": "class",
+      "file": "src/util/circuit-breaker.ts",
+      "source_location": "L26"
+    },
+    {
+      "id": "src_util_circuit_breaker_ts_defaultSleep",
+      "label": "defaultSleep",
+      "type": "function",
+      "file": "src/util/circuit-breaker.ts",
+      "source_location": "L89"
+    },
+    {
+      "id": "file_src_util_env_ts",
+      "label": "env.ts",
+      "type": "file",
+      "file": "src/util/env.ts"
+    },
+    {
+      "id": "src_util_env_ts_getApiKey",
+      "label": "getApiKey",
+      "type": "function",
+      "file": "src/util/env.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "src_util_env_ts_getEnv",
+      "label": "getEnv",
+      "type": "function",
+      "file": "src/util/env.ts",
+      "source_location": "L26"
+    },
+    {
+      "id": "file_src_util_errors_ts",
+      "label": "errors.ts",
+      "type": "file",
+      "file": "src/util/errors.ts"
+    },
+    {
+      "id": "src_util_errors_ts_ApiError",
+      "label": "ApiError",
+      "type": "class",
+      "file": "src/util/errors.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_util_errors_ts_defaultRetriable",
+      "label": "defaultRetriable",
+      "type": "function",
+      "file": "src/util/errors.ts",
+      "source_location": "L40"
+    },
+    {
+      "id": "src_util_errors_ts_normaliseError",
+      "label": "normaliseError",
+      "type": "function",
+      "file": "src/util/errors.ts",
+      "source_location": "L53"
+    },
+    {
+      "id": "src_util_errors_ts_parseRetryAfter",
+      "label": "parseRetryAfter",
+      "type": "function",
+      "file": "src/util/errors.ts",
+      "source_location": "L85"
+    },
+    {
+      "id": "src_util_errors_ts_parseGoogleRetryAfter",
+      "label": "parseGoogleRetryAfter",
+      "type": "function",
+      "file": "src/util/errors.ts",
+      "source_location": "L102"
+    },
+    {
+      "id": "src_util_errors_ts_isGoogle",
+      "label": "isGoogle",
+      "type": "function",
+      "file": "src/util/errors.ts",
+      "source_location": "L124"
+    },
+    {
+      "id": "file_src_util_rate_limiter_ts",
+      "label": "rate-limiter.ts",
+      "type": "file",
+      "file": "src/util/rate-limiter.ts"
+    },
+    {
+      "id": "src_util_rate_limiter_ts_RateLimiterOptions",
+      "label": "RateLimiterOptions",
+      "type": "interface",
+      "file": "src/util/rate-limiter.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_util_rate_limiter_ts_RateLimiter",
+      "label": "RateLimiter",
+      "type": "class",
+      "file": "src/util/rate-limiter.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "src_util_rate_limiter_ts_defaultSleep",
+      "label": "defaultSleep",
+      "type": "function",
+      "file": "src/util/rate-limiter.ts",
+      "source_location": "L99"
+    },
+    {
+      "id": "src_util_rate_limiter_ts_rpmLimiter",
+      "label": "rpmLimiter",
+      "type": "function",
+      "file": "src/util/rate-limiter.ts",
+      "source_location": "L106"
+    },
+    {
+      "id": "src_util_rate_limiter_ts_TpmTracker",
+      "label": "TpmTracker",
+      "type": "class",
+      "file": "src/util/rate-limiter.ts",
+      "source_location": "L120"
+    },
+    {
+      "id": "file_src_util_retry_ts",
+      "label": "retry.ts",
+      "type": "file",
+      "file": "src/util/retry.ts"
+    },
+    {
+      "id": "src_util_retry_ts_RetryOptions",
+      "label": "RetryOptions",
+      "type": "interface",
+      "file": "src/util/retry.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "src_util_retry_ts_withRetry",
+      "label": "withRetry",
+      "type": "function",
+      "file": "src/util/retry.ts",
+      "source_location": "L28"
+    },
+    {
+      "id": "src_util_retry_ts_computeDelay",
+      "label": "computeDelay",
+      "type": "function",
+      "file": "src/util/retry.ts",
+      "source_location": "L60"
+    },
+    {
+      "id": "src_util_retry_ts_defaultSleep",
+      "label": "defaultSleep",
+      "type": "function",
+      "file": "src/util/retry.ts",
+      "source_location": "L73"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_ProjectContext",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_loadProjectContext",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_loadGraphSummary",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_detectProjectName",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_detectStack",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_readTruncated",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_buildTree",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_walk",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_readConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_context_ts",
+      "target": "src_agent_context_ts_readGitLog",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_LoopOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_LoopResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_TokenUsage",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_costFor",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_runAgentLoop",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_BodyArgs",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_runLoopBody",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_persist",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_loop_ts",
+      "target": "src_agent_loop_ts_formatCallForConfirmation",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_session_store_ts",
+      "target": "src_agent_session_store_ts_ChatSession",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_session_store_ts",
+      "target": "src_agent_session_store_ts_sessionStore",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_SpawnOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_Spawner",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_ActiveSpawner",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_registerSpawner",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_clearSpawner",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_makeDefaultSpawner",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_executeSpawnTask",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_spawner_ts",
+      "target": "src_agent_spawner_ts_SPAWN_TASK_DEFINITION",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_agent_system_prompt_ts",
+      "target": "src_agent_system_prompt_ts_buildSystemPrompt",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_display_ts",
+      "target": "src_cli_display_ts_Display",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_display_ts",
+      "target": "src_cli_display_ts_createTerminalDisplay",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_display_ts",
+      "target": "src_cli_display_ts_toolIcon",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_display_ts",
+      "target": "src_cli_display_ts_formatInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_num",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_buildProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_main",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_ChatState",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_ReplCtx",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_ReplCommandResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_trySetModel",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_showModelSelector",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_handleReplCommand",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_runOrchestratedTask",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_printUsageFooter",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_cli_index_ts",
+      "target": "src_cli_index_ts_printHelp",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_defaults_ts",
+      "target": "src_config_defaults_ts_DEFAULTS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_defaults_ts",
+      "target": "src_config_defaults_ts_DANGEROUS_COMMANDS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_defaults_ts",
+      "target": "src_config_defaults_ts_DANGEROUS_PATTERNS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_defaults_ts",
+      "target": "src_config_defaults_ts_SAFE_SHELL_COMMANDS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_defaults_ts",
+      "target": "src_config_defaults_ts_IGNORE_PATTERNS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_defaults_ts",
+      "target": "src_config_defaults_ts_BINARY_EXTENSIONS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_project_config_ts",
+      "target": "src_config_project_config_ts_ProviderDef",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_project_config_ts",
+      "target": "src_config_project_config_ts_ProjectConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_project_config_ts",
+      "target": "src_config_project_config_ts_loadProjectConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_project_config_ts",
+      "target": "src_config_project_config_ts_normalise",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_project_config_ts",
+      "target": "src_config_project_config_ts_ResolvedConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_config_project_config_ts",
+      "target": "src_config_project_config_ts_resolveConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_ExternalHarness",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_HermesStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_getHarnessStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_getHermesStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_which",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_getVersion",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_listFiles",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_integrations_harnesses_ts",
+      "target": "src_integrations_harnesses_ts_listSkillNames",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_SpecialistRole",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_CompetenceDomain",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_CompetenceScore",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_ProjectCompetence",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_StepOutcome",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_PRIMARY_DOMAIN",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_key",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_clamp01",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_defaultCompetenceMatrix",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_recommendSpecialist",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_applyOutcome",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_competence_ts",
+      "target": "src_orchestration_competence_ts_competenceStore",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_ExecutorOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_executePlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_synthesise",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_findReadySteps",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_propagateSkips",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_propagateAllSkips",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_isTerminal",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_fallbackSynthesis",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_executor_ts",
+      "target": "src_orchestration_executor_ts_persist",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_savePlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_loadPlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_listPlans",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_deletePlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_saveMemory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_getMemory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_index_ts",
+      "target": "src_orchestration_index_ts_listMemory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_prompts_ts",
+      "target": "src_orchestration_orchestrator_prompts_ts_ORCHESTRATOR_SYSTEM_PROMPT",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_prompts_ts",
+      "target": "src_orchestration_orchestrator_prompts_ts_buildRiskSection",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_OrchestratorOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_createPlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_buildUserMessage",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_RawPlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_RawStep",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_parsePlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_hasCycle",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_dfs",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_orchestrator_ts",
+      "target": "src_orchestration_orchestrator_ts_fallbackPlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_plan_store_ts",
+      "target": "src_orchestration_plan_store_ts_planStore",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_prompts_ts",
+      "target": "src_orchestration_router_prompts_ts_ROUTER_SYSTEM_PROMPT",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_ts",
+      "target": "src_orchestration_router_ts_RouterOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_ts",
+      "target": "src_orchestration_router_ts_routeTask",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_ts",
+      "target": "src_orchestration_router_ts_buildUserMessage",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_ts",
+      "target": "src_orchestration_router_ts_RawDecision",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_ts",
+      "target": "src_orchestration_router_ts_parseDecision",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_router_ts",
+      "target": "src_orchestration_router_ts_safeDefault",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_detect_ts",
+      "target": "src_orchestration_ruby_detect_ts_readTextIfExists",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_detect_ts",
+      "target": "src_orchestration_ruby_detect_ts_detectRubyVersion",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_detect_ts",
+      "target": "src_orchestration_ruby_detect_ts_detectFramework",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_detect_ts",
+      "target": "src_orchestration_ruby_detect_ts_detectTestFramework",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_detect_ts",
+      "target": "src_orchestration_ruby_detect_ts_detectEntrypoints",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_detect_ts",
+      "target": "src_orchestration_ruby_detect_ts_detectRubyProject",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_types_ts",
+      "target": "src_orchestration_ruby_types_ts_RubyFramework",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_types_ts",
+      "target": "src_orchestration_ruby_types_ts_RubyTestFramework",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_types_ts",
+      "target": "src_orchestration_ruby_types_ts_RubyProjectContext",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_types_ts",
+      "target": "src_orchestration_ruby_types_ts_RubyDiamondSurface",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_ruby_types_ts",
+      "target": "src_orchestration_ruby_types_ts_RubyDiamondEnvelope",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialist_prompts_ts",
+      "target": "src_orchestration_specialist_prompts_ts_RESEARCHER_SYSTEM_PROMPT",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialist_prompts_ts",
+      "target": "src_orchestration_specialist_prompts_ts_REVIEWER_SYSTEM_PROMPT",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialist_prompts_ts",
+      "target": "src_orchestration_specialist_prompts_ts_CODER_CONTEXT_TEMPLATE",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_SpecialistOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_SpecialistResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_runResearcher",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_runReviewer",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_runCoder",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_runSpecialist",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_buildTask",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_specialists_ts",
+      "target": "src_orchestration_specialists_ts_failResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_types_ts",
+      "target": "src_orchestration_types_ts_PlanStep",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_types_ts",
+      "target": "src_orchestration_types_ts_ExecutionPlan",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_types_ts",
+      "target": "src_orchestration_types_ts_OrchestrationMemory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_orchestration_types_ts",
+      "target": "src_orchestration_types_ts_RouterDecision",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_extractPerception",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_walkFiles",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_walk",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_readFile",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_ParsedImport",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_parseImports",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_resolveRelativeImport",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_ParsedComment",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_parseComments",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_readVision",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_parseMustConstraints",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_RubyConfigData",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_readRubyConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_PkgJson",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_readPackageJson",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_buildFileNode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_buildModuleNode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_buildDepNode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_buildEdge",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_extractor_ts",
+      "target": "src_perception_extractor_ts_classifyTestCoverage",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_graph_store_ts",
+      "target": "src_perception_graph_store_ts_savePerception",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_graph_store_ts",
+      "target": "src_perception_graph_store_ts_loadPerception",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_graph_store_ts",
+      "target": "src_perception_graph_store_ts_isStale",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_graph_store_ts",
+      "target": "src_perception_graph_store_ts_clearPerception",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_graph_store_ts",
+      "target": "src_perception_graph_store_ts_defaultPath",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_emptyResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_resolveTarget",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_BfsResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_bfsTraverse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_getDependencies",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_getImpact",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_getConstraints",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_getRiskAreas",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_getTrajectory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_findRelated",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_queries_ts",
+      "target": "src_perception_queries_ts_pathDir",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_types_ts",
+      "target": "src_perception_types_ts_ArchitectureNode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_types_ts",
+      "target": "src_perception_types_ts_ArchitectureEdge",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_types_ts",
+      "target": "src_perception_types_ts_ProjectPerception",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_types_ts",
+      "target": "src_perception_types_ts_PerceptionQuery",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_perception_types_ts",
+      "target": "src_perception_types_ts_PerceptionQueryResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_anthropic_ts",
+      "target": "src_providers_anthropic_ts_AnthropicProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_anthropic_ts",
+      "target": "src_providers_anthropic_ts_PendingTool",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_anthropic_ts",
+      "target": "src_providers_anthropic_ts_toAnthropicTool",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_anthropic_ts",
+      "target": "src_providers_anthropic_ts_toAnthropicMessages",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_anthropic_ts",
+      "target": "src_providers_anthropic_ts_fromAnthropicResponse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_factory_ts",
+      "target": "src_providers_factory_ts_registerCustomProviders",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_factory_ts",
+      "target": "src_providers_factory_ts_getCustomProviders",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_factory_ts",
+      "target": "src_providers_factory_ts_detectProviderKind",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_factory_ts",
+      "target": "src_providers_factory_ts_createProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_factory_ts",
+      "target": "src_providers_factory_ts_KNOWN_MODELS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_factory_ts",
+      "target": "src_providers_factory_ts_getAllModels",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_fallback_ts",
+      "target": "src_providers_fallback_ts_FallbackChainProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_google_ts",
+      "target": "src_providers_google_ts_GoogleProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_google_ts",
+      "target": "src_providers_google_ts_toGoogleTool",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_google_ts",
+      "target": "src_providers_google_ts_GoogleContent",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_google_ts",
+      "target": "src_providers_google_ts_toGoogleHistory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_google_ts",
+      "target": "src_providers_google_ts_fromGoogleResponse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_OpenAICompatibleProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_toOpenAITool",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_toOpenAIMessages",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_fromOpenAIResponse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_deriveProviderName",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_resolveApiKey",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_openai_compatible_ts",
+      "target": "src_providers_openai_compatible_ts_resolveBaseUrl",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_resilient_factory_ts",
+      "target": "src_providers_resilient_factory_ts_ResilienceConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_resilient_factory_ts",
+      "target": "src_providers_resilient_factory_ts_createResilientProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_resilient_ts",
+      "target": "src_providers_resilient_ts_ResilientOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_resilient_ts",
+      "target": "src_providers_resilient_ts_ResilientProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_ToolDefinition",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_JSONSchemaProperty",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_ToolCall",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_ToolResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_HistoryMessage",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_LLMResponse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_StreamChunk",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_LLMProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_providers_types_ts",
+      "target": "src_providers_types_ts_ProviderConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_AlternatorOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_AlternatorRunResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_createNoopDisplay",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_inferTaskCategory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_isNonEmptyResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_isOllamaAvailable",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_buildRubyProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_alternator_ts",
+      "target": "src_ruby_alternator_ts_RubyAlternator",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_DEFAULT_FALLBACK_MODEL",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_DEFAULT_MIN_FAILURES",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_clamp01",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_safeConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_tokenize",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_similarity",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_tasksSimilar",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_taskPatternFrom",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_safeEpisodes",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_buildLevelFromEpisodes",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_safeDecision",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_assessCompetence",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_updateCompetence",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_getCompetenceReport",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_competence_ts",
+      "target": "src_ruby_competence_ts_shouldFineTune",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_episode_capture_ts",
+      "target": "src_ruby_episode_capture_ts_EpisodeStats",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_episode_capture_ts",
+      "target": "src_ruby_episode_capture_ts_episodeStore",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_episode_capture_ts",
+      "target": "src_ruby_episode_capture_ts_saveEpisode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_episode_capture_ts",
+      "target": "src_ruby_episode_capture_ts_loadEpisodes",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_episode_capture_ts",
+      "target": "src_ruby_episode_capture_ts_deleteEpisode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_episode_capture_ts",
+      "target": "src_ruby_episode_capture_ts_getEpisodeStats",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_JsonlRow",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_OllamaTagsResponse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_fineTuneWithOllama",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_fineTuneWithOpenAI",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_checkJobStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_checkOllamaJobStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_fine_tune_ts",
+      "target": "src_ruby_fine_tune_ts_checkOpenAIJobStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_ruby_model_ts",
+      "target": "src_ruby_ruby_model_ts_OllamaTagsResponse",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_ruby_model_ts",
+      "target": "src_ruby_ruby_model_ts_RubyModel",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_ruby_model_ts",
+      "target": "src_ruby_ruby_model_ts_ollamaRoot",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_training_data_ts",
+      "target": "src_ruby_training_data_ts_generateTrainingData",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_training_data_ts",
+      "target": "src_ruby_training_data_ts_exportJSONL",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_CompetenceLevel",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_RubyConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_DEFAULT_RUBY_CONFIG",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_TaskCategory",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_Episode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_AlternationDecision",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_TrainingExample",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_ruby_types_ts",
+      "target": "src_ruby_types_ts_FineTuneJob",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_safety_permissions_ts",
+      "target": "src_safety_permissions_ts_PermissionLevel",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_safety_permissions_ts",
+      "target": "src_safety_permissions_ts_PermissionResult",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_safety_permissions_ts",
+      "target": "src_safety_permissions_ts_PermissionSystem",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_safety_permissions_ts",
+      "target": "src_safety_permissions_ts_confirm",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_ServeOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_startServer",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_runTask",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_send",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_buildUI",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_conn",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_hv",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_rp",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_us",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_uf",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_rt",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_fn",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_idle",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_mk",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_ex",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_sc",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_ic",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_si",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_go",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_ar",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_index_ts",
+      "target": "src_server_index_ts_lh",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_session_ts",
+      "target": "src_server_session_ts_SessionMessage",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_server_session_ts",
+      "target": "src_server_session_ts_Session",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_ProviderChoice",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_PROVIDER_CHOICES",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_hasGlobalConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_hasAnyEnvKey",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_needsWizard",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_detectProviderFromEnv",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_hasAnyProvider",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_pad",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_askMenu",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_ask",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_readLine",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_drainQueue",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_first_run_ts",
+      "target": "src_setup_first_run_ts_runFirstRunWizard",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_global_config_ts",
+      "target": "src_setup_global_config_ts_GlobalConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_global_config_ts",
+      "target": "src_setup_global_config_ts_configDir",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_global_config_ts",
+      "target": "src_setup_global_config_ts_configPath",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_global_config_ts",
+      "target": "src_setup_global_config_ts_loadGlobalConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_global_config_ts",
+      "target": "src_setup_global_config_ts_saveGlobalConfig",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_setup_global_config_ts",
+      "target": "src_setup_global_config_ts_globalConfigPath",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_edit_file_ts",
+      "target": "src_tools_edit_file_ts_EditFileInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_edit_file_ts",
+      "target": "src_tools_edit_file_ts_editFile",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_index_ts",
+      "target": "src_tools_index_ts_TOOL_DEFINITIONS",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_index_ts",
+      "target": "src_tools_index_ts_executeTool",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_read_file_ts",
+      "target": "src_tools_read_file_ts_ReadFileInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_read_file_ts",
+      "target": "src_tools_read_file_ts_readFile",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_ListDirInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_listDir",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_walk",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_WriteFileInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_writeFile",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_SearchCodeInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_searchCode",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_RunShellInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_runShell",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_RunTestsInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_runTests",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_detectTestCommand",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_gitStatus",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_GitDiffInput",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_tools_tools_ts",
+      "target": "src_tools_tools_ts_gitDiff",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_circuit_breaker_ts",
+      "target": "src_util_circuit_breaker_ts_CircuitState",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_circuit_breaker_ts",
+      "target": "src_util_circuit_breaker_ts_CircuitBreakerOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_circuit_breaker_ts",
+      "target": "src_util_circuit_breaker_ts_CircuitOpenError",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_circuit_breaker_ts",
+      "target": "src_util_circuit_breaker_ts_CircuitBreaker",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_circuit_breaker_ts",
+      "target": "src_util_circuit_breaker_ts_defaultSleep",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_env_ts",
+      "target": "src_util_env_ts_getApiKey",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_env_ts",
+      "target": "src_util_env_ts_getEnv",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_errors_ts",
+      "target": "src_util_errors_ts_ApiError",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_errors_ts",
+      "target": "src_util_errors_ts_defaultRetriable",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_errors_ts",
+      "target": "src_util_errors_ts_normaliseError",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_errors_ts",
+      "target": "src_util_errors_ts_parseRetryAfter",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_errors_ts",
+      "target": "src_util_errors_ts_parseGoogleRetryAfter",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_errors_ts",
+      "target": "src_util_errors_ts_isGoogle",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_rate_limiter_ts",
+      "target": "src_util_rate_limiter_ts_RateLimiterOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_rate_limiter_ts",
+      "target": "src_util_rate_limiter_ts_RateLimiter",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_rate_limiter_ts",
+      "target": "src_util_rate_limiter_ts_defaultSleep",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_rate_limiter_ts",
+      "target": "src_util_rate_limiter_ts_rpmLimiter",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_rate_limiter_ts",
+      "target": "src_util_rate_limiter_ts_TpmTracker",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_retry_ts",
+      "target": "src_util_retry_ts_RetryOptions",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_retry_ts",
+      "target": "src_util_retry_ts_withRetry",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_retry_ts",
+      "target": "src_util_retry_ts_computeDelay",
+      "relation": "defines"
+    },
+    {
+      "source": "file_src_util_retry_ts",
+      "target": "src_util_retry_ts_defaultSleep",
+      "relation": "defines"
+    }
+  ],
+  "metadata": {
+    "source": "typescript-ast-grep",
+    "project": "ruby-code",
+    "node_count": 419,
+    "edge_count": 355
+  }
+}
