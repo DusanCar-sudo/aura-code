@@ -28,8 +28,8 @@ import { loadPerception, isStale, extractPerception } from '../perception/index.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'fallback', 'resume', 'chat-id'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'fallback', 'resume', 'chat-id', 'profile', 'test-command'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session', 'verify'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.RUBY_MODEL,
@@ -43,9 +43,13 @@ function num(s: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const cliMaxRetries  = num(argv['max-retries']) ?? num(process.env.RUBY_MAX_RETRIES);
-const cliRpm         = num(argv['rate-limit-rpm']) ?? num(process.env.RUBY_API_RPM);
-const cliTpm         = num(argv['rate-limit-tpm']) ?? num(process.env.RUBY_API_TPM);
+const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.RUBY_MAX_RETRIES);
+const cliMaxVerifyRetries = num(argv['max-verify-retries']);
+const cliVerify          = argv.verify === true;
+const cliProfile         = typeof argv.profile === 'string' ? argv.profile : undefined;
+const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
+const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.RUBY_API_RPM);
+const cliTpm             = num(argv['rate-limit-tpm']) ?? num(process.env.RUBY_API_TPM);
 const cliFallbacks: string[] =
   Array.isArray(argv.fallback)
     ? argv.fallback.map(String)
@@ -358,15 +362,39 @@ async function main() {
       // Router failed — fall through to single agent
     }
 
-    const result = await runAgentLoop({
-      provider, task, context: ctx, permissions, display,
-      initialHistory: activeChatHistory,
-      spawnConfig: {
-        apiKey: argv['api-key'] ?? undefined,
-        baseUrl: resolved.baseUrl ?? undefined,
-      },
-      sessionPath,
-    });
+    const doVerify = cliVerify || !!fileConfig.verify;
+
+    let result;
+    if (doVerify) {
+      const { runWithVerification } = await import('../verify/index.js');
+      const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+      const testCommand = cliTestCommand ?? fileConfig.testCommand;
+      const wrapperResult = await runWithVerification({
+        loopOpts: {
+          provider, task, context: ctx, permissions, display,
+          initialHistory: activeChatHistory,
+          spawnConfig: {
+            apiKey: argv['api-key'] ?? undefined,
+            baseUrl: resolved.baseUrl ?? undefined,
+          },
+          sessionPath,
+        },
+        config: { enabled: true, maxRetries, testCommand },
+        projectRoot: ctx.root,
+        display,
+      });
+      result = wrapperResult.loopResult;
+    } else {
+      result = await runAgentLoop({
+        provider, task, context: ctx, permissions, display,
+        initialHistory: activeChatHistory,
+        spawnConfig: {
+          apiKey: argv['api-key'] ?? undefined,
+          baseUrl: resolved.baseUrl ?? undefined,
+        },
+        sessionPath,
+      });
+    }
 
     if (activeChatId && !noSession) {
       await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
@@ -416,16 +444,40 @@ async function main() {
       let result;
       try {
         const currentProvider = buildProvider(display);
-        result = await runAgentLoop({
-          provider: currentProvider, task: input,
-          context: ctx, permissions, display,
-          initialHistory: activeChatHistory,
-          spawnConfig: {
-            apiKey: runtimeConfig.apiKey,
-            baseUrl: runtimeConfig.baseUrl ?? undefined,
-          },
-          sessionPath,
-        });
+
+        const doVerify = argv.verify === true || !!fileConfig.verify;
+        if (doVerify) {
+          const { runWithVerification } = await import('../verify/index.js');
+          const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+          const testCommand = cliTestCommand ?? fileConfig.testCommand;
+          const wrapperResult = await runWithVerification({
+            loopOpts: {
+              provider: currentProvider, task: input,
+              context: ctx, permissions, display,
+              initialHistory: activeChatHistory,
+              spawnConfig: {
+                apiKey: runtimeConfig.apiKey,
+                baseUrl: runtimeConfig.baseUrl ?? undefined,
+              },
+              sessionPath,
+            },
+            config: { enabled: true, maxRetries, testCommand },
+            projectRoot: ctx.root,
+            display,
+          });
+          result = wrapperResult.loopResult;
+        } else {
+          result = await runAgentLoop({
+            provider: currentProvider, task: input,
+            context: ctx, permissions, display,
+            initialHistory: activeChatHistory,
+            spawnConfig: {
+              apiKey: runtimeConfig.apiKey,
+              baseUrl: runtimeConfig.baseUrl ?? undefined,
+            },
+            sessionPath,
+          });
+        }
       } catch (err) {
         const msg = err instanceof Error ? (err.stack || err.message) : String(err);
         console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
@@ -966,11 +1018,16 @@ ${chalk.hex('#cc785c').bold('  ruby-code')} ${chalk.hex('#8a7768')('— model-ag
     --reset-setup            Wipe saved config and re-run the setup wizard
     --orchestrate            Force multi-agent orchestration mode
     --plan                   Preview execution plan before running
+    --verify                 Verify output after task; retry up to --max-verify-retries times
+    --max-verify-retries <n> Max verification retries (default: 3)
+    --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
+    --profile local          Use local Ollama model (no API key required)
 
     --rate-limit-rpm <n>     Cap requests per minute (default: 0=unlimited, Google: 30)
     --rate-limit-tpm <n>     Cap tokens per minute (Google only; default: 0=unlimited)
     --max-retries <n>        Max retry attempts on 429/5xx (default: 5, Google: 6)
     --fallback <model>       Fallback model if primary exhausts retries (repeatable)
+    --verify                 Enable post-task verification with automatic retries
 
   ${chalk.hex('#4e3d30')('Resilience:')}
     All API calls automatically:

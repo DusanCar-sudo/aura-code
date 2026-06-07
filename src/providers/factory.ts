@@ -4,6 +4,7 @@ import { OpenAICompatibleProvider } from './openai-compatible.js';
 import { GoogleProvider } from './google.js';
 import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
+import * as http from 'http';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom provider registry  (populated from .rubycode.json or programmatically)
@@ -132,6 +133,17 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     }, 'Local');
   }
 
+  // ── Local profile (qwen2.5-coder:7b or similar, no API key) ─────────────
+  if (model.startsWith('local-profile/')) {
+    const localModel = model.replace('local-profile/', '');
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: localModel,
+      baseUrl: config.baseUrl ?? 'http://localhost:11434/v1',
+      apiKey: 'ollama',
+    }, 'Local (Ollama)');
+  }
+
   // ── OpenAI (default OpenAI-compatible fallback) ───────────────────────────
   return new OpenAICompatibleProvider(config);
 }
@@ -241,4 +253,19 @@ export function getAllModels(): { id: string; name: string; provider: string; sp
     }
   }
   return all;
+}
+
+/**
+ * Check if Ollama is reachable at the given base URL.
+ * Returns true if the server responds, false otherwise.
+ */
+export async function checkOllamaHealth(baseUrl: string = 'http://localhost:11434'): Promise<boolean> {
+  return new Promise(resolve => {
+    const req = http.get(`${baseUrl}/api/tags`, { timeout: 3000 }, res => {
+      resolve(res.statusCode === 200);
+      res.resume();
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
 }

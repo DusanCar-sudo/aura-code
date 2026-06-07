@@ -134,6 +134,12 @@
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* Graph mode toggle */
+  .graph-modes { display:flex; gap:4px; align-items:center; }
+  .gm-btn { background:var(--card); border:1.5px solid var(--border2); border-radius:6px; color:var(--muted); cursor:pointer; font:inherit; font-size:11px; font-weight:600; padding:4px 12px; transition:all .12s; letter-spacing:.04em; }
+  .gm-btn:hover { border-color:var(--primary); color:var(--text); }
+  .gm-btn.active { background:var(--primary); border-color:var(--primary); color:#0a0704; }
 </style>
 </head>
 <body>
@@ -239,27 +245,30 @@ function initGraph() {
   }
 
   const NODE_COLORS = {
-    file:      '#58a6ff',
-    function:  '#ff7b72',
-    class:     '#d2a8ff',
-    interface: '#3fb950',
-    const:     '#ffa657',
-    type:      '#79c0ff',
-    enum:      '#f85149',
-    node:      '#8b949e',
+    file:'#58a6ff', function:'#ff7b72', class:'#d2a8ff', interface:'#3fb950',
+    const:'#ffa657', type:'#79c0ff', enum:'#f85149', node:'#8b949e'
   };
-  const NODE_R = { file: 13, class: 11, interface: 10, function: 8, const: 7, type: 7, enum: 8, node: 7 };
+  const NODE_R    = { file:13, class:11, interface:10, function:8, const:7, type:7, enum:8, node:7 };
+  const NODE_R3   = { file:8,  class:6,  interface:6,  function:4, const:4, type:4, enum:5, node:4 };
 
-  const allTypes = [...new Set(DATA.graph.nodes.map(n => n.type || 'node'))];
+  const allTypes   = [...new Set(DATA.graph.nodes.map(n => n.type || 'node'))];
   const activeTypes = new Set(allTypes);
+  let currentMode  = 'flat';
+  let threeAnimId  = null;
+  let threeRenderer = null;
 
   panel.innerHTML = `
     <div class="graph-controls">
       <input id="graph-search" placeholder="🔍  Search nodes, files…" oninput="filterGraph()">
+      <div class="graph-modes">
+        <button class="gm-btn active" onclick="window.switchGMode('flat',this)">Flat</button>
+        <button class="gm-btn" onclick="window.switchGMode('3d',this)">3D</button>
+        <button class="gm-btn" onclick="window.switchGMode('radial',this)">Radial</button>
+      </div>
       <div class="legend" id="legend"></div>
-      <span class="hint">scroll to zoom · drag to pan · drag nodes</span>
+      <span class="hint" id="graph-hint">scroll to zoom · drag to pan · drag nodes</span>
     </div>
-    <svg id="graph-svg"></svg>
+    <div id="graph-container" style="flex:1;min-height:0;position:relative;overflow:hidden;border-radius:8px;"></div>
   `;
 
   const legendEl = document.getElementById('legend');
@@ -271,103 +280,459 @@ function initGraph() {
     item.onclick = () => {
       if (activeTypes.has(t)) { activeTypes.delete(t); item.classList.remove('on'); }
       else { activeTypes.add(t); item.classList.add('on'); }
-      filterGraph();
+      if (currentMode === 'flat') doFilterFlat();
     };
     legendEl.appendChild(item);
   });
 
-  const svgEl = document.getElementById('graph-svg');
-  const W = svgEl.clientWidth || 900, H = svgEl.clientHeight || 580;
-  const svg = d3.select('#graph-svg').attr('width', W).attr('height', H);
-  const g = svg.append('g');
-
-  svg.call(d3.zoom().scaleExtent([0.05, 6]).on('zoom', e => g.attr('transform', e.transform)));
-
-  // Arrow marker — bright color
-  svg.append('defs').append('marker')
-    .attr('id','arr').attr('viewBox','0 -5 10 10').attr('refX',2).attr('refY',0)
-    .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
-    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#484f58');
-
   const nodes = DATA.graph.nodes.map(n => ({...n}));
   const edges = DATA.graph.edges.map(e => ({...e}));
-  const tooltip = document.getElementById('tooltip');
 
-  // Show labels for important node types always; others on hover
-  const ALWAYS_LABEL = new Set(['file','class','interface']);
+  // ── Flat (D3 Force) ───────────────────────────────────────────────
+  let flatSim = null, gLinks, gNodes, gLabels;
 
-  function filterGraph() {
-    const term = document.getElementById('graph-search').value.toLowerCase();
-    const vis = new Set(
-      nodes.filter(n =>
-        activeTypes.has(n.type || 'node') &&
-        (!term || n.label.toLowerCase().includes(term) || (n.file||'').toLowerCase().includes(term))
-      ).map(n => n.id)
-    );
-    gNodes.style('opacity', d => vis.has(d.id) ? 1 : 0.06);
-    gLinks.style('opacity', d => {
-      const si = d.source.id || d.source, ti = d.target.id || d.target;
-      return vis.has(si) && vis.has(ti) ? 0.55 : 0.03;
+  function initFlat(container) {
+    const W = container.clientWidth || 900, H = container.clientHeight || 580;
+    container.innerHTML = '';
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svgEl.id = 'graph-svg';
+    svgEl.style.cssText = 'width:100%;height:100%;background:var(--canvas);cursor:grab;display:block;';
+    svgEl.setAttribute('width', W); svgEl.setAttribute('height', H);
+    container.appendChild(svgEl);
+
+    const svg = d3.select('#graph-svg');
+    const g = svg.append('g');
+    svg.call(d3.zoom().scaleExtent([0.05,6]).on('zoom', e => g.attr('transform', e.transform)));
+    svg.append('defs').append('marker')
+      .attr('id','arr').attr('viewBox','0 -5 10 10').attr('refX',2).attr('refY',0)
+      .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+      .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#484f58');
+
+    const tooltip = document.getElementById('tooltip');
+    const ALWAYS_LABEL = new Set(['file','class','interface']);
+    if (flatSim) flatSim.stop();
+    flatSim = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(edges).id(d=>d.id).distance(d=>{
+        const st=d.source.type||'node',tt=d.target.type||'node';
+        return (st==='file'||tt==='file')?90:60;
+      }).strength(0.6))
+      .force('charge', d3.forceManyBody().strength(d=>d.type==='file'?-300:-160))
+      .force('center', d3.forceCenter(W/2, H/2))
+      .force('collision', d3.forceCollide(d=>(NODE_R[d.type||'node']||7)+6));
+
+    gLinks = g.append('g').selectAll('line').data(edges).enter().append('line')
+      .attr('stroke','#484f58').attr('stroke-width',d=>(d.relation||'')==='imports'?1.5:1)
+      .attr('opacity',0.55).attr('marker-end','url(#arr)');
+
+    gNodes = g.append('g').selectAll('circle').data(nodes).enter().append('circle')
+      .attr('r', d=>NODE_R[d.type||'node']||7)
+      .attr('fill', d=>NODE_COLORS[d.type||'node']||'#8b949e')
+      .attr('stroke','#0a0704').attr('stroke-width',2).style('cursor','pointer')
+      .call(d3.drag()
+        .on('start',(e,d)=>{ if(!e.active) flatSim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+        .on('drag',(e,d)=>{ d.fx=e.x; d.fy=e.y; })
+        .on('end',(e,d)=>{ if(!e.active) flatSim.alphaTarget(0); d.fx=null; d.fy=null; }))
+      .on('mouseover',(e,d)=>{
+        tooltip.style.display='block';
+        tooltip.innerHTML=`<strong>${d.label}</strong><br><span class="t-type">${d.type||'node'}</span>`
+          +(d.file?`<br><span class="t-file">${d.file}${d.source_location?' · '+d.source_location:''}</span>`:'');
+      })
+      .on('mousemove',e=>{ tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
+      .on('mouseout',()=>{ tooltip.style.display='none'; });
+
+    gLabels = g.append('g').selectAll('text')
+      .data(nodes.filter(n=>ALWAYS_LABEL.has(n.type||'')))
+      .enter().append('text')
+      .text(d=>d.label.length>22?d.label.slice(0,20)+'…':d.label)
+      .attr('fill',d=>NODE_COLORS[d.type||'node']||'#8b949e')
+      .attr('font-size',d=>d.type==='file'?'11px':'10px')
+      .attr('font-weight',d=>d.type==='file'?'700':'500')
+      .attr('pointer-events','none')
+      .attr('paint-order','stroke')
+      .attr('stroke','#0a0704').attr('stroke-width','3px')
+      .attr('dx',d=>(NODE_R[d.type||'node']||7)+4).attr('dy','0.35em');
+
+    flatSim.on('tick',()=>{
+      gLinks.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+            .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+      gNodes.attr('cx',d=>d.x).attr('cy',d=>d.y);
+      gLabels.attr('x',d=>d.x).attr('y',d=>d.y);
     });
-    gLabels.style('opacity', d => vis.has(d.id) ? 1 : 0.06);
   }
-  window.filterGraph = filterGraph;
 
-  const sim = d3.forceSimulation(nodes)
-    .force('link',      d3.forceLink(edges).id(d=>d.id).distance(d => {
-      const st = d.source.type || 'node', tt = d.target.type || 'node';
-      if (st==='file'||tt==='file') return 90;
-      return 60;
-    }).strength(0.6))
-    .force('charge',    d3.forceManyBody().strength(d => d.type==='file' ? -300 : -160))
-    .force('center',    d3.forceCenter(W/2, H/2))
-    .force('collision', d3.forceCollide(d => (NODE_R[d.type||'node']||7) + 6));
+  function doFilterFlat() {
+    const term = (document.getElementById('graph-search')?.value||'').toLowerCase();
+    const vis = new Set(nodes.filter(n=>
+      activeTypes.has(n.type||'node') &&
+      (!term||n.label.toLowerCase().includes(term)||(n.file||'').toLowerCase().includes(term))
+    ).map(n=>n.id));
+    if (!gNodes) return;
+    gNodes.style('opacity', d=>vis.has(d.id)?1:0.06);
+    gLinks.style('opacity', d=>{ const si=d.source.id||d.source,ti=d.target.id||d.target; return vis.has(si)&&vis.has(ti)?0.55:0.03; });
+    gLabels.style('opacity', d=>vis.has(d.id)?1:0.06);
+  }
 
-  const gLinks = g.append('g').selectAll('line').data(edges).enter().append('line')
-    .attr('stroke','#484f58').attr('stroke-width', d => {
-      const r = d.relation || '';
-      return r === 'imports' ? 1.5 : 1;
-    })
-    .attr('opacity', 0.55)
-    .attr('marker-end','url(#arr)');
+  // ── 3D (Three.js) ─────────────────────────────────────────────────
+  function init3D(container) {
+    const W = container.clientWidth || 900, H = container.clientHeight || 580;
 
-  const gNodes = g.append('g').selectAll('circle').data(nodes).enter().append('circle')
-    .attr('r', d => NODE_R[d.type||'node'] || 7)
-    .attr('fill', d => NODE_COLORS[d.type||'node'] || '#8b949e')
-    .attr('stroke', '#0d1117').attr('stroke-width', 2)
-    .style('cursor','pointer')
-    .call(d3.drag()
-      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
-      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
-      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
-    .on('mouseover', (e,d) => {
-      tooltip.style.display='block';
-      tooltip.innerHTML = `<strong>${d.label}</strong><br>
-        <span class="t-type">${d.type||'node'}</span>
-        ${d.file ? `<br><span class="t-file">${d.file}${d.source_location?' · '+d.source_location:''}</span>` : ''}`;
-    })
-    .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
-    .on('mouseout',  () => { tooltip.style.display='none'; });
+    // Compact 3D spring layout — smaller spread
+    const n3 = DATA.graph.nodes.map(n => ({
+      id:n.id, label:n.label, type:n.type||'node', file:n.file||'',
+      x:(Math.random()-0.5)*300, y:(Math.random()-0.5)*300, z:(Math.random()-0.5)*300,
+      vx:0, vy:0, vz:0
+    }));
+    const nm3 = Object.fromEntries(n3.map(n=>[n.id,n]));
+    const e3 = DATA.graph.edges.map(e=>({
+      s: nm3[typeof e.source==='object'?e.source.id:e.source],
+      t: nm3[typeof e.target==='object'?e.target.id:e.target]
+    })).filter(e=>e.s&&e.t);
 
-  const gLabels = g.append('g').selectAll('text')
-    .data(nodes.filter(n => ALWAYS_LABEL.has(n.type||'')))
-    .enter().append('text')
-    .text(d => d.label.length > 22 ? d.label.slice(0,20)+'…' : d.label)
-    .attr('fill', d => NODE_COLORS[d.type||'node'] || '#8b949e')
-    .attr('font-size', d => d.type==='file' ? '11px' : '10px')
-    .attr('font-weight', d => d.type==='file' ? '700' : '500')
-    .attr('pointer-events','none')
-    .attr('paint-order','stroke')
-    .attr('stroke','#0a0704').attr('stroke-width','3px')
-    .attr('dx', d => (NODE_R[d.type||'node']||7) + 4)
-    .attr('dy', '0.35em');
+    // Spring simulation with repulsion
+    for (let i = 0; i < 300; i++) {
+      // Attraction along edges
+      e3.forEach(({s,t})=>{
+        const dx=t.x-s.x, dy=t.y-s.y, dz=t.z-s.z;
+        const d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
+        const f=(d-60)*0.002/d;
+        s.vx+=dx*f; s.vy+=dy*f; s.vz+=dz*f;
+        t.vx-=dx*f; t.vy-=dy*f; t.vz-=dz*f;
+      });
+      // Repulsion between all nodes
+      for(let a=0;a<n3.length;a++) {
+        for(let b=a+1;b<n3.length;b++) {
+          const dx=n3[b].x-n3[a].x, dy=n3[b].y-n3[a].y, dz=n3[b].z-n3[a].z;
+          const d2=dx*dx+dy*dy+dz*dz||1;
+          if(d2<2500) { // only nearby nodes
+            const f=800/d2;
+            n3[a].vx-=dx*f; n3[a].vy-=dy*f; n3[a].vz-=dz*f;
+            n3[b].vx+=dx*f; n3[b].vy+=dy*f; n3[b].vz+=dz*f;
+          }
+        }
+      }
+      n3.forEach(n=>{
+        n.vx=(n.vx-n.x*0.002)*0.88;
+        n.vy=(n.vy-n.y*0.002)*0.88;
+        n.vz=(n.vz-n.z*0.002)*0.88;
+        n.x+=n.vx; n.y+=n.vy; n.z+=n.vz;
+      });
+    }
 
-  sim.on('tick', () => {
-    gLinks.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-          .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
-    gNodes.attr('cx',d=>d.x).attr('cy',d=>d.y);
-    gLabels.attr('x',d=>d.x).attr('y',d=>d.y);
-  });
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0704);
+    scene.fog = new THREE.Fog(0x0a0704, 400, 900);
+
+    const camera = new THREE.PerspectiveCamera(55, W/H, 0.1, 2000);
+    camera.position.z = 450;
+
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+    threeRenderer = renderer;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dl = new THREE.DirectionalLight(0xffffff, 0.6);
+    dl.position.set(1,2,1); scene.add(dl);
+    const dl2 = new THREE.DirectionalLight(0xcc785c, 0.3);
+    dl2.position.set(-1,-1,0); scene.add(dl2);
+
+    const grp = new THREE.Group();
+    scene.add(grp);
+
+    // Edges — thin, subtle
+    const lpts = [];
+    e3.forEach(({s,t})=>lpts.push(s.x,s.y,s.z,t.x,t.y,t.z));
+    if (lpts.length) {
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.Float32BufferAttribute(lpts,3));
+      lg.setDrawRange(0, lpts.length/3);
+      grp.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({
+        color:0x3a2818, opacity:0.5, transparent:true
+      })));
+    }
+
+    // Node spheres — smaller radii
+    const COLORS = {file:0x58a6ff, function:0xff7b72, class:0xd2a8ff,
+                    interface:0x3fb950, const:0xffa657, type:0x79c0ff, node:0x8a7768};
+    const SIZE = {file:2.5, class:3, interface:3, function:2, const:1.5, type:1.5, node:2};
+
+    const meshes = [];
+    n3.forEach(n=>{
+      const r = SIZE[n.type]||2.5;
+      const geo = new THREE.SphereGeometry(r, 8, 8);
+      const mat = new THREE.MeshPhongMaterial({
+        color: COLORS[n.type]||0x8a7768,
+        shininess: 60, specular: 0x333333
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(n.x, n.y, n.z);
+      mesh.userData = {label: n.label, type: n.type};
+      grp.add(mesh);
+      meshes.push(mesh);
+    });
+
+    // Tooltip
+    const tip = document.createElement('div');
+    tip.style.cssText = 'position:absolute;background:#1e1a15;border:1px solid #3a2818;color:#ede0cc;font:12px JetBrains Mono,monospace;padding:6px 10px;border-radius:6px;pointer-events:none;display:none;z-index:10;max-width:200px;';
+    container.style.position = 'relative';
+    container.appendChild(tip);
+
+    // Mouse interaction
+    let isDragging=false, prevX=0, prevY=0, rotX=0, rotY=0, velX=0, velY=0;
+    const AUTO_SPEED = 0.001;
+    let autoRotate = true;
+
+    const rc = renderer.domElement;
+    rc.addEventListener('mousedown', e=>{isDragging=true; prevX=e.clientX; prevY=e.clientY; autoRotate=false; velX=0; velY=0;});
+    window.addEventListener('mouseup', ()=>{isDragging=false;});
+    window.addEventListener('mousemove', e=>{
+      if(!isDragging) {
+        // Hover tooltip
+        const rect = rc.getBoundingClientRect();
+        const mx=((e.clientX-rect.left)/W)*2-1;
+        const my=-((e.clientY-rect.top)/H)*2+1;
+        const ray = new THREE.Raycaster();
+        ray.setFromCamera({x:mx,y:my}, camera);
+        const hits = ray.intersectObjects(meshes);
+        if(hits.length) {
+          const d = hits[0].object.userData;
+          tip.innerHTML = '<strong style="color:#cc785c">'+d.label+'</strong><br><span style="color:#8a7768">'+d.type+'</span>';
+          tip.style.display='block';
+          tip.style.left=(e.clientX-rect.left+12)+'px';
+          tip.style.top=(e.clientY-rect.top-10)+'px';
+        } else {
+          tip.style.display='none';
+        }
+        return;
+      }
+      const dx=e.clientX-prevX, dy=e.clientY-prevY;
+      velX=dx*0.005; velY=dy*0.005;
+      rotY+=dx*0.005; rotX+=dy*0.005;
+      prevX=e.clientX; prevY=e.clientY;
+      grp.rotation.y=rotY; grp.rotation.x=rotX;
+    });
+    rc.addEventListener('wheel', e=>{
+      camera.position.z = Math.max(80, Math.min(800, camera.position.z + e.deltaY*0.3));
+    }, {passive:true});
+
+    function animate() {
+      if(!threeRenderer) return;
+      requestAnimationFrame(animate);
+      if(!isDragging) {
+        velX*=0.95; velY*=0.95;
+        rotX+=velY; rotY+=velX;
+        if(autoRotate) rotY+=AUTO_SPEED;
+        grp.rotation.x=rotX; grp.rotation.y=rotY;
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+  }
+
+  function initRadial(container) {
+    const W = container.clientWidth || 900, H = container.clientHeight || 580;
+    const CX = W/2, CY = H/2;
+    const minDim = Math.min(W, H);
+
+    // Sparser rings — more breathing room
+    const R = {
+      outer:  minDim * 0.42,
+      middle: minDim * 0.26,
+      inner:  minDim * 0.12
+    };
+
+    container.innerHTML = '';
+    container.style.position = 'relative';
+
+    // Reset button
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset highlight';
+    resetBtn.style.cssText = 'position:absolute;top:10px;right:10px;z-index:5;background:var(--card);border:1px solid var(--border2);color:var(--muted);font:11px inherit;padding:5px 12px;border-radius:6px;cursor:pointer;';
+    container.appendChild(resetBtn);
+
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svgEl.style.cssText = 'width:100%;height:100%;background:var(--canvas);display:block;cursor:grab;';
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    container.appendChild(svgEl);
+
+    const svg = d3.select(svgEl);
+    const g = svg.append('g').attr('transform', `translate(${CX},${CY})`);
+
+    // Zoom + pan
+    svg.call(d3.zoom().scaleExtent([0.2, 8]).on('zoom', e => {
+      g.attr('transform', `translate(${CX + e.transform.x}, ${CY + e.transform.y}) scale(${e.transform.k})`);
+    }));
+
+    // Tooltip
+    const tip = document.createElement('div');
+    tip.style.cssText = 'position:absolute;background:#1e1a15;border:1px solid #3a2818;color:#ede0cc;font:11px JetBrains Mono,monospace;padding:5px 10px;border-radius:6px;pointer-events:none;display:none;z-index:10;';
+    container.appendChild(tip);
+
+    // Assign rings
+    const ringOf = n => n.type==='file' ? 'outer' : (n.type==='class'||n.type==='interface') ? 'middle' : 'inner';
+    const byRing = {outer:[], middle:[], inner:[]};
+    nodes.forEach(n => byRing[ringOf(n)].push(n));
+
+    // Positions with gap between nodes
+    const pos = {};
+    Object.entries(byRing).forEach(([rname, rnodes]) => {
+      const r = R[rname];
+      rnodes.forEach((n, i) => {
+        const angle = (i / Math.max(rnodes.length, 1)) * 2 * Math.PI - Math.PI/2;
+        pos[n.id] = { x: Math.cos(angle)*r, y: Math.sin(angle)*r, angle };
+      });
+    });
+
+    // Guide circles — subtle dashes
+    [['outer','Files'], ['middle','Classes'], ['inner','Functions']].forEach(([rname, label]) => {
+      g.append('circle').attr('r', R[rname])
+        .attr('fill','none').attr('stroke','#2c1e14').attr('stroke-width',1)
+        .attr('stroke-dasharray','3,6').attr('opacity',0.6);
+      g.append('text')
+        .attr('x', R[rname]+8).attr('y', 4)
+        .attr('fill','#4e3d30').attr('font-size',10).attr('font-family','JetBrains Mono,monospace')
+        .text(label);
+    });
+
+    // Build adjacency for highlight
+    const adj = {};
+    nodes.forEach(n => adj[n.id] = new Set());
+    const edgeList = DATA.graph.edges.map(e=>({
+      s: typeof e.source==='object'?e.source.id:e.source,
+      t: typeof e.target==='object'?e.target.id:e.target
+    })).filter(e=>pos[e.s]&&pos[e.t]);
+    edgeList.forEach(({s,t})=>{ adj[s].add(t); adj[t].add(s); });
+
+    // Edge colors by ring connection type
+    const edgeColor = (s, t) => {
+      const rs = ringOf(nodes.find(n=>n.id===s)||{type:''}), rt = ringOf(nodes.find(n=>n.id===t)||{type:''});
+      if(rs===rt) return '#2c1e14';
+      if(rs==='outer'||rt==='outer') return '#1e3a2a';
+      return '#2a1e3a';
+    };
+
+    // Draw edges — curved bezier
+    const edgeG = g.append('g').attr('class','edges');
+    edgeList.forEach(({s,t}) => {
+      const ps = pos[s], pt = pos[t];
+      const mx = (ps.x+pt.x)*0.15, my = (ps.y+pt.y)*0.15; // curve toward center
+      edgeG.append('path')
+        .attr('d', `M${ps.x},${ps.y} Q${mx},${my} ${pt.x},${pt.y}`)
+        .attr('fill','none')
+        .attr('stroke', edgeColor(s,t))
+        .attr('stroke-width', 0.6)
+        .attr('opacity', 0.5)
+        .attr('data-s', s).attr('data-t', t);
+    });
+
+    // Draw nodes
+    const COLORS = {file:'#58a6ff', function:'#ff7b72', class:'#d2a8ff',
+                    interface:'#3fb950', const:'#ffa657', type:'#79c0ff', node:'#8a7768'};
+    const RADIUS = {file:5, class:4, interface:4, function:3, const:2.5, type:2.5, node:3};
+
+    const nodeG = g.append('g').attr('class','node-g');
+    let selected = null;
+
+    nodes.forEach(n => {
+      if(!pos[n.id]) return;
+      const {x,y} = pos[n.id];
+      const r = RADIUS[n.type]||3;
+      const c = COLORS[n.type]||'#8a7768';
+
+      const circle = nodeG.append('circle')
+        .attr('cx',x).attr('cy',y).attr('r',r)
+        .attr('fill',c).attr('opacity',0.85)
+        .attr('stroke','none')
+        .attr('data-id',n.id)
+        .style('cursor','pointer');
+
+      // Show label only for files (outer ring)
+      if(n.type==='file') {
+        const angle = pos[n.id].angle;
+        const lx = Math.cos(angle)*(R.outer+14);
+        const ly = Math.sin(angle)*(R.outer+14);
+        const anchor = Math.cos(angle) > 0 ? 'start' : 'end';
+        g.append('text')
+          .attr('x',lx).attr('y',ly)
+          .attr('text-anchor',anchor)
+          .attr('dominant-baseline','middle')
+          .attr('fill','#8a7768').attr('font-size',8)
+          .attr('font-family','JetBrains Mono,monospace')
+          .text(n.label.length>20 ? n.label.slice(0,18)+'…' : n.label)
+          .style('pointer-events','none');
+      }
+
+      // Hover tooltip for all nodes
+      circle.on('mouseover', function(event) {
+        const rect = container.getBoundingClientRect();
+        tip.innerHTML = '<strong style="color:#cc785c">'+n.label+'</strong><br><span style="color:#8a7768">'+n.type+(n.file?' · '+n.file.split('/').pop():'')+'</span>';
+        tip.style.display='block';
+        tip.style.left=(event.clientX-rect.left+14)+'px';
+        tip.style.top=(event.clientY-rect.top-10)+'px';
+      }).on('mousemove', function(event) {
+        const rect = container.getBoundingClientRect();
+        tip.style.left=(event.clientX-rect.left+14)+'px';
+        tip.style.top=(event.clientY-rect.top-10)+'px';
+      }).on('mouseout', ()=>{ tip.style.display='none'; });
+
+      // Click highlight
+      circle.on('click', function() {
+        if(selected===n.id){ doRadialReset(); return; }
+        selected = n.id;
+        const connected = adj[n.id];
+        nodeG.selectAll('circle').attr('opacity', d2 => {
+          const id2 = d2.getAttribute ? d2.getAttribute('data-id') : null;
+          return id2===n.id || connected.has(id2) ? 1 : 0.1;
+        });
+        edgeG.selectAll('path').attr('opacity', function() {
+          const s2=this.getAttribute('data-s'), t2=this.getAttribute('data-t');
+          return (s2===n.id||t2===n.id) ? 0.9 : 0.05;
+        });
+        // Enlarge selected
+        d3.select(this).attr('r', r*1.8).attr('stroke','#cc785c').attr('stroke-width',1.5);
+      });
+    });
+
+    function doRadialReset() {
+      selected = null;
+      nodeG.selectAll('circle').attr('opacity',0.85).attr('stroke','none')
+        .each(function(){ const r2=RADIUS[this.getAttribute('data-id')?.split('_')[0]]||3; });
+      // Reset radii properly
+      nodes.forEach(n=>{
+        nodeG.select(`circle[data-id="${n.id}"]`).attr('r', RADIUS[n.type]||3);
+      });
+      edgeG.selectAll('path').attr('opacity',0.5);
+      tip.style.display='none';
+    }
+
+    resetBtn.onclick = doRadialReset;
+    window.radialReset = doRadialReset;
+  }
+
+  // ── Mode switcher ──────────────────────────────────────────────────
+  window.switchGMode = function(mode, btn) {
+    if (mode===currentMode) return;
+    currentMode = mode;
+    document.querySelectorAll('.gm-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if (threeAnimId)   { cancelAnimationFrame(threeAnimId); threeAnimId=null; }
+    if (threeRenderer) { threeRenderer.dispose(); threeRenderer=null; }
+    const container = document.getElementById('graph-container');
+    container.innerHTML = '';
+    document.getElementById('tooltip').style.display='none';
+    const hint = document.getElementById('graph-hint');
+    if (mode==='flat')   { hint.textContent='scroll to zoom · drag to pan · drag nodes'; initFlat(container); }
+    else if (mode==='3d'){ hint.textContent='drag to rotate · scroll to zoom · auto-rotates when idle'; init3D(container); }
+    else                 { hint.textContent='click node to highlight connections · scroll to zoom · pan'; initRadial(container); }
+  };
+
+  window.filterGraph = function() {
+    if (currentMode==='flat') doFilterFlat();
+  };
+
+  // Boot flat mode
+  initFlat(document.getElementById('graph-container'));
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────

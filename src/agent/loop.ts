@@ -8,6 +8,7 @@ import type { Display } from '../cli/display.js';
 import { DEFAULTS } from '../config/defaults.js';
 import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
+import type { VerificationConfig } from '../verify/types.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -26,6 +27,8 @@ export interface LoopOptions {
   spawnConfig?: { apiKey?: string; baseUrl?: string };
   /** Disables subagent tool entirely (e.g. for tests) */
   disableSpawn?: boolean;
+  /** Internal: skip post-task verification (used by runWithVerification wrapper). */
+  verify?: boolean;
 }
 
 export interface LoopResult {
@@ -37,6 +40,8 @@ export interface LoopResult {
   costUsd: number;
   /** Full conversation history after the loop (including prior turns if resumed). */
   history: HistoryMessage[];
+  /** Every tool call made during this loop run — used by the verify layer. */
+  toolCallLog: Array<{ name: string; input: Record<string, unknown> }>;
 }
 
 export interface TokenUsage {
@@ -79,7 +84,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let toolCallCount = 0;
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-  // Wire up the subagent tool unless explicitly disabled
   if (!opts.disableSpawn) {
     registerSpawner(makeDefaultSpawner(context, opts.spawnConfig ?? {}, display));
   }
@@ -89,8 +93,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   try {
     return await runLoopBody({ opts, provider, system, history, maxTurns, pricingModel, display, permissions, turns, toolCallCount, usage });
   } finally {
-    // Always clean up the module-level spawner so it doesn't leak
-    // into subsequent invocations or tests.
     clearSpawner();
   }
 }
@@ -112,6 +114,7 @@ interface BodyArgs {
 async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const { opts, provider, system, history, maxTurns, pricingModel, display, permissions } = args;
   let { turns, toolCallCount, usage } = args;
+  const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
 
   while (turns < maxTurns) {
     turns++;
@@ -158,7 +161,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: false,
         summary: `Provider error on turn ${turns}: ${String(e)}`,
-        turns, toolCallCount, usage, history,
+        turns, toolCallCount, usage, history, toolCallLog,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
@@ -172,7 +175,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: true,
         summary: responseText || '(Task completed with no output)',
-        turns, toolCallCount, usage, history,
+        turns, toolCallCount, usage, history, toolCallLog,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
@@ -219,6 +222,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         const elapsed = Date.now() - startMs;
         display.toolResult(call.name, result, elapsed);
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
+        toolCallLog.push({ name: call.name, input: call.input });
       } catch (e) {
         result = `Tool error (${call.name}): ${String(e)}`;
         isError = true;
@@ -235,9 +239,18 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   return {
     success: false,
     summary: `Loop ended after ${turns} turns (max: ${maxTurns})`,
-    turns, toolCallCount, usage, history,
+    turns, toolCallCount, usage, history, toolCallLog,
     costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
   };
+}
+
+export async function runAgentLoopVerified(
+  opts: LoopOptions,
+  config: VerificationConfig,
+  projectRoot: string,
+): Promise<{ loopResult: LoopResult; verifyResult: import('../verify/types.js').VerificationResult; totalAttempts: number }> {
+  const { runWithVerification } = await import('../verify/index.js');
+  return runWithVerification({ loopOpts: opts, config, projectRoot, display: opts.display });
 }
 
 async function persist(path: string | undefined, history: HistoryMessage[]): Promise<void> {

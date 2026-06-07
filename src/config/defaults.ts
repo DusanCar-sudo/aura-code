@@ -10,6 +10,17 @@ export const DEFAULTS = {
   maxLoopTurns: 50,         // prevent infinite loops
   confirmDangerous: true,   // ask before destructive ops
   autoApprove: false,       // --auto flag overrides
+  verify: false,            // --verify flag enables post-task verification
+  maxVerifyRetries: 3,      // retries when verification fails
+  testCommand: undefined as string | undefined, // custom test command for verification
+  profile: 'default' as 'default' | 'local',    // 'default' or 'local' (Ollama)
+  // Local profile (--profile local / profile: "local" in .rubycode.json)
+  localProfile: {
+    model: 'qwen2.5-coder:7b',
+    baseUrl: 'http://localhost:11434/v1',
+    contextWindow: 8192,
+    maxTokens: 2048,
+  },
 };
 
 export const DANGEROUS_COMMANDS = [

@@ -37,6 +37,14 @@ export interface ProjectConfig {
   maxRetries?: number;
   /** Resilience: fallbacks tried if primary fails. */
   fallbacks?: string[];
+  /** Enable post-task verification. */
+  verify?: boolean;
+  /** Max verification retries (default: 3). */
+  maxVerifyRetries?: number;
+  /** Shell command to run as part of verification (e.g. "npm test"). */
+  testCommand?: string;
+  /** Preset profile — "local" routes to Ollama with compact prompts. */
+  profile?: 'local';
 }
 
 /**
@@ -78,6 +86,10 @@ function normalise(raw: unknown): ProjectConfig {
     out.fallbacks = r.fallbacks.filter((x): x is string => typeof x === 'string');
   }
   if (Array.isArray(r.ignore)) out.ignore = r.ignore.filter((x): x is string => typeof x === 'string');
+  if (r.verify === true || r.verify === false) out.verify = r.verify as boolean;
+  if (typeof r.maxVerifyRetries === 'number' && r.maxVerifyRetries > 0) out.maxVerifyRetries = Math.floor(r.maxVerifyRetries as number);
+  if (typeof r.testCommand === 'string') out.testCommand = r.testCommand as string;
+  if (r.profile === 'local') out.profile = 'local';
   if (Array.isArray(r.providers)) {
     out.providers = r.providers
       .filter((p: unknown): p is Record<string, unknown> =>
