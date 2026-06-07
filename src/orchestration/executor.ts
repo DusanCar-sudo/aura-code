@@ -5,6 +5,7 @@ import type { ExecutionPlan, PlanStep, OrchestrationMemory } from './types.js';
 import type { Display } from '../cli/display.js';
 import { runSpecialist } from './specialists.js';
 import { planStore } from './plan-store.js';
+import { competenceStore, PRIMARY_DOMAIN } from './competence.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -102,6 +103,13 @@ export async function executePlan(opts: ExecutorOptions): Promise<ExecutionPlan>
         memory.push(entry);
         try { await planStore.saveMemory(context.root, entry); } catch { /* best-effort */ }
 
+        competenceStore.recordOutcome(context.root, {
+          specialist: step.specialist,
+          domain: PRIMARY_DOMAIN[step.specialist],
+          success: true,
+          quality: 1,
+        }).catch(() => { /* best-effort */ });
+
         display.stepCompleted(step, step.result);
       } else {
         const errMsg =
@@ -112,6 +120,12 @@ export async function executePlan(opts: ExecutorOptions): Promise<ExecutionPlan>
         step.status     = 'failed';
         step.result     = errMsg;
         step.durationMs = result.status === 'fulfilled' ? result.value.durationMs : 0;
+
+        competenceStore.recordOutcome(context.root, {
+          specialist: step.specialist,
+          domain: PRIMARY_DOMAIN[step.specialist],
+          success: false,
+        }).catch(() => { /* best-effort */ });
 
         propagateSkips(plan.steps, step.id);
       }
