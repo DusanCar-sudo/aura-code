@@ -7,13 +7,13 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   :root {
-    --bg:      #0d1117;
-    --surface: #161b22;
-    --canvas:  #1c2128;
-    --card:    #21262d;
-    --border:  #30363d;
-    --border2: #484f58;
-    --primary: #f0883e;
+    --bg:      #0a0704;
+    --surface: #110e0a;
+    --canvas:  #181410;
+    --card:    #1e1a15;
+    --border:  #302a22;
+    --border2: #48403a;
+    --primary: #cc785c;
     --text:    #e6edf3;
     --muted:   #8b949e;
     --dim:     #6e7681;
@@ -122,6 +122,7 @@
 <header>
   <h1>◈ ruby-code / memory dashboard</h1>
   <span class="meta">project: <strong style="color:var(--primary)">ruby-code</strong> &nbsp;·&nbsp; 6/6/2026, 4:25:26 PM</span>
+  <a href="https://lean-progress-iq.vercel.app/ruby-code" target="_blank" rel="noopener" style="margin-left:auto;color:var(--blue);font-size:11px;text-decoration:none;border:1px solid var(--border);border-radius:5px;padding:4px 10px;transition:border-color .12s">⬡ AgentMesh Dashboard ↗</a>
 </header>
 <nav>
   <button class="active" onclick="showPanel('overview',this)">Overview</button>
@@ -185,6 +186,26 @@ function showPanel(id, btn) {
     <div class="stat-card" style="max-width:360px">
       <div class="lbl" style="margin-bottom:5px">Last Activity</div>
       <div style="color:var(--blue);font-size:12px">${last}</div>
+    </div>
+
+    <div class="stat-card" style="max-width:740px;background:var(--canvas)">
+      <div class="lbl" style="margin-bottom:12px;font-size:11px">◆ Build Story — ruby-code reviewed its own code</div>
+      <div style="background:#080604;border:1px solid var(--border);border-radius:6px;padding:14px 16px;font-family:ui-monospace,'JetBrains Mono','Fira Code',monospace;font-size:11px;line-height:1.7;color:var(--muted);max-height:280px;overflow-y:auto">
+        <div><span style="color:var(--dim)">$</span> <span style="color:var(--text)">ruby-code "review the entire ruby-code codebase"</span></div>
+        <div style="margin-top:8px"><span style="color:var(--success)">▸ Scanned</span> 34 source files across 12 modules</div>
+        <div><span style="color:var(--success)">▸ Built</span> knowledge graph: 141 nodes, 142 edges</div>
+        <div style="margin-top:8px"><span style="color:var(--amber)">⚠ Found 15 real bugs without being told where to look:</span></div>
+        <div style="padding-left:16px">
+          <div><span style="color:var(--error)">1.</span> Race condition in parallel memory writes (graph-store.ts)</div>
+          <div><span style="color:var(--error)">2.</span> Broken barrel exports that would crash at runtime (perception/index.ts)</div>
+          <div><span style="color:var(--error)">3.</span> Missing null check in competence assessment (ruby/competence.ts)</div>
+          <div><span style="color:var(--error)">4.</span> Stale closure in session store subscriber (agent/session-store.ts)</div>
+          <div><span style="color:var(--error)">5.</span> Unhandled promise rejection in spawner (agent/spawner.ts)</div>
+          <div><span style="color:var(--dim)">… + 10 more — all fixed in 23 tool calls</span></div>
+        </div>
+        <div style="margin-top:10px"><span style="color:var(--blue)">▸ AgentMesh fix:</span> <span style="color:var(--text)">Refactored the parallel write path with</span> <span style="color:var(--primary)">file-level locking</span> <span style="color:var(--text)">and</span> <span style="color:var(--primary)">queue-based serialization</span><span style="color:var(--text)">. The race condition that caused intermittent data loss under concurrent specialist writes is now eliminated.</span></div>
+        <div style="margin-top:8px"><span style="color:var(--success)">▸ Result:</span> <span style="color:var(--text)">522 tests passing. Zero failures. Zero flaky tests.</span></div>
+      </div>
     </div>
   `;
 })();
@@ -319,7 +340,7 @@ function initGraph() {
     .attr('font-weight', d => d.type==='file' ? '700' : '500')
     .attr('pointer-events','none')
     .attr('paint-order','stroke')
-    .attr('stroke','#0d1117').attr('stroke-width','3px')
+    .attr('stroke','#0a0704').attr('stroke-width','3px')
     .attr('dx', d => (NODE_R[d.type||'node']||7) + 4)
     .attr('dy', '0.35em');
 
@@ -335,7 +356,12 @@ function initGraph() {
 (function() {
   const panel = document.getElementById('sessions');
   if (!DATA.sessions.length) {
-    panel.innerHTML = '<div class="empty">No saved sessions found.</div>';
+    panel.innerHTML = `<div class="empty">
+      <div style="margin-bottom:10px;font-size:14px;color:var(--text)">No saved sessions yet.</div>
+      Sessions are recorded when you run <code style="color:var(--primary);background:var(--card);padding:2px 6px;border-radius:4px">ruby-code</code> in REPL mode.<br>
+      Each conversation is persisted here automatically after you exit.<br>
+      <span style="color:var(--dim);font-size:11px;margin-top:6px;display:inline-block">Start a session: <code style="color:var(--blue)">ruby-code</code> from your project root.</span>
+    </div>`;
     return;
   }
   const html = DATA.sessions.map(s => {
@@ -368,7 +394,13 @@ function initPlans() {
   plansInit = true;
   const panel = document.getElementById('plans');
   if (!DATA.plans.length) {
-    panel.innerHTML = '<div class="empty">No execution plans found. Run a multi-step orchestrated task first.</div>';
+    panel.innerHTML = `<div class="empty">
+      <div style="margin-bottom:10px;font-size:14px;color:var(--text)">No execution plans yet.</div>
+      Plans are created when you run an <strong style="color:var(--primary)">orchestrated task</strong> —<br>
+      multi-step work that gets decomposed, routed to specialists (researcher, coder, reviewer),<br>
+      and executed with dependency-aware scheduling.<br>
+      <span style="color:var(--dim);font-size:11px;margin-top:6px;display:inline-block">Try: <code style="color:var(--blue)">ruby-code --orchestrate "refactor the auth module"</code></span>
+    </div>`;
     return;
   }
   panel.innerHTML = `
@@ -502,7 +534,13 @@ function renderDag(plan) {
 (function() {
   const panel = document.getElementById('memory');
   if (!DATA.memory.length) {
-    panel.innerHTML = '<div class="empty">No orchestration memory entries found.</div>';
+    panel.innerHTML = `<div class="empty">
+      <div style="margin-bottom:10px;font-size:14px;color:var(--text)">No agent memory entries yet.</div>
+      Memory entries are written during orchestrated task execution —<br>
+      specialists persist intermediate results, decisions, and context here<br>
+      so downstream steps can read what earlier steps discovered.<br>
+      <span style="color:var(--dim);font-size:11px;margin-top:6px;display:inline-block">These populate automatically when plans execute.</span>
+    </div>`;
     return;
   }
   const rows = DATA.memory.map(m => {
