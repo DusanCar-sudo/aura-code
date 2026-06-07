@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ruby-code · Memory Dashboard · ruby-code</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root {
     --bg:      #0a0704;
@@ -55,6 +56,23 @@
   .legend-item.on { border-color: currentColor; color: var(--text); }
   .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .hint { color: var(--dim); font-size: 10px; }
+
+  /* Graph mode toggle buttons */
+  .graph-modes { display: flex; gap: 6px; align-items: center; }
+  .graph-modes button {
+    background: var(--card); border: 1.5px solid var(--border2); border-radius: 6px;
+    color: var(--muted); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700;
+    padding: 6px 14px; letter-spacing: .04em; transition: all .15s;
+    text-transform: uppercase;
+  }
+  .graph-modes button:hover { border-color: var(--primary); color: var(--text); }
+  .graph-modes button.active { border-color: var(--primary); color: var(--primary); background: #1a1510; box-shadow: 0 0 8px #cc785c30; }
+  #graph-container { flex: 1; min-height: 0; position: relative; }
+  #graph-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; width: 100%; height: 100%; cursor: grab; }
+  #graph-svg:active { cursor: grabbing; }
+  #three-container { width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; position: absolute; top: 0; left: 0; }
+  #radial-svg { width: 100%; height: 100%; cursor: grab; }
+  #radial-svg:active { cursor: grabbing; }
 
   /* Tooltip */
   .tooltip {
