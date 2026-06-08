@@ -14,43 +14,79 @@ function loadGraph(projectRoot: string): object | null {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
 }
 
-function loadPlans(): ExecutionPlan[] {
-  const dir = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'plans');
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
-    .map(f => {
-      try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as ExecutionPlan; }
-      catch { return null; }
-    })
-    .filter((p): p is ExecutionPlan => p !== null)
-    .sort((a, b) => b.created - a.created);
+function loadPlans(projectRoot: string): ExecutionPlan[] {
+  const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'plans');
+  if (!fs.existsSync(base)) return [];
+
+  const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+
+  const readDir = (d: string): ExecutionPlan[] => {
+    if (!fs.existsSync(d)) return [];
+    return fs.readdirSync(d)
+      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
+      .map(f => {
+        try { return JSON.parse(fs.readFileSync(path.join(d, f), 'utf8')) as ExecutionPlan; }
+        catch { return null; }
+      })
+      .filter((p): p is ExecutionPlan => p !== null);
+  };
+
+  // Plans from root level + project-specific subdir
+  const rootPlans = readDir(base);
+  const subPlans  = readDir(path.join(base, safe));
+
+  const seen = new Set(rootPlans.map(p => p.id));
+  const merged = [...rootPlans];
+  for (const p of subPlans) {
+    if (!seen.has(p.id)) merged.push(p);
+  }
+
+  return merged.sort((a, b) => b.created - a.created);
 }
 
 function loadSessions(projectRoot: string): ChatSession[] {
+  const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'sessions');
   const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
-  const dir = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'sessions', safe);
+
+  const readDir = (d: string): ChatSession[] => {
+    if (!fs.existsSync(d)) return [];
+    return fs.readdirSync(d)
+      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
+      .map(f => {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(path.join(d, f), 'utf8')) as Partial<ChatSession>;
+          if (!parsed.id) return null;
+          return parsed as ChatSession;
+        } catch { return null; }
+      })
+      .filter((s): s is ChatSession => s !== null);
+  };
+
+  // Sessions from project-specific subdir + any .json files at root level
+  const subSessions  = readDir(path.join(base, safe));
+  const rootSessions = readDir(base);
+
+  const seen = new Set(subSessions.map(s => s.id));
+  const merged = [...subSessions];
+  for (const s of rootSessions) {
+    if (!seen.has(s.id)) merged.push(s);
+  }
+
+  return merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+function loadMemory(projectRoot: string): object[] {
+  const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'memory');
+  const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+  const dir = path.join(base, safe);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
     .map(f => {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Partial<ChatSession>;
-        if (!parsed.id) return null;
-        return parsed as ChatSession;
-      } catch { return null; }
+      try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); }
+      catch { return null; }
     })
-    .filter((s): s is ChatSession => s !== null)
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-}
-
-function loadMemory(projectRoot: string): object[] {
-  const p = path.join(projectRoot, '.rubycode', 'memory.json');
-  if (!fs.existsSync(p)) return [];
-  try {
-    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
+    .filter((m): m is object => m !== null);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -208,7 +244,7 @@ function buildHtml(data: {
 <div class="tooltip" id="tooltip" style="display:none"></div>
 
 <script>
-const DATA = ${json};
+const DATA = ` + json + `;
 
 function showPanel(id, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -601,7 +637,7 @@ function renderDag(plan) {
 
 export function generateDashboard(projectRoot: string): string {
   const graph    = loadGraph(projectRoot);
-  const plans    = loadPlans();
+  const plans    = loadPlans(projectRoot);
   const sessions = loadSessions(projectRoot);
   const memory   = loadMemory(projectRoot);
 
