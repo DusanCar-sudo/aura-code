@@ -238,6 +238,17 @@ describe('verifyTaskIntent', () => {
     }));
     expect(checks.find(c => c.name === 'files created')).toBeUndefined();
   });
+
+  it('skips intent check when task only uses edit_file (no write_file)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'existing.ts'), 'old content');
+    const checks = runAllChecks(makeCtx({
+      projectRoot: tmpDir,
+      task: 'add error handling to the module',
+      toolCalls: [{ name: 'edit_file', input: { path: 'existing.ts', find: 'old', replace: 'new' } }],
+      filesBefore: new Set(['existing.ts']),
+    }));
+    expect(checks.find(c => c.name === 'files created')).toBeUndefined();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
