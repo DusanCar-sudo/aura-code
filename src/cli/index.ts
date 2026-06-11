@@ -28,7 +28,7 @@ import { loadPerception, isStale, extractPerception } from '../perception/index.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'fallback', 'resume', 'chat-id', 'profile', 'test-command'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command'],
   boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session', 'verify'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
@@ -45,6 +45,7 @@ function num(s: unknown): number | undefined {
 
 const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.RUBY_MAX_RETRIES);
 const cliMaxVerifyRetries = num(argv['max-verify-retries']);
+const cliMaxTurns        = num(argv['max-turns']);
 const cliVerify          = argv.verify === true;
 const cliProfile         = typeof argv.profile === 'string' ? argv.profile : undefined;
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
@@ -150,6 +151,7 @@ const resolved = resolveConfig(
     baseUrl: cliBaseUrl,
     auto: argv.auto === true,
     readonly: argv.readonly === true,
+    maxTurns: cliMaxTurns,
     rateLimitRpm: cliRpm,
     rateLimitTpm: cliTpm,
     maxRetries: cliMaxRetries,
@@ -373,6 +375,7 @@ async function main() {
         loopOpts: {
           provider, task, context: ctx, permissions, display,
           initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
           spawnConfig: {
             apiKey: argv['api-key'] ?? undefined,
             baseUrl: resolved.baseUrl ?? undefined,
@@ -388,6 +391,7 @@ async function main() {
       result = await runAgentLoop({
         provider, task, context: ctx, permissions, display,
         initialHistory: activeChatHistory,
+        maxTurns: resolved.maxTurns,
         spawnConfig: {
           apiKey: argv['api-key'] ?? undefined,
           baseUrl: resolved.baseUrl ?? undefined,
@@ -455,6 +459,7 @@ async function main() {
               provider: currentProvider, task: input,
               context: ctx, permissions, display,
               initialHistory: activeChatHistory,
+              maxTurns: resolved.maxTurns,
               spawnConfig: {
                 apiKey: runtimeConfig.apiKey,
                 baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -471,6 +476,7 @@ async function main() {
             provider: currentProvider, task: input,
             context: ctx, permissions, display,
             initialHistory: activeChatHistory,
+            maxTurns: resolved.maxTurns,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
               baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -1021,6 +1027,7 @@ ${chalk.hex('#cc785c').bold('  ruby-code')} ${chalk.hex('#8a7768')('— model-ag
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
+    --max-turns <n>          Max agent loop turns before stopping (default: 150)
     --profile local          Use local Ollama model (no API key required)
 
     --rate-limit-rpm <n>     Cap requests per minute (default: 0=unlimited, Google: 30)
@@ -1055,6 +1062,7 @@ ${chalk.hex('#cc785c').bold('  ruby-code')} ${chalk.hex('#8a7768')('— model-ag
       ],
       "rateLimitRpm": 30,
       "rateLimitTpm": 1000000,
+      "maxTurns": 150,
       "maxRetries": 6,
       "fallbacks": ["gpt-4o-mini", "gemini-2.5-flash"],
       "ignore": ["dist/", "*.generated.ts"]

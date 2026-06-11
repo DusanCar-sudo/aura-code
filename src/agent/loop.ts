@@ -1,3 +1,4 @@
+import * as path from 'path';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
 import { TOOL_DEFINITIONS, executeTool } from '../tools/index.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -71,7 +72,7 @@ function costFor(model: string, input: number, output: number): number {
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const { provider, task, context, permissions, display } = opts;
-  const maxTurns = opts.maxTurns ?? DEFAULTS.maxLoopTurns;
+  const maxTurns = opts.maxTurns ?? DEFAULTS.maxTurns;
   const pricingModel = opts.pricingModel ?? provider.model;
 
   const system = buildSystemPrompt(context, provider.name);
@@ -236,9 +237,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   }
 
   await persist(opts.sessionPath, history);
+  const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
+  const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
   return {
     success: false,
-    summary: `Loop ended after ${turns} turns (max: ${maxTurns})`,
+    summary: `Loop ended after ${turns} turns.${resumeHint}`,
     turns, toolCallCount, usage, history, toolCallLog,
     costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
   };

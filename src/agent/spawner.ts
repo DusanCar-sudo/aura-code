@@ -62,7 +62,7 @@ export function makeDefaultSpawner(
         context: ctx,
         permissions: new PermissionSystem(level),
         display,
-        maxTurns: DEFAULTS.maxLoopTurns,
+        maxTurns: DEFAULTS.maxTurns,
       });
       const cost = result.costUsd.toFixed(4);
       return `[subagent ${model}]\n${result.summary}\n[cost: $${cost} · ${result.turns} turns · ${result.toolCallCount} tools]`;

@@ -139,7 +139,7 @@ export async function runCoder(opts: SpecialistOptions): Promise<SpecialistResul
       context: opts.context,
       permissions: new PermissionSystem('normal'),
       display: opts.display,
-      maxTurns: DEFAULTS.maxLoopTurns,
+      maxTurns: DEFAULTS.maxTurns,
       pricingModel: opts.provider.model,
     });
 
