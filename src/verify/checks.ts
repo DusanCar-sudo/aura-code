@@ -259,6 +259,9 @@ function verifyTaskIntent(ctx: CheckContext): Check[] {
   const fileWrites = ctx.toolCalls.filter(c => c.name === 'write_file');
   if (fileWrites.length > 0) return [];
 
+  const fileEdits = ctx.toolCalls.filter(c => c.name === 'edit_file');
+  if (fileEdits.length > 0) return [];
+
   const nowFiles = collectProjectFiles(ctx.projectRoot);
   const newFiles = [...nowFiles].filter(f => !ctx.filesBefore.has(f));
 
