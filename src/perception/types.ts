@@ -111,7 +111,7 @@ export interface PerceptionQuery {
    * - `trajectory`   — is `target` deprecated, in-progress, or planned?
    * - `risk`         — aggregated risk score and reasons for `target`
    */
-  type: 'dependencies' | 'impact' | 'constraints' | 'trajectory' | 'risk';
+  type: 'dependencies' | 'impact' | 'constraints' | 'trajectory' | 'risk' | 'related';
   /** Node id or label to query against. */
   target: string;
   /** How many hops to traverse from `target` (defaults to 1 when omitted). */

@@ -207,6 +207,21 @@ describe('isStale', () => {
     // Either behavior is acceptable at exact boundary, but must be consistent
     expect(typeof result).toBe('boolean');
   });
+
+  it('returns true when extractedAt is undefined (missing timestamp)', () => {
+    const perception = makePerception({ extractedAt: undefined as unknown as number });
+    expect(isStale(perception)).toBe(true);
+  });
+
+  it('returns true when extractedAt is NaN', () => {
+    const perception = makePerception({ extractedAt: NaN });
+    expect(isStale(perception)).toBe(true);
+  });
+
+  it('returns true when extractedAt is Infinity', () => {
+    const perception = makePerception({ extractedAt: Infinity });
+    expect(isStale(perception)).toBe(true);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
