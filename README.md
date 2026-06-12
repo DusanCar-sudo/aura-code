@@ -112,6 +112,17 @@ export OPENROUTER_API_KEY="sk-or-..."   # All models via one key
 
 ---
 
+## Quick Start
+
+```bash
+git clone https://github.com/milodule3-debug/rubyness
+cd rubyness && npm install && npm run build && npm link
+export ANTHROPIC_API_KEY=your-key
+ruby 'hello world'
+```
+
+---
+
 ## Usage
 
 ```bash
@@ -323,6 +334,47 @@ Add `.rubycode.json` to any project:
   "ignore": ["dist/", "*.generated.ts"]
 }
 ```
+
+---
+
+## How the Self-Improvement Loop Works
+
+Rubyness can read its own session history, find where it failed, and propose patches to its own system prompt. The cycle has three parts:
+
+**Weakness Miner.** Reads saved session transcripts and scans for six failure patterns: no tools called (the agent talked but didn't act), file not created (asked to write but didn't), explored but didn't execute (read everything, did nothing), test regression (previously passing tests broke), loop exhausted (ran out of retry attempts), and safety false positive (legitimate action blocked by the permission system). For each pattern, it counts how many times it appeared. Any pattern seen two or more times becomes a candidate for a prompt patch suggestion.
+
+**Harness Proposer.** Takes each candidate pattern and maps it to a specific section of the system prompt — the part of the prompt that governs that behaviour. It generates a minimal, targeted patch that addresses only that one failure mode. Each patch is saved as a proposal file with an ID.
+
+**Apply and Validate.** Running `ruby --apply-harness <id>` patches the system prompt with the proposal, then immediately runs the full test suite (655 tests). If any test fails, the patch is automatically reverted and the system prompt is restored to its previous state. Nothing ships that breaks the codebase. In the first real run, this cycle identified and fixed 4 patterns in one shot and reduced safety false positives from 15 to near-zero.
+
+### Commands
+
+| Command | What it does |
+|---------|-------------|
+| `ruby --analyze` | Scan session history for failure patterns |
+| `ruby --propose-harness` | Generate prompt patch proposals |
+| `ruby --apply-harness <id>` | Apply a proposal, validate, auto-revert on failure |
+
+---
+
+## Behind the Scenes — How the Orchestration Worked
+
+Rubyness was built by multiple AI agents working together. Here is who did what:
+
+| Agent | Role |
+|-------|------|
+| **Claude** (claude.ai) | Architecture decisions, session briefs, design reviews |
+| **Rubyness itself** (`--orchestrate`) | Primary implementation agent — wrote most of the codebase |
+| **OpenCode** | Integration work, alternative implementations of key modules |
+| **Grok and Pi** | Test coverage, specific module reviews |
+
+**Context management:** Each agent received a focused brief tailored to its task — not the full project history. State was maintained through git commits. Each commit was a checkpoint that any agent could pick up from. The repository itself was the shared memory between agents. No agent had to re-derive what another agent had already decided; the commit history carried the decisions forward.
+
+---
+
+## Contributing
+
+Commits are made by the agent that wrote the code. leanproiq-coder = Rubyness. This is intentional — the repo is a live record of recursive AI development.
 
 ---
 

@@ -26,14 +26,16 @@ import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-mine
 import { generateProposals, listProposals, applyHarnessProposal } from '../harness/proposer.js';
 import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflowState } from '../workflows/engine.js';
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
+import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
+import type { Blueprint } from '../architect/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.RUBY_MODEL,
@@ -200,6 +202,104 @@ if (argv.workflows) {
       }
       console.log();
     }
+    process.exit(0);
+  })();
+}
+
+// ── --blueprints: list all saved blueprints ──────────────────────────────────
+if (argv.blueprints) {
+  (async () => {
+    const bps = await listArchitectBlueprints();
+    if (bps.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No saved blueprints.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Saved blueprints:\n'));
+      for (const bp of bps) {
+        const created = new Date(bp.createdAt).toLocaleString();
+        const builtCount = bp.files.filter(f => f.status === 'built').length;
+        const totalFiles = bp.files.length;
+        const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
+        console.log(
+          `  ${chalk.hex(statusColor)(bp.status.padEnd(10))} ` +
+          `${chalk.hex('#cc785c')(bp.id.slice(0, 16).padEnd(18))} ` +
+          `${chalk.hex('#ede0cc')(bp.task.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex('#4e3d30')(`${builtCount}/${totalFiles} files · ${created}`)}`,
+        );
+      }
+      console.log();
+    }
+    process.exit(0);
+  })();
+}
+
+// ── --blueprint <id>: show a saved blueprint ────────────────────────────────
+if (typeof argv.blueprint === 'string' && argv.blueprint) {
+  (async () => {
+    const bp = await loadBlueprint(argv.blueprint);
+    if (!bp) {
+      console.error(chalk.hex('#b15439')(`\n  ✗ Blueprint not found: ${argv.blueprint}\n`));
+      process.exit(1);
+    }
+
+    const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
+    console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
+    console.log(`  ${chalk.hex('#8a7768')('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
+    console.log(`  ${chalk.hex('#8a7768')('Task:')}    ${chalk.hex('#ede0cc')(bp.task)}`);
+    console.log(`  ${chalk.hex('#8a7768')('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
+    console.log(`  ${chalk.hex('#8a7768')('Steps:')}   ${bp.estimatedSteps}`);
+    console.log(`  ${chalk.hex('#8a7768')('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
+    if (bp.builtAt) console.log(`  ${chalk.hex('#8a7768')('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
+
+    if (bp.files.length > 0) {
+      console.log(chalk.hex('#cc785c').bold('\n  Files:\n'));
+      for (const f of bp.files) {
+        const fileStatusColor = f.status === 'built' ? '#5a9e6e' : f.status === 'skipped' ? '#8a7768' : '#cc785c';
+        console.log(
+          `    ${chalk.hex(fileStatusColor)(f.status.padEnd(8))} ${chalk.hex('#cc785c')(f.path)}`,
+        );
+        console.log(`            ${chalk.hex('#8a7768')(f.purpose)}`);
+        if (f.exports.length > 0) {
+          console.log(`            ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
+        }
+        if (f.interfaces.length > 0) {
+          console.log(`            ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
+        }
+      }
+    }
+
+    if (bp.dataModels.length > 0) {
+      console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
+      for (const dm of bp.dataModels) {
+        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#8a7768')(dm.description)}`);
+        for (const field of dm.fields) {
+          console.log(`      ${chalk.hex('#4e3d30')(field)}`);
+        }
+      }
+    }
+
+    if (bp.dependencies.length > 0) {
+      console.log(chalk.hex('#cc785c').bold('\n  Dependencies:\n'));
+      for (const dep of bp.dependencies) {
+        console.log(`    ${chalk.hex('#4e3d30')(dep)}`);
+      }
+    }
+
+    if (bp.risks.length > 0) {
+      console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
+      for (const risk of bp.risks) {
+        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#8a7768')(risk)}`);
+      }
+    }
+
+    if (bp.deviations.length > 0) {
+      console.log(chalk.hex('#cc9e5c').bold('\n  Deviations:\n'));
+      for (const dev of bp.deviations) {
+        const time = new Date(dev.recordedAt).toLocaleString();
+        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex('#8a7768')(dev.description)} ${chalk.hex('#4e3d30')(`(${time})`)}`);
+      }
+    }
+
+    console.log();
     process.exit(0);
   })();
 }
@@ -430,6 +530,75 @@ async function main() {
 
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
+  // ── --build <id>: build from a saved blueprint in dependency order ───────────
+  if (typeof argv.build === 'string' && argv.build) {
+    const bp = await loadBlueprint(argv.build);
+    if (!bp) {
+      console.error(chalk.hex('#b15439')(`\n  ✗ Blueprint not found: ${argv.build}\n`));
+      process.exit(1);
+    }
+
+    display.header('Architect Builder', `Building from blueprint: ${bp.id}`);
+    console.log(chalk.hex('#8a7768')(`  Task: ${bp.task}`));
+    console.log(chalk.hex('#8a7768')(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
+
+    await updateBlueprintStatus(bp.id, 'building');
+
+    // Build files in order — planned files only
+    const plannedFiles = bp.files.filter(f => f.status === 'planned');
+
+    for (const file of plannedFiles) {
+      console.log(chalk.hex('#cc785c')(`  ▸ Building: ${file.path} — ${file.purpose}`));
+
+      const buildTask = [
+        `Create the file ${file.path}.`,
+        `Purpose: ${file.purpose}`,
+        file.exports.length > 0 ? `Exports: ${file.exports.join(', ')}` : '',
+        file.interfaces.length > 0 ? `Interfaces: ${file.interfaces.join(', ')}` : '',
+        `This file is part of a larger blueprint for: ${bp.task}`,
+        bp.dependencies.length > 0 ? `Dependencies: ${bp.dependencies.join(', ')}` : '',
+        'Follow the existing code style. Do not modify other files.',
+      ].filter(Boolean).join('\n');
+
+      try {
+        const result = await runAgentLoop({
+          provider, task: buildTask, context: ctx, permissions, display,
+          initialHistory: [],
+          maxTurns: Math.min(resolved.maxTurns ?? 50, 50),
+          spawnConfig: {
+            apiKey: runtimeConfig.apiKey,
+            baseUrl: runtimeConfig.baseUrl ?? undefined,
+          },
+        });
+
+        if (result.success) {
+          await markBuilt(bp.id, file.path);
+          console.log(chalk.hex('#5a9e6e')(`  ✓ ${file.path} built\n`));
+        } else {
+          console.log(chalk.hex('#b15439')(`  ✗ ${file.path} failed: ${result.summary}\n`));
+          await addDeviation(bp.id, `Failed to build ${file.path}: ${result.summary}`);
+        }
+      } catch (e) {
+        console.log(chalk.hex('#b15439')(`  ✗ ${file.path} error: ${String(e)}\n`));
+        await addDeviation(bp.id, `Error building ${file.path}: ${String(e)}`);
+      }
+    }
+
+    // Final status
+    const finalBp = await loadBlueprint(bp.id);
+    if (finalBp) {
+      const allBuilt = finalBp.files.every(f => f.status !== 'planned');
+      if (allBuilt) {
+        await updateBlueprintStatus(bp.id, 'complete');
+        console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ Blueprint complete: ${finalBp.files.filter(f => f.status === 'built').length} files built\n`));
+      } else {
+        console.log(chalk.hex('#cc9e5c').bold(`\n  ⚠ Blueprint partially complete: ${finalBp.files.filter(f => f.status === 'built').length}/${finalBp.files.length} files built\n`));
+      }
+    }
+
+    return;
+  }
+
   // ── --workflow: create and run a new workflow ──────────────────────────────
   if (typeof argv.workflow === 'string' && argv.workflow) {
     const workflowName = argv.workflow;
@@ -553,7 +722,15 @@ async function main() {
     const task = argv._.join(' ');
     console.log(chalk.hex('#8a7768')(`\n  Task: ${chalk.hex('#ede0cc')(task)}\n`));
 
-    const doOrchestrate = argv.orchestrate === true;
+    // --architect: plan-only — decompose and display, then exit (no execution)
+    if (argv.architect === true) {
+      await runArchitectPlan(task, provider, ctx, display);
+      return;
+    }
+
+    // --build: full orchestrated build — decompose + execute all specialists
+    // When --build <id> is a string, build from a saved blueprint instead
+    const doOrchestrate = argv.orchestrate === true || argv.build === true;
 
     if (doOrchestrate) {
       await runOrchestratedTask(task, provider, ctx, display, doOrchestrate);
@@ -1285,6 +1462,156 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   return unhandled;
 }
 
+/**
+ * Architect mode: produce a blueprint without writing any code.
+ * The agent analyses the task, proposes files/interfaces/data models,
+ * and the blueprint is saved to ~/.rubycode/blueprints/<id>.json.
+ */
+async function runArchitectPlan(
+  task: string,
+  provider: LLMProvider,
+  ctx: Awaited<ReturnType<typeof loadProjectContext>>,
+  display: ReturnType<typeof createTerminalDisplay>,
+): Promise<void> {
+  display.header('Architect', 'Analysing task and producing blueprint...');
+
+  const architectPrompt = [
+    `You are in architect mode. You are planning the implementation for: "${task}"`,
+    '',
+    'Project context:',
+    `  Language: ${ctx.language}`,
+    `  Framework: ${ctx.framework}`,
+    `  Root: ${ctx.root}`,
+    '',
+    'Rules for architect mode:',
+    '1. Think about the FULL solution before proposing any file.',
+    '2. Propose the MINIMUM number of files needed.',
+    '3. Name files after what they DO, not what they ARE.',
+    '4. Define interfaces before implementations.',
+    '5. Flag any ambiguous parts of the task as risks.',
+    '6. Do NOT write any code. Only plan.',
+    '',
+    'Output format — respond with ONLY this JSON object (no markdown fences, no extra text):',
+    JSON.stringify({
+      files: [
+        {
+          path: 'src/example.ts',
+          purpose: 'What this file does (one sentence)',
+          exports: ['exportedSymbol'],
+          interfaces: ['InterfaceName'],
+        },
+      ],
+      dataModels: [
+        {
+          name: 'ModelName',
+          fields: ['field: type'],
+          description: 'What this model represents',
+        },
+      ],
+      dependencies: ['external-package-or-module'],
+      risks: ['Ambiguous part or concern'],
+      estimatedSteps: 0,
+    }, null, 2),
+    '',
+    'Now produce the blueprint JSON for the task described above.',
+  ].join('\n');
+
+  const permissions = new PermissionSystem('read-only');
+
+  let result;
+  try {
+    result = await runAgentLoop({
+      provider, task: architectPrompt, context: ctx, permissions, display,
+      initialHistory: [],
+      maxTurns: 5,
+      spawnConfig: {
+        apiKey: runtimeConfig.apiKey,
+        baseUrl: runtimeConfig.baseUrl ?? undefined,
+      },
+    });
+  } catch (e) {
+    display.error(`Architect analysis failed: ${String(e)}`);
+    process.exit(1);
+  }
+
+  // Parse the agent's response for a JSON blueprint
+  const responseText = result.summary;
+  let parsed: {
+    files?: Array<{ path: string; purpose: string; exports?: string[]; interfaces?: string[] }>;
+    dataModels?: Array<{ name: string; fields?: string[]; description?: string }>;
+    dependencies?: string[];
+    risks?: string[];
+    estimatedSteps?: number;
+  };
+
+  try {
+    // Try to extract JSON from the response (may have surrounding text)
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    // If the agent didn't produce valid JSON, create a minimal blueprint with the raw response
+    parsed = {
+      files: [],
+      dataModels: [],
+      dependencies: [],
+      risks: [`Agent response was not valid JSON: ${responseText.slice(0, 200)}`],
+      estimatedSteps: 0,
+    };
+  }
+
+  const blueprint = await createBlueprint(task, ctx.root, {
+    files: (parsed.files ?? []).map(f => ({
+      path: f.path,
+      purpose: f.purpose,
+      exports: f.exports ?? [],
+      interfaces: f.interfaces ?? [],
+      status: 'planned' as const,
+    })),
+    dataModels: (parsed.dataModels ?? []).map(dm => ({
+      name: dm.name,
+      fields: dm.fields ?? [],
+      description: dm.description ?? '',
+    })),
+    dependencies: parsed.dependencies ?? [],
+    risks: parsed.risks ?? [],
+    estimatedSteps: parsed.estimatedSteps ?? parsed.files?.length ?? 0,
+  });
+
+  // Display result
+  console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
+  console.log(chalk.hex('#ede0cc')(`  Task: ${blueprint.task}`));
+  console.log(chalk.hex('#4e3d30')(`  ID: ${blueprint.id}\n`));
+
+  if (blueprint.files.length > 0) {
+    console.log(chalk.hex('#cc785c').bold('  Files:\n'));
+    for (const f of blueprint.files) {
+      console.log(`    ${chalk.hex('#cc785c')(f.path)}`);
+      console.log(`      ${chalk.hex('#8a7768')(f.purpose)}`);
+      if (f.exports.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
+      if (f.interfaces.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
+    }
+  }
+
+  if (blueprint.dataModels.length > 0) {
+    console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
+    for (const dm of blueprint.dataModels) {
+      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#8a7768')(dm.description)}`);
+    }
+  }
+
+  if (blueprint.risks.length > 0) {
+    console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
+    for (const risk of blueprint.risks) {
+      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#8a7768')(risk)}`);
+    }
+  }
+
+  console.log(chalk.hex('#5a9e6e')('\n  Blueprint saved. No files were modified.'));
+  console.log(chalk.hex('#5a9e6e')(`  Review with: ruby --blueprint ${blueprint.id}`));
+  console.log(chalk.hex('#5a9e6e')(`  Build with: ruby --build ${blueprint.id}\n`));
+}
+
 async function runOrchestratedTask(
   task: string,
   provider: LLMProvider,
@@ -1384,6 +1711,10 @@ ${chalk.hex('#cc785c').bold('  rubyness')} ${chalk.hex('#8a7768')("— Her Rubyn
     --no-setup               Skip the first-run setup wizard
     --reset-setup            Wipe saved config and re-run the setup wizard
     --orchestrate            Force multi-agent orchestration mode
+    --architect "task"       Blueprint mode: plan-only, no code written, produces blueprint
+    --blueprint <id>         Show a saved blueprint by ID
+    --blueprints             List all saved blueprints
+    --build [id]             Full orchestrated build; --build <id> builds from blueprint
     --plan                   Preview execution plan before running
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)

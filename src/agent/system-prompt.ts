@@ -59,3 +59,40 @@ ${ctx.recentCommits}
 
 Provider: ${providerName}. Work efficiently — minimize unnecessary tool calls.`;
 }
+
+export function buildArchitectPrompt(task: string, projectRoot: string): string {
+  return `You are in architect mode. You are planning the implementation for: "${task}"
+
+Project root: ${projectRoot}
+
+## Architect rules
+1. Think about the FULL solution before proposing any file.
+2. Propose the MINIMUM number of files needed.
+3. Name files after what they DO, not what they ARE.
+4. Define interfaces before implementations.
+5. Flag any ambiguous parts of the task as risks.
+6. Do NOT write any code. Only plan.
+
+## Output format
+Respond with ONLY a JSON object (no markdown fences, no extra text):
+{
+  "files": [
+    {
+      "path": "src/example.ts",
+      "purpose": "What this file does (one sentence)",
+      "exports": ["exportedSymbol"],
+      "interfaces": ["InterfaceName"]
+    }
+  ],
+  "dataModels": [
+    {
+      "name": "ModelName",
+      "fields": ["field: type"],
+      "description": "What this model represents"
+    }
+  ],
+  "dependencies": ["external-package-or-module"],
+  "risks": ["Ambiguous part or concern"],
+  "estimatedSteps": 0
+}`;
+}
