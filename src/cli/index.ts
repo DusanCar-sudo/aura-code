@@ -70,7 +70,7 @@ const cliFallbacks: string[] =
 
 if (argv.version) {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
-  console.log(`BootstrapRuby v${pkg.version}`);
+  console.log(`Rubyness v${pkg.version}`);
   process.exit(0);
 }
 
@@ -299,8 +299,8 @@ async function main() {
   // Wizard is eligible when there are no other args (no one-shot task) AND
   // we're not in a strict TTY-less script context. Accept both TTY and pipe:
   //   - TTY = real interactive use
-  //   - pipe = test harnesses (and `ruby-code | tee log`)
-  // The one-shot path (`ruby-code "task"`) has argv._.length > 0 so the
+  //   - pipe = test harnesses (and `rubyness | tee log`)
+  // The one-shot path (`rubyness "task"`) has argv._.length > 0 so the
   // wizard can't fire there. --reset-setup alone is treated as interactive
   // since the whole point is to launch the wizard.
   const isInteractive = argv.interactive === true
@@ -354,7 +354,7 @@ async function main() {
   // ── Guard: we need a model before we can build a provider ─────────────────
   if (!resolved.model) {
     console.error(chalk.hex('#b15439')('\n  ✗ No model configured.'));
-    console.error(chalk.hex('#8a7768')('  Run `bootstrapruby` with no args in a TTY to launch the setup wizard,'));
+    console.error(chalk.hex('#8a7768')('  Run `rubyness` with no args in a TTY to launch the setup wizard,'));
     console.error(chalk.hex('#8a7768')('  or pass --model <id> --api-key <key> on the command line,'));
     console.error(chalk.hex('#8a7768')('  or set the model in .rubycode.json (`"model": "..."`).'));
     process.exit(1);
@@ -422,7 +422,7 @@ async function main() {
     projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
 
   display.header(
-    `BootstrapRuby — ${ctx.name}`,
+    `Rubyness — ${ctx.name}`,
     `${provider.name} · ${runtimeConfig.model} · ${ctx.language} · ${permissionLevel} mode` +
     (fileConfig.model ? ` · .rubycode.json loaded` : '') +
     (activeChatId ? ` · chat ${activeChatId}` : ''),
@@ -736,14 +736,14 @@ async function main() {
       console.log(chalk.hex('#cc785c')('\n  ⏳ Press Ctrl+C again to exit (current task will keep running).'));
       setTimeout(() => { ctrlC = 0; }, 3000);
     } else {
-      console.log(chalk.hex('#4e3d30')('\n  BootstrapRuby closed.\n'));
+      console.log(chalk.hex('#4e3d30')('\n  Rubyness closed.\n'));
       process.exit(0);
     }
   });
 
   ask();
   rl.on('close', () => {
-    console.log(chalk.hex('#4e3d30')('\n  BootstrapRuby closed.\n'));
+    console.log(chalk.hex('#4e3d30')('\n  Rubyness closed.\n'));
     process.exit(0);
   });
 }
@@ -1361,15 +1361,15 @@ function printUsageFooter(
 
 function printHelp() {
   console.log(`
-${chalk.hex('#cc785c').bold('  bootstrapruby')} ${chalk.hex('#8a7768')('— model-agnostic AI coding agent')}
+${chalk.hex('#cc785c').bold('  rubyness')} ${chalk.hex('#8a7768')("— Her Rubyness: model-agnostic AI coding agent")}
 
   ${chalk.hex('#4e3d30')('Usage:')}
-    bootstrapruby ${chalk.hex('#8a7768')('"<task>"')}                Run a single task
-    bootstrapruby ${chalk.hex('#8a7768')('--interactive')}           Start interactive REPL
-    bootstrapruby ${chalk.hex('#8a7768')('--models')}                List available models
+    rubyness ${chalk.hex('#8a7768')('"<task>"')}                     Run a single task
+    rubyness ${chalk.hex('#8a7768')('--interactive')}                Start interactive REPL
+    rubyness ${chalk.hex('#8a7768')('--models')}                     List available models
 
   ${chalk.hex('#4e3d30')('Options:')}
-    --model, -m <id>         Model to use (default: from ~/.config/bootstrapruby/config.json)
+    --model, -m <id>         Model to use (default: from ~/.config/rubyness/config.json)
     --api-key <key>          API key (overrides env var)
     --base-url <url>         Custom API endpoint (for Ollama, proxies, etc.)
     --auto                   Auto-approve all tool calls (no confirmation)
@@ -1438,10 +1438,10 @@ ${chalk.hex('#cc785c').bold('  bootstrapruby')} ${chalk.hex('#8a7768')('— mode
     Custom providers are OpenAI-compatible endpoints.
 
   ${chalk.hex('#4e3d30')('Model examples:')}
-    bootstrapruby -m claude-opus-4-5-20251001  "refactor auth"
-    bootstrapruby -m gpt-4o                    "add unit tests"
-    bootstrapruby -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
-    bootstrapruby -m ollama/llama3.2           "local model, no API key needed"
+    rubyness -m claude-opus-4-5-20251001  "refactor auth"
+    rubyness -m gpt-4o                    "add unit tests"
+    rubyness -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
+    rubyness -m ollama/llama3.2           "local model, no API key needed"
 
   ${chalk.hex('#4e3d30')('API keys (set as env vars):')}
     ANTHROPIC_API_KEY    Claude models

@@ -12,13 +12,14 @@ describe('RateLimiter', () => {
   it('waits when bucket is empty', async () => {
     const sleeps: number[] = [];
     const rl = new RateLimiter({
-      capacity: 1, refillPerMs: 100,  // 100 tokens per ms (refills fast)
-      sleep: (ms) => { sleeps.push(ms); return Promise.resolve(); },
+      capacity: 1, refillPerMs: 0.001,  // 1 token per second
+      sleep: (ms) => { sleeps.push(ms); return new Promise(r => setTimeout(r, ms)); },
     });
     await rl.acquire(1);  // bucket empty now
-    await rl.acquire(1);  // must wait (at least once)
+    const waited = await rl.acquire(1);  // must wait ~1005ms
     expect(sleeps.length).toBeGreaterThanOrEqual(1);
-    expect(sleeps[0]).toBeGreaterThanOrEqual(1);
+    expect(sleeps[0]).toBeGreaterThanOrEqual(1000);
+    expect(waited).toBeGreaterThanOrEqual(100);
   });
 
   it('refills over time', async () => {

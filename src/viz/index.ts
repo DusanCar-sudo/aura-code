@@ -146,7 +146,7 @@ function buildHtml(data: {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BootstrapRuby · Memory Dashboard · ${data.projectName}</title>
+<title>Rubyness — Memory Dashboard · ${data.projectName}</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   :root {
@@ -263,7 +263,7 @@ function buildHtml(data: {
 </head>
 <body>
 <header>
-  <h1>◈ ruby-code / memory dashboard</h1>
+  <h1>◈ Rubyness / memory dashboard</h1>
   <span class="meta">project: <strong style="color:var(--primary)">${data.projectName}</strong> &nbsp;·&nbsp; ${data.generatedAt}</span>
 </header>
 <nav>

@@ -1,7 +1,7 @@
 /**
- * Global ruby-code configuration (user-wide, not project-specific).
+ * Global Rubyness configuration (user-wide, not project-specific).
  *
- * Lives at `$XDG_CONFIG_HOME/ruby-code/config.json` (default `~/.config/ruby-code/config.json`).
+ * Lives at `$XDG_CONFIG_HOME/rubyness/config.json` (default `~/.config/rubyness/config.json`).
  * Holds the user's default provider + API key + default model, set by the
  * first-run wizard so subsequent runs don't re-prompt.
  *
@@ -37,7 +37,7 @@ const EMPTY: GlobalConfig = {
 
 function configDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
-  return xdg ? path.join(xdg, 'ruby-code') : path.join(os.homedir(), '.config', 'ruby-code');
+  return xdg ? path.join(xdg, 'rubyness') : path.join(os.homedir(), '.config', 'rubyness');
 }
 
 function configPath(): string {

@@ -36,10 +36,10 @@ export interface RubyProjectContext {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Identifies which Ruby Diamond surface produced or consumes orchestration data. */
-export type RubyDiamondSurface = 'ruby-code' | 'ruby-diamond-client' | 'harness' | 'unknown';
+export type RubyDiamondSurface = 'rubyness' | 'ruby-diamond-client' | 'harness' | 'unknown';
 
 /**
- * Cross-surface envelope for passing orchestration payloads between ruby-code CLI,
+ * Cross-surface envelope for passing orchestration payloads between Rubyness CLI,
  * Ruby Diamond desktop, and Python harness generators.
  */
 export interface RubyDiamondEnvelope<T = unknown> {

@@ -20,7 +20,7 @@ function makeTmpDir(): string {
 const SAMPLE_PROMPT = `import type { ProjectContext } from './context.js';
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string): string {
-  return \`You are BootstrapRuby — a precise, efficient AI coding agent.
+  return \`You are Her Rubyness — a precise, efficient AI coding agent.
 
 ## How you operate
 - You work in a loop: read context → plan → execute tools → verify → repeat until done.

@@ -66,8 +66,8 @@ describe('CLI integration: first-run wizard', () => {
     const input = '4\ntp-fake-key-test\n1\n\n';
     const result = await runCliWithCleanEnv(input, tmpConfigDir);
 
-    // Wizard should have written the config file at $XDG_CONFIG_HOME/ruby-code/config.json
-    const configPath = path.join(tmpConfigDir, 'ruby-code', 'config.json');
+    // Wizard should have written the config file at $XDG_CONFIG_HOME/rubyness/config.json
+    const configPath = path.join(tmpConfigDir, 'rubyness', 'config.json');
     expect(fs.existsSync(configPath)).toBe(true);
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     expect(cfg.provider).toBe('xiaomi');
@@ -83,7 +83,7 @@ describe('CLI integration: first-run wizard', () => {
     // Should NOT show "No model configured" error
     expect(result.stderr).not.toContain('No model configured');
     // Should mention "Welcome"
-    expect(result.stdout).toContain('Welcome to ruby-code');
+    expect(result.stdout).toContain('Welcome to Rubyness');
   });
 
   it('bypasses the wizard when --no-setup is given (then errors about no model)', async () => {

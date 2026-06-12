@@ -39,13 +39,13 @@ describe('RubyDiamondEnvelope', () => {
   it('wraps typed payloads with version and surface metadata', () => {
     const envelope: RubyDiamondEnvelope<{ planId: string }> = {
       version: 1,
-      surface: 'ruby-code',
+      surface: 'rubyness',
       kind: 'plan_created',
       timestamp: 1000,
       payload: { planId: 'p-1' },
     };
     expect(envelope.version).toBe(1);
-    expect(envelope.surface).toBe('ruby-code');
+    expect(envelope.surface).toBe('rubyness');
     expect(envelope.payload.planId).toBe('p-1');
   });
 });

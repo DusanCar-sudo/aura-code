@@ -2,10 +2,14 @@
   <img src="assets/ruby-diamond.jpg" width="280" alt="Ruby Diamond Technologies" />
 </p>
 
-<h1 align="center">BootstrapRuby</h1>
+<h1 align="center">Rubyness</h1>
 
 <p align="center">
-  <em>An AI coding agent built entirely by AI agents. I acted as the orchestrator — directing Claude, OpenCode, Pi, and Grok to design, implement, test, and verify it. The agent that writes your code was itself written by agents.</em>
+  <em>I don't try. I verify.</em>
+</p>
+
+<p align="center">
+  <em>An AI coding agent built entirely by AI agents. Her Rubyness orchestrated Claude, OpenCode, Pi, and Grok to design, implement, test, and verify it. The agent that writes your code was itself written by agents.</em>
 </p>
 
 <p align="center">
@@ -19,9 +23,9 @@
 
 ## Why This Exists
 
-BootstrapRuby is an open-source autonomous coding agent inspired by Claude Code, OpenHands, and modern multi-agent research. Its goal: combine agent orchestration, persistent memory, provider independence, and self-improvement experimentation into a single extensible platform. Written in TypeScript — not related to the Ruby programming language.
+Rubyness is an open-source autonomous coding agent inspired by Claude Code, OpenHands, and modern multi-agent research. Its goal: combine agent orchestration, persistent memory, provider independence, and self-improvement experimentation into a single extensible platform. Written in TypeScript — not related to the Ruby programming language.
 
-BootstrapRuby is in active development — the repository reflects the current working state. Features are documented as working, experimental, or planned. The project is considered complete when a task can be given in plain English, executed reliably, verified automatically, and improved from failure without human intervention.
+Rubyness is in active development — the repository reflects the current working state. Features are documented as working, experimental, or planned. The project is considered complete when a task can be given in plain English, executed reliably, verified automatically, and improved from failure without human intervention.
 
 ---
 
@@ -62,7 +66,7 @@ BootstrapRuby is in active development — the repository reflects the current w
                                                     │
                            ┌────────────────────────▼────────────────────────────────┐
                            │                       CLI                               │
-                           │        bootstrapruby "fix the authentication bug"           │
+                           │        rubyness "fix the authentication bug"              │
                            └─────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +74,7 @@ BootstrapRuby is in active development — the repository reflects the current w
 
 ## What it is
 
-BootstrapRuby is a coding agent you point at any codebase and talk to in plain English. It reads files, writes code, runs tests, searches the codebase, and executes shell commands.
+Rubyness is a coding agent you point at any codebase and talk to in plain English. It reads files, writes code, runs tests, searches the codebase, and executes shell commands.
 
 ---
 
@@ -112,29 +116,29 @@ export OPENROUTER_API_KEY="sk-or-..."   # All models via one key
 
 ```bash
 # Single task
-bootstrapruby "fix the authentication bug"
-bootstrapruby -m mimo-v2.5-pro "refactor the payment module"
-bootstrapruby -m ollama/qwen2.5-coder "explain this codebase"
+rubyness "fix the authentication bug"
+rubyness -m mimo-v2.5-pro "refactor the payment module"
+rubyness -m ollama/qwen2.5-coder "explain this codebase"
 
 # Multi-agent orchestration
-bootstrapruby --orchestrate "add error handling to all API endpoints"
-bootstrapruby --plan "refactor the database layer"   # preview plan first
+rubyness --orchestrate "add error handling to all API endpoints"
+rubyness --plan "refactor the database layer"   # preview plan first
 
 # Verification with automatic retry
-bootstrapruby --verify --test-command "npm test" "add error handling to the auth module"
-bootstrapruby --verify --max-verify-retries 5 "fix flaky test suite"
+rubyness --verify --test-command "npm test" "add error handling to the auth module"
+rubyness --verify --max-verify-retries 5 "fix flaky test suite"
 
 # Web client (browser UI)
-bootstrapruby serve -m mimo-v2.5-pro
+rubyness serve -m mimo-v2.5-pro
 
 # Interactive REPL
-bootstrapruby --interactive
+rubyness --interactive
 
 # Read-only (safe for exploration)
-bootstrapruby --readonly "map the architecture"
+rubyness --readonly "map the architecture"
 
 # Point at any project
-bootstrapruby --cwd ~/myproject "review the auth module"
+rubyness --cwd ~/myproject "review the auth module"
 ```
 
 ---
@@ -155,7 +159,7 @@ bootstrapruby --cwd ~/myproject "review the auth module"
 | `openrouter/<any>` | OpenRouter | Varies | 100+ models |
 
 ```bash
-bootstrapruby --models   # list all known models
+rubyness --models   # list all known models
 ```
 
 ---
@@ -247,7 +251,7 @@ The `--verify` flag (new in v0.2.0) runs post-task checks and retries automatica
 
 ### Baseline diff
 
-When `--test-command` is set, BootstrapRuby captures pre-existing test failures before the task starts. Only **new** failures introduced by the task cause verification to fail. Pre-existing failures are reported but do not block.
+When `--test-command` is set, Rubyness captures pre-existing test failures before the task starts. Only **new** failures introduced by the task cause verification to fail. Pre-existing failures are reported but do not block.
 
 ---
 
@@ -324,7 +328,7 @@ Add `.rubycode.json` to any project:
 
 ## Part of the Ruby Diamond ecosystem
 
-- **BootstrapRuby** — this CLI agent
+- **Rubyness** — this CLI agent
 - **Ruby Diamond Desktop** — native desktop app (Tauri + React, coming)
 - **AgentMesh WF** — agent workflow framework
 - **AgentMesh** — multi-agent coordination platform

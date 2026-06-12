@@ -30,10 +30,10 @@ vi.mock('../../src/orchestration/plan-store.js', () => ({
 // ── Fixtures ────────────────────────────────────────────────────────────────
 const mockContext: ProjectContext = {
   root: '/fake/project',
-  name: 'ruby-code',
+  name: 'rubyness',
   language: 'TypeScript',
   framework: 'Node.js',
-  readme: '# ruby-code',
+  readme: '# Rubyness',
   tree: 'src/\n  agent/\n  providers/\n  orchestration/',
   config: '{"name":"ruby-code"}',
   recentCommits: 'abc1234 Add orchestration layer',
