@@ -75,6 +75,44 @@ function loadSessions(projectRoot: string): ChatSession[] {
   return merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
+/**
+ * Strip a session down to metadata only — removes the full message history
+ * which can contain backticks, </script> tags, and other HTML-breaking content.
+ */
+function stripSession(s: ChatSession): Record<string, unknown> {
+  const history = s.history ?? [];
+  return {
+    id: s.id,
+    title: s.title,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    messageCount: history.length,
+    toolCallCount: history.filter(m => m.role === 'tool_result').length,
+  };
+}
+
+/**
+ * Strip a plan down to metadata only — removes step result strings and
+ * plan outcome which can contain code with backticks or </script> sequences.
+ */
+function stripPlan(p: ExecutionPlan): Record<string, unknown> {
+  return {
+    id: p.id,
+    goal: p.goal,
+    status: p.status,
+    created: p.created,
+    completed: p.completed,
+    steps: p.steps.map(s => ({
+      id: s.id,
+      specialist: s.specialist,
+      task: s.task,
+      status: s.status,
+      durationMs: s.durationMs,
+      dependsOn: s.dependsOn,
+    })),
+  };
+}
+
 function loadMemory(projectRoot: string): object[] {
   const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'memory');
   const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
@@ -95,13 +133,14 @@ function loadMemory(projectRoot: string): object[] {
 
 function buildHtml(data: {
   graph: object | null;
-  plans: ExecutionPlan[];
-  sessions: ChatSession[];
+  plans: Record<string, unknown>[];
+  sessions: Record<string, unknown>[];
   memory: object[];
   projectName: string;
   generatedAt: string;
 }): string {
-  const json = JSON.stringify(data, null, 0);
+  // Escape </script> in JSON to prevent premature script-block closing in HTML
+  const json = JSON.stringify(data, null, 0).replace(/<\/script>/gi, '<\\/script>');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -443,24 +482,14 @@ function initGraph() {
     return;
   }
   const html = DATA.sessions.map(s => {
-    const turns = Math.floor(s.history.length / 2);
+    const turns = Math.floor((s.messageCount || 0) / 2);
     const updated = new Date(s.updatedAt).toLocaleString();
-    const msgs = s.history.slice(0, 24).map(m => {
-      const role = m.role || 'unknown';
-      const content = typeof m.content === 'string' ? m.content
-        : Array.isArray(m.content) ? m.content.map(c=>c.text||'').join('') : JSON.stringify(m.content);
-      return \`<div class="msg">
-        <span class="msg-role \${role}">\${role === 'tool_result' ? 'tool' : role}</span>
-        <div class="msg-content">\${content.slice(0,500).replace(/</g,'&lt;')}\${content.length>500?'…':''}</div>
-      </div>\`;
-    }).join('');
-    return \`<div class="session-card" onclick="this.classList.toggle('expanded')">
+    return \`<div class="session-card">
       <div class="s-header">
-        <span class="s-title">\${s.title.replace(/</g,'&lt;')}</span>
+        <span class="s-title">\${(s.title||'').replace(/</g,'&lt;')}</span>
         <span class="s-meta">\${turns} turn\${turns!==1?'s':''} · \${updated}</span>
       </div>
-      <div class="s-id">\${s.id}</div>
-      <div class="session-messages">\${msgs}</div>
+      <div class="s-id">\${s.id} · \${s.messageCount||0} msgs · \${s.toolCallCount||0} tool calls</div>
     </div>\`;
   }).join('');
   panel.innerHTML = \`<div class="session-list">\${html}</div>\`;
@@ -637,8 +666,8 @@ function renderDag(plan) {
 
 export function generateDashboard(projectRoot: string): string {
   const graph    = loadGraph(projectRoot);
-  const plans    = loadPlans(projectRoot);
-  const sessions = loadSessions(projectRoot);
+  const plans    = loadPlans(projectRoot).map(stripPlan);
+  const sessions = loadSessions(projectRoot).map(stripSession);
   const memory   = loadMemory(projectRoot);
 
   const pkgPath = path.join(projectRoot, 'package.json');
