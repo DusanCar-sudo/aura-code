@@ -21,6 +21,8 @@
 
 BootstrapRuby is an open-source autonomous coding agent inspired by Claude Code, OpenHands, and modern multi-agent research. Its goal: combine agent orchestration, persistent memory, provider independence, and self-improvement experimentation into a single extensible platform. Written in TypeScript — not related to the Ruby programming language.
 
+BootstrapRuby is in active development — the repository reflects the current working state. Features are documented as working, experimental, or planned. The project is considered complete when a task can be given in plain English, executed reliably, verified automatically, and improved from failure without human intervention.
+
 ---
 
 ## Architecture

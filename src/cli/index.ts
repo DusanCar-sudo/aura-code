@@ -22,14 +22,18 @@ import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
+import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
+import { generateProposals, listProposals, applyHarnessProposal } from '../harness/proposer.js';
+import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflowState } from '../workflows/engine.js';
+import type { WorkflowStep, StepResult } from '../workflows/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session', 'verify'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.RUBY_MODEL,
@@ -108,6 +112,96 @@ if (argv['list-sessions']) {
     console.log();
   }
   process.exit(0);
+}
+
+if (argv.analyze) {
+  const report = mineWeaknesses();
+  const outPath = saveReport(report);
+  console.log(chalk.hex('#cc785c').bold('\n  Weakness Analysis Report\n'));
+  console.log(chalk.hex('#8a7768')(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
+  console.log(chalk.hex('#8a7768')(`  Report saved to: ${outPath}\n`));
+
+  if (report.patterns.length === 0) {
+    console.log(chalk.hex('#5a9e6e')('  ✓ No recurring weakness patterns detected. Agent behavior looks healthy.\n'));
+  } else {
+    for (const p of report.patterns) {
+      console.log(chalk.hex('#b15439').bold(`  ✗ ${p.pattern} (${p.frequency} occurrences)`));
+      console.log(chalk.hex('#8a7768')(`    ${p.description}`));
+      if (p.occurrences[0]) {
+        console.log(chalk.hex('#4e3d30')(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
+        console.log(chalk.hex('#4e3d30')(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
+      }
+      console.log(chalk.hex('#cc785c')(`    Suggestion: ${p.promptPatch.slice(0, 120)}...`));
+      console.log();
+    }
+    console.log(chalk.hex('#8a7768')(`  ${report.summary}\n`));
+  }
+  process.exit(0);
+}
+
+if (argv['propose-harness']) {
+  // Ensure a weakness report exists — mine if needed
+  if (!fs.existsSync(reportPath())) {
+    console.log(chalk.hex('#8a7768')('\n  No weakness report found — mining sessions first...\n'));
+    const report = mineWeaknesses();
+    saveReport(report);
+  }
+
+  const proposals = generateProposals();
+  if (proposals.length === 0) {
+    console.log(chalk.hex('#5a9e6e')('\n  ✓ No proposals generated — no actionable weakness patterns found.\n'));
+  } else {
+    console.log(chalk.hex('#cc785c').bold('\n  Harness Proposals\n'));
+    for (const p of proposals) {
+      console.log(chalk.hex('#cc785c')(`  ${p.id}`));
+      console.log(chalk.hex('#8a7768')(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
+      console.log(chalk.hex('#8a7768')(`    Section:  ${p.targetSection}`));
+      console.log(chalk.hex('#4e3d30')(`    Patch:    ${p.patchText.slice(0, 80)}...`));
+      console.log();
+    }
+    console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.rubycode/harness/proposals/`));
+    console.log(chalk.hex('#8a7768')('  Apply with: ruby --apply-harness <id>\n'));
+  }
+  process.exit(0);
+}
+
+if (typeof argv['apply-harness'] === 'string' && argv['apply-harness']) {
+  const proposalId = argv['apply-harness'];
+  console.log(chalk.hex('#cc785c').bold(`\n  Applying harness proposal: ${proposalId}\n`));
+
+  const result = applyHarnessProposal(proposalId);
+  if (result.success) {
+    console.log(chalk.hex('#5a9e6e')(`  ✓ ${result.message}\n`));
+  } else {
+    console.log(chalk.hex('#b15439')(`  ✗ ${result.message}\n`));
+  }
+  process.exit(result.success ? 0 : 1);
+}
+
+// ── --workflows: list all persisted workflows ────────────────────────────────
+if (argv.workflows) {
+  (async () => {
+    const workflows = await listWorkflows();
+    if (workflows.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No saved workflows.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
+      for (const ws of workflows) {
+        const created = new Date(ws.definition.createdAt).toLocaleString();
+        const doneSteps = ws.stepStates.filter(s => s.status === 'done').length;
+        const totalSteps = ws.definition.steps.length;
+        const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
+        console.log(
+          `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
+          `${chalk.hex('#ede0cc')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
+          `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
+        );
+      }
+      console.log();
+    }
+    process.exit(0);
+  })();
 }
 
 if (argv.help) {
@@ -335,6 +429,124 @@ async function main() {
   );
 
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+
+  // ── --workflow: create and run a new workflow ──────────────────────────────
+  if (typeof argv.workflow === 'string' && argv.workflow) {
+    const workflowName = argv.workflow;
+    const stepTasks = argv._.map(String);
+    if (stepTasks.length === 0) {
+      console.error(chalk.hex('#b15439')('\n  ✗ No step tasks provided.'));
+      console.error(chalk.hex('#8a7768')('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
+      process.exit(1);
+    }
+
+    const steps: WorkflowStep[] = stepTasks.map((task: string, i: number) => ({
+      name: `step-${i + 1}`,
+      task,
+    }));
+
+    display.header('Workflow', `Creating workflow "${workflowName}" with ${steps.length} steps`);
+
+    const state = await createWorkflow({ name: workflowName, steps });
+    console.log(chalk.hex('#5a9e6e')(`\n  ✓ Workflow created: ${state.definition.id}\n`));
+
+    const makeRunStep = () => {
+      return async (task: string, stepIndex: number): Promise<StepResult> => {
+        console.log(chalk.hex('#cc785c')(`\n  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
+
+        const currentProvider = buildProvider(display);
+        const result = await runAgentLoop({
+          provider: currentProvider, task, context: ctx, permissions, display,
+          initialHistory: [],
+          maxTurns: resolved.maxTurns,
+          spawnConfig: {
+            apiKey: runtimeConfig.apiKey,
+            baseUrl: runtimeConfig.baseUrl ?? undefined,
+          },
+        });
+
+        return {
+          success: result.success,
+          summary: result.summary,
+          turns: result.turns,
+          toolCallCount: result.toolCallCount,
+          tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
+        };
+      };
+    };
+
+    const finalState = await runWorkflow(state, makeRunStep());
+
+    if (finalState.status === 'done') {
+      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+    } else {
+      console.error(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}\n`));
+    }
+
+    const totalTokens = finalState.totalTokens ?? 0;
+    console.log(chalk.hex('#4e3d30')(
+      `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
+    ));
+    if (finalState.status === 'failed') {
+      console.log(chalk.hex('#8a7768')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      process.exit(1);
+    }
+    return;
+  }
+
+  // ── --resume-workflow <id>: resume a persisted workflow ─────────────────────
+  if (typeof argv['resume-workflow'] === 'string' && argv['resume-workflow']) {
+    const workflowId = argv['resume-workflow'];
+
+    display.header('Workflow', `Resuming workflow ${workflowId}`);
+
+    const makeRunStep = () => {
+      return async (task: string, stepIndex: number): Promise<StepResult> => {
+        console.log(chalk.hex('#cc785c')(`\n  ▸ Step ${stepIndex + 1}: ${task}\n`));
+
+        const currentProvider = buildProvider(display);
+        const result = await runAgentLoop({
+          provider: currentProvider, task, context: ctx, permissions, display,
+          initialHistory: [],
+          maxTurns: resolved.maxTurns,
+          spawnConfig: {
+            apiKey: runtimeConfig.apiKey,
+            baseUrl: runtimeConfig.baseUrl ?? undefined,
+          },
+        });
+
+        return {
+          success: result.success,
+          summary: result.summary,
+          turns: result.turns,
+          toolCallCount: result.toolCallCount,
+          tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
+        };
+      };
+    };
+
+    const finalState = await resumeWorkflow(workflowId, makeRunStep());
+    if (!finalState) {
+      console.error(chalk.hex('#b15439')(`\n  ✗ Workflow not found: ${workflowId}\n`));
+      process.exit(1);
+    }
+
+    if (finalState.status === 'done') {
+      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+    } else {
+      console.error(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}\n`));
+    }
+
+    const totalTokens = finalState.totalTokens ?? 0;
+    console.log(chalk.hex('#4e3d30')(
+      `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
+    ));
+    if (finalState.status === 'failed') {
+      console.log(chalk.hex('#8a7768')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      process.exit(1);
+    }
+    return;
+  }
 
   // ── Single task mode: ruby-code "fix the bug" ──────────────────────────────
   if (argv._.length > 0) {
@@ -661,6 +873,12 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :models                 List all available models',
       '  :apikey <key>           Set API key for current session',
       '',
+      '  ── Workflows ─────────────────────────────────────',
+      '  :workflows              List all saved workflows',
+      '  :workflow               Create & run a multi-step workflow',
+      '    <name> "step1" "step2" ...',
+      '  :resume-workflow <id>   Resume a paused/failed workflow',
+      '',
       '  ── Context / Stats ──────────────────────────────',
       '  :context                Show loaded project context',
       '  :graph                  Show codebase knowledge graph summary',
@@ -915,9 +1133,152 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       `    Input tokens: ${u.inputTokens.toLocaleString()}`,
       `    Output tokens:${u.outputTokens.toLocaleString()}`,
       `    Total tokens: ${total.toLocaleString()}`,
-      `    Est. cost:    $${u.costUsd.toFixed(4)}`,
+      `    Est. cost:    ${u.costUsd.toFixed(4)}`,
       '',
     ].join('\n')));
+    return { handled: true };
+  }
+
+  // ── Workflow commands ──────────────────────────────────────────────────────
+
+  if (input === ':workflows') {
+    const workflows = await listWorkflows();
+    if (workflows.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No saved workflows.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
+      for (const ws of workflows) {
+        const created = new Date(ws.definition.createdAt).toLocaleString();
+        const doneSteps = ws.stepStates.filter(s => s.status === 'done').length;
+        const totalSteps = ws.definition.steps.length;
+        const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
+        console.log(
+          `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
+          `${chalk.hex('#ede0cc')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
+          `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
+        );
+      }
+      console.log();
+    }
+    return { handled: true };
+  }
+
+  if (input.startsWith(':workflow ')) {
+    const parts = input.slice(':workflow '.length).trim();
+    // Parse: <name> "step1" "step2" ...  or  <name> step1 step2 ...
+    const match = parts.match(/^(\S+)\s+(.+)$/);
+    if (!match) {
+      console.log(chalk.hex('#b15439')('  ✗ Usage: :workflow <name> "step 1" "step 2" ...'));
+      return { handled: true };
+    }
+    const workflowName = match[1];
+    // Split remaining by quoted strings or spaces
+    const restStr = match[2];
+    const stepTasks: string[] = [];
+    const quotedRe = /"([^"]+)"|'([^']+)'|(\S+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = quotedRe.exec(restStr)) !== null) {
+      stepTasks.push(m[1] ?? m[2] ?? m[3]);
+    }
+
+    if (stepTasks.length === 0) {
+      console.log(chalk.hex('#b15439')('  ✗ At least one step task is required.'));
+      return { handled: true };
+    }
+
+    const steps: WorkflowStep[] = stepTasks.map((task: string, i: number) => ({
+      name: `step-${i + 1}`,
+      task,
+    }));
+
+    console.log(chalk.hex('#cc785c').bold(`\n  Creating workflow "${workflowName}" with ${steps.length} steps...\n`));
+
+    const state = await createWorkflow({ name: workflowName, steps });
+    console.log(chalk.hex('#5a9e6e')(`  ✓ Workflow created: ${state.definition.id}\n`));
+
+    // Build the runStep callback using the REPL context's provider
+    const runStep = async (task: string, stepIndex: number): Promise<StepResult> => {
+      console.log(chalk.hex('#cc785c')(`  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
+
+      const { createResilientProvider } = await import('../providers/resilient-factory.js');
+      const currentProvider = createResilientProvider(
+        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+        {},
+        c.display,
+      );
+      const result = await runAgentLoop({
+        provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
+        display: c.display, initialHistory: [], maxTurns: undefined,
+        spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+      });
+
+      return {
+        success: result.success,
+        summary: result.summary,
+        turns: result.turns,
+        toolCallCount: result.toolCallCount,
+        tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
+      };
+    };
+
+    const finalState = await runWorkflow(state, runStep);
+    if (finalState.status === 'done') {
+      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+    } else {
+      console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
+      console.log(chalk.hex('#8a7768')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+    }
+
+    return { handled: true };
+  }
+
+  if (input.startsWith(':resume-workflow ')) {
+    const workflowId = input.slice(':resume-workflow '.length).trim();
+    if (!workflowId) {
+      console.log(chalk.hex('#b15439')('  ✗ Usage: :resume-workflow <id>'));
+      return { handled: true };
+    }
+
+    console.log(chalk.hex('#cc785c').bold(`\n  Resuming workflow ${workflowId}...\n`));
+
+    const runStep = async (task: string, stepIndex: number): Promise<StepResult> => {
+      console.log(chalk.hex('#cc785c')(`  ▸ Step ${stepIndex + 1}: ${task}\n`));
+
+      const { createResilientProvider } = await import('../providers/resilient-factory.js');
+      const currentProvider = createResilientProvider(
+        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+        {},
+        c.display,
+      );
+      const result = await runAgentLoop({
+        provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
+        display: c.display, initialHistory: [], maxTurns: undefined,
+        spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+      });
+
+      return {
+        success: result.success,
+        summary: result.summary,
+        turns: result.turns,
+        toolCallCount: result.toolCallCount,
+        tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
+      };
+    };
+
+    const finalState = await resumeWorkflow(workflowId, runStep);
+    if (!finalState) {
+      console.log(chalk.hex('#b15439')(`  ✗ Workflow not found: ${workflowId}\n`));
+      return { handled: true };
+    }
+
+    if (finalState.status === 'done') {
+      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+    } else {
+      console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
+      console.log(chalk.hex('#8a7768')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+    }
+
     return { handled: true };
   }
 
@@ -1028,6 +1389,12 @@ ${chalk.hex('#cc785c').bold('  bootstrapruby')} ${chalk.hex('#8a7768')('— mode
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
     --max-turns <n>          Max agent loop turns before stopping (default: 150)
+    --analyze                Mine session history for weakness patterns; save report
+    --propose-harness        Generate system-prompt patches from weakness report
+    --apply-harness <id>     Apply a proposal patch; reverts if tests fail
+    --workflow <name> ...    Create and run a sequential workflow with named steps
+    --resume-workflow <id>   Resume a paused/failed workflow from last completed step
+    --workflows              List all persisted workflows
     --profile local          Use local Ollama model (no API key required)
 
     --rate-limit-rpm <n>     Cap requests per minute (default: 0=unlimited, Google: 30)
