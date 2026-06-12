@@ -20,7 +20,7 @@ Built by Dušan Milosavljević acting as lead architect and orchestrator, direct
 Source code released under MIT License. Anyone may use, copy, modify, distribute provided copyright notice is preserved.
 
 ## Future Licensing
-The copyright holder reserves the right to release future versions under different license terms, including commercial licenses.
+The copyright holder reserves the right to release future versions under different license terms, including commercial licenses. The MIT license applies to the current published version only.
 
 ## Contact
 Dušan Milosavljević
