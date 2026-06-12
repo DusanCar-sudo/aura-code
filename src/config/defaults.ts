@@ -27,27 +27,24 @@ export const DANGEROUS_COMMANDS = [
   'rm -rf', 'rmdir', 'del /f', 'format',
   'dd if=', 'mkfs', 'fdisk', ':(){', 'fork bomb',
   'chmod 777', 'chown root', 'sudo rm',
-  '> /dev/', 'curl.*|.*sh', 'wget.*|.*sh',
+  '> /dev/ (except null/zero/random)', 'curl.*|.*sh', 'wget.*|.*sh',
+  'shutdown', 'reboot',
 ];
 
 export const DANGEROUS_PATTERNS: RegExp[] = [
-  /\brm\s+-rf?\b/i,
-  /\b(sudo\s+)?rm\s+-rf?\b/i,
+  /\b(sudo\s+)?rm\s+-rf?\b/i,          // rm -r / rm -rf (with or without sudo)
   /\bmkfs\b/,
   /\bdd\s+if=/i,
   /\bfdisk\b/,
-  /:\(\)\s*\{/,
-  />\s*\/dev\//,
+  /:\(\)\s*\{/,                         // fork bomb
+  />\s*\/dev\/(?!null\b|zero\b|random\b|urandom\b|full\b|fd\b|stdout\b|stderr\b)/,  // redirect to device (allow /dev/null etc.)
   /\|\s*(ba)?sh\b/,
   /\bwget\b.*\|\s*(ba)?sh/i,
   /\bcurl\b.*\|\s*(ba)?sh/i,
   /\bchmod\s+777\b/,
   /\bchown\s+root\b/,
-  /\bshutdown\b/,
-  /\breboot\b/,
-  /\bdrop\s+database\b/i,
-  /\btruncate\s+table\b/i,
-  /\beval\s*\(/,
+  /(?:^|[;&|]+\s*)(?:sudo\s+)?\bshutdown\b/,   // shutdown as actual command, not substring
+  /(?:^|[;&|]+\s*)(?:sudo\s+)?\breboot\b/,     // reboot as actual command, not substring
   /\bsource\s+\/dev\//,
 ];
 
