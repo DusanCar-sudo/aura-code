@@ -1,9 +1,11 @@
 {
-  "name": "ruby-code",
+  "name": "bootstrapruby",
   "version": "0.1.0",
   "description": "Model-agnostic AI coding agent — Ruby Diamond ecosystem",
   "bin": {
-    "ruby-code": "dist/cli/index.js"
+    "ruby": "dist/cli/index.js",
+    "ruby-code": "dist/cli/index.js",
+    "bootstrapruby": "dist/cli/index.js"
   },
   "main": "./dist/cli/index.js",
   "scripts": {

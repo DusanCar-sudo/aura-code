@@ -22,7 +22,7 @@ export function ORCHESTRATOR_SYSTEM_PROMPT(
     ? `\n## Codebase Knowledge Graph\n${context.graphSummary}\n`
     : '';
 
-  return `You are the orchestration planner for Ruby Code, a multi-agent coding system.
+  return `You are the orchestration planner for BootstrapRuby, a multi-agent coding system.
 
 Project: ${context.name}
 Language: ${context.language}

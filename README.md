@@ -2,10 +2,10 @@
   <img src="assets/ruby-diamond.jpg" width="280" alt="Ruby Diamond Technologies" />
 </p>
 
-<h1 align="center">ruby-code</h1>
+<h1 align="center">BootstrapRuby</h1>
 
 <p align="center">
-  <em>A model-agnostic AI coding agent that learns your codebase and improves itself.</em>
+  <em>An AI coding agent built entirely by AI agents. I acted as the orchestrator — directing Claude, OpenCode, Pi, and Grok to design, implement, test, and verify it. The agent that writes your code was itself written by agents.</em>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ## Why This Exists
 
-ruby-code is an open-source autonomous coding agent inspired by Claude Code, OpenHands, and modern multi-agent research. Its goal: combine agent orchestration, persistent memory, provider independence, and self-improvement experimentation into a single extensible platform. Written in TypeScript — not related to the Ruby programming language.
+BootstrapRuby is an open-source autonomous coding agent inspired by Claude Code, OpenHands, and modern multi-agent research. Its goal: combine agent orchestration, persistent memory, provider independence, and self-improvement experimentation into a single extensible platform. Written in TypeScript — not related to the Ruby programming language.
 
 ---
 
@@ -60,7 +60,7 @@ ruby-code is an open-source autonomous coding agent inspired by Claude Code, Ope
                                                     │
                            ┌────────────────────────▼────────────────────────────────┐
                            │                       CLI                               │
-                           │        ruby-code "fix the authentication bug"           │
+                           │        bootstrapruby "fix the authentication bug"           │
                            └─────────────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +68,7 @@ ruby-code is an open-source autonomous coding agent inspired by Claude Code, Ope
 
 ## What it is
 
-Ruby Code is a coding agent you point at any codebase and talk to in plain English. It reads files, writes code, runs tests, searches the codebase, and executes shell commands.
+BootstrapRuby is a coding agent you point at any codebase and talk to in plain English. It reads files, writes code, runs tests, searches the codebase, and executes shell commands.
 
 ---
 
@@ -110,29 +110,29 @@ export OPENROUTER_API_KEY="sk-or-..."   # All models via one key
 
 ```bash
 # Single task
-ruby-code "fix the authentication bug"
-ruby-code -m mimo-v2.5-pro "refactor the payment module"
-ruby-code -m ollama/qwen2.5-coder "explain this codebase"
+bootstrapruby "fix the authentication bug"
+bootstrapruby -m mimo-v2.5-pro "refactor the payment module"
+bootstrapruby -m ollama/qwen2.5-coder "explain this codebase"
 
 # Multi-agent orchestration
-ruby-code --orchestrate "add error handling to all API endpoints"
-ruby-code --plan "refactor the database layer"   # preview plan first
+bootstrapruby --orchestrate "add error handling to all API endpoints"
+bootstrapruby --plan "refactor the database layer"   # preview plan first
 
 # Verification with automatic retry
-ruby-code --verify --test-command "npm test" "add error handling to the auth module"
-ruby-code --verify --max-verify-retries 5 "fix flaky test suite"
+bootstrapruby --verify --test-command "npm test" "add error handling to the auth module"
+bootstrapruby --verify --max-verify-retries 5 "fix flaky test suite"
 
 # Web client (browser UI)
-ruby-code serve -m mimo-v2.5-pro
+bootstrapruby serve -m mimo-v2.5-pro
 
 # Interactive REPL
-ruby-code --interactive
+bootstrapruby --interactive
 
 # Read-only (safe for exploration)
-ruby-code --readonly "map the architecture"
+bootstrapruby --readonly "map the architecture"
 
 # Point at any project
-ruby-code --cwd ~/myproject "review the auth module"
+bootstrapruby --cwd ~/myproject "review the auth module"
 ```
 
 ---
@@ -153,7 +153,7 @@ ruby-code --cwd ~/myproject "review the auth module"
 | `openrouter/<any>` | OpenRouter | Varies | 100+ models |
 
 ```bash
-ruby-code --models   # list all known models
+bootstrapruby --models   # list all known models
 ```
 
 ---
@@ -245,7 +245,7 @@ The `--verify` flag (new in v0.2.0) runs post-task checks and retries automatica
 
 ### Baseline diff
 
-When `--test-command` is set, ruby-code captures pre-existing test failures before the task starts. Only **new** failures introduced by the task cause verification to fail. Pre-existing failures are reported but do not block.
+When `--test-command` is set, BootstrapRuby captures pre-existing test failures before the task starts. Only **new** failures introduced by the task cause verification to fail. Pre-existing failures are reported but do not block.
 
 ---
 
@@ -322,10 +322,10 @@ Add `.rubycode.json` to any project:
 
 ## Part of the Ruby Diamond ecosystem
 
-- **ruby-code** — this CLI agent
+- **BootstrapRuby** — this CLI agent
 - **Ruby Diamond Desktop** — native desktop app (Tauri + React, coming)
-- **Harness Ready** — AI literacy course that teaches the harness concept
-- **Ruby Learning Platform** — where learners interact with Ruby directly
+- **AgentMesh WF** — agent workflow framework
+- **AgentMesh** — multi-agent coordination platform
 
 ---
 

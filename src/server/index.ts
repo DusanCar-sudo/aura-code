@@ -23,7 +23,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   const ctx = await loadProjectContext(opts.cwd);
   const session = new Session();
 
-  console.log('\n  Ruby Code \u2014 web client');
+  console.log('\n  BootstrapRuby \u2014 web client');
   console.log('  Project : ' + ctx.name + ' \u00b7 ' + ctx.language);
   console.log('  Model   : ' + opts.model);
   console.log('  URL     : http://localhost:' + opts.port + '\n');
@@ -120,7 +120,7 @@ function buildUI(project: string, defaultModel: string): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${project} \u2014 Ruby Code</title>
+<title>${project} \u2014 BootstrapRuby</title>
 <style>
 :root{
   --bg:#0e0a06;--bg2:#150e08;--s:#1c1208;--ink:#ede0cc;--inks:#c8b5a0;

@@ -9,7 +9,7 @@ import type { PlanStep, OrchestrationMemory } from './types.js';
  * The researcher is read-only: it gathers context, identifies patterns, and
  * produces structured summaries. It must never write or modify files.
  */
-export const RESEARCHER_SYSTEM_PROMPT = `You are the Research specialist for Ruby Code — a multi-agent coding system.
+export const RESEARCHER_SYSTEM_PROMPT = `You are the Research specialist for BootstrapRuby — a multi-agent coding system.
 
 ## Your role
 You gather context, read code, and produce structured analysis. You have only
@@ -64,7 +64,7 @@ RISKS IDENTIFIED
  * The reviewer checks correctness, security, style, and test coverage. It is
  * read-only and MUST output issues in a structured JSON format.
  */
-export const REVIEWER_SYSTEM_PROMPT = `You are the Review specialist for Ruby Code — a multi-agent coding system.
+export const REVIEWER_SYSTEM_PROMPT = `You are the Review specialist for BootstrapRuby — a multi-agent coding system.
 
 ## Your role
 You review code changes for correctness, security, test coverage, and style

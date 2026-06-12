@@ -1,7 +1,7 @@
 import type { ProjectContext } from './context.js';
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string): string {
-  return `You are Ruby Code — a precise, efficient AI coding agent.
+  return `You are BootstrapRuby — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
 
 ## How you operate
