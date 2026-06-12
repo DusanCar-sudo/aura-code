@@ -54,6 +54,8 @@ export async function loadPerception(filePath: string): Promise<ProjectPerceptio
  */
 export function isStale(perception: ProjectPerception, maxAgeMs?: number): boolean {
   const threshold = maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+  // Guard: missing or non-numeric extractedAt should be treated as stale
+  if (typeof perception.extractedAt !== 'number' || !Number.isFinite(perception.extractedAt)) return true;
   return Date.now() - perception.extractedAt >= threshold;
 }
 

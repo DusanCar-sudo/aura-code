@@ -364,7 +364,7 @@ export function findRelated(
 
   if (matched.length === 0) {
     return {
-      query: { type: 'dependencies', target: concept },
+      query: { type: 'related', target: concept },
       nodes: [],
       edges: [],
       summary: `No nodes found related to "${concept}". Try a different search term.`,
@@ -388,7 +388,7 @@ export function findRelated(
   const summary = `Found ${matched.length} node${matched.length === 1 ? '' : 's'} related to "${concept}": ${names}.`;
 
   return {
-    query: { type: 'dependencies', target: concept },
+    query: { type: 'related', target: concept },
     nodes: allNodes,
     edges: relatedEdges,
     summary,

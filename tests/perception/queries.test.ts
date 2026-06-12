@@ -397,6 +397,16 @@ describe('findRelated', () => {
     expect(result.edges).toEqual([]);
     expect(result.summary.length).toBeGreaterThan(0);
   });
+
+  it('returns query.type "related" (not "dependencies")', () => {
+    const result = findRelated(mockPerception, 'auth');
+    expect(result.query.type).toBe('related');
+  });
+
+  it('returns query.type "related" even when no match found', () => {
+    const result = findRelated(mockPerception, 'ZZZZZZ_NOMATCH_ZZZZZZ');
+    expect(result.query.type).toBe('related');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
