@@ -50,6 +50,7 @@ export const DANGEROUS_PATTERNS: RegExp[] = [
 
 export const SAFE_SHELL_COMMANDS = [
   'ls', 'cat', 'echo', 'pwd', 'which', 'find', 'grep', 'rg',
+  'curl', 'jq', 'head', 'tail', 'wc',
   'npm test', 'npm run', 'npx', 'yarn test', 'yarn run',
   'python', 'python3', 'pytest', 'go test', 'cargo test',
   'tsc', 'node', 'ts-node',
