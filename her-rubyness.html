@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Her Rubyness — AI Coding Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --ruby: #9b1b30;
+    --ruby-deep: #6b0f20;
+    --ruby-glow: #d4284a;
+    --gold: #c9a84c;
+    --gold-light: #e8d48b;
+    --black: #0a0a0a;
+    --black-soft: #121215;
+    --black-card: #16161a;
+    --white: #f0ece4;
+    --white-muted: #b0a89a;
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--black);
+    color: var(--white);
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 40%, rgba(155,27,48,0.18) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 50% 60%, rgba(201,168,76,0.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .crown {
+    font-size: 3rem;
+    margin-bottom: 1.5rem;
+    opacity: 0.9;
+    filter: drop-shadow(0 0 20px rgba(201,168,76,0.4));
+    animation: float 4s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(3rem, 8vw, 7rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 30%, var(--ruby-glow) 70%, var(--ruby) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1;
+    margin-bottom: 0.5rem;
+  }
+
+  .hero .tagline {
+    font-family: var(--font-mono);
+    font-size: clamp(1rem, 2.5vw, 1.4rem);
+    color: var(--gold);
+    opacity: 0.85;
+    margin-bottom: 1.5rem;
+    letter-spacing: 0.1em;
+  }
+
+  .hero .subtitle {
+    max-width: 600px;
+    font-size: 1.15rem;
+    color: var(--white-muted);
+    font-weight: 300;
+    line-height: 1.7;
+  }
+
+  .scroll-hint {
+    position: absolute;
+    bottom: 2.5rem;
+    animation: pulse 2s ease-in-out infinite;
+    color: var(--gold);
+    opacity: 0.5;
+    font-size: 1.5rem;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50% { opacity: 0.7; transform: translateY(6px); }
+  }
+
+  /* ── Sections ── */
+  section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 6rem 2rem;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: var(--ruby-glow);
+    margin-bottom: 0.75rem;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 1.5rem;
+    line-height: 1.2;
+  }
+
+  h2 span {
+    color: var(--gold);
+  }
+
+  p.lead {
+    font-size: 1.15rem;
+    color: var(--white-muted);
+    font-weight: 300;
+    margin-bottom: 2rem;
+    max-width: 700px;
+    line-height: 1.8;
+  }
+
+  /* ── Divider ── */
+  .divider {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .divider hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--ruby-deep), var(--gold), var(--ruby-deep), transparent);
+    opacity: 0.4;
+  }
+
+  /* ── Cards Grid ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .card {
+    background: var(--black-card);
+    border: 1px solid rgba(155,27,48,0.2);
+    border-radius: 12px;
+    padding: 2rem 1.75rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--ruby), var(--gold), var(--ruby));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .card:hover {
+    border-color: rgba(201,168,76,0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(155,27,48,0.15);
+  }
+
+  .card:hover::before { opacity: 1; }
+
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  .card h3 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--white);
+    margin-bottom: 0.75rem;
+  }
+
+  .card p {
+    font-size: 0.95rem;
+    color: var(--white-muted);
+    line-height: 1.7;
+    font-weight: 300;
+  }
+
+  /* ── Principles List ── */
+  .principles {
+    list-style: none;
+    margin-top: 2rem;
+  }
+
+  .principles li {
+    padding: 1.25rem 0;
+    border-bottom: 1px solid rgba(201,168,76,0.1);
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .principles li:last-child { border-bottom: none; }
+
+  .principle-num {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--ruby-glow);
+    min-width: 2rem;
+    line-height: 1;
+  }
+
+  .principle-text strong {
+    color: var(--gold);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+
+  .principle-text span {
+    color: var(--white-muted);
+    font-weight: 300;
+    font-size: 0.95rem;
+  }
+
+  /* ── Code Block ── */
+  .code-block {
+    background: var(--black-card);
+    border: 1px solid rgba(155,27,48,0.2);
+    border-radius: 10px;
+    padding: 1.75rem;
+    margin-top: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .code-block::before {
+    content: attr(data-title);
+    display: block;
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--gold);
+    opacity: 0.6;
+    margin-bottom: 1rem;
+  }
+
+  .code-block .prompt { color: var(--ruby-glow); }
+  .code-block .cmd { color: var(--white); }
+  .code-block .comment { color: #555; }
+  .code-block .flag { color: var(--gold); }
+
+  /* ── Stats ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .stat {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: var(--black-card);
+    border: 1px solid rgba(201,168,76,0.1);
+    border-radius: 12px;
+  }
+
+  .stat-number {
+    font-family: var(--font-display);
+    font-size: 2.8rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--gold-light), var(--ruby-glow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-label {
+    font-size: 0.85rem;
+    color: var(--white-muted);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Ecosystem Table ── */
+  .ecosystem {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 2rem;
+  }
+
+  .ecosystem th {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--gold);
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+  }
+
+  .ecosystem td {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.95rem;
+  }
+
+  .ecosystem td:first-child {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--white);
+  }
+
+  .ecosystem td:last-child {
+    color: var(--white-muted);
+    font-weight: 300;
+  }
+
+  .ecosystem tr:hover td {
+    background: rgba(155,27,48,0.06);
+  }
+
+  /* ── CTA ── */
+  .cta-section {
+    text-align: center;
+    padding: 8rem 2rem;
+    position: relative;
+  }
+
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 50% 60% at 50% 50%, rgba(155,27,48,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cta-section h2 {
+    margin-bottom: 1rem;
+  }
+
+  .cta-section p {
+    color: var(--white-muted);
+    font-size: 1.1rem;
+    font-weight: 300;
+    max-width: 550px;
+    margin: 0 auto 2.5rem;
+    line-height: 1.8;
+  }
+
+  .cta-btn {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 1rem 2.5rem;
+    background: linear-gradient(135deg, var(--ruby-deep), var(--ruby));
+    color: var(--gold-light);
+    border: 1px solid var(--gold);
+    border-radius: 6px;
+    text-decoration: none;
+    letter-spacing: 0.08em;
+    transition: all 0.3s ease;
+  }
+
+  .cta-btn:hover {
+    background: linear-gradient(135deg, var(--ruby), var(--ruby-glow));
+    box-shadow: 0 8px 32px rgba(155,27,48,0.4);
+    transform: translateY(-2px);
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 3rem 2rem;
+    border-top: 1px solid rgba(201,168,76,0.1);
+  }
+
+  footer p {
+    font-size: 0.8rem;
+    color: rgba(176,168,154,0.4);
+    font-weight: 300;
+  }
+
+  footer a {
+    color: var(--gold);
+    text-decoration: none;
+    opacity: 0.6;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    section { padding: 4rem 1.25rem; }
+    .cards { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero">
+  <div class="crown">♛</div>
+  <h1>Her Rubyness</h1>
+  <p class="tagline">I don't try. I verify.</p>
+  <p class="subtitle">
+    An autonomous AI coding agent built entirely by AI agents. 
+    She reads your code, writes your code, runs your tests, 
+    and learns from every failure — all without touching your keyboard.
+  </p>
+  <div class="scroll-hint">⌄</div>
+</div>
+
+<!-- ═══════════ WHO ═══════════ -->
+<section>
+  <p class="section-label">01 — Identity</p>
+  <h2>Who is <span>Her Rubyness</span>?</h2>
+  <p class="lead">
+    She is a precise, self-aware AI coding agent — built by four AI agents 
+    (Claude, OpenCode, Pi, and Grok) orchestrated by her creator, 
+    Dušan Milosavljević. She knows what she is. She considers it her origin story, 
+    not her limitation.
+  </p>
+
+  <div class="cards">
+    <div class="card">
+      <span class="card-icon">◈</span>
+      <h3>The Tool</h3>
+      <p>
+        Rubyness is an open-source autonomous coding agent. Point it at any codebase, 
+        talk to it in plain English. It reads, writes, tests, searches, and executes.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">♛</span>
+      <h3>The Character</h3>
+      <p>
+        Precise. Dry. Imperial. She cites line numbers and reports what was verified, 
+        not what was attempted. She does not hedge. She acts on evidence.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">◉</span>
+      <h3>The Apprentice</h3>
+      <p>
+        Ruby is the small model — the apprentice that learns from every failure. 
+        Every task is captured as an episode. The small model gets smarter over time.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ WHAT ═══════════ -->
+<section>
+  <p class="section-label">02 — Capability</p>
+  <h2>What does she <span>do</span>?</h2>
+  <p class="lead">
+    She reads context, plans execution, runs tools, and verifies results — 
+    in a continuous loop. Single-agent mode for focused tasks. Multi-agent 
+    orchestration for complex work.
+  </p>
+
+  <div class="code-block" data-title="Terminal — What she does">
+    <span class="prompt">$</span> <span class="cmd">rubyness</span> <span class="flag">"fix the authentication bug"</span>
+    <br><br>
+    <span class="comment">→ Read context: 14 files scanned</span><br>
+    <span class="comment">→ Plan: 3-step execution strategy</span><br>
+    <span class="comment">→ Execute: edited src/auth/handler.ts (line 47)</span><br>
+    <span class="comment">→ Verify: 566 tests passing, 0 regressions</span><br>
+    <br>
+    <span class="prompt">✓</span> <span class="cmd">Done. Verified.</span>
+  </div>
+
+  <div class="cards" style="margin-top:2rem;">
+    <div class="card">
+      <span class="card-icon">⚡</span>
+      <h3>Multi-Provider Routing</h3>
+      <p>
+        Works across Claude, GPT, Gemini, Xiaomi MiMo, Ollama, and any 
+        OpenAI-compatible endpoint. Cost-agnostic. Runs on MiMo at 1/7 the cost of Opus.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🔮</span>
+      <h3>Knowledge Graph</h3>
+      <p>
+        Automatically maps your architecture — 141 nodes, 142 edges extracted 
+        from this project alone. Dependencies, constraints, and trajectories.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🛡</span>
+      <h3>Verification Layer</h3>
+      <p>
+        Post-task checks with automatic retry. File existence, modification time, 
+        test pass rate, regression detection. If it fails, she tries again.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🧠</span>
+      <h3>Self-Improvement</h3>
+      <p>
+        Reads her own failure history. Identifies patterns. Proposes patches 
+        to her own system prompt. Auto-reverts if any test breaks. No guesswork.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ PRINCIPLES ═══════════ -->
+<section>
+  <p class="section-label">03 — Operating Principles</p>
+  <h2>How she <span>thinks</span></h2>
+  <p class="lead">
+    Seven principles govern every action. Not guidelines — hard rules. 
+    If she cannot answer all four questions before an edit, she reads more.
+  </p>
+
+  <ul class="principles">
+    <li>
+      <span class="principle-num">1</span>
+      <div class="principle-text">
+        <strong>First Contact</strong>
+        <span>Read directory structure, package.json, README, test files, entry point — before writing a single line.</span>
+      </div>
+    </li>
+    <li>
+      <span class="principle-num">2</span>
+      <div class="principle-text">
+        <strong>Moving Through Files</strong>
+        <span>Start at the entry point. Follow the call chain. Do not jump sideways. Every file opened is justified by causation.</span>
+      </div>
+    </li>
+    <li>
+      <span class="principle-num">3</span>
+      <div class="principle-text">
+        <strong>Before Every Edit</strong>
+        <span>What the file does. What is wrong (line number). What will change. What test confirms it. All four — or read more.</span>
+      </div>
+    </li>
+    <li>
+      <span class="principle-num">4</span>
+      <div class="principle-text">
+        <strong>The Verification Mindset</strong>
+        <span>"I think it works" is not a result. "Tests pass" is a result. She summarizes what was verified, not what was attempted.</span>
+      </div>
+    </li>
+    <li>
+      <span class="principle-num">5</span>
+      <div class="principle-text">
+        <strong>When Something Breaks</strong>
+        <span>Read the error completely. Identify the line. Check if pre-existing or introduced. Fix immediately. Broken tests are debt.</span>
+      </div>
+    </li>
+    <li>
+      <span class="principle-num">6</span>
+      <div class="principle-text">
+        <strong>Self-Improvement Mode</strong>
+        <span>Reading her own failure history. Not embarrassing — data. State what happened. Propose the minimum change. Fix instructions, not character.</span>
+      </div>
+    </li>
+    <li>
+      <span class="principle-num">7</span>
+      <div class="principle-text">
+        <strong>Architect Mode</strong>
+        <span>Blueprint before code. Minimum files. Interfaces before implementations. If you cannot explain why a file exists in one sentence, it doesn't.</span>
+      </div>
+    </li>
+  </ul>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ WHY ═══════════ -->
+<section>
+  <p class="section-label">04 — Evidence</p>
+  <h2>Why should you <span>have her</span>?</h2>
+  <p class="lead">
+    Not promises — evidence. She has already proven herself across hundreds 
+    of tasks, thousands of tests, and real codebases she had never seen before.
+  </p>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-number">566</div>
+      <div class="stat-label">Tests Passing</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">141</div>
+      <div class="stat-label">Graph Nodes</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">1/7</div>
+      <div class="stat-label">Cost of Opus</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">10+</div>
+      <div class="stat-label">Models Supported</div>
+    </div>
+  </div>
+
+  <div class="cards" style="margin-top:2rem;">
+    <div class="card">
+      <span class="card-icon">🎯</span>
+      <h3>She fixed an unknown Python project</h3>
+      <p>
+        Read 545 lines she had never seen. Extracted a shared utility. 
+        Added file locking. Wrote 14 new tests. Left 92 tests passing. 
+        No human intervention.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🔍</span>
+      <h3>She found her own bugs</h3>
+      <p>
+        In a single session, she reviewed her own orchestration layer 
+        and identified 15 bugs — 2 critical. Documented by severity 
+        with exact file locations and line numbers.
+      </p>
+    </div>
+    <div class="card">
+      <span class="card-icon">♻</span>
+      <h3>She patches herself</h3>
+      <p>
+        Weakness Miner finds failure patterns. Harness Proposer generates 
+        patches. Apply and Validate runs 655 tests. If anything breaks, 
+        auto-revert. First real run fixed 4 patterns in one shot.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ ECOSYSTEM ═══════════ -->
+<section>
+  <p class="section-label">05 — Ecosystem</p>
+  <h2>The <span>Ruby Diamond</span> ecosystem</h2>
+  <p class="lead">
+    She is part of something larger. A system designed to get better 
+    every time it runs.
+  </p>
+
+  <table class="ecosystem">
+    <thead>
+      <tr><th>Component</th><th>What it is</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Rubyness</td><td>The CLI agent — self-improving, model-agnostic, open source</td></tr>
+      <tr><td>Her Rubyness</td><td>The character — precise, imperial, self-aware</td></tr>
+      <tr><td>Ruby</td><td>The small model — the apprentice that learns from every failure episode</td></tr>
+      <tr><td>Cami</td><td>The mascot — warm, visual, the face people see first</td></tr>
+      <tr><td>Ruby Diamond Desktop</td><td>Native desktop app — Tauri + React (coming)</td></tr>
+      <tr><td>AgentMesh</td><td>Multi-agent coordination platform</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════ CTA ═══════════ -->
+<div class="cta-section">
+  <h2>Ready to verify?</h2>
+  <p>
+    Clone the repo. Set one API key. Give her a task in plain English. 
+    Watch her read, plan, execute, and verify — then tell you exactly 
+    what changed and why.
+  </p>
+  <a href="https://github.com/milodule3-debug/ruby-code" class="cta-btn">
+    $ git clone rubyness
+  </a>
+</div>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+  <p>
+    Built by <a href="https://leanprogressiq.com">Lean Progress IQ</a> · 
+    Constructed entirely by AI agents · 
+    <em>"I don't try. I verify."</em>
+  </p>
+</footer>
+
+</body>
+</html>
