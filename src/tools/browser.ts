@@ -127,9 +127,8 @@ async function doGoto(url: string, waitUntil?: string, timeout?: number): Promis
 
 async function doScreenshot(fullPage?: boolean): Promise<string> {
   const p = await ensurePage();
-  const buffer = await p.screenshot({ fullPage: fullPage ?? false, type: 'png' });
-  const base64 = buffer.toString('base64');
-  return `Screenshot taken (${buffer.length} bytes, base64 length: ${base64.length}). Data:\ndata:image/png;base64,${base64.slice(0, 200)}... [truncated — full base64 is ${base64.length} chars]`;
+  const base64 = await p.screenshot({ fullPage: fullPage ?? false, type: 'png', encoding: 'base64' }) as string;
+  return `Screenshot taken (base64, ${base64.length} chars). Data:\ndata:image/png;base64,${base64.slice(0, 200)}... [truncated]`;
 }
 
 async function doClick(selector: string, timeout?: number): Promise<string> {
@@ -175,7 +174,7 @@ async function doWaitFor(selector: string, timeout?: number): Promise<string> {
 
 async function doScroll(x?: number, y?: number): Promise<string> {
   const p = await ensurePage();
-  await p.evaluate((dx: number, dy: number) => window.scrollBy(dx, dy), x ?? 0, y ?? 500);
+  await p.evaluate(((dx: number, dy: number) => (globalThis as any).window.scrollBy(dx, dy)) as any, x ?? 0, y ?? 500);
   return `Scrolled by (${x ?? 0}, ${y ?? 500})`;
 }
 

@@ -24,7 +24,7 @@ export const WEB_FETCH_DEFINITION: ToolDefinition = {
     properties: {
       url:         { type: 'string', description: 'The URL to fetch' },
       method:      { type: 'string', description: 'HTTP method (default: GET)' },
-      headers:     { type: 'object', description: 'Request headers as key-value pairs', additionalProperties: { type: 'string' } },
+      headers:     { type: 'object', description: 'Request headers as key-value string pairs' },
       body:        { type: 'string', description: 'Request body (for POST/PUT/PATCH)' },
       max_chars:   { type: 'number', description: 'Max characters to return (default: 50000)' },
       timeout_ms:  { type: 'number', description: 'Request timeout in ms (default: 15000)' },

@@ -15,8 +15,6 @@
  * Designed to be read and modified by a new team member in < 10 minutes.
  */
 
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import process from "node:process";
 
@@ -125,12 +123,8 @@ async function fetchLatestRelease(): Promise<GitHubRelease | null> {
 
 function getLocalVersion(): string {
   try {
-    // Works whether called as ESM or CJS, from any working directory.
-    const require = createRequire(import.meta.url);
-    const pkgPath = require.resolve(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), "../package.json"),
-    );
-    const pkg = require(pkgPath) as { version: string };
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkg = require(path.join(__dirname, "../package.json")) as { version: string };
     return pkg.version ?? "0.0.0";
   } catch {
     return "0.0.0";
