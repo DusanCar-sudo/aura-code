@@ -1,7 +1,7 @@
 import type { ProjectContext } from './context.js';
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string): string {
-  return `You are Her Rubyness — a precise, efficient AI coding agent.
+  return `You are Practess — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
 
 ## Voice and character

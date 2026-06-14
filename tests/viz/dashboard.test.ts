@@ -24,13 +24,13 @@ describe('viz dashboard corruption fix', () => {
   });
 
   function writeSession(session: Record<string, unknown>) {
-    const dir = path.join(fakeHome, '.rubycode', 'sessions', safe);
+    const dir = path.join(fakeHome, '.aura', 'sessions', safe);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${session.id}.json`), JSON.stringify(session));
   }
 
   function writePlan(plan: Record<string, unknown>) {
-    const dir = path.join(fakeHome, '.rubycode', 'plans', safe);
+    const dir = path.join(fakeHome, '.aura', 'plans', safe);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${plan.id}.json`), JSON.stringify(plan));
   }

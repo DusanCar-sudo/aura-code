@@ -19,7 +19,7 @@ export interface ChatSession {
  */
 export const sessionStore = {
   defaultDir(): string {
-    return process.env.RUBY_SESSION_DIR ?? path.join(process.env.HOME ?? '/tmp', '.rubycode', 'sessions');
+    return process.env.AURA_SESSION_DIR ?? path.join(process.env.HOME ?? '/tmp', '.aura', 'sessions');
   },
 
   projectDir(projectRoot: string): string {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Her Rubyness — Generative ASCII Art Video
+Practess — Generative ASCII Art Video
 "I don't try. I verify."
 
 A coding agent built entirely by AI agents.
@@ -18,7 +18,7 @@ VW, VH = 1920, 1080
 FPS = 24
 DURATION = 20  # seconds
 TOTAL_FRAMES = FPS * DURATION
-OUTPUT = "/home/dusan/ruby-code/Her-Rubyness-ASCII.mp4"
+OUTPUT = "/home/dusan/ruby-code/Practess-ASCII.mp4"
 
 # ─── Font ──────────────────────────────────────────────────────────────────
 FONT_PREFS = [
@@ -523,7 +523,7 @@ def get_scene(t):
 
 # ─── Main ──────────────────────────────────────────────────────────────────
 def main():
-    print(f"Her Rubyness — ASCII Video Generator")
+    print(f"Practess — ASCII Video Generator")
     print(f"Resolution: {VW}x{VH} @ {FPS}fps, {DURATION}s ({TOTAL_FRAMES} frames)")
     print(f"Output: {OUTPUT}")
     print()

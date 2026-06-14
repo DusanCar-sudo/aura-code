@@ -11,12 +11,12 @@ describe('loadProjectConfig', () => {
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
-  it('returns empty when no .rubycode.json', () => {
+  it('returns empty when no .aura.json', () => {
     expect(loadProjectConfig(tmpDir)).toEqual({});
   });
 
   it('loads valid config from project root', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
       model: 'gpt-4o',
       mode: 'auto',
       ignore: ['vendor/'],
@@ -28,7 +28,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('walks up to find ancestor config', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({ model: 'haiku' }));
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ model: 'haiku' }));
     const subdir = path.join(tmpDir, 'a', 'b');
     fs.mkdirSync(subdir, { recursive: true });
     const cfg = loadProjectConfig(subdir);
@@ -36,12 +36,12 @@ describe('loadProjectConfig', () => {
   });
 
   it('silently returns empty on malformed JSON', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), '{not json');
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), '{not json');
     expect(loadProjectConfig(tmpDir)).toEqual({});
   });
 
   it('rejects invalid mode values', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({ mode: 'nuclear' }));
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ mode: 'nuclear' }));
     expect(loadProjectConfig(tmpDir).mode).toBeUndefined();
   });
 });
@@ -114,7 +114,7 @@ describe('loadProjectConfig — providers', () => {
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
   it('parses valid providers array', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
       providers: [{
         name: 'DeepSeek',
         baseUrl: 'https://api.deepseek.com/v1',
@@ -131,7 +131,7 @@ describe('loadProjectConfig — providers', () => {
   });
 
   it('skips malformed provider entries', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
       providers: [
         { name: 'Good', baseUrl: 'https://good.example.com/v1', prefixes: ['good/'] },
         { name: 'MissingBaseUrl' },               // no baseUrl
@@ -145,7 +145,7 @@ describe('loadProjectConfig — providers', () => {
   });
 
   it('skips providers with non-string prefix entries', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
       providers: [{
         name: 'Test',
         baseUrl: 'https://test.example.com/v1',
@@ -158,7 +158,7 @@ describe('loadProjectConfig — providers', () => {
   });
 
   it('handles missing models array gracefully', () => {
-    fs.writeFileSync(path.join(tmpDir, '.rubycode.json'), JSON.stringify({
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
       providers: [{
         name: 'NoModels',
         baseUrl: 'https://no-models.example.com/v1',

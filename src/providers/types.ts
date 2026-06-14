@@ -98,7 +98,7 @@ export interface LLMProvider {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Provider config (from CLI args or .rubycode.json)
+// Provider config (from CLI args or .aura.json)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ProviderConfig {

@@ -66,8 +66,8 @@ describe('CLI integration: first-run wizard', () => {
     const input = '4\ntp-fake-key-test\n1\n\n';
     const result = await runCliWithCleanEnv(input, tmpConfigDir);
 
-    // Wizard should have written the config file at $XDG_CONFIG_HOME/rubyness/config.json
-    const configPath = path.join(tmpConfigDir, 'rubyness', 'config.json');
+    // Wizard should have written the config file at $XDG_CONFIG_HOME/aura-code/config.json
+    const configPath = path.join(tmpConfigDir, 'aura-code', 'config.json');
     expect(fs.existsSync(configPath)).toBe(true);
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     expect(cfg.provider).toBe('xiaomi');
@@ -83,7 +83,7 @@ describe('CLI integration: first-run wizard', () => {
     // Should NOT show "No model configured" error
     expect(result.stderr).not.toContain('No model configured');
     // Should mention "Welcome"
-    expect(result.stdout).toContain('Welcome to Rubyness');
+    expect(result.stdout).toContain('Welcome to Aura');
   });
 
   it('bypasses the wizard when --no-setup is given (then errors about no model)', async () => {
@@ -96,7 +96,7 @@ describe('CLI integration: first-run wizard', () => {
     await new Promise<void>((res) => { proc.on('close', () => res()); proc.stdin.end(); });
     expect(stderr).toContain('No model configured');
     // No config should be written
-    const configPath = path.join(tmpConfigDir, 'ruby-code', 'config.json');
+    const configPath = path.join(tmpConfigDir, 'aura-code', 'config.json');
     expect(fs.existsSync(configPath)).toBe(false);
   });
 
@@ -111,6 +111,6 @@ describe('CLI integration: first-run wizard', () => {
     proc.stdout.on('data', (d) => { stdout += d.toString(); });
     await new Promise<void>((res) => { proc.on('close', () => res()); proc.stdin.end(); });
     // Wizard should NOT have run (no "Welcome" in stdout)
-    expect(stdout).not.toContain('Welcome to ruby-code');
+    expect(stdout).not.toContain('Welcome to Aura');
   });
 });

@@ -13,7 +13,7 @@ const DEFAULT_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
 /**
  * Serialise and persist a perception snapshot to disk.
  * If `filePath` is provided it writes to that exact path; otherwise it
- * derives `{projectRoot}/.rubycode/perception.json`.
+ * derives `{projectRoot}/.aura/perception.json`.
  *
  * Writes atomically (tmp file + rename) so a crash never leaves a partial file.
  * Creates parent directories if they do not already exist.
@@ -74,6 +74,6 @@ export async function clearPerception(filePath: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function defaultPath(projectRoot: string): string {
-  const dir = path.join(projectRoot, '.rubycode');
+  const dir = path.join(projectRoot, '.aura');
   return path.join(dir, 'perception.json');
 }

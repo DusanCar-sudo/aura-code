@@ -7,7 +7,7 @@ import { shouldFineTune } from './competence.js';
 // Episode persistence
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Stores alternation episodes under ~/.rubycode/episodes/{projectHash}/ so
+// Stores alternation episodes under ~/.aura/episodes/{projectHash}/ so
 // Ruby competence and fine-tune readiness can be computed per project.
 
 /** Stats returned by {@link getEpisodeStats}. */
@@ -25,7 +25,7 @@ export interface EpisodeStats {
  */
 export const episodeStore = {
   defaultDir(): string {
-    return path.join(process.env.HOME ?? '/tmp', '.rubycode', 'episodes');
+    return path.join(process.env.HOME ?? '/tmp', '.aura', 'episodes');
   },
 
   /**
@@ -46,7 +46,7 @@ export const episodeStore = {
   },
 
   /**
-   * Persists one episode to `~/.rubycode/episodes/{projectHash}/{id}.json`.
+   * Persists one episode to `~/.aura/episodes/{projectHash}/{id}.json`.
    */
   async saveEpisode(projectRoot: string, episode: Episode): Promise<void> {
     const dir = this.projectDir(projectRoot);

@@ -24,10 +24,10 @@ function generateId(): string {
   return crypto.randomBytes(4).toString('hex') + '-' + Date.now().toString(36);
 }
 
-/** Returns ~/.rubycode/workflows (or $RUBY_WORKFLOW_DIR if set). */
+/** Returns ~/.aura/workflows (or $AURA_WORKFLOW_DIR if set). */
 export function workflowsDir(): string {
-  return process.env.RUBY_WORKFLOW_DIR
-    ?? path.join(process.env.HOME ?? '/tmp', '.rubycode', 'workflows');
+  return process.env.AURA_WORKFLOW_DIR
+    ?? path.join(process.env.HOME ?? '/tmp', '.aura', 'workflows');
 }
 
 function workflowPath(id: string): string {
@@ -79,7 +79,7 @@ export type RunStepFn = (
 
 /**
  * Creates a new workflow definition and its initial state.
- * Persists the state to ~/.rubycode/workflows/<id>.json.
+ * Persists the state to ~/.aura/workflows/<id>.json.
  * Returns the workflow state.
  */
 export async function createWorkflow(opts: {

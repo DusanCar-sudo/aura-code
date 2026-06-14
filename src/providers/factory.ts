@@ -7,13 +7,13 @@ import type { ProviderDef } from '../config/project-config.js';
 import * as http from 'http';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Custom provider registry  (populated from .rubycode.json or programmatically)
+// Custom provider registry  (populated from .aura.json or programmatically)
 // ─────────────────────────────────────────────────────────────────────────────
 
 let customProviders: ProviderDef[] = [];
 
 /**
- * Register custom providers from .rubycode.json or any other source.
+ * Register custom providers from .aura.json or any other source.
  * These are checked before built-in routing in createProvider().
  */
 export function registerCustomProviders(providers: ProviderDef[]): void {
@@ -52,7 +52,7 @@ export function detectProviderKind(model: string): 'anthropic' | 'google' | 'ope
 export function createProvider(config: ProviderConfig): LLMProvider {
   const model = config.model.toLowerCase();
 
-  // ── Custom providers (from .rubycode.json) ─────────────────────────────────
+  // ── Custom providers (from .aura.json) ─────────────────────────────────
   for (const def of customProviders) {
     const matched = def.prefixes.some(p => model.startsWith(p.toLowerCase()));
     if (matched) {
@@ -209,6 +209,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'openrouter/qwen/qwen-2.5-coder-32b-instruct',        name: 'Qwen 2.5 Coder 32B (OR)',  provider: 'OpenRouter', speed: 'Open · code' },
   { id: 'openrouter/deepseek/deepseek-chat',                  name: 'DeepSeek V3 (OR)',         provider: 'OpenRouter', speed: 'Open · strong' },
   { id: 'openrouter/deepseek/deepseek-r1',                    name: 'DeepSeek R1 (OR)',         provider: 'OpenRouter', speed: 'Reasoning · open' },
+  { id: 'openrouter/deepseek/deepseek-v4-pro',                name: 'DeepSeek V4 Pro (OR)',     provider: 'OpenRouter', speed: 'Powerful · open' },
   { id: 'openrouter/google/gemma-2-27b-it',                   name: 'Gemma 2 27B (OR)',         provider: 'OpenRouter', speed: 'Open · fast' },
 
   // ── Ollama (local) ──────────────────────────────────────────────────────
@@ -233,7 +234,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
 ];
 
 /**
- * Get all available models — built-in + custom providers from .rubycode.json.
+ * Get all available models — built-in + custom providers from .aura.json.
  */
 export function getAllModels(): { id: string; name: string; provider: string; speed: string }[] {
   const all = [...KNOWN_MODELS];

@@ -18,7 +18,7 @@ describe('first-run detection', () => {
       }
     }
     // Isolate global config from the user's actual home so the test does not
-    // depend on (and does not leak state to) ~/.config/rubyness/config.json.
+    // depend on (and does not leak state to) ~/.config/aura-code/config.json.
     process.env.XDG_CONFIG_HOME = tmpHome;
   });
   afterEach(() => {
@@ -64,7 +64,7 @@ describe('first-run detection', () => {
   it('needsWizard does NOT trigger when global config exists (model already saved)', () => {
     // Write a fake global config to the test-isolated path
     const xdg = process.env.XDG_CONFIG_HOME!;
-    const cfgDir = `${xdg}/rubyness`;
+    const cfgDir = `${xdg}/aura-code`;
     require('fs').mkdirSync(cfgDir, { recursive: true });
     require('fs').writeFileSync(`${cfgDir}/config.json`, JSON.stringify({
       provider: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY',

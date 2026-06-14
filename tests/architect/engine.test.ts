@@ -57,12 +57,12 @@ afterEach(() => {
 // blueprintsDir
 // ─────────────────────────────────────────────────────────────────────────────
 describe('blueprintsDir()', () => {
-  it('returns ~/.rubycode/blueprints by default', () => {
-    expect(blueprintsDir()).toBe(path.join(homeTmp, '.rubycode', 'blueprints'));
+  it('returns ~/.aura/blueprints by default', () => {
+    expect(blueprintsDir()).toBe(path.join(homeTmp, '.aura', 'blueprints'));
   });
 
-  it('respects RUBY_BLUEPRINT_DIR env var', () => {
-    vi.stubEnv('RUBY_BLUEPRINT_DIR', '/custom/blueprints');
+  it('respects AURA_BLUEPRINT_DIR env var', () => {
+    vi.stubEnv('AURA_BLUEPRINT_DIR', '/custom/blueprints');
     expect(blueprintsDir()).toBe('/custom/blueprints');
   });
 });

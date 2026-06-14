@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Her Rubyness — Professional Project Showcase PDF Generator
+Practess — Professional Project Showcase PDF Generator
 Generates a dark-themed, modern one-pager using reportlab.
 """
 
@@ -36,7 +36,7 @@ GREEN_ACCENT = HexColor('#00cc88')    # Success / tests green
 WIDTH, HEIGHT = A4  # 595.27 x 841.89 points
 
 
-class RubynessDocTemplate(SimpleDocTemplate):
+class PractessDocTemplate(SimpleDocTemplate):
     """Custom document template with dark background and page decorations."""
 
     def __init__(self, filename, **kw):
@@ -107,9 +107,9 @@ def create_ruby_gem_drawing():
 
 def build_pdf():
     """Build the complete PDF document."""
-    output_path = '/home/dusan/ruby-code/Her-Rubyness.pdf'
+    output_path = '/home/dusan/ruby-code/Practess.pdf'
 
-    doc = RubynessDocTemplate(
+    doc = PractessDocTemplate(
         output_path,
         pagesize=A4,
         leftMargin=40,
@@ -309,7 +309,7 @@ def build_pdf():
     story.append(Spacer(1, 10))
 
     # Ruby gem icon + title row
-    title_text = '◆ Her Rubyness'
+    title_text = '◆ Practess'
     story.append(Paragraph(title_text, s_title))
     story.append(Spacer(1, 4))
 
@@ -544,7 +544,7 @@ def build_pdf():
     story.append(Spacer(1, 4))
 
     ai_agents_text = [
-        '<font color="#ffffff">Her Rubyness was written entirely by a team of AI agents working in concert:</font>',
+        '<font color="#ffffff">Practess was written entirely by a team of AI agents working in concert:</font>',
         '',
         '<font color="#00d4ff">◆</font>  <font color="#ffffff"><b>Claude</b></font> <font color="#b0b0c0">— Architecture design, core logic, test strategy</font>',
         '<font color="#00d4ff">◆</font>  <font color="#ffffff"><b>OpenCode</b></font> <font color="#b0b0c0">— Code generation, refactoring, debugging</font>',
@@ -602,7 +602,7 @@ def build_pdf():
 
     # Footer text
     story.append(Paragraph(
-        '<font color="#6b6b80">◆ Her Rubyness — An AI-built autonomous coding agent</font>',
+        '<font color="#6b6b80">◆ Practess — An AI-built autonomous coding agent</font>',
         s_small
     ))
     story.append(Paragraph(

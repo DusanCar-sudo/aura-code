@@ -20,7 +20,7 @@ function makeTmpDir(): string {
 const SAMPLE_PROMPT = `import type { ProjectContext } from './context.js';
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string): string {
-  return \`You are Her Rubyness — a precise, efficient AI coding agent.
+  return \`You are Practess — a precise, efficient AI coding agent.
 
 ## How you operate
 - You work in a loop: read context → plan → execute tools → verify → repeat until done.
@@ -433,7 +433,7 @@ describe('harness proposer', () => {
 
   it('proposalsDir returns a valid path', () => {
     const dir = proposalsDir();
-    expect(dir).toContain('.rubycode');
+    expect(dir).toContain('.aura');
     expect(dir).toContain('proposals');
   });
 

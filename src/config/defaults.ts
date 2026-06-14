@@ -14,7 +14,7 @@ export const DEFAULTS = {
   maxVerifyRetries: 3,      // retries when verification fails
   testCommand: undefined as string | undefined, // custom test command for verification
   profile: 'default' as 'default' | 'local',    // 'default' or 'local' (Ollama)
-  // Local profile (--profile local / profile: "local" in .rubycode.json)
+  // Local profile (--profile local / profile: "local" in .aura.json)
   localProfile: {
     model: 'qwen2.5-coder:7b',
     baseUrl: 'http://localhost:11434/v1',
@@ -61,7 +61,7 @@ export const SAFE_SHELL_COMMANDS = [
 
 /**
  * Default fallback model chain tried in order when the primary model
- * exhausts its retries.  Overridden by --fallback flags or RUBY_FALLBACK_MODEL.
+ * exhausts its retries.  Overridden by --fallback flags or AURA_FALLBACK_MODEL.
  */
 export const FALLBACK_CHAIN: readonly string[] = [
   'mimo-v2.5-pro',

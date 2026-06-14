@@ -22,12 +22,12 @@ function assertValidPerception(p: ProjectPerception, expectedRoot?: string): voi
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Happy path — runs against the real rubyness project
+// Happy path — runs against the real aura-code project
 // ─────────────────────────────────────────────────────────────────────────────
-describe('extractPerception — happy path against rubyness', () => {
-  const rubyCodeRoot = path.resolve(process.cwd()); // vitest runs from project root (~/ruby-code)
+describe('extractPerception — happy path against aura-code', () => {
+  const rubyCodeRoot = path.resolve(process.cwd()); // vitest runs from project root
 
-  it('returns a valid ProjectPerception for the ruby-code project', async () => {
+  it('returns a valid ProjectPerception for the aura-code project', async () => {
     const perception = await extractPerception(rubyCodeRoot);
     assertValidPerception(perception, rubyCodeRoot);
 

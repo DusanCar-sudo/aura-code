@@ -9,20 +9,20 @@ const writeLocks = new Map<string, Promise<void>>();
 /**
  * On-disk persistence for execution plans and orchestration memory.
  *
- * Plans are stored as individual JSON files under ~/.rubycode/plans/{id}.json
+ * Plans are stored as individual JSON files under ~/.aura/plans/{id}.json
  * so they survive process restarts and can be inspected or replayed.
  *
- * Per-project memory is appended to {projectRoot}/.rubycode/memory.json and
+ * Per-project memory is appended to {projectRoot}/.aura/memory.json and
  * keyed by a string so specialists can share facts across steps.
  */
 export const planStore = {
   /** Returns the directory where plan files are stored. */
   plansDir(): string {
-    return path.join(process.env.HOME ?? '/tmp', '.rubycode', 'plans');
+    return path.join(process.env.HOME ?? '/tmp', '.aura', 'plans');
   },
 
   /**
-   * Persists an execution plan to ~/.rubycode/plans/{id}.json.
+   * Persists an execution plan to ~/.aura/plans/{id}.json.
    * Uses a .tmp rename to avoid corrupt files on crash.
    */
   async save(plan: ExecutionPlan): Promise<void> {
@@ -85,11 +85,11 @@ export const planStore = {
 
   /** Returns the path to the memory file for a given project root. */
   memoryPath(projectRoot: string): string {
-    return path.join(projectRoot, '.rubycode', 'memory.json');
+    return path.join(projectRoot, '.aura', 'memory.json');
   },
 
   /**
-   * Appends a memory entry to {projectRoot}/.rubycode/memory.json.
+   * Appends a memory entry to {projectRoot}/.aura/memory.json.
    * Creates the file (and parent directory) if they do not yet exist.
    * Uses a .tmp rename to avoid corrupt files on crash.
    */

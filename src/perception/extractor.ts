@@ -411,7 +411,7 @@ interface RubyConfigData {
 }
 
 function readRubyConfig(root: string): RubyConfigData {
-  const raw = readFile(root, '.rubycode.json');
+  const raw = readFile(root, '.aura.json');
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);

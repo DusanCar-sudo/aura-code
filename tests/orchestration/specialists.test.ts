@@ -30,10 +30,10 @@ const noopDisplay: Display = {
 // ── Fixtures ────────────────────────────────────────────────────────────────
 const mockContext: ProjectContext = {
   root: '/fake/project',
-  name: 'rubyness',
+  name: 'aura-code',
   language: 'TypeScript',
   framework: 'Node.js',
-  readme: '# Rubyness',
+  readme: '# Aura',
   tree: 'src/',
   config: '{}',
   recentCommits: 'abc123',

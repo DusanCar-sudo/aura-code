@@ -23,10 +23,10 @@ function generateId(): string {
   return crypto.randomBytes(4).toString('hex') + '-' + Date.now().toString(36);
 }
 
-/** Returns ~/.rubycode/blueprints (or $RUBY_BLUEPRINT_DIR if set). */
+/** Returns ~/.aura/blueprints (or $AURA_BLUEPRINT_DIR if set). */
 export function blueprintsDir(): string {
-  return process.env.RUBY_BLUEPRINT_DIR
-    ?? path.join(process.env.HOME ?? '/tmp', '.rubycode', 'blueprints');
+  return process.env.AURA_BLUEPRINT_DIR
+    ?? path.join(process.env.HOME ?? '/tmp', '.aura', 'blueprints');
 }
 
 function blueprintPath(id: string): string {
@@ -59,7 +59,7 @@ async function readJson<T>(filePath: string): Promise<T | null> {
 
 /**
  * Creates a new blueprint from an architect's analysis.
- * Persists to ~/.rubycode/blueprints/<id>.json.
+ * Persists to ~/.aura/blueprints/<id>.json.
  *
  * @param task        — the original user task
  * @param _projectRoot — the project root (reserved for future context loading)
