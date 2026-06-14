@@ -1,3 +1,5 @@
+![Aura](./README-hero.jpg)
+
 <p align="center">
   <img src="assets/ruby-diamond.jpg" width="240" alt="Ruby Diamond Technologies" />
 </p>
