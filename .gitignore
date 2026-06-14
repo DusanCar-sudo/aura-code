@@ -22,3 +22,4 @@ coverage/
 
 # Build artifacts
 *.tsbuildinfo
+.aura.json
