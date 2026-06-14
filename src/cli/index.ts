@@ -15,7 +15,7 @@ import { createTerminalDisplay } from './display.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
-import { DEFAULTS } from '../config/defaults.js';
+import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
 import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
@@ -28,6 +28,7 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
+import { renderDiamond } from './diamond.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
@@ -64,7 +65,7 @@ const cliFallbacks: string[] =
       ? [argv.fallback]
       : process.env.RUBY_FALLBACK_MODEL
         ? [process.env.RUBY_FALLBACK_MODEL]
-        : [];
+        : [...FALLBACK_CHAIN];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Help / version
@@ -390,6 +391,9 @@ function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMPr
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function main() {
+  renderDiamond();
+  await new Promise(r => setTimeout(r, 1500));
+  process.stdout.write('\x1b[2J\x1b[H');
   const display = createTerminalDisplay();
 
   // ── First-run wizard ───────────────────────────────────────────────────────
@@ -520,6 +524,25 @@ async function main() {
   // Legacy sessionPath kept for single-task one-shot mode
   const sessionPath = noSession ? undefined : path.join(sessionStore.defaultDir(),
     projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
+
+  // ── ASCII art banner ────────────────────────────────────────────────────────
+  const red    = chalk.hex('#CC2936');
+  const orange = chalk.hex('#E8771A');
+  const pink   = chalk.hex('#FF6B9D');
+  console.log('');
+  console.log(red   (' ____        _             ____  _                                 _ '));
+  console.log(red   (' |  _ \\ _   _| |__  _   _  |  _ \\(_) __ _ _ __ ___   ___  _ __   __| |'));
+  console.log(red   (' | |_) | | | | \'_ \\| | | | | | | | |/ _` | \'_` _ \\ / _ \\| \'_ \\ / _` |'));
+  console.log(red   (' |  _ <| |_| | |_) | |_| | | |_| | | (_| | | | | | | (_) | | | | (_| |'));
+  console.log(orange (' |_|__\\\\___,|_|.__/ \\__, | |____/|_|\\__,_|_| |_|_|_|\\___/|_| |_|\\__,_|'));
+  console.log(orange (' |_   _|__  ___| |__|___/_   ___ | | ___   __ _(_) ___  ___           '));
+  console.log(orange ('   | |/ _ \\/ __| \'_\\ | \'_ \\ / _ \\| |/ _ \\ / _` | |/ _ \\/ __|          '));
+  console.log(pink   ('   | |  __/ (__| | | | | | | (_) | | (_) | (_| | |  __/\\__ \\          '));
+  console.log(pink   ('   |_|\\___|\\___|_| |_|_| |_|\\___/|_|\\___/ \\__, |_|\\___||___/          '));
+  console.log(pink   ('                                          |___/                     '));
+  console.log('');
+
+  await new Promise(r => setTimeout(r, 50));
 
   display.header(
     `Rubyness — ${ctx.name}`,

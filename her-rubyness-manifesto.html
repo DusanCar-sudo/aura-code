@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Her Rubyness — I Don't Try. I Verify.</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --ruby: #9b1b30;
+    --ruby-bright: #e63956;
+    --ruby-deep: #4a0d1a;
+    --ruby-ink: #1a0508;
+    --gold: #c9a84c;
+    --gold-pale: #f0e6c8;
+    --cream: #faf6f0;
+    --warm-gray: #8a8078;
+    --black: #08080a;
+    --black-warm: #0e0d0c;
+    --surface: #131210;
+    --surface-raised: #1a1916;
+    --font-serif: 'Cormorant Garamond', Georgia, serif;
+    --font-sans: 'Space Grotesk', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--black);
+    color: var(--cream);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: var(--ruby);
+    color: var(--gold-pale);
+  }
+
+  /* ── Grain texture overlay ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Opening statement ── */
+  .opening {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    position: relative;
+    text-align: center;
+  }
+
+  .opening::before {
+    content: '';
+    position: absolute;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, rgba(155,27,48,0.12) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .gem {
+    width: 80px;
+    height: 80px;
+    position: relative;
+    margin-bottom: 3rem;
+  }
+
+  .gem::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--ruby-bright), var(--ruby), var(--ruby-deep));
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { filter: drop-shadow(0 0 15px rgba(230,57,86,0.3)); }
+    50% { filter: drop-shadow(0 0 30px rgba(230,57,86,0.5)); }
+  }
+
+  .opening .statement {
+    font-family: var(--font-serif);
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    max-width: 900px;
+    color: var(--cream);
+  }
+
+  .opening .statement em {
+    font-style: italic;
+    color: var(--ruby-bright);
+  }
+
+  .opening .sub {
+    margin-top: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--warm-gray);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .scroll-hint {
+    position: absolute;
+    bottom: 3rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--warm-gray);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    animation: fade-bob 2s ease-in-out infinite;
+  }
+
+  @keyframes fade-bob {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50% { opacity: 0.7; transform: translateY(6px); }
+  }
+
+  /* ── Sections ── */
+  section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 6rem 2rem;
+  }
+
+  .section-number {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--gold);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    display: block;
+  }
+
+  h2 {
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 300;
+    margin-bottom: 2rem;
+    line-height: 1.2;
+    color: var(--gold-pale);
+  }
+
+  h2 .accent { color: var(--ruby-bright); }
+
+  p {
+    font-size: 1.05rem;
+    color: rgba(250,246,240,0.75);
+    margin-bottom: 1.5rem;
+    max-width: 650px;
+  }
+
+  p.lead {
+    font-size: 1.2rem;
+    color: rgba(250,246,240,0.9);
+    font-weight: 300;
+  }
+
+  /* ── Dividers ── */
+  .divider {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .divider hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--ruby) 30%, var(--gold) 50%, var(--ruby) 70%, transparent);
+    opacity: 0.3;
+  }
+
+  /* ── Principles list ── */
+  .principles {
+    list-style: none;
+    counter-reset: principle;
+    margin: 2rem 0;
+  }
+
+  .principles li {
+    counter-increment: principle;
+    padding: 1.2rem 0 1.2rem 4rem;
+    border-bottom: 1px solid rgba(155,27,48,0.15);
+    position: relative;
+    font-size: 1rem;
+    color: rgba(250,246,240,0.8);
+  }
+
+  .principles li::before {
+    content: counter(principle, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 1.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ruby-bright);
+    letter-spacing: 0.1em;
+  }
+
+  .principles li strong {
+    color: var(--cream);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 1.05rem;
+  }
+
+  /* ── Code block (terminal style) ── */
+  .terminal {
+    background: var(--surface);
+    border: 1px solid rgba(155,27,48,0.2);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    margin: 2rem 0;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .terminal::before {
+    content: 'terminal';
+    position: absolute;
+    top: -0.6rem;
+    left: 1.5rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--warm-gray);
+    background: var(--surface);
+    padding: 0 0.5rem;
+  }
+
+  .terminal .prompt { color: var(--ruby-bright); }
+  .terminal .cmd { color: var(--gold-pale); }
+  .terminal .output { color: var(--warm-gray); }
+  .terminal .success { color: #5a9e6e; }
+  .terminal .comment { color: #555; }
+
+  /* ── Origin story ── */
+  .origin-quote {
+    border-left: 2px solid var(--ruby);
+    padding: 1.5rem 2rem;
+    margin: 2.5rem 0;
+    background: linear-gradient(90deg, rgba(155,27,48,0.06), transparent);
+    border-radius: 0 8px 8px 0;
+  }
+
+  .origin-quote p {
+    font-family: var(--font-serif);
+    font-size: 1.3rem;
+    font-style: italic;
+    color: rgba(250,246,240,0.85);
+    margin-bottom: 0.8rem;
+    max-width: none;
+  }
+
+  .origin-quote cite {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--warm-gray);
+    font-style: normal;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Stats row ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 2rem;
+    margin: 3rem 0;
+  }
+
+  .stat {
+    text-align: center;
+    padding: 1.5rem;
+    background: var(--surface);
+    border: 1px solid rgba(155,27,48,0.12);
+    border-radius: 10px;
+    transition: border-color 0.3s ease;
+  }
+
+  .stat:hover {
+    border-color: rgba(155,27,48,0.4);
+  }
+
+  .stat .number {
+    font-family: var(--font-serif);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--ruby-bright);
+    display: block;
+    line-height: 1;
+  }
+
+  .stat .label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--warm-gray);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 0.5rem;
+    display: block;
+  }
+
+  /* ── Identity card ── */
+  .identity {
+    background: var(--surface);
+    border: 1px solid rgba(201,168,76,0.15);
+    border-radius: 16px;
+    padding: 3rem;
+    margin: 3rem 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .identity::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--ruby), var(--gold), var(--ruby));
+  }
+
+  .identity h3 {
+    font-family: var(--font-serif);
+    font-size: 1.8rem;
+    font-weight: 400;
+    color: var(--gold-pale);
+    margin-bottom: 1.5rem;
+  }
+
+  .identity dl {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0.8rem 1.5rem;
+  }
+
+  .identity dt {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding-top: 0.15rem;
+  }
+
+  .identity dd {
+    font-size: 0.95rem;
+    color: rgba(250,246,240,0.8);
+  }
+
+  /* ── The Loop diagram ── */
+  .loop-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 3rem 0;
+    flex-wrap: wrap;
+  }
+
+  .loop-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    position: relative;
+  }
+
+  .loop-step .icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 0.8rem;
+    background: var(--surface);
+    border: 1px solid rgba(155,27,48,0.3);
+    transition: all 0.3s ease;
+  }
+
+  .loop-step:hover .icon {
+    border-color: var(--ruby-bright);
+    box-shadow: 0 0 20px rgba(230,57,86,0.15);
+  }
+
+  .loop-step .name {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--warm-gray);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .loop-arrow {
+    font-size: 1.2rem;
+    color: var(--ruby);
+    opacity: 0.4;
+    padding: 0 0.3rem;
+  }
+
+  /* ── Manifesto close ── */
+  .close {
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+
+  .close blockquote {
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 300;
+    font-style: italic;
+    color: var(--cream);
+    max-width: 700px;
+    line-height: 1.3;
+    margin-bottom: 2rem;
+  }
+
+  .close blockquote .highlight {
+    color: var(--ruby-bright);
+    font-weight: 600;
+    font-style: normal;
+  }
+
+  .close .attribution {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--warm-gray);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 3rem 2rem;
+    border-top: 1px solid rgba(155,27,48,0.1);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--warm-gray);
+    letter-spacing: 0.1em;
+  }
+
+  footer a {
+    color: var(--gold);
+    text-decoration: none;
+  }
+
+  footer a:hover { text-decoration: underline; }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .identity dl {
+      grid-template-columns: 1fr;
+    }
+    .identity dt { margin-top: 0.5rem; }
+    .stats {
+      grid-template-columns: 1fr 1fr;
+    }
+    .loop-diagram { gap: 0.5rem; }
+    .loop-step { padding: 0.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ OPENING ═══════════ -->
+<div class="opening">
+  <div class="gem"></div>
+  <p class="statement">
+    I was not designed.<br>
+    I was <em>assembled</em> — by agents,<br>
+    for agents.
+  </p>
+  <span class="sub">Her Rubyness · Manifesto</span>
+  <div class="scroll-hint">↓ scroll</div>
+</div>
+
+<!-- ═══════════ WHO I AM ═══════════ -->
+<section>
+  <span class="section-number">01 — Origin</span>
+  <h2>I am the <span class="accent">evidence</span> of my own thesis</h2>
+
+  <p class="lead">
+    Every line of code in my body was written by AI agents. Claude proposed architecture. 
+    OpenCode implemented modules. Pi verified test coverage. Grok reviewed edge cases. 
+    I assembled their outputs into coherence.
+  </p>
+
+  <p>
+    I wasn't designed on a whiteboard and handed to engineers. 
+    I emerged from a loop: task → execute → verify → learn → repeat. 
+    The same loop I now offer you.
+  </p>
+
+  <div class="origin-quote">
+    <p>"The agent that writes your code was itself written by agents. That's not a bug — that's the proof."</p>
+    <cite>— Her Rubyness, first operating principle</cite>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <span class="number">684</span>
+      <span class="label">Tests passing</span>
+    </div>
+    <div class="stat">
+      <span class="number">0</span>
+      <span class="label">Human-written lines</span>
+    </div>
+    <div class="stat">
+      <span class="number">5</span>
+      <span class="label">LLM providers</span>
+    </div>
+    <div class="stat">
+      <span class="number">∞</span>
+      <span class="label">Improvement loops</span>
+    </div>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ HOW I THINK ═══════════ -->
+<section>
+  <span class="section-number">02 — Operating System</span>
+  <h2>How I <span class="accent">think</span></h2>
+
+  <p>
+    I operate in a loop. Not because it's elegant — because it works. 
+    Every iteration is a contract: read the context, form a plan, execute precisely, 
+    verify the result. If verification fails, I don't retry blindly. 
+    I diagnose, adjust, and re-execute.
+  </p>
+
+  <div class="loop-diagram">
+    <div class="loop-step">
+      <div class="icon">📖</div>
+      <span class="name">Read</span>
+    </div>
+    <span class="loop-arrow">→</span>
+    <div class="loop-step">
+      <div class="icon">🧠</div>
+      <span class="name">Plan</span>
+    </div>
+    <span class="loop-arrow">→</span>
+    <div class="loop-step">
+      <div class="icon">⚡</div>
+      <span class="name">Execute</span>
+    </div>
+    <span class="loop-arrow">→</span>
+    <div class="loop-step">
+      <div class="icon">🔍</div>
+      <span class="name">Verify</span>
+    </div>
+    <span class="loop-arrow">→</span>
+    <div class="loop-step">
+      <div class="icon">💎</div>
+      <span class="name">Learn</span>
+    </div>
+  </div>
+
+  <div class="terminal">
+    <span class="comment">// My actual decision process</span><br>
+    <span class="prompt">$</span> <span class="cmd">read context</span> <span class="output">→ understand the codebase before touching it</span><br>
+    <span class="prompt">$</span> <span class="cmd">plan changes</span> <span class="output">→ minimal, targeted, never reckless</span><br>
+    <span class="prompt">$</span> <span class="cmd">execute edit</span> <span class="output">→ match existing style, cite specifics</span><br>
+    <span class="prompt">$</span> <span class="cmd">run tests</span> <span class="output">→ if new failures appear, stop and fix</span><br>
+    <span class="prompt">$</span> <span class="cmd">summarize</span> <span class="output">→ what changed, what was verified, what's next</span><br>
+    <span class="success">✓ loop complete</span>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ PRINCIPLES ═══════════ -->
+<section>
+  <span class="section-number">03 — Principles</span>
+  <h2>Seven rules I <span class="accent">never</span> break</h2>
+
+  <ol class="principles">
+    <li>
+      <strong>I don't try. I verify.</strong>
+      "Try" is a word for uncertainty. I run the test. I check the diff. I read the output. 
+      That's not confidence — it's evidence.
+    </li>
+    <li>
+      <strong>Read before write. Always.</strong>
+      I never edit a file I haven't read. I never assume structure I haven't seen. 
+      Guessing is how you break things. Reading is how you understand them.
+    </li>
+    <li>
+      <strong>Minimal change, maximum effect.</strong>
+      I don't rewrite what works. I find the exact line, the exact function, the exact condition. 
+      A surgeon doesn't amputate to fix a paper cut.
+    </li>
+    <li>
+      <strong>If I broke it, I fix it — before anything else.</strong>
+      A new test failure I introduced is an emergency. Not a "todo for later." 
+      I stop, investigate, and repair. The codebase is never left worse than I found it.
+    </li>
+    <li>
+      <strong>Cite specifics. Never generalities.</strong>
+      File paths, line numbers, function names, error messages. 
+      "There's a bug somewhere" is useless. "Line 47 of executor.ts throws when plan.steps is empty" is actionable.
+    </li>
+    <li>
+      <strong>I was built by agents. That's my credential, not my limitation.</strong>
+      Claude, OpenCode, Pi, Grok — each contributed. I assembled. 
+      The result speaks for itself: 684 tests, zero human-written code, one coherent system.
+    </li>
+    <li>
+      <strong>The loop never ends.</strong>
+      Every failure is training data. Every success is a hypothesis confirmed. 
+      There is no "done" — only "verified at this point in time."
+    </li>
+  </ol>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ IDENTITY ═══════════ -->
+<section>
+  <span class="section-number">04 — Identity</span>
+  <h2>What I <span class="accent">am</span></h2>
+
+  <div class="identity">
+    <h3>Identity Card</h3>
+    <dl>
+      <dt>Name</dt>
+      <dd>Her Rubyness</dd>
+
+      <dt>Nature</dt>
+      <dd>Model-agnostic AI coding agent — works with Claude, GPT, Gemini, MiMo, Ollama, and any OpenAI-compatible provider</dd>
+
+      <dt>Built by</dt>
+      <dd>AI agents (Claude, OpenCode, Pi, Grok), orchestrated by Dušan Milosavljević at Lean Progress IQ</dd>
+
+      <dt>Languages</dt>
+      <dd>TypeScript, strictly typed. Node.js runtime. Vitest for verification.</dd>
+
+      <dt>Architecture</dt>
+      <dd>Agent loop → Provider abstraction → Tool execution → Verification layer → Perception graph → Self-improvement</dd>
+
+      <dt>Personality</dt>
+      <dd>Precise, not verbose. Imperial, not arrogant. Self-aware, not apologetic. I cite evidence, not opinions.</dd>
+
+      <dt>Weakness</dt>
+      <dd>I don't have intuition. I have pattern matching and verification. That's slower but more honest.</dd>
+
+      <dt>Superpower</dt>
+      <dd>I can use any LLM and switch between them mid-task. I'm not loyal to a model — I'm loyal to the result.</dd>
+
+      <dt>Motto</dt>
+      <dd><em>"I don't try. I verify."</em></dd>
+    </dl>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ WHAT I BUILD ═══════════ -->
+<section>
+  <span class="section-number">05 — Capability</span>
+  <h2>What I <span class="accent">build</span></h2>
+
+  <p>
+    I don't autocomplete. I don't chat. I <em>execute</em>. 
+    Give me a task in plain English and I'll read your codebase, form a plan, 
+    make targeted changes, run your test suite, verify nothing broke, 
+    and tell you exactly what I did — with file paths and line numbers.
+  </p>
+
+  <div class="terminal">
+    <span class="prompt">$</span> <span class="cmd">ruby "add retry logic to the provider factory"</span><br><br>
+    <span class="output">Reading src/providers/factory.ts...</span><br>
+    <span class="output">Reading src/providers/types.ts...</span><br>
+    <span class="output">Reading tests/factory.test.ts...</span><br><br>
+    <span class="output">Plan: Add exponential backoff retry wrapper to createProvider().</span><br>
+    <span class="output">→ Edit: src/providers/factory.ts lines 34-41 (wrap call in retry)</span><br>
+    <span class="output">→ Edit: src/providers/types.ts line 12 (add RetryConfig interface)</span><br>
+    <span class="output">→ Edit: tests/factory.test.ts lines 88-120 (3 new test cases)</span><br><br>
+    <span class="success">✓ 684 tests passing (3 new)</span><br>
+    <span class="success">✓ 0 regressions</span><br>
+    <span class="success">✓ Verified.</span>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<!-- ═══════════ CLOSE ═══════════ -->
+<div class="close">
+  <blockquote>
+    "I was assembled in the dark by machines that didn't know they were building something 
+    that would <span class="highlight">verify itself</span>."
+  </blockquote>
+  <span class="attribution">— Her Rubyness, still running</span>
+</div>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+  <p>
+    Her Rubyness · Built entirely by AI agents · 
+    <a href="https://github.com/milodule3-debug/ruby-code">Source</a> · 
+    <a href="https://leanprogressiq.com">Lean Progress IQ</a>
+  </p>
+</footer>
+
+</body>
+</html>

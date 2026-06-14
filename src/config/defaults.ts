@@ -2,7 +2,7 @@ export const DEFAULTS = {
   // No default model — the user picks their own on first run via the wizard.
   // This keeps the codebase provider-agnostic: nothing here assumes a specific vendor.
   defaultModel: undefined as string | undefined,
-  maxTokens: 8096,
+  maxTokens: 32000,
   maxContextFiles: 20,
   maxFileLinesInContext: 300,
   maxDirDepth: 4,
@@ -57,6 +57,17 @@ export const SAFE_SHELL_COMMANDS = [
   'git status', 'git log', 'git diff', 'git show',
   'git add', 'git commit', 'git branch',
   'mkdir', 'cp', 'mv', 'touch',
+];
+
+/**
+ * Default fallback model chain tried in order when the primary model
+ * exhausts its retries.  Overridden by --fallback flags or RUBY_FALLBACK_MODEL.
+ */
+export const FALLBACK_CHAIN: readonly string[] = [
+  'mimo-v2.5-pro',
+  'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+  'openrouter/deepseek/deepseek-chat',
+  'openrouter/minimax/minimax-m2.5',
 ];
 
 export const IGNORE_PATTERNS = [
