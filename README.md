@@ -1,4 +1,6 @@
-![Aura](./README-hero.jpg)
+<p align="center">
+  <img src="./README-hero.jpg" alt="Aura">
+</p>
 
 
 <h1 align="center">Aura Code — Autonomous Coding Agent</h1>
