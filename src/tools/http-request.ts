@@ -24,7 +24,7 @@ export const HTTP_REQUEST_DEFINITION: ToolDefinition = {
     properties: {
       url:         { type: 'string', description: 'The URL to call' },
       method:      { type: 'string', description: 'HTTP method (default: GET)' },
-      headers:     { type: 'object', description: 'Request headers', additionalProperties: { type: 'string' } },
+      headers:     { type: 'object', description: 'Request headers as key-value string pairs' },
       body:        { type: 'string', description: 'Raw request body (string)' },
       json:        { type: 'object', description: 'JSON body (auto-sets Content-Type to application/json)' },
       max_chars:   { type: 'number', description: 'Max response chars to return (default: 50000)' },
