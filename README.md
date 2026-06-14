@@ -39,7 +39,7 @@ export XIAOMI_API_KEY="tp-..."          # MiMo
 
 ---
 
-## What She Does
+## What Aura Does
 
 1. **Reads** your codebase — files, structure, dependencies
 2. **Plans** a strategy — decides what to change and how
