@@ -42,7 +42,7 @@ export interface BlueprintDeviation {
 
 /**
  * A blueprint — the architect's plan before any code is written.
- * Saved to ~/.rubycode/blueprints/<id>.json.
+ * Saved to ~/.aura/blueprints/<id>.json.
  */
 export interface Blueprint {
   /** Unique identifier (hex-timestamp). */

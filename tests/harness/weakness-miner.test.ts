@@ -357,7 +357,7 @@ describe('weakness-miner', () => {
 
   it('reportPath returns a valid path', () => {
     const p = reportPath();
-    expect(p).toContain('.rubycode');
+    expect(p).toContain('.aura');
     expect(p).toContain('weakness-report.json');
   });
 });

@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Definition of a custom provider in .rubycode.json.
+ * Definition of a custom provider in .aura.json.
  * Allows users to add new OpenAI-compatible endpoints without code changes.
  */
 export interface ProviderDef {
@@ -27,7 +27,7 @@ export interface ProjectConfig {
   maxTurns?: number;
   ignore?: string[];
   systemPromptSuffix?: string;
-  /** Custom providers defined in .rubycode.json */
+  /** Custom providers defined in .aura.json */
   providers?: ProviderDef[];
   /** Resilience: requests per minute. */
   rateLimitRpm?: number;
@@ -48,7 +48,7 @@ export interface ProjectConfig {
 }
 
 /**
- * Load .rubycode.json from the project root (or any ancestor).
+ * Load .aura.json from the project root (or any ancestor).
  * Returns an empty object if no file is found. Silently ignores parse errors
  * so a malformed config file doesn't brick the CLI.
  */
@@ -56,7 +56,7 @@ export function loadProjectConfig(cwd: string): ProjectConfig {
   let dir = path.resolve(cwd);
   const root = path.parse(dir).root;
   while (true) {
-    const p = path.join(dir, '.rubycode.json');
+    const p = path.join(dir, '.aura.json');
     if (fs.existsSync(p)) {
       try {
         const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -120,7 +120,7 @@ function normalise(raw: unknown): ProjectConfig {
 
 /**
  * CLI flags always win over file config, but file config beats defaults.
- * Order of precedence: explicit args > .rubycode.json > built-in defaults.
+ * Order of precedence: explicit args > .aura.json > built-in defaults.
  */
 export interface ResolvedConfig {
   /** Model id; undefined when the user hasn't picked one yet (the wizard handles this). */
@@ -130,7 +130,7 @@ export interface ResolvedConfig {
   maxTurns?: number;
   ignore: string[];
   systemPromptSuffix?: string;
-  /** Custom providers from .rubycode.json */
+  /** Custom providers from .aura.json */
   providers: ProviderDef[];
   rateLimitRpm?: number;
   rateLimitTpm?: number;

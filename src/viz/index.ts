@@ -15,7 +15,7 @@ function loadGraph(projectRoot: string): object | null {
 }
 
 function loadPlans(projectRoot: string): ExecutionPlan[] {
-  const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'plans');
+  const base = path.join(process.env.HOME ?? '/tmp', '.aura', 'plans');
   if (!fs.existsSync(base)) return [];
 
   const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
@@ -45,7 +45,7 @@ function loadPlans(projectRoot: string): ExecutionPlan[] {
 }
 
 function loadSessions(projectRoot: string): ChatSession[] {
-  const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'sessions');
+  const base = path.join(process.env.HOME ?? '/tmp', '.aura', 'sessions');
   const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
 
   const readDir = (d: string): ChatSession[] => {
@@ -114,7 +114,7 @@ function stripPlan(p: ExecutionPlan): Record<string, unknown> {
 }
 
 function loadMemory(projectRoot: string): object[] {
-  const base = path.join(process.env.HOME ?? '/tmp', '.rubycode', 'memory');
+  const base = path.join(process.env.HOME ?? '/tmp', '.aura', 'memory');
   const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
   const dir = path.join(base, safe);
   if (!fs.existsSync(dir)) return [];
@@ -146,7 +146,7 @@ function buildHtml(data: {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rubyness — Memory Dashboard · ${data.projectName}</title>
+<title>Aura — Memory Dashboard · ${data.projectName}</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   :root {
@@ -263,7 +263,7 @@ function buildHtml(data: {
 </head>
 <body>
 <header>
-  <h1>◈ Rubyness / memory dashboard</h1>
+  <h1>◈ Aura / memory dashboard</h1>
   <span class="meta">project: <strong style="color:var(--primary)">${data.projectName}</strong> &nbsp;·&nbsp; ${data.generatedAt}</span>
 </header>
 <nav>

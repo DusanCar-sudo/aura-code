@@ -57,12 +57,12 @@ class MockRouterProvider implements LLMProvider {
 
 const mockContext: ProjectContext = {
   root: '/fake/project',
-  name: 'rubyness',
+  name: 'aura-code',
   language: 'TypeScript',
   framework: 'Node.js',
-  readme: '# Rubyness\n\nModel-agnostic AI coding agent.',
+  readme: '# Aura\n\nModel-agnostic AI coding agent.',
   tree: 'src/\n  agent/\n  providers/\n  orchestration/',
-  config: '{\n  "name": "ruby-code",\n  "version": "0.1.0"\n}',
+  config: '{\n  "name": "aura-code",\n  "version": "0.1.0"\n}',
   recentCommits: 'abc1234 Add orchestration layer',
 };
 

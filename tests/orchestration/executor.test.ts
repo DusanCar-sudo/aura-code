@@ -31,12 +31,12 @@ vi.mock('../../src/orchestration/plan-store.js', () => ({
 
 const mockContext: ProjectContext = {
   root: '/fake/project',
-  name: 'rubyness',
+  name: 'aura-code',
   language: 'TypeScript',
   framework: 'Node.js',
-  readme: '# Rubyness',
+  readme: '# Aura',
   tree: 'src/\n  agent/\n  providers/',
-  config: '{"name":"ruby-code"}',
+  config: '{"name":"aura-code"}',
   recentCommits: 'abc1234 Add feature',
 };
 

@@ -52,7 +52,7 @@ const HARMLESS_COMMANDS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function sessionDir(): string {
-  return process.env.RUBY_SESSION_DIR ?? path.join(process.env.HOME ?? '/tmp', '.rubycode', 'sessions');
+  return process.env.AURA_SESSION_DIR ?? path.join(process.env.HOME ?? '/tmp', '.aura', 'sessions');
 }
 
 interface RawSession {
@@ -379,7 +379,7 @@ const PATTERN_DESCRIPTIONS: Record<PatternName, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function reportPath(): string {
-  return path.join(process.env.HOME ?? '/tmp', '.rubycode', 'harness', 'weakness-report.json');
+  return path.join(process.env.HOME ?? '/tmp', '.aura', 'harness', 'weakness-report.json');
 }
 
 export function saveReport(report: WeaknessReport, customPath?: string): string {

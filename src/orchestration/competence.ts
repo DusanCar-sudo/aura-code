@@ -155,12 +155,12 @@ export function applyOutcome(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Persistence — {projectRoot}/.rubycode/competence.json
+// Persistence — {projectRoot}/.aura/competence.json
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const competenceStore = {
   filePath(projectRoot: string): string {
-    return path.join(projectRoot, '.rubycode', 'competence.json');
+    return path.join(projectRoot, '.aura', 'competence.json');
   },
 
   async load(projectRoot: string): Promise<ProjectCompetence> {

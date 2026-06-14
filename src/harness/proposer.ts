@@ -70,7 +70,7 @@ const PATCH_REGISTRY: Partial<Record<PatternName, PatchEntry>> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function proposalsDir(): string {
-  return path.join(process.env.HOME ?? '/tmp', '.rubycode', 'harness', 'proposals');
+  return path.join(process.env.HOME ?? '/tmp', '.aura', 'harness', 'proposals');
 }
 
 function proposalPath(id: string): string {

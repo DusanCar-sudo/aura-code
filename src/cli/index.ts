@@ -39,7 +39,7 @@ const argv = minimist(process.argv.slice(2), {
   boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
-    model: process.env.RUBY_MODEL,
+    model: process.env.AURA_MODEL,
     mode:  'normal',
   },
 });
@@ -50,21 +50,21 @@ function num(s: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.RUBY_MAX_RETRIES);
+const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.AURA_MAX_RETRIES);
 const cliMaxVerifyRetries = num(argv['max-verify-retries']);
 const cliMaxTurns        = num(argv['max-turns']);
 const cliVerify          = argv.verify === true;
 const cliProfile         = typeof argv.profile === 'string' ? argv.profile : undefined;
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
-const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.RUBY_API_RPM);
-const cliTpm             = num(argv['rate-limit-tpm']) ?? num(process.env.RUBY_API_TPM);
+const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.AURA_API_RPM);
+const cliTpm             = num(argv['rate-limit-tpm']) ?? num(process.env.AURA_API_TPM);
 const cliFallbacks: string[] =
   Array.isArray(argv.fallback)
     ? argv.fallback.map(String)
     : typeof argv.fallback === 'string'
       ? [argv.fallback]
-      : process.env.RUBY_FALLBACK_MODEL
-        ? [process.env.RUBY_FALLBACK_MODEL]
+      : process.env.AURA_FALLBACK_MODEL
+          ? [process.env.AURA_FALLBACK_MODEL]
         : [...FALLBACK_CHAIN];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ const cliFallbacks: string[] =
 
 if (argv.version) {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
-  console.log(`Rubyness v${pkg.version}`);
+  console.log(`Aura v${pkg.version}`);
   process.exit(0);
 }
 
@@ -90,7 +90,7 @@ if (argv.models) {
       console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
     }
   }
-  console.log(chalk.hex('#4e3d30')('\n  Use --model <id> or set RUBY_MODEL env var'));
+  console.log(chalk.hex('#4e3d30')('\n  Use --model <id> or set AURA_MODEL env var'));
   console.log(chalk.hex('#4e3d30')('  For Ollama: --model ollama/llama3.2'));
   console.log(chalk.hex('#4e3d30')('  For OpenRouter: --model openrouter/<provider>/<name>\n'));
   process.exit(0);
@@ -162,7 +162,7 @@ if (argv['propose-harness']) {
       console.log(chalk.hex('#4e3d30')(`    Patch:    ${p.patchText.slice(0, 80)}...`));
       console.log();
     }
-    console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.rubycode/harness/proposals/`));
+    console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
     console.log(chalk.hex('#8a7768')('  Apply with: ruby --apply-harness <id>\n'));
   }
   process.exit(0);
@@ -321,7 +321,7 @@ if (argv._.length === 0 && !argv.interactive && process.stdin.isTTY !== true && 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Resolve config — CLI > .rubycode.json > global config > first-run wizard
+// Resolve config — CLI > .aura.json > global config > first-run wizard
 // ─────────────────────────────────────────────────────────────────────────────
 
 const cwd = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
@@ -331,11 +331,11 @@ const fileConfig = loadProjectConfig(cwd);
 // to re-set their provider on every run.
 const globalCfg = loadGlobalConfig();
 
-// Effective model = CLI > RUBY_MODEL env > .rubycode.json > global config > undefined
+// Effective model = CLI > AURA_MODEL env > .aura.json > global config > undefined
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
-const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.RUBY_MODEL;
+const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
 
-// Effective base URL = CLI > .rubycode.json > global config > undefined
+// Effective base URL = CLI > .aura.json > global config > undefined
 const cliBaseUrl = typeof argv['base-url'] === 'string' ? argv['base-url'] : undefined;
 const effectiveBaseUrl = cliBaseUrl ?? fileConfig.baseUrl ?? globalCfg?.baseUrl;
 
@@ -355,7 +355,7 @@ const resolved = resolveConfig(
   { model: undefined as unknown as string, mode: 'normal', ignore: [] },
 );
 
-// Register custom providers from .rubycode.json
+// Register custom providers from .aura.json
 registerCustomProviders(resolved.providers);
 
 const permissionLevel: PermissionLevel = resolved.mode;
@@ -366,6 +366,14 @@ const runtimeConfig = {
   baseUrl: resolved.baseUrl,
   apiKey: typeof argv['api-key'] === 'string' ? argv['api-key'] : undefined,
 };
+
+// ── Profile: local → Ollama defaults ─────────────────────────────────────────
+if (cliProfile === 'local') {
+  resolved.baseUrl = 'http://localhost:11434/v1';
+  if (!runtimeConfig.apiKey) {
+    runtimeConfig.apiKey = 'ollama';
+  }
+}
 
 function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMProvider {
   // Caller guarantees resolved.model is set (guarded in main()).
@@ -403,8 +411,8 @@ async function main() {
   // Wizard is eligible when there are no other args (no one-shot task) AND
   // we're not in a strict TTY-less script context. Accept both TTY and pipe:
   //   - TTY = real interactive use
-  //   - pipe = test harnesses (and `rubyness | tee log`)
-  // The one-shot path (`rubyness "task"`) has argv._.length > 0 so the
+  //   - pipe = test harnesses (and `aura | tee log`)
+  // The one-shot path (`aura "task"`) has argv._.length > 0 so the
   // wizard can't fire there. --reset-setup alone is treated as interactive
   // since the whole point is to launch the wizard.
   const isInteractive = argv.interactive === true
@@ -458,9 +466,9 @@ async function main() {
   // ── Guard: we need a model before we can build a provider ─────────────────
   if (!resolved.model) {
     console.error(chalk.hex('#b15439')('\n  ✗ No model configured.'));
-    console.error(chalk.hex('#8a7768')('  Run `rubyness` with no args in a TTY to launch the setup wizard,'));
+    console.error(chalk.hex('#8a7768')('  Run `aura` with no args in a TTY to launch the setup wizard,'));
     console.error(chalk.hex('#8a7768')('  or pass --model <id> --api-key <key> on the command line,'));
-    console.error(chalk.hex('#8a7768')('  or set the model in .rubycode.json (`"model": "..."`).'));
+    console.error(chalk.hex('#8a7768')('  or set the model in .aura.json (`"model": "..."`).'));
     process.exit(1);
   }
 
@@ -530,24 +538,22 @@ async function main() {
   const orange = chalk.hex('#E8771A');
   const pink   = chalk.hex('#FF6B9D');
   console.log('');
-  console.log(red   (' ____        _             ____  _                                 _ '));
-  console.log(red   (' |  _ \\ _   _| |__  _   _  |  _ \\(_) __ _ _ __ ___   ___  _ __   __| |'));
-  console.log(red   (' | |_) | | | | \'_ \\| | | | | | | | |/ _` | \'_` _ \\ / _ \\| \'_ \\ / _` |'));
-  console.log(red   (' |  _ <| |_| | |_) | |_| | | |_| | | (_| | | | | | | (_) | | | | (_| |'));
-  console.log(orange (' |_|__\\\\___,|_|.__/ \\__, | |____/|_|\\__,_|_| |_|_|_|\\___/|_| |_|\\__,_|'));
-  console.log(orange (' |_   _|__  ___| |__|___/_   ___ | | ___   __ _(_) ___  ___           '));
-  console.log(orange ('   | |/ _ \\/ __| \'_\\ | \'_ \\ / _ \\| |/ _ \\ / _` | |/ _ \\/ __|          '));
-  console.log(pink   ('   | |  __/ (__| | | | | | | (_) | | (_) | (_| | |  __/\\__ \\          '));
-  console.log(pink   ('   |_|\\___|\\___|_| |_|_| |_|\\___/|_|\\___/ \\__, |_|\\___||___/          '));
-  console.log(pink   ('                                          |___/                     '));
+  console.log(red   ('    _                 '));
+  console.log(red   ('   / \\   _   _ _ __  '));
+  console.log(orange('  / _ \\ | | | | \'__| '));
+  console.log(orange(' / ___ \\| |_| | |    '));
+  console.log(pink  ('_/ /   \\_\\__,_|_|    '));
+  console.log('');
+  console.log(chalk.hex('#8a7768')('  Aura Code — Praktess framework'));
+  console.log(chalk.hex('#4e3d30')('  "I don\'t try. I verify."'));
   console.log('');
 
   await new Promise(r => setTimeout(r, 50));
 
   display.header(
-    `Rubyness — ${ctx.name}`,
+    `Aura — ${ctx.name}`,
     `${provider.name} · ${runtimeConfig.model} · ${ctx.language} · ${permissionLevel} mode` +
-    (fileConfig.model ? ` · .rubycode.json loaded` : '') +
+    (fileConfig.model ? ` · .aura.json loaded` : '') +
     (activeChatId ? ` · chat ${activeChatId}` : ''),
   );
 
@@ -740,7 +746,7 @@ async function main() {
     return;
   }
 
-  // ── Single task mode: ruby-code "fix the bug" ──────────────────────────────
+  // ── Single task mode: aura "fix the bug" ──────────────────────────────────────
   if (argv._.length > 0) {
     const task = argv._.join(' ');
     console.log(chalk.hex('#8a7768')(`\n  Task: ${chalk.hex('#ede0cc')(task)}\n`));
@@ -936,14 +942,14 @@ async function main() {
       console.log(chalk.hex('#cc785c')('\n  ⏳ Press Ctrl+C again to exit (current task will keep running).'));
       setTimeout(() => { ctrlC = 0; }, 3000);
     } else {
-      console.log(chalk.hex('#4e3d30')('\n  Rubyness closed.\n'));
+      console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
       process.exit(0);
     }
   });
 
   ask();
   rl.on('close', () => {
-    console.log(chalk.hex('#4e3d30')('\n  Rubyness closed.\n'));
+    console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
     process.exit(0);
   });
 }
@@ -1488,7 +1494,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 /**
  * Architect mode: produce a blueprint without writing any code.
  * The agent analyses the task, proposes files/interfaces/data models,
- * and the blueprint is saved to ~/.rubycode/blueprints/<id>.json.
+ * and the blueprint is saved to ~/.aura/blueprints/<id>.json.
  */
 async function runArchitectPlan(
   task: string,
@@ -1711,15 +1717,15 @@ function printUsageFooter(
 
 function printHelp() {
   console.log(`
-${chalk.hex('#cc785c').bold('  rubyness')} ${chalk.hex('#8a7768')("— Her Rubyness: model-agnostic AI coding agent")}
+${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: model-agnostic AI coding agent")}
 
   ${chalk.hex('#4e3d30')('Usage:')}
-    rubyness ${chalk.hex('#8a7768')('"<task>"')}                     Run a single task
-    rubyness ${chalk.hex('#8a7768')('--interactive')}                Start interactive REPL
-    rubyness ${chalk.hex('#8a7768')('--models')}                     List available models
+    aura ${chalk.hex('#8a7768')('"<task>"')}                           Run a single task
+    aura ${chalk.hex('#8a7768')('--interactive')}                      Start interactive REPL
+    aura ${chalk.hex('#8a7768')('--models')}                           List available models
 
   ${chalk.hex('#4e3d30')('Options:')}
-    --model, -m <id>         Model to use (default: from ~/.config/rubyness/config.json)
+    --model, -m <id>         Model to use (default: from ~/.config/aura-code/config.json)
     --api-key <key>          API key (overrides env var)
     --base-url <url>         Custom API endpoint (for Ollama, proxies, etc.)
     --auto                   Auto-approve all tool calls (no confirmation)
@@ -1765,7 +1771,7 @@ ${chalk.hex('#cc785c').bold('  rubyness')} ${chalk.hex('#8a7768')("— Her Rubyn
     4. Fail over to the next --fallback model if retries exhaust
     5. Pace requests when --rate-limit-rpm / --rate-limit-tpm is set
 
-  ${chalk.hex('#4e3d30')('Project config (.rubycode.json):')}
+  ${chalk.hex('#4e3d30')('Project config (.aura.json):')}
     {
       "model": "claude-sonnet-4-5-20251001",
       "mode":  "auto",
@@ -1788,14 +1794,14 @@ ${chalk.hex('#cc785c').bold('  rubyness')} ${chalk.hex('#8a7768')("— Her Rubyn
       "fallbacks": ["gpt-4o-mini", "gemini-2.5-flash"],
       "ignore": ["dist/", "*.generated.ts"]
     }
-    CLI flags always override .rubycode.json.
+    CLI flags always override .aura.json.
     Custom providers are OpenAI-compatible endpoints.
 
   ${chalk.hex('#4e3d30')('Model examples:')}
-    rubyness -m claude-opus-4-5-20251001  "refactor auth"
-    rubyness -m gpt-4o                    "add unit tests"
-    rubyness -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
-    rubyness -m ollama/llama3.2           "local model, no API key needed"
+    aura -m claude-opus-4-5-20251001  "refactor auth"
+    aura -m gpt-4o                    "add unit tests"
+    aura -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
+    aura -m ollama/llama3.2           "local model, no API key needed"
 
   ${chalk.hex('#4e3d30')('API keys (set as env vars):')}
     ANTHROPIC_API_KEY    Claude models
@@ -1804,11 +1810,11 @@ ${chalk.hex('#cc785c').bold('  rubyness')} ${chalk.hex('#8a7768')("— Her Rubyn
     XAI_API_KEY          Grok models
     OPENROUTER_API_KEY   OpenRouter (access to all models)
     XIAOMI_API_KEY       Xiaomi MiMo
-    RUBY_MODEL           Default model (overridden by --model)
-    RUBY_API_RPM         Default request rate limit
-    RUBY_API_TPM         Default token rate limit (Gemini)
-    RUBY_MAX_RETRIES     Default max retry attempts
-    RUBY_FALLBACK_MODEL  Comma-separated fallback models
+    AURA_MODEL           Default model (overridden by --model)
+    AURA_API_RPM         Default request rate limit
+    AURA_API_TPM         Default token rate limit (Gemini)
+    AURA_MAX_RETRIES     Default max retry attempts
+    AURA_FALLBACK_MODEL  Comma-separated fallback models
 `);
 }
 

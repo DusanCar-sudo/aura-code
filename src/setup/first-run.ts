@@ -4,7 +4,7 @@
  * Triggers when:
  *   1. No provider-specific env var is set (any of the known *_API_KEY vars)
  *   2. AND no --api-key was passed on the CLI
- *   3. AND no global config exists at ~/.config/rubyness/config.json
+ *   3. AND no global config exists at ~/.config/aura-code/config.json
  *
  * Walks the user through picking a provider, entering an API key, and picking
  * a default model. Saves to the global config and exports the relevant env
@@ -254,7 +254,7 @@ function drainQueue(): void {
  * current process so the rest of the run works without re-prompting.
  */
 export async function runFirstRunWizard(): Promise<GlobalConfig | null> {
-  console.log(chalk.hex('#cc785c')('\n  ✦  Welcome to Rubyness!'));
+  console.log(chalk.hex('#cc785c')('\n  ✦  Welcome to Aura!'));
   console.log(chalk.hex('#8a7768')('  Let\'s get you set up — pick a provider to get started.\n'));
   console.log(chalk.hex('#5a4a3a')(`  (Config will be saved to ${globalConfigPath()})`));
 

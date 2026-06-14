@@ -34,7 +34,7 @@ export interface CompetenceLevel {
 
 /**
  * Runtime configuration for the Ruby small-model alternation layer.
- * Typically loaded from `.rubycode/ruby.json` or CLI flags.
+ * Typically loaded from `.aura/ruby.json` or CLI flags.
  */
 export interface RubyConfig {
   /** Ollama model tag (e.g. `qwen2.5-coder:1.5b`). */

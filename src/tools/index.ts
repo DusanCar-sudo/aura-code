@@ -8,6 +8,19 @@ import { runShell } from './run-shell.js';
 import { runTests } from './run-tests.js';
 import { gitStatus, gitDiff } from './git.js';
 import { SPAWN_TASK_DEFINITION, executeSpawnTask } from '../agent/spawner.js';
+import { WEB_FETCH_DEFINITION, webFetch } from './web-fetch.js';
+import { BROWSER_DEFINITION, browserTool } from './browser.js';
+import { WEB_SEARCH_DEFINITION, webSearch } from './web-search.js';
+import { HTTP_REQUEST_DEFINITION, httpRequest } from './http-request.js';
+import { MEMORY_DEFINITION, memoryTool } from './memory.js';
+import { CLIPBOARD_DEFINITION, clipboardTool } from './clipboard.js';
+import { NOTIFY_DEFINITION, notifyTool } from './notify.js';
+import { IMAGE_READ_DEFINITION, imageRead } from './image-read.js';
+import { EMAIL_DEFINITION, emailTool } from './email.js';
+import { CALENDAR_DEFINITION, calendarTool } from './calendar.js';
+import { TELEGRAM_DEFINITION, telegramTool } from './telegram.js';
+import { WHATSAPP_DEFINITION, whatsAppTool } from './whatsapp.js';
+import { CRON_DEFINITION, cronTool } from './cron.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool schemas (what the model sees)
@@ -125,6 +138,19 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   SPAWN_TASK_DEFINITION,
+  WEB_FETCH_DEFINITION,
+  BROWSER_DEFINITION,
+  WEB_SEARCH_DEFINITION,
+  HTTP_REQUEST_DEFINITION,
+  MEMORY_DEFINITION,
+  CLIPBOARD_DEFINITION,
+  NOTIFY_DEFINITION,
+  IMAGE_READ_DEFINITION,
+  EMAIL_DEFINITION,
+  CALENDAR_DEFINITION,
+  TELEGRAM_DEFINITION,
+  WHATSAPP_DEFINITION,
+  CRON_DEFINITION,
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +174,19 @@ export async function executeTool(
       case 'git_status':   return gitStatus(cwd);
       case 'git_diff':     return gitDiff({ path: input.path as string | undefined, staged: (input.staged as boolean) ?? false }, cwd);
       case 'spawn_task':   return executeSpawnTask(input);
+      case 'web_fetch':    return webFetch({ url: input.url as string, method: input.method as any, headers: input.headers as Record<string, string> | undefined, body: input.body as string | undefined, max_chars: input.max_chars as number | undefined, timeout_ms: input.timeout_ms as number | undefined });
+      case 'browser':      return browserTool(input as any);
+      case 'web_search':   return webSearch({ query: input.query as string, max_results: input.max_results as number | undefined, region: input.region as string | undefined });
+      case 'http_request': return httpRequest({ url: input.url as string, method: input.method as any, headers: input.headers as Record<string, string> | undefined, body: input.body as string | undefined, json: input.json, max_chars: input.max_chars as number | undefined, timeout_ms: input.timeout_ms as number | undefined });
+      case 'memory':       return memoryTool(input as any);
+      case 'clipboard':    return clipboardTool(input as any);
+      case 'notify':       return notifyTool(input as any);
+      case 'image_read':   return imageRead(input as any);
+      case 'email':        return emailTool(input as any);
+      case 'calendar':     return calendarTool(input as any);
+      case 'telegram':     return telegramTool(input as any);
+      case 'whatsapp':     return whatsAppTool(input as any);
+      case 'cron':         return cronTool(input as any);
       default:             return `Error: Unknown tool '${name}'`;
     }
   } catch (e) {

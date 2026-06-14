@@ -1,11 +1,11 @@
 /**
- * Global Rubyness configuration (user-wide, not project-specific).
+ * Global Aura configuration (user-wide, not project-specific).
  *
- * Lives at `$XDG_CONFIG_HOME/rubyness/config.json` (default `~/.config/rubyness/config.json`).
+ * Lives at `$XDG_CONFIG_HOME/aura-code/config.json` (default `~/.config/aura-code/config.json`).
  * Holds the user's default provider + API key + default model, set by the
  * first-run wizard so subsequent runs don't re-prompt.
  *
- * Project-level `.rubycode.json` still wins on a per-project basis; this file
+ * Project-level `.aura.json` still wins on a per-project basis; this file
  * is just the "no project context" fallback.
  */
 import * as fs from 'fs';
@@ -37,7 +37,7 @@ const EMPTY: GlobalConfig = {
 
 function configDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
-  return xdg ? path.join(xdg, 'rubyness') : path.join(os.homedir(), '.config', 'rubyness');
+  return xdg ? path.join(xdg, 'aura-code') : path.join(os.homedir(), '.config', 'aura-code');
 }
 
 function configPath(): string {

@@ -22,7 +22,7 @@ export function ORCHESTRATOR_SYSTEM_PROMPT(
     ? `\n## Codebase Knowledge Graph\n${context.graphSummary}\n`
     : '';
 
-  return `You are the orchestration planner for Rubyness, a multi-agent coding system.
+  return `You are the orchestration planner for Aura, a multi-agent coding system.
 
 Project: ${context.name}
 Language: ${context.language}

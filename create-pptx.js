@@ -42,7 +42,7 @@ slide1.addShape(pres.ShapeType.rect, {
 });
 
 // Main title
-slide1.addText("Her Rubyness", {
+slide1.addText("Practess", {
   x: 1.0, y: 1.4, w: 8, h: 1.2,
   fontSize: 54, fontFace: "Arial Black", color: WHITE,
   bold: true, align: "left",
@@ -173,7 +173,7 @@ slide3.addText("THE SOLUTION", {
 });
 
 // Title
-slide3.addText("Her Rubyness", {
+slide3.addText("Practess", {
   x: 0.6, y: 0.8, w: 9, h: 0.8,
   fontSize: 40, fontFace: "Arial Black", color: WHITE,
   bold: true,
@@ -792,14 +792,14 @@ slide9.addText("The Brain Behind the Agent", {
 });
 
 // Central node visualization (stylized)
-// Central "Her Rubyness" node
+// Central "Practess" node
 slide9.addShape(pres.ShapeType.ellipse, {
   x: 3.8, y: 2.3, w: 2.4, h: 2.4,
   fill: { color: RUBY },
   shadow: { type: "outer", blur: 20, offset: 0, color: RUBY, opacity: 0.5 },
 });
 
-slide9.addText("Her\nRubyness", {
+slide9.addText("Practess", {
   x: 3.8, y: 2.3, w: 2.4, h: 2.4,
   fontSize: 18, fontFace: "Arial Black", color: WHITE,
   bold: true, align: "center", valign: "middle",
@@ -957,9 +957,9 @@ slide10.addText("Built by AI agents. Verified by tests. Ready for you.", {
 });
 
 // ─── Save ───
-pres.writeFile({ fileName: "/home/dusan/ruby-code/Her-Rubyness.pptx" })
+pres.writeFile({ fileName: "/home/dusan/ruby-code/Practess.pptx" })
   .then(() => {
-    console.log("✓ Presentation saved to /home/dusan/ruby-code/Her-Rubyness.pptx");
+    console.log("✓ Presentation saved to /home/dusan/ruby-code/Practess.pptx");
     console.log("  Slides: " + pres.slides.length);
   })
   .catch(err => {

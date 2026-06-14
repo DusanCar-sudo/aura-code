@@ -55,12 +55,12 @@ afterEach(() => {
 // workflowsDir
 // ─────────────────────────────────────────────────────────────────────────────
 describe('workflowsDir()', () => {
-  it('returns ~/.rubycode/workflows by default', () => {
-    expect(workflowsDir()).toBe(path.join(homeTmp, '.rubycode', 'workflows'));
+  it('returns ~/.aura/workflows by default', () => {
+    expect(workflowsDir()).toBe(path.join(homeTmp, '.aura', 'workflows'));
   });
 
-  it('respects RUBY_WORKFLOW_DIR env var', () => {
-    vi.stubEnv('RUBY_WORKFLOW_DIR', '/custom/workflows');
+  it('respects AURA_WORKFLOW_DIR env var', () => {
+    vi.stubEnv('AURA_WORKFLOW_DIR', '/custom/workflows');
     expect(workflowsDir()).toBe('/custom/workflows');
   });
 });

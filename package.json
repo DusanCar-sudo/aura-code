@@ -1,11 +1,9 @@
 {
-  "name": "rubyness",
-  "version": "0.1.0",
-  "description": "Model-agnostic AI coding agent — Ruby Diamond ecosystem",
+  "name": "aura-code",
+  "version": "0.3.0",
+  "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
   "bin": {
-    "ruby": "dist/cli/index.js",
-    "ruby-code": "dist/cli/index.js",
-    "rubyness": "dist/cli/index.js"
+    "aura": "dist/cli/index.js"
   },
   "main": "./dist/cli/index.js",
   "scripts": {
@@ -26,6 +24,7 @@
     "minimist": "^1.2.8",
     "openai": "^4.68.4",
     "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^25.1.0",
     "ws": "^8.21.0"
   },
   "devDependencies": {
@@ -47,7 +46,8 @@
     "coding",
     "cli",
     "model-agnostic",
-    "ruby"
+    "aura",
+    "praktess"
   ],
   "license": "MIT",
   "directories": {
