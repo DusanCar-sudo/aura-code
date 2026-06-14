@@ -1,5 +1,5 @@
 /**
- * versionCheck.ts — Praktess / Aura
+ * versionCheck.ts — Aura
  *
  * Runs at session startup. Hits GitHub releases API, compares against
  * the local package.json version, prints a one-line banner if a newer

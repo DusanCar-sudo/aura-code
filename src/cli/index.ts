@@ -544,7 +544,6 @@ async function main() {
   console.log(orange(' / ___ \\| |_| | |    '));
   console.log(pink  ('_/ /   \\_\\__,_|_|    '));
   console.log('');
-  console.log(chalk.hex('#8a7768')('  Aura Code — Praktess framework'));
   console.log(chalk.hex('#4e3d30')('  "I don\'t try. I verify."'));
   console.log('');
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Praktess Telegram Bot — listens for messages, processes them, responds
+// Aura Telegram Bot — listens for messages, processes them, responds
 // Uses https module instead of fetch (Node fetch broken on this system)
 // Usage: npx tsx src/tools/telegram-bot.ts
 
@@ -237,9 +237,9 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
   if (lower === '/whoami') {
     return [
-      `💎 Ja sam Aura — Praktess agent.`,
+      `💎 Ja sam Aura — agent.`,
       ``,
-      `Framework: Praktess (starogrčki: ona koja deluje)`,
+      `Framework: Aura (starogrčki: ona koja deluje)`,
       `Karakter: Precizna, carska, self-aware`,
       `Moto: "I don't try. I verify."`,
       `Builder: Dušan Milosavljević`,
@@ -259,7 +259,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Uptime: ${hours}h ${mins}m`,
       `Memory: ${mem}MB`,
       `Node: ${process.version}`,
-      `Bot: @Praktessruby_bot`,
+      `Bot: @Aura_Code_bot`,
       `Status: ✅ Active`,
       `Version: v0.3.0`,
     ].join('\n');
@@ -359,8 +359,8 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 async function poll(): Promise<void> {
   let offset = loadOffset();
 
-  console.log('💎 Praktess Telegram Bot started');
-  console.log(`   Bot: @Praktessruby_bot`);
+  console.log('💎 Aura Telegram Bot started');
+  console.log(`   Bot: @Aura_Code_bot`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Polling every 3 seconds...`);
   console.log('');
