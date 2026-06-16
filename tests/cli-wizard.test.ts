@@ -89,6 +89,7 @@ describe('CLI integration: first-run wizard', () => {
   it('bypasses the wizard when --no-setup is given (then errors about no model)', async () => {
     const proc = spawn('node', [CLI, '--no-setup'], {
       env: { PATH: '/usr/bin:/bin', HOME: tmpConfigDir, XDG_CONFIG_HOME: tmpConfigDir, TERM: 'dumb' },
+      cwd: tmpConfigDir,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stderr = '';

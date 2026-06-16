@@ -4,7 +4,7 @@
 Copyright (c) 2026 Dušan Milosavljević
 
 ## Ownership Statement
-Aura Code (formerly Rubyness, BootstrapRuby) — the name, concept, architecture, and design are the intellectual property of Dušan Milosavljević, operating under Lean Progress IQ (leanprogressiq.com).
+Aura Code (formerly Rubyness, BootstrapRuby) — the name, concept, architecture, and design are the intellectual property of Dušan Milosavljević, operating under Lean Progress IQ (lean-progress-iq-site.vercel.app).
 
 This includes:
 - The concept of a self-improving AI coding agent directed by a human orchestrator
@@ -25,5 +25,5 @@ The copyright holder reserves the right to release future versions under differe
 ## Contact
 Dušan Milosavljević
 leanproiq@gmail.com
-https://leanprogressiq.com
+https://lean-progress-iq-site.vercel.app
 Da Nang, Vietnam

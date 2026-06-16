@@ -21,6 +21,9 @@ import { CALENDAR_DEFINITION, calendarTool } from './calendar.js';
 import { TELEGRAM_DEFINITION, telegramTool } from './telegram.js';
 import { WHATSAPP_DEFINITION, whatsAppTool } from './whatsapp.js';
 import { CRON_DEFINITION, cronTool } from './cron.js';
+import { AUDIO_TRANSCRIBE_DEFINITION, audioTranscribe } from './audio-transcribe.js';
+import { YOUTUBE_TRANSCRIPT_DEFINITION, youtubeTranscript } from './youtube-transcript.js';
+import { MCP_DEFINITION, mcpTool } from './mcp.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool schemas (what the model sees)
@@ -151,6 +154,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   TELEGRAM_DEFINITION,
   WHATSAPP_DEFINITION,
   CRON_DEFINITION,
+  AUDIO_TRANSCRIBE_DEFINITION,
+  YOUTUBE_TRANSCRIPT_DEFINITION,
+  MCP_DEFINITION,
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,7 +193,10 @@ export async function executeTool(
       case 'telegram':     return telegramTool(input as any);
       case 'whatsapp':     return whatsAppTool(input as any);
       case 'cron':         return cronTool(input as any);
-      default:             return `Error: Unknown tool '${name}'`;
+      case 'audio_transcribe':    return audioTranscribe(input as any);
+      case 'youtube_transcript':  return youtubeTranscript(input as any);
+      case 'mcp':                 return mcpTool(input as any);
+      default:                    return `Error: Unknown tool '${name}'`;
     }
   } catch (e) {
     return `Tool error (${name}): ${String(e)}`;

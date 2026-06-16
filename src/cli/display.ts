@@ -104,25 +104,26 @@ export function createTerminalDisplay(): Display {
     },
 
     header(title: string, subtitle?: string) {
-      const w = process.stdout.columns ?? 80;
-      const line = '─'.repeat(Math.min(w - 4, 60));
-      console.log('\n' + chalk.hex('#4e3d30')(line));
-      console.log(chalk.hex('#cc785c').bold(`  ${title}`));
-      if (subtitle) console.log(chalk.hex('#8a7768')(`  ${subtitle}`));
-      console.log(chalk.hex('#4e3d30')(line));
+      const w = Math.min((process.stdout.columns ?? 80) - 2, 72);
+      const pad = (s: string) => `  ${s}`;
+      console.log('');
+      console.log(boxTop(w));
+      console.log(boxLine(chalk.hex('#cc785c').bold(pad(title)), w));
+      if (subtitle) console.log(boxLine(chalk.hex('#8a7768')(pad(subtitle)), w));
+      console.log(boxBottom(w));
     },
 
     summary(text: string, turns: number, toolCount: number) {
-      const w = process.stdout.columns ?? 80;
-      const line = '─'.repeat(Math.min(w - 4, 60));
-      console.log('\n' + chalk.hex('#4e3d30')(line));
-      console.log(chalk.hex('#5a9e6e').bold('  ✓ Done'));
-      console.log(chalk.hex('#8a7768')(`  ${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`));
+      const w = Math.min((process.stdout.columns ?? 80) - 2, 72);
+      const pad = (s: string) => `  ${s}`;
+      console.log('');
+      console.log(boxTop(w));
+      console.log(boxLine(chalk.hex('#5a9e6e').bold(pad('✓ Done')), w));
+      console.log(boxLine(chalk.hex('#8a7768')(pad(`${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`)), w));
       if (text) {
-        console.log('');
-        text.split('\n').forEach(l => console.log(chalk.hex('#c8b5a0')(`  ${l}`)));
+        text.split('\n').forEach(l => console.log(boxLine(chalk.hex('#c8b5a0')(pad(l)), w)));
       }
-      console.log(chalk.hex('#4e3d30')(line) + '\n');
+      console.log(boxBottom(w) + '\n');
     },
 
     retry(info) {
@@ -140,14 +141,14 @@ export function createTerminalDisplay(): Display {
     },
 
     showPlan(plan: ExecutionPlan) {
-      const w = process.stdout.columns ?? 80;
-      const line = '─'.repeat(Math.min(w - 4, 60));
+      const w = Math.min((process.stdout.columns ?? 80) - 2, 72);
+      const pad = (s: string) => `  ${s}`;
       // Build a position map so dependency arrows show step numbers, not raw UUIDs
       const idxMap = new Map<string, number>(plan.steps.map((s, i) => [s.id, i + 1]));
-      console.log('\n' + chalk.hex('#4e3d30')(line));
-      console.log(chalk.hex('#cc785c').bold('  Execution Plan'));
-      console.log(chalk.hex('#8a7768')(`  Goal: ${plan.goal}`));
-      console.log(chalk.hex('#4e3d30')(line));
+      console.log('');
+      console.log(boxTop(w));
+      console.log(boxLine(chalk.hex('#cc785c').bold(pad('Execution Plan')), w));
+      console.log(boxLine(chalk.hex('#8a7768')(pad(`Goal: ${plan.goal}`)), w));
       plan.steps.forEach((s, i) => {
         const num    = chalk.hex('#4e3d30')(`${i + 1}.`);
         const spec   = chalk.hex('#cc785c').bold(`[${s.specialist}]`);
@@ -155,9 +156,9 @@ export function createTerminalDisplay(): Display {
         const deps   = s.dependsOn.length > 0
           ? chalk.hex('#4e3d30')(` ← ${s.dependsOn.map(d => idxMap.get(d) ?? '?').join(', ')}`)
           : '';
-        console.log(`  ${num} ${spec} ${task}${deps}`);
+        console.log(boxLine(`  ${num} ${spec} ${task}${deps}`, w));
       });
-      console.log(chalk.hex('#4e3d30')(line) + '\n');
+      console.log(boxBottom(w) + '\n');
     },
 
     stepStarted(step: PlanStep) {
@@ -172,6 +173,28 @@ export function createTerminalDisplay(): Display {
       console.log(chalk.hex('#5a9e6e')('  ✓') + ` ${spec} ${chalk.hex('#4e3d30')(`done (${ms})`)}`);
     },
   };
+}
+
+// ── Box-drawing helpers ──────────────────────────────────────────────────────
+
+/** Render a colored top border: ┌──────────┐ */
+function boxTop(width: number, color = '#4e3d30'): string {
+  const inner = '─'.repeat(Math.max(width - 2, 2));
+  return chalk.hex(color)(`┌${inner}┐`);
+}
+
+/** Render a colored bottom border: └──────────┘ */
+function boxBottom(width: number, color = '#4e3d30'): string {
+  const inner = '─'.repeat(Math.max(width - 2, 2));
+  return chalk.hex(color)(`└${inner}┘`);
+}
+
+/** Render a colored side-padded line: │  content          │ */
+function boxLine(text: string, width: number, color = '#4e3d30'): string {
+  // Strip ANSI to measure visible length
+  const visible = text.replace(/\x1b\[[0-9;]*m/g, '');
+  const padding = Math.max(width - 2 - visible.length, 0);
+  return chalk.hex(color)('│') + text + ' '.repeat(padding) + chalk.hex(color)('│');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1,12 +1,95 @@
 #!/usr/bin/env node
 // Aura Telegram Bot — listens for messages, processes them, responds
-// Uses https module instead of fetch (Node fetch broken on this system)
+// Uses curl for API calls (Node https.request ETIMEDOUT on this system)
 // Usage: npx tsx src/tools/telegram-bot.ts
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as https from 'https';
+import { execSync } from 'child_process';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LLM Integration (Xiaomi MiMo via curl)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MIMO_KEY = process.env.XIAOMI_API_KEY ?? '';
+const MIMO_BASE_URL = process.env.XIAOMI_BASE_URL ?? 'https://token-plan-sgp.xiaomimimo.com/v1';
+const MIMO_MODEL = 'mimo-v2.5-pro';
+const CONVERSATIONS_FILE = path.join(os.homedir(), '.aura', 'telegram-conversations.json');
+
+interface ConversationEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+function loadConversations(): Record<number, ConversationEntry[]> {
+  try {
+    if (fs.existsSync(CONVERSATIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(CONVERSATIONS_FILE, 'utf8'));
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveConversations(convos: Record<number, ConversationEntry[]>): void {
+  fs.writeFileSync(CONVERSATIONS_FILE, JSON.stringify(convos, null, 2), 'utf8');
+}
+
+const conversations: Record<number, ConversationEntry[]> = loadConversations();
+
+function askMiMo(chatId: number, userMessage: string): string {
+  if (!MIMO_KEY) return '❌ XIAOMI_API_KEY not set. Cannot call MiMo.';
+
+  // Init conversation history for this chat
+  if (!conversations[chatId]) {
+    conversations[chatId] = [
+      { role: 'system' as any, content: `You are Aura — a precise, efficient AI coding agent. You are communicating via Telegram with your creator Dušan. Be concise, helpful, and direct. You can discuss code, answer questions, give advice. If asked to run commands or check files, suggest using the /run, /read, /ls commands. Speak in the language the user speaks (Serbian or English). Keep responses short and practical for mobile reading.` } as any,
+    ];
+  }
+
+  // Add user message
+  conversations[chatId].push({ role: 'user', content: userMessage });
+
+  // Keep last 20 messages to stay within token limits
+  const recentMessages = conversations[chatId].slice(-20);
+
+  const body = JSON.stringify({
+    model: MIMO_MODEL,
+    max_tokens: 2048,
+    messages: recentMessages,
+  });
+
+  try {
+    const result = execSync(
+      `curl -s -X POST ${MIMO_BASE_URL}/chat/completions ` +
+      `-H "Content-Type: application/json" ` +
+      `-H "Authorization: Bearer ${MIMO_KEY}" ` +
+      `-d '${body.replace(/'/g, "'\\''")}'`,
+      { timeout: 60_000, encoding: 'utf8' }
+    );
+
+    const parsed = JSON.parse(result);
+
+    if (parsed.error) {
+      return `❌ MiMo error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`;
+    }
+
+    const assistantText = parsed.choices?.[0]?.message?.content ?? 'No response from MiMo.';
+
+    // Save assistant reply to history
+    conversations[chatId].push({ role: 'assistant', content: assistantText });
+    saveConversations(conversations);
+
+    return assistantText;
+  } catch (e: any) {
+    return `❌ MiMo call failed: ${e.message}`;
+  }
+}
+
+function clearConversation(chatId: number): void {
+  delete conversations[chatId];
+  saveConversations(conversations);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -27,7 +110,7 @@ function loadConfig(): TelegramConfig {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HTTPS helper (no fetch dependency)
+// API helpers via curl (Node https.request ETIMEDOUT on this system)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const config = loadConfig();
@@ -46,89 +129,32 @@ function saveOffset(offset: number): void {
   fs.writeFileSync(OFFSET_FILE, String(offset), 'utf8');
 }
 
-function apiPost(method: string, body?: Record<string, unknown>): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const data = body ? JSON.stringify(body) : '';
-    const options = {
-      hostname: 'api.telegram.org',
-      port: 443,
-      path: `/bot${TOKEN}/${method}`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let responseData = '';
-      res.on('data', (chunk) => { responseData += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(responseData);
-          if (!parsed.ok) {
-            reject(new Error(`Telegram: ${parsed.description} (${parsed.error_code})`));
-          } else {
-            resolve(parsed.result);
-          }
-        } catch (e) {
-          reject(new Error(`Parse error: ${responseData.slice(0, 100)}`));
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.setTimeout(35000, () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
-    });
-
-    if (data) req.write(data);
-    req.end();
-  });
+function curlPost(method: string, body?: Record<string, unknown>): any {
+  const data = body ? JSON.stringify(body) : '';
+  const url = `https://api.telegram.org/bot${TOKEN}/${method}`;
+  const escaped = data.replace(/'/g, "'\\''");
+  const result = execSync(
+    `curl -s -X POST -H "Content-Type: application/json" -d '${escaped}' "${url}"`,
+    { timeout: 30_000, encoding: 'utf8' }
+  );
+  const parsed = JSON.parse(result);
+  if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
+  return parsed.result;
 }
 
-function apiGet(method: string, params?: Record<string, string>): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    const options = {
-      hostname: 'api.telegram.org',
-      port: 443,
-      path: `/bot${TOKEN}/${method}${qs}`,
-      method: 'GET',
-    };
-
-    const req = https.request(options, (res) => {
-      let responseData = '';
-      res.on('data', (chunk) => { responseData += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(responseData);
-          if (!parsed.ok) {
-            reject(new Error(`Telegram: ${parsed.description} (${parsed.error_code})`));
-          } else {
-            resolve(parsed.result);
-          }
-        } catch (e) {
-          reject(new Error(`Parse error: ${responseData.slice(0, 100)}`));
-        }
-      });
-    });
-
-    req.on('error', (e) => reject(e));
-    req.setTimeout(35000, () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
-    });
-
-    req.end();
-  });
+function curlGet(method: string, params?: Record<string, string>): any {
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  const url = `https://api.telegram.org/bot${TOKEN}/${method}${qs}`;
+  const result = execSync(`curl -s "${url}"`, { timeout: 30_000, encoding: 'utf8' });
+  const parsed = JSON.parse(result);
+  if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
+  return parsed.result;
 }
 
-async function sendMessage(chatId: string | number, text: string): Promise<void> {
+function sendMessage(chatId: string | number, text: string): void {
   const chunks = splitMessage(text, 4000);
   for (const chunk of chunks) {
-    await apiPost('sendMessage', { chat_id: chatId, text: chunk });
+    curlPost('sendMessage', { chat_id: chatId, text: chunk });
   }
 }
 
@@ -147,21 +173,24 @@ function splitMessage(text: string, maxLen: number): string[] {
 // Command handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Tool execution helpers ──────────────────────────────────────────────────
-
 const DEFAULT_CWD = process.env.HOME ?? '/tmp';
 
-function execShell(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; code: number }> {
-  return new Promise((resolve) => {
-    const { exec } = require('child_process');
-    exec(command, { cwd: cwd ?? DEFAULT_CWD, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err: any, stdout: string, stderr: string) => {
-      resolve({
-        stdout: stdout?.toString() ?? '',
-        stderr: stderr?.toString() ?? '',
-        code: err ? (err.code ?? 1) : 0,
-      });
+function execShell(command: string, cwd?: string): { stdout: string; stderr: string; code: number } {
+  try {
+    const stdout = execSync(command, {
+      cwd: cwd ?? DEFAULT_CWD,
+      timeout: 30_000,
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8',
     });
-  });
+    return { stdout, stderr: '', code: 0 };
+  } catch (err: any) {
+    return {
+      stdout: err.stdout?.toString() ?? '',
+      stderr: err.stderr?.toString() ?? '',
+      code: err.status ?? 1,
+    };
+  }
 }
 
 function readFileTool(filePath: string): string {
@@ -197,7 +226,7 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
     ? (path.isAbsolute(searchPath) ? searchPath : path.join(DEFAULT_CWD, searchPath))
     : DEFAULT_CWD;
   try {
-    const result = require('child_process').execSync(
+    const result = execSync(
       `rg -n --no-heading -i "${pattern.replace(/"/g, '\\"')}" "${resolved}" 2>/dev/null | head -30`,
       { timeout: 10_000, encoding: 'utf8' }
     );
@@ -207,45 +236,46 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
   }
 }
 
-async function handleCommand(chatId: number, text: string, from: string): Promise<string> {
+function handleCommand(chatId: number, text: string, from: string): string {
   const lower = text.toLowerCase().trim();
 
   if (lower === '/start' || lower === '/help') {
     return [
       `💎 Aura Bot — Online`,
       ``,
-      `Komande:`,
-      `/status — Status sistema`,
-      `/tools — Lista dostupnih alata`,
-      `/memory — Pregled memorije`,
-      `/time — Trenutno vreme`,
-      `/ping — Provera konekcije`,
-      `/whoami — Ko sam ja`,
-      `/ls <dir> — Lista direktorijuma`,
-      `/read <file> — Čitanje fajla`,
-      `/search <pattern> — Pretraga koda`,
-      `/run <cmd> — Izvršavanje shell komande`,
+      `Commands:`,
+      `/status — System status`,
+      `/tools — Available tools`,
+      `/memory — Memory overview`,
+      `/time — Current time`,
+      `/ping — Connection check`,
+      `/whoami — About me`,
+      `/ls <dir> — List directory`,
+      `/read <file> — Read file`,
+      `/search <pattern> — Search code`,
+      `/run <cmd> — Run shell command`,
       `/git — Git status`,
+      `/clear — Clear conversation history`,
       ``,
-      `Ili mi piši bilo šta — odgovoriću!`,
+      `Or just write anything — I'll respond via Claude!`,
     ].join('\n');
   }
 
-  if (lower === '/ping') return '🏓 Pong! Aura je živa i radi.';
+  if (lower === '/ping') return '🏓 Pong! Aura is alive and running.';
 
   if (lower === '/time') return `🕐 ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`;
 
   if (lower === '/whoami') {
     return [
-      `💎 Ja sam Aura — agent.`,
+      `💎 I am Aura — an agent.`,
       ``,
-      `Framework: Aura (starogrčki: ona koja deluje)`,
-      `Karakter: Precizna, carska, self-aware`,
-      `Moto: "I don't try. I verify."`,
+      `Framework: Aura (Ancient Greek: she who acts)`,
+      `Character: Precise, imperial, self-aware`,
+      `Motto: "I don't try. I verify."`,
       `Builder: Dušan Milosavljević`,
-      `Alati: 22`,
-      `Testovi: 838+ passing`,
-      `Verzija: v0.3.0 (Aura rebrand)`,
+      `Tools: 22`,
+      `Tests: 734+ passing`,
+      `Version: v0.3.0 (Aura rebrand)`,
     ].join('\n');
   }
 
@@ -259,7 +289,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Uptime: ${hours}h ${mins}m`,
       `Memory: ${mem}MB`,
       `Node: ${process.version}`,
-      `Bot: @Aura_Code_bot`,
+      `Bot: @Praktessruby_bot`,
       `Status: ✅ Active`,
       `Version: v0.3.0`,
     ].join('\n');
@@ -267,14 +297,14 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
   if (lower === '/tools') {
     return [
-      `🔧 Dostupni alati:`,
+      `🔧 Available tools:`,
       ``,
-      `📁 /ls <dir> — lista direktorijuma`,
-      `📄 /read <file> — čitanje fajla`,
-      `🔍 /search <pattern> — pretraga koda`,
-      `⚡ /run <cmd> — shell komanda`,
+      `📁 /ls <dir> — list directory`,
+      `📄 /read <file> — read file`,
+      `🔍 /search <pattern> — search code`,
+      `⚡ /run <cmd> — shell command`,
       `🌿 /git — git status`,
-      `🧠 /memory — pregled memorije`,
+      `🧠 /memory — memory overview`,
     ].join('\n');
   }
 
@@ -300,67 +330,64 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   if (lower.startsWith('/run')) {
     const cmd = text.slice(4).trim();
     if (!cmd) return '❌ Usage: /run <command>';
-    // Safety: block dangerous commands
     const dangerous = ['rm -rf', 'mkfs', 'dd if=', 'fork bomb', 'shutdown', 'reboot'];
     if (dangerous.some(d => cmd.toLowerCase().includes(d))) {
       return '🚫 Blocked: dangerous command detected.';
     }
-    const result = await execShell(cmd);
+    const result = execShell(cmd);
     const output = result.stdout || result.stderr || '(no output)';
     const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
     return `⚡ ${cmd}\n${result.code === 0 ? '✅' : '❌'} exit ${result.code}\n${truncated}`;
   }
 
   if (lower === '/git') {
-    const result = await execShell('git status --short && echo "---" && git log --oneline -5');
+    const result = execShell('git status --short && echo "---" && git log --oneline -5');
     return `🌿 Git:\n${result.stdout || '(not a git repo)'}`;
   }
 
   if (lower.startsWith('/memory')) {
     const memDir = path.join(os.homedir(), '.aura', 'memory');
-    if (!fs.existsSync(memDir)) return '🧠 Nema memorije.';
+    if (!fs.existsSync(memDir)) return '🧠 No memory found.';
     try {
       const files = fs.readdirSync(memDir).filter(f => f.endsWith('.json'));
-      if (files.length === 0) return '🧠 Memorija prazna.';
+      if (files.length === 0) return '🧠 Memory empty.';
       const lines = files.map(f => {
         const data = JSON.parse(fs.readFileSync(path.join(memDir, f), 'utf8'));
-        return `📁 ${f.replace('.json', '')}: ${Object.keys(data).length} ključeva`;
+        return `📁 ${f.replace('.json', '')}: ${Object.keys(data).length} keys`;
       });
-      return `🧠 Memorija:\n${lines.join('\n')}`;
+      return `🧠 Memory:\n${lines.join('\n')}`;
     } catch {
-      return '🧠 Greška pri čitanju memorije.';
+      return '🧠 Error reading memory.';
     }
+  }
+
+  if (lower === '/clear') {
+    clearConversation(chatId);
+    return '🧹 Conversation cleared. Starting fresh.';
   }
 
   // Default: try to interpret as a shell command if it looks like one
   const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
   if (looksLikeCommand) {
-    const result = await execShell(text);
+    const result = execShell(text);
     const output = result.stdout || result.stderr || '(no output)';
     const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
     return `⚡ ${text}\n${truncated}`;
   }
 
-  // Default: acknowledge and echo
-  return [
-    `💬 Primljeno od ${from}:`,
-    `"${text}"`,
-    ``,
-    `Vreme: ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`,
-    ``,
-    `Probaj /help za liste komandi.`,
-  ].join('\n');
+  // Default: send to MiMo for real conversation
+  return askMiMo(chatId, text);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main polling loop
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function poll(): Promise<void> {
+function poll(): void {
   let offset = loadOffset();
 
   console.log('💎 Aura Telegram Bot started');
-  console.log(`   Bot: @Aura_Code_bot`);
+  console.log(`   Bot: @Praktessruby_bot`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Polling every 3 seconds...`);
   console.log('');
@@ -368,7 +395,7 @@ async function poll(): Promise<void> {
   // Clear old updates on first run
   if (offset === 0) {
     try {
-      const updates = await apiGet('getUpdates', { offset: '0', limit: '100' });
+      const updates = curlGet('getUpdates', { offset: '0', limit: '100' });
       if (updates.length > 0) {
         offset = updates[updates.length - 1].update_id + 1;
         saveOffset(offset);
@@ -383,7 +410,7 @@ async function poll(): Promise<void> {
 
   while (true) {
     try {
-      const updates = await apiGet('getUpdates', {
+      const updates = curlGet('getUpdates', {
         offset: String(offset),
         limit: '100',
         timeout: '3',
@@ -405,13 +432,13 @@ async function poll(): Promise<void> {
         console.log(`📩 [${from}]: ${text}`);
 
         try {
-          const response = await handleCommand(chatId, text, from);
-          await sendMessage(chatId, response);
+          const response = handleCommand(chatId, text, from);
+          sendMessage(chatId, response);
           console.log(`📤 Replied to ${from}`);
         } catch (e: any) {
           console.error(`❌ Reply error: ${e.message}`);
           try {
-            await sendMessage(chatId, `❌ Greška: ${e.message}`);
+            sendMessage(chatId, `❌ Error: ${e.message}`);
           } catch { /* give up */ }
         }
       }
@@ -420,10 +447,10 @@ async function poll(): Promise<void> {
       console.error(`⚠️ Poll error (${consecutiveErrors}): ${e.message}`);
       if (consecutiveErrors > 10) {
         console.error('💀 Too many errors, waiting 30s...');
-        await new Promise(r => setTimeout(r, 30000));
+        execSync('sleep 30');
         consecutiveErrors = 0;
       } else {
-        await new Promise(r => setTimeout(r, 3000));
+        execSync('sleep 3');
       }
     }
   }
@@ -433,7 +460,4 @@ async function poll(): Promise<void> {
 // Entry
 // ─────────────────────────────────────────────────────────────────────────────
 
-poll().catch(e => {
-  console.error('Fatal:', e);
-  process.exit(1);
-});
+poll();

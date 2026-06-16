@@ -59,8 +59,8 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       const stripPrefix = def.prefixes.find(p => model.startsWith(p.toLowerCase()));
       const rawModel = stripPrefix ? model.slice(stripPrefix.length) : model;
       const apiKey = config.apiKey
-        ?? (def.apiKeyEnv ? getApiKey(def.apiKeyEnv) : undefined)
-        ?? (def.apiKey ?? undefined);
+        ?? (def.apiKey ?? undefined)
+        ?? (def.apiKeyEnv ? getApiKey(def.apiKeyEnv) : undefined);
       return new OpenAICompatibleProvider({
         ...config,
         model: rawModel || model,

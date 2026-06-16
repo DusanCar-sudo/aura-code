@@ -70,7 +70,7 @@ export function createResilientProvider(
   if (!merged.fallbacks || merged.fallbacks.length === 0) return primary;
 
   const fallbackProviders: LLMProvider[] = merged.fallbacks.map(model => {
-    const fc: ProviderConfig = { ...config, model };
+    const fc: ProviderConfig = { ...config, model, baseUrl: undefined };
     return new ResilientProvider(createProvider(fc), resilientOpts);
   });
 

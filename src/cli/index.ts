@@ -534,17 +534,23 @@ async function main() {
     projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
 
   // ── ASCII art banner ────────────────────────────────────────────────────────
-  const red    = chalk.hex('#CC2936');
   const orange = chalk.hex('#E8771A');
-  const pink   = chalk.hex('#FF6B9D');
+  const pink1  = chalk.hex('#F5715B'); // Smooth transition step
+  const pink2  = chalk.hex('#FF6B9D');
+  const red1   = chalk.hex('#E64A69'); // Smooth transition step
+  const red2   = chalk.hex('#CC2936');
+
   console.log('');
-  console.log(red   ('    _                 '));
-  console.log(red   ('   / \\   _   _ _ __  '));
-  console.log(orange('  / _ \\ | | | | \'__| '));
-  console.log(orange(' / ___ \\| |_| | |    '));
-  console.log(pink  ('_/ /   \\_\\__,_|_|    '));
+  console.log(orange('  █████╗ ██╗   ██╗██████╗  █████╗      ██████╗ ██████╗ ██████╗ ███████╗'));
+  console.log(pink1 (' ██╔══██╗██║   ██║██╔══██╗██╔══██╗    ██╔════╝██╔═══██╗██╔══██╗██╔════╝'));
+  console.log(pink2 (' ███████║██║   ██║██████╔╝███████║    ██║     ██║   ██║██║  ██║█████╗  '));
+  console.log(red1  (' ██╔══██║██║   ██║██╔══██╗██╔══██║    ██║     ██║   ██║██║  ██║██╔══╝  '));
+  console.log(red2  (' ██║  ██║╚██████╔╝██║  ██║██║  ██║    ╚██████╗╚██████╔╝██████╔╝███████╗'));
+  console.log(red2  (' ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝'));
   console.log('');
   console.log(chalk.hex('#4e3d30')('  "I don\'t try. I verify."'));
+  console.log('');
+
   console.log('');
 
   await new Promise(r => setTimeout(r, 50));
@@ -983,7 +989,9 @@ interface ReplCommandResult {
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
   const prevModel = runtimeConfig.model;
+  const prevBaseUrl = runtimeConfig.baseUrl;
   runtimeConfig.model = newModel;
+  runtimeConfig.baseUrl = undefined;
   try {
     const test = buildProvider(c.display);
     c.providerConfig.model = newModel;
@@ -991,6 +999,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
     return { ok: true };
   } catch (e) {
     runtimeConfig.model = prevModel;  // rollback on error
+    runtimeConfig.baseUrl = prevBaseUrl;
     return { ok: false, err: String(e) };
   }
 }

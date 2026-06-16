@@ -1,11 +1,30 @@
 {
   "name": "aura-code",
   "version": "0.3.0",
-  "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
+  "description": "Aura Code — model-agnostic AI coding agent. Works with Claude, GPT, Gemini, MiMo, Ollama, and any OpenAI-compatible endpoint. MIT licensed.",
   "bin": {
     "aura": "dist/cli/index.js"
   },
   "main": "./dist/cli/index.js",
+  "homepage": "https://lean-progress-iq-site.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/milodule3-debug/aura-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/milodule3-debug/aura-code/issues"
+  },
+  "author": {
+    "name": "Dušan Milosavljević",
+    "email": "leanproiq@gmail.com",
+    "url": "https://lean-progress-iq-site.vercel.app"
+  },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/cli/index.ts",
@@ -47,13 +66,21 @@
     "cli",
     "model-agnostic",
     "aura",
-    "praktess"
+    "praktess",
+    "claude",
+    "gpt",
+    "gemini",
+    "ollama",
+    "developer-tools",
+    "code-generation",
+    "autonomous-agent",
+    "llm",
+    "typescript"
   ],
   "license": "MIT",
   "directories": {
     "test": "tests"
   },
-  "author": "",
   "type": "commonjs",
   "types": "./dist/cli/index.d.ts"
 }
