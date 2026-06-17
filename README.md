@@ -22,7 +22,7 @@
 
 ## What is Aura Code?
 
-Aura Code is an autonomous coding agent built entirely by AI agents. Claude, OpenCode, Pi, Grok, and Aura itself collaborated to design, implement, test, and verify the codebase. The agent that writes your code was itself written by agents. Written in TypeScript — not related to the Ruby programming language.
+Aura Code was developed using AI-assisted engineering workflows, with multiple AI agents contributing to design, implementation, testing, and verification. Written in TypeScript — not related to the Ruby programming language.
 
 Built on the **Praktess** framework — from Ancient Greek: *she who acts and executes*.
 
