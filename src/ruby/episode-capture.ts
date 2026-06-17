@@ -10,6 +10,16 @@ import { shouldFineTune } from './competence.js';
 // Stores alternation episodes under ~/.aura/episodes/{projectHash}/ so
 // Ruby competence and fine-tune readiness can be computed per project.
 
+/**
+ * Rough character-based token estimation (≈1 token per 4 characters).
+ * Used only for episode recording when the provider does not report usage
+ * (e.g. MiMo streaming, Google Gemini streaming).
+ */
+export function estimateTokens(text: string | undefined): number {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
 /** Stats returned by {@link getEpisodeStats}. */
 export interface EpisodeStats {
   total: number;
@@ -47,8 +57,22 @@ export const episodeStore = {
 
   /**
    * Persists one episode to `~/.aura/episodes/{projectHash}/{id}.json`.
+   *
+   * When the provider did not report token usage (totalTokens === 0), fills in
+   * a character-based estimate from the episode's output text so that fine-tune
+   * readiness and competence tracking still have meaningful token counts.
    */
   async saveEpisode(projectRoot: string, episode: Episode): Promise<void> {
+    // Fill estimated tokens when the provider reported 0
+    if (episode.rubyAttempted && !episode.tokensUsed.ruby) {
+      const est = estimateTokens(episode.rubyOutput);
+      if (est > 0) episode = { ...episode, tokensUsed: { ...episode.tokensUsed, ruby: est } };
+    }
+    if (episode.largeModelUsed && !episode.tokensUsed.largeModel) {
+      const est = estimateTokens(episode.largeModelOutput);
+      if (est > 0) episode = { ...episode, tokensUsed: { ...episode.tokensUsed, largeModel: est } };
+    }
+
     const dir = this.projectDir(projectRoot);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const filePath = this.episodePath(projectRoot, episode.id);
@@ -143,3 +167,4 @@ export const saveEpisode = episodeStore.saveEpisode.bind(episodeStore);
 export const loadEpisodes = episodeStore.loadEpisodes.bind(episodeStore);
 export const deleteEpisode = episodeStore.deleteEpisode.bind(episodeStore);
 export const getEpisodeStats = episodeStore.getEpisodeStats.bind(episodeStore);
+// estimateTokens is already a top-level export above

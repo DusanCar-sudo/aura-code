@@ -5,20 +5,20 @@ import * as fs from 'fs';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
-import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
+import { KNOWN_MODELS, getAllModels, registerCustomProviders, getContextWindow } from '../providers/factory.js';
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import type { ProjectContext } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
-import { createTerminalDisplay } from './display.js';
+import { createTerminalDisplay, formatContextBar } from './display.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore } from '../agent/session-store.js';
-import type { LLMProvider } from '../providers/types.js';
+import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
@@ -865,7 +865,11 @@ async function main() {
 
     if (result.success) {
       display.summary(result.summary, result.turns, result.toolCallCount);
-      printUsageFooter(display, result.usage, result.costUsd);
+      printUsageFooter(display, result.usage, result.costUsd, {
+        model: runtimeConfig.model ?? undefined,
+        cumulativeTokens: result.usage.inputTokens + result.usage.outputTokens,
+        history: result.history,
+      });
     } else {
       display.error(result.summary);
     }
@@ -973,7 +977,11 @@ async function main() {
 
         if (result.success) {
           display.summary(result.summary, result.turns, result.toolCallCount);
-          printUsageFooter(display, result.usage, result.costUsd);
+          printUsageFooter(display, result.usage, result.costUsd, {
+            model: runtimeConfig.model ?? undefined,
+            cumulativeTokens: cumulative.inputTokens + cumulative.outputTokens,
+            history: activeChatHistory,
+          });
         } else {
           display.error(result.summary);
         }
@@ -1759,11 +1767,34 @@ function printUsageFooter(
   display: ReturnType<typeof createTerminalDisplay>,
   usage: { inputTokens: number; outputTokens: number },
   costUsd: number,
+  opts?: { model?: string; cumulativeTokens?: number; history?: HistoryMessage[] },
 ): void {
   const total = usage.inputTokens + usage.outputTokens;
   console.log(chalk.hex('#4e3d30')(
-    `  ↳ ${total.toLocaleString()} tokens (${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out) · est. $${costUsd.toFixed(4)}`,
+    `  ↳ ${total.toLocaleString()} tokens (${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out) · est. ${costUsd.toFixed(4)}`,
   ));
+
+  // Context window bar
+  if (opts?.model) {
+    const ctxWin = getContextWindow(opts.model);
+    if (ctxWin) {
+      const real = opts.cumulativeTokens ?? 0;
+      let used: number;
+      let estimated: boolean;
+      if (real > 0) {
+        used = real;
+        estimated = false;
+      } else {
+        // Provider didn't report usage — estimate from history character count
+        const histChars = (opts.history ?? []).reduce((n, m) => n + (m.content?.length ?? 0), 0);
+        used = Math.ceil(histChars / 4);
+        estimated = true;
+      }
+      if (used > 0) {
+        console.log(formatContextBar(used, ctxWin, estimated));
+      }
+    }
+  }
 }
 
 function printHelp() {
