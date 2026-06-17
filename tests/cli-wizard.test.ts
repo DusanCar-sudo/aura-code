@@ -27,27 +27,22 @@ function runCliWithCleanEnv(input: string, configDir: string): Promise<{ stdout:
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
     proc.on('close', (code) => resolve({ stdout, stderr, code }));
     proc.on('error', reject);
-    // Write all input lines at once after a safe delay, then close stdin so
-    // the child can exit naturally instead of waiting for a kill timer.
-    // The wizard's readLine() uses an async line queue (rl.on('line', …))
-    // that correctly buffers all lines even when they arrive in one chunk,
-    // and the rl.once('close') handler only aborts when the queue is empty.
-    const writeTimer = setTimeout(() => {
-      const lines = input.split('\n');
-      for (const line of lines) {
-        proc.stdin.write(line + '\n');
-      }
-    }, 3000);
-    const closeTimer = setTimeout(() => {
-      proc.stdin.end();
-    }, 3500);
+    // Feed input line-by-line with small delays so readline can process each
+    // question() callback separately (mimics human typing). This avoids a race
+    // on Node 20/22 where closing stdin prematurely triggers readline's 'close'
+    // event before all buffered 'line' events have been delivered.
+    const lines = input.split('\n');
+    let i = 0;
+    const feed = () => {
+      if (i >= lines.length) return;
+      proc.stdin.write(lines[i] + '\n');
+      i++;
+      setTimeout(feed, 50);
+    };
+    setTimeout(feed, 200);  // let the wizard print its first prompt first
     // Emergency fallback: kill if the process doesn't exit on its own
-    const killTimer = setTimeout(() => proc.kill('SIGKILL'), 10_000);
-    proc.on('close', () => {
-      clearTimeout(killTimer);
-      clearTimeout(writeTimer);
-      clearTimeout(closeTimer);
-    });
+    const killTimer = setTimeout(() => proc.kill('SIGKILL'), 12_000);
+    proc.on('close', () => clearTimeout(killTimer));
   });
 }
 
