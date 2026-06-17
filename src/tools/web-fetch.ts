@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../providers/types.js';
+import { stripHtml } from '../util/sanitize.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Web Fetch — retrieves content from any URL
@@ -40,30 +41,6 @@ const MAX_REDIRECTS = 5;
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max) + `\n\n... [truncated — ${text.length} chars total, showing first ${max}]`;
-}
-
-function stripHtml(html: string): string {
-  // Remove script and style blocks
-  let text = html.replace(/<script[\s\S]*?<\/script>/gi, '');
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
-  // Remove HTML tags
-  text = text.replace(/<br\s*\/?>/gi, '\n');
-  text = text.replace(/<\/p>/gi, '\n\n');
-  text = text.replace(/<\/div>/gi, '\n');
-  text = text.replace(/<\/li>/gi, '\n');
-  text = text.replace(/<\/h[1-6]>/gi, '\n\n');
-  text = text.replace(/<[^>]+>/g, '');
-  // Decode common entities
-  text = text.replace(/&amp;/g, '&');
-  text = text.replace(/&lt;/g, '<');
-  text = text.replace(/&gt;/g, '>');
-  text = text.replace(/&quot;/g, '"');
-  text = text.replace(/&#39;/g, "'");
-  text = text.replace(/&nbsp;/g, ' ');
-  // Collapse whitespace
-  text = text.replace(/[ \t]+/g, ' ');
-  text = text.replace(/\n{3,}/g, '\n\n');
-  return text.trim();
 }
 
 export async function webFetch(input: WebFetchInput): Promise<string> {

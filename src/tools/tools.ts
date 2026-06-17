@@ -8,6 +8,25 @@ import { IGNORE_PATTERNS } from '../config/defaults.js';
 
 export interface ListDirInput { path: string; recursive: boolean; depth: number }
 
+/** Match a filename against a simple glob pattern (supports leading/trailing *). */
+function matchGlob(name: string, pattern: string): boolean {
+  if (!pattern.includes('*')) return name === pattern;
+  if (pattern === '*') return true;
+  if (pattern.startsWith('*') && pattern.endsWith('*')) return name.includes(pattern.slice(1, -1));
+  if (pattern.startsWith('*')) return name.endsWith(pattern.slice(1));
+  if (pattern.endsWith('*')) return name.startsWith(pattern.slice(0, -1));
+  // Multiple wildcards: check prefix and suffix
+  const firstStar = pattern.indexOf('*');
+  const lastStar = pattern.lastIndexOf('*');
+  if (firstStar !== lastStar) {
+    const prefix = pattern.substring(0, firstStar);
+    const suffix = pattern.substring(lastStar + 1);
+    return name.startsWith(prefix) && name.endsWith(suffix);
+  }
+  return name === pattern;
+}
+
+
 export function listDir(input: ListDirInput, cwd: string): string {
   const dirPath = path.resolve(cwd, input.path ?? '.');
   if (!fs.existsSync(dirPath)) return `Error: Directory not found: ${input.path}`;
@@ -19,7 +38,7 @@ export function listDir(input: ListDirInput, cwd: string): string {
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
     catch { return; }
 
-    const filtered = entries.filter(e => !IGNORE_PATTERNS.some(p => e.name.startsWith('.') ? p === '.git' && e.name === '.git' : e.name === p || e.name.endsWith(p.replace('*', ''))));
+    const filtered = entries.filter(e => !IGNORE_PATTERNS.some(p => matchGlob(e.name, p)));
     filtered.sort((a, b) => {
       if (a.isDirectory() && !b.isDirectory()) return -1;
       if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -81,34 +100,44 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
   // Try ripgrep first (much faster), fall back to grep
   const hasRg = (() => { try { execSync('which rg', { stdio: 'pipe' }); return true; } catch { return false; } })();
 
-  let cmd: string;
-  const flagsRg: string[] = ['-n', '--no-heading', `--max-count=1`];
+  const flagsRg: string[] = ['-n', '--no-heading', '--max-count=1'];
   const flagsGrep: string[] = ['-rn'];
 
-  if (!input.case_sensitive) hasRg ? flagsRg.push('-i') : flagsGrep.push('-i');
-  if (input.literal) hasRg ? flagsRg.push('-F') : flagsGrep.push('-F');
-  if (input.file_glob) hasRg ? flagsRg.push(`--glob=${input.file_glob}`) : flagsGrep.push('--include', `"${input.file_glob}"`);
+  if (!input.case_sensitive) { if (hasRg) flagsRg.push('-i'); else flagsGrep.push('-i'); }
+  if (input.literal) { if (hasRg) flagsRg.push('-F'); else flagsGrep.push('-F'); }
+  if (input.file_glob) { if (hasRg) flagsRg.push('--glob=' + input.file_glob); else flagsGrep.push('--include', input.file_glob); }
 
   try {
     if (hasRg) {
-      cmd = `rg ${flagsRg.join(' ')} ${JSON.stringify(input.pattern)} ${JSON.stringify(searchDir)}`;
+      // Use execFileSync with args array to avoid shell injection
+      const result = execFileSync('rg', flagsRg.concat([input.pattern, searchDir]), {
+        encoding: 'utf8',
+        maxBuffer: 2 * 1024 * 1024,
+      });
+      const allLines = result.trim() ? result.trim().split('\n').filter(Boolean) : [];
+      const lines = allLines.slice(0, input.max_results);
+      if (lines.length === 0) return 'No results for "' + input.pattern + '"';
+      const relative = lines.map(l => l.replace(searchDir + '/', '').replace(searchDir + path.sep, ''));
+      const truncated = allLines.length > lines.length ? ' (showing first ' + lines.length + ' of ' + allLines.length + ')' : '';
+      return 'Found ' + allLines.length + ' result' + (allLines.length > 1 ? 's' : '') + ' for "' + input.pattern + '"' + truncated + ':\n\n' + relative.join('\n');
     } else {
-      cmd = `grep ${flagsGrep.join(' ')} ${JSON.stringify(input.pattern)} ${JSON.stringify(searchDir)}`;
+      const result = execFileSync('grep', flagsGrep.concat(['--', input.pattern, searchDir]), {
+        encoding: 'utf8',
+        maxBuffer: 2 * 1024 * 1024,
+      });
+      const allLines = result.trim() ? result.trim().split('\n').filter(Boolean) : [];
+      const lines = allLines.slice(0, input.max_results);
+      if (lines.length === 0) return 'No results for "' + input.pattern + '"';
+      const relative = lines.map(l => l.replace(searchDir + '/', '').replace(searchDir + path.sep, ''));
+      const truncated = allLines.length > lines.length ? ' (showing first ' + lines.length + ' of ' + allLines.length + ')' : '';
+      return 'Found ' + allLines.length + ' result' + (allLines.length > 1 ? 's' : '') + ' for "' + input.pattern + '"' + truncated + ':\n\n' + relative.join('\n');
     }
-    const result = execSync(cmd, { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 });
-    const allLines = result.trim().split('\n').filter(Boolean);
-    const lines = allLines.slice(0, input.max_results);
-    if (lines.length === 0) return `No results for "${input.pattern}"`;
-    // Make paths relative
-    const relative = lines.map(l => l.replace(searchDir + '/', '').replace(searchDir + path.sep, ''));
-    const truncated = allLines.length > lines.length ? ` (showing first ${lines.length} of ${allLines.length})` : '';
-    return `Found ${allLines.length} result${allLines.length > 1 ? 's' : ''} for "${input.pattern}"${truncated}:\n\n${relative.join('\n')}`;
   } catch (e: unknown) {
     // Exit code 1 from grep/rg means no results
     if (typeof e === 'object' && e !== null && 'status' in e && (e as { status: number }).status === 1) {
-      return `No results for "${input.pattern}"`;
+      return 'No results for "' + input.pattern + '"';
     }
-    return `Search error: ${String(e)}`;
+    return 'Search error: ' + String(e);
   }
 }
 
