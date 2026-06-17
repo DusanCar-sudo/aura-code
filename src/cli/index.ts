@@ -36,7 +36,7 @@ import { renderDiamond } from './diamond.js';
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'once'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -762,10 +762,11 @@ async function main() {
     const task = argv._.join(' ');
     console.log(chalk.hex('#8a7768')(`\n  Task: ${chalk.hex('#ede0cc')(task)}\n`));
 
-    // --architect: plan-only — decompose and display, then exit (no execution)
+    // --architect: plan-only — decompose and display
     if (argv.architect === true) {
       await runArchitectPlan(task, provider, ctx, display);
-      return;
+      if (argv.once) return;
+      return startRepl();
     }
 
     // --build: full orchestrated build — decompose + execute all specialists
@@ -774,7 +775,8 @@ async function main() {
 
     if (doOrchestrate) {
       await runOrchestratedTask(task, provider, ctx, display, doOrchestrate);
-      return;
+      if (argv.once) return;
+      return startRepl();
     }
 
     try {
@@ -787,7 +789,8 @@ async function main() {
       const decision = await routeTask({ provider, context: ctx, task, perception: perception ?? undefined });
       if (decision.shouldDecompose && decision.confidence > 0.8) {
         await runOrchestratedTask(task, provider, ctx, display, false, perception ?? undefined);
-        return;
+        if (argv.once) return;
+        return startRepl();
       }
     } catch {
       // Router failed — fall through to single agent
@@ -829,6 +832,9 @@ async function main() {
       });
     }
 
+    // Update history so REPL continues the conversation
+    activeChatHistory = result.history;
+
     if (activeChatId && !noSession) {
       await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
     }
@@ -838,53 +844,77 @@ async function main() {
       printUsageFooter(display, result.usage, result.costUsd);
     } else {
       display.error(result.summary);
-      process.exit(1);
     }
-    return;
+
+    if (argv.once) return;
+    return startRepl();
   }
 
-  // ── Interactive REPL mode ──────────────────────────────────────────────────
-  if (activeChatHistory.length > 0) {
-    console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
-  }
-  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.\n'));
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // ── Interactive REPL mode (no task args) ────────────────────────────────────
+  return startRepl();
 
-  const ask = () => {
-    const idTag = activeChatId ? chalk.hex('#4e3d30')(` [${activeChatId}]`) : '';
-    rl.question(chalk.hex('#cc785c')('  ▸ ') + idTag + (idTag ? ' ' : ''), async (line) => {
-      const input = line.trim();
-      if (!input) { ask(); return; }
+  // ─────────────────────────────────────────────────────────────────────────────
+  // startRepl — interactive readline loop, reused after single-task completion
+  // ─────────────────────────────────────────────────────────────────────────────
+  async function startRepl(): Promise<void> {
+    if (activeChatHistory.length > 0) {
+      console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
+    }
+    console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.\n'));
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-      // Slash / colon commands
-      const replCtx: ReplCtx = {
-        ctx, display,
-        providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
-        permissions, cumulative,
-        chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
-      };
-      const cmdResult = await handleReplCommand(input, replCtx);
-      if (cmdResult.handled) {
-        // Commands may update chat state
-        if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
-        if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
-        if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
-        ask();
-        return;
-      }
+    const ask = () => {
+      const idTag = activeChatId ? chalk.hex('#4e3d30')(` [${activeChatId}]`) : '';
+      rl.question(chalk.hex('#cc785c')('  ▸ ') + idTag + (idTag ? ' ' : ''), async (line) => {
+        const input = line.trim();
+        if (!input) { ask(); return; }
 
-      // Run task — pass current conversation history for stay-active mode
-      let result;
-      try {
-        const currentProvider = buildProvider(display);
+        // Slash / colon commands
+        const replCtx: ReplCtx = {
+          ctx, display,
+          providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
+          permissions, cumulative,
+          chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+        };
+        const cmdResult = await handleReplCommand(input, replCtx);
+        if (cmdResult.handled) {
+          // Commands may update chat state
+          if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
+          if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
+          if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
+          ask();
+          return;
+        }
 
-        const doVerify = argv.verify === true || !!fileConfig.verify;
-        if (doVerify) {
-          const { runWithVerification } = await import('../verify/index.js');
-          const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
-          const testCommand = cliTestCommand ?? fileConfig.testCommand;
-          const wrapperResult = await runWithVerification({
-            loopOpts: {
+        // Run task — pass current conversation history for stay-active mode
+        let result;
+        try {
+          const currentProvider = buildProvider(display);
+
+          const doVerify = argv.verify === true || !!fileConfig.verify;
+          if (doVerify) {
+            const { runWithVerification } = await import('../verify/index.js');
+            const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+            const testCommand = cliTestCommand ?? fileConfig.testCommand;
+            const wrapperResult = await runWithVerification({
+              loopOpts: {
+                provider: currentProvider, task: input,
+                context: ctx, permissions, display,
+                initialHistory: activeChatHistory,
+                maxTurns: resolved.maxTurns,
+                spawnConfig: {
+                  apiKey: runtimeConfig.apiKey,
+                  baseUrl: runtimeConfig.baseUrl ?? undefined,
+                },
+                sessionPath,
+              },
+              config: { enabled: true, maxRetries, testCommand },
+              projectRoot: ctx.root,
+              display,
+            });
+            result = wrapperResult.loopResult;
+          } else {
+            result = await runAgentLoop({
               provider: currentProvider, task: input,
               context: ctx, permissions, display,
               initialHistory: activeChatHistory,
@@ -894,75 +924,59 @@ async function main() {
                 baseUrl: runtimeConfig.baseUrl ?? undefined,
               },
               sessionPath,
-            },
-            config: { enabled: true, maxRetries, testCommand },
-            projectRoot: ctx.root,
-            display,
-          });
-          result = wrapperResult.loopResult;
-        } else {
-          result = await runAgentLoop({
-            provider: currentProvider, task: input,
-            context: ctx, permissions, display,
-            initialHistory: activeChatHistory,
-            maxTurns: resolved.maxTurns,
-            spawnConfig: {
-              apiKey: runtimeConfig.apiKey,
-              baseUrl: runtimeConfig.baseUrl ?? undefined,
-            },
-            sessionPath,
-          });
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+          console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
+          ask();
+          return;
         }
-      } catch (err) {
-        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-        console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
+
+        // Update stay-active history
+        activeChatHistory = result.history;
+
+        // Persist session
+        if (activeChatId && !noSession) {
+          await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
+        }
+
+        cumulative.turns += result.turns;
+        cumulative.toolCalls += result.toolCallCount;
+        cumulative.inputTokens += result.usage.inputTokens;
+        cumulative.outputTokens += result.usage.outputTokens;
+        cumulative.costUsd += result.costUsd;
+
+        if (result.success) {
+          display.summary(result.summary, result.turns, result.toolCallCount);
+          printUsageFooter(display, result.usage, result.costUsd);
+        } else {
+          display.error(result.summary);
+        }
+
         ask();
-        return;
-      }
+      });
+    };
 
-      // Update stay-active history
-      activeChatHistory = result.history;
-
-      // Persist session
-      if (activeChatId && !noSession) {
-        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
-      }
-
-      cumulative.turns += result.turns;
-      cumulative.toolCalls += result.toolCallCount;
-      cumulative.inputTokens += result.usage.inputTokens;
-      cumulative.outputTokens += result.usage.outputTokens;
-      cumulative.costUsd += result.costUsd;
-
-      if (result.success) {
-        display.summary(result.summary, result.turns, result.toolCallCount);
-        printUsageFooter(display, result.usage, result.costUsd);
+    // Ctrl+C: if a task is running, prompt to force-quit; second Ctrl+C exits.
+    let ctrlC = 0;
+    rl.on('SIGINT', () => {
+      ctrlC++;
+      if (ctrlC === 1) {
+        console.log(chalk.hex('#cc785c')('\n  ⏳ Press Ctrl+C again to exit (current task will keep running).'));
+        setTimeout(() => { ctrlC = 0; }, 3000);
       } else {
-        display.error(result.summary);
+        console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
+        process.exit(0);
       }
-
-      ask();
     });
-  };
 
-  // Ctrl+C: if a task is running, prompt to force-quit; second Ctrl+C exits.
-  let ctrlC = 0;
-  rl.on('SIGINT', () => {
-    ctrlC++;
-    if (ctrlC === 1) {
-      console.log(chalk.hex('#cc785c')('\n  ⏳ Press Ctrl+C again to exit (current task will keep running).'));
-      setTimeout(() => { ctrlC = 0; }, 3000);
-    } else {
+    ask();
+    rl.on('close', () => {
       console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
       process.exit(0);
-    }
-  });
-
-  ask();
-  rl.on('close', () => {
-    console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
-    process.exit(0);
-  });
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1733,8 +1747,9 @@ function printHelp() {
 ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: model-agnostic AI coding agent")}
 
   ${chalk.hex('#4e3d30')('Usage:')}
-    aura ${chalk.hex('#8a7768')('"<task>"')}                           Run a single task
-    aura ${chalk.hex('#8a7768')('--interactive')}                      Start interactive REPL
+    aura ${chalk.hex('#8a7768')('"<task>"')}                           Run a task, then drop into REPL
+    aura ${chalk.hex('#8a7768')('"<task>" --once')}                    Run a single task and exit
+    aura                                                               Start interactive REPL
     aura ${chalk.hex('#8a7768')('--models')}                           List available models
 
   ${chalk.hex('#4e3d30')('Options:')}
@@ -1746,6 +1761,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --cwd <path>             Working directory (default: current)
     --models                 List all known model IDs
     --no-session             Disable conversation history persistence
+    --once                   Run single task and exit (no REPL after)
     --new-session            Force a fresh session (ignore any prior history)
     --resume [id]            Resume latest session, or a specific session by ID
     --chat-id <id>           Attach to a specific chat ID (creates if missing)
