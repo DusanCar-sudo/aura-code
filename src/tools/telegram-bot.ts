@@ -221,18 +221,24 @@ function listDirTool(dirPath: string): string {
   }
 }
 
+/** Escape a string for use inside double quotes in a shell command.
+ *  Escapes: backslash, double-quote, dollar, backtick. */
+function escapeShellDouble(s: string): string {
+  return s.replace(/[\\"$]/g, '\\$&').replace(/`/g, '\\`');
+}
+
 function searchCodeTool(pattern: string, searchPath?: string): string {
   const resolved = searchPath
     ? (path.isAbsolute(searchPath) ? searchPath : path.join(DEFAULT_CWD, searchPath))
     : DEFAULT_CWD;
   try {
     const result = execSync(
-      `rg -n --no-heading -i "${pattern.replace(/"/g, '\\"')}" "${resolved}" 2>/dev/null | head -30`,
+      'rg -n --no-heading -i "' + escapeShellDouble(pattern) + '" "' + escapeShellDouble(resolved) + '" 2>/dev/null | head -30',
       { timeout: 10_000, encoding: 'utf8' }
     );
-    return result.trim() || `No matches for "${pattern}"`;
+    return result.trim() || 'No matches for "' + pattern + '"';
   } catch {
-    return `No matches for "${pattern}" (or rg not installed)`;
+    return 'No matches for "' + pattern + '" (or rg not installed)';
   }
 }
 

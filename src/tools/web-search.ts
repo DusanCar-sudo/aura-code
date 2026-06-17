@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../providers/types.js';
+import { stripHtml } from '../util/sanitize.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Web Search — DuckDuckGo HTML search (no API key required)
@@ -43,8 +44,8 @@ function extractResults(html: string): SearchResult[] {
     const uddg = url.match(/uddg=([^&]+)/);
     if (uddg) url = decodeURIComponent(uddg[1]);
 
-    const title = match[2].replace(/<[^>]+>/g, '').trim();
-    const snippet = match[3].replace(/<[^>]+>/g, '').trim();
+    const title = stripHtml(match[2]).trim();
+    const snippet = stripHtml(match[3]).trim();
 
     if (title && url) {
       results.push({ title, url, snippet });

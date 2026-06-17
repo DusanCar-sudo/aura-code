@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../providers/types.js';
+import { stripHtml, decodeEntities } from '../util/sanitize.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // YouTube Transcript — extract captions/subtitles from YouTube videos
@@ -76,14 +77,7 @@ function parseTimedText(xml: string): TranscriptSegment[] {
   while ((m = pRegex.exec(xml)) !== null) {
     const start = parseInt(m[1], 10) / 1000;
     const duration = parseInt(m[2], 10) / 1000;
-    const text = m[3]
-      .replace(/<[^>]+>/g, '')      // strip HTML tags
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&#x27;/g, "'")
+    const text = decodeEntities(stripHtml(m[3]))
       .replace(/\n/g, ' ')
       .trim();
 
@@ -96,14 +90,7 @@ function parseTimedText(xml: string): TranscriptSegment[] {
     while ((m = textRegex.exec(xml)) !== null) {
       const start = parseFloat(m[1]);
       const duration = parseFloat(m[2]);
-      const text = m[3]
-        .replace(/<[^>]+>/g, '')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&#x27;/g, "'")
+      const text = decodeEntities(stripHtml(m[3]))
         .replace(/\n/g, ' ')
         .trim();
 
