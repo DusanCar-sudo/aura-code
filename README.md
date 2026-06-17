@@ -18,6 +18,20 @@
   <a href="https://github.com/milodule3-debug/aura-code"><img src="https://img.shields.io/github/stars/milodule3-debug/aura-code?style=social" alt="GitHub Stars"></a>
 </p>
 
+<p align="center">
+  <a href="./docs/ARCHITECTURE.md">
+    <img src="./assets/architecture-diagram.png" alt="Architecture Diagram" width="800">
+  </a>
+  <br>
+  <em><a href="./docs/ARCHITECTURE.md">View full architecture documentation →</a></em>
+</p>
+
+<p align="center">
+  <img src="./assets/demo.gif" alt="Aura Code CLI Demo" width="800">
+  <br>
+  <em>CLI demo — help, models, and version overview</em>
+</p>
+
 ---
 
 ## What is Aura Code?
