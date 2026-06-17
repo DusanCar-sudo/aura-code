@@ -191,9 +191,31 @@ function boxBottom(width: number, color = '#4e3d30'): string {
 
 /** Render a colored side-padded line: │  content          │ */
 function boxLine(text: string, width: number, color = '#4e3d30'): string {
+  const maxInner = Math.max(width - 2, 2);
   // Strip ANSI to measure visible length
   const visible = text.replace(/\x1b\[[0-9;]*m/g, '');
-  const padding = Math.max(width - 2 - visible.length, 0);
+  if (visible.length > maxInner) {
+    // Truncate with ellipsis to prevent box overflow.
+    // Reserve 1 visible char for '…' so total = 1 + (truncLen + 1) + 1 = width.
+    const truncLen = Math.max(maxInner - 1, 1);
+    // Walk text char-by-char to preserve ANSI boundaries during truncation
+    let visCount = 0;
+    let idx = 0;
+    const chars = [...text];
+    while (idx < chars.length && visCount < truncLen) {
+      if (chars[idx] === '\x1b') {
+        // Skip the entire ANSI escape sequence
+        while (idx < chars.length && chars[idx] !== 'm') idx++;
+        idx++; // skip the 'm' terminator
+      } else {
+        visCount++;
+        idx++;
+      }
+    }
+    const truncated = text.slice(0, idx) + '…';
+    return chalk.hex(color)('│') + truncated + chalk.hex(color)('│');
+  }
+  const padding = maxInner - visible.length;
   return chalk.hex(color)('│') + text + ' '.repeat(padding) + chalk.hex(color)('│');
 }
 

@@ -211,6 +211,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'openrouter/deepseek/deepseek-r1',                    name: 'DeepSeek R1 (OR)',         provider: 'OpenRouter', speed: 'Reasoning · open' },
   { id: 'openrouter/deepseek/deepseek-v4-pro',                name: 'DeepSeek V4 Pro (OR)',     provider: 'OpenRouter', speed: 'Powerful · open' },
   { id: 'openrouter/google/gemma-2-27b-it',                   name: 'Gemma 2 27B (OR)',         provider: 'OpenRouter', speed: 'Open · fast' },
+  { id: 'openrouter/nex-agi/nex-n2-pro:free',                  name: 'Nex N2 Pro (OR)',          provider: 'OpenRouter', speed: 'Free · open' },
 
   // ── Ollama (local) ──────────────────────────────────────────────────────
   { id: 'ollama/llama3.2',           name: 'Llama 3.2 (local)',     provider: 'Ollama', speed: 'Local · small' },
