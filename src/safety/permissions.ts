@@ -1,4 +1,3 @@
-import * as readline from 'readline';
 import { DANGEROUS_PATTERNS, SAFE_SHELL_COMMANDS } from '../config/defaults.js';
 
 export type PermissionLevel = 'read-only' | 'normal' | 'auto';
@@ -75,11 +74,17 @@ export class PermissionSystem {
 
 /** Ask user to confirm in the terminal. Returns true if approved. */
 export async function confirm(message: string): Promise<boolean> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  process.stdout.write(`\n⚠️  ${message} [y/N] `);
   return new Promise(resolve => {
-    rl.question(`\n⚠️  ${message} [y/N] `, answer => {
-      rl.close();
-      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-    });
+    let buf = '';
+    const onData = (data: Buffer) => {
+      buf += data.toString();
+      if (buf.includes('\n') || buf.includes('\r')) {
+        process.stdin.removeListener('data', onData);
+        const answer = buf.trim().toLowerCase();
+        resolve(answer === 'y' || answer === 'yes');
+      }
+    };
+    process.stdin.on('data', onData);
   });
 }
