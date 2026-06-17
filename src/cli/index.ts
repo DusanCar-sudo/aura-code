@@ -376,8 +376,10 @@ if (cliProfile === 'local') {
 }
 
 function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMProvider {
-  // Caller guarantees resolved.model is set (guarded in main()).
-  const model = resolved.model!;
+  // Use runtimeConfig.model (mutable via :model command) falling back to resolved.model.
+  const model = runtimeConfig.model ?? resolved.model!;
+  // Keep resolved in sync so external reads (e.g. header display) reflect the switch.
+  (resolved as { model?: string }).model = model;
   return createResilientProvider(
     {
       model,

@@ -83,11 +83,11 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
 
   let cmd: string;
   const flagsRg: string[] = ['-n', '--no-heading', `--max-count=1`];
-  const flagsGrep: string[] = ['-rn', '--include'];
+  const flagsGrep: string[] = ['-rn'];
 
   if (!input.case_sensitive) hasRg ? flagsRg.push('-i') : flagsGrep.push('-i');
   if (input.literal) hasRg ? flagsRg.push('-F') : flagsGrep.push('-F');
-  if (input.file_glob) hasRg ? flagsRg.push(`--glob=${input.file_glob}`) : flagsGrep.push(`"${input.file_glob}"`);
+  if (input.file_glob) hasRg ? flagsRg.push(`--glob=${input.file_glob}`) : flagsGrep.push('--include', `"${input.file_glob}"`);
 
   try {
     if (hasRg) {
