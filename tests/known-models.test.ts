@@ -45,6 +45,12 @@ describe('KNOWN_MODELS', () => {
     expect(or.length).toBeGreaterThanOrEqual(10);
   });
 
+  it('includes DeepSeek V4 models', () => {
+    const ids = new Set(KNOWN_MODELS.map(m => m.id));
+    expect(ids.has('openrouter/deepseek/deepseek-v4-pro')).toBe(true);
+    expect(ids.has('openrouter/deepseek/deepseek-v4-flash:free')).toBe(true);
+  });
+
   it('has multiple Ollama models for local use', () => {
     const ollama = KNOWN_MODELS.filter(m => m.id.startsWith('ollama/'));
     expect(ollama.length).toBeGreaterThanOrEqual(8);

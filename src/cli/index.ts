@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
+import type { ProjectContext } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -457,7 +458,7 @@ async function main() {
     }
   }
 
-  let ctx;
+  let ctx: ProjectContext;
   try {
     ctx = await loadProjectContext(cwd);
   } catch (e) {
@@ -1811,8 +1812,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
           "apiKeyEnv": "DEEPSEEK_API_KEY",
           "prefixes": ["deepseek/"],
           "models": [
-            { "id": "deepseek/deepseek-chat", "name": "DeepSeek Chat", "speed": "Fast" },
-            { "id": "deepseek/deepseek-reasoner", "name": "DeepSeek R1", "speed": "Reasoning" }
+            { "id": "deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash", "speed": "Fast · 1M context" },
+            { "id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro", "speed": "Powerful · 1M context" }
           ]
         }
       ],

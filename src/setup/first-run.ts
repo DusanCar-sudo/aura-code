@@ -77,7 +77,7 @@ export const PROVIDER_CHOICES: ProviderChoice[] = [
     id: 'openrouter', name: 'OpenRouter',
     apiKeyEnv: 'OPENROUTER_API_KEY', needsKey: true,
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
-    description: 'Access 100+ models via one API (Claude, GPT, Llama, Mistral…)',
+    description: 'OpenRouter — Claude, GPT, Gemini, DeepSeek V4, Llama, Mistral…',
     models: [
       'openrouter/anthropic/claude-3.5-sonnet',
       'openrouter/openai/gpt-4o',
@@ -86,7 +86,8 @@ export const PROVIDER_CHOICES: ProviderChoice[] = [
       'openrouter/meta-llama/llama-3.1-405b-instruct',
       'openrouter/mistralai/mistral-large',
       'openrouter/qwen/qwen-2.5-72b-instruct',
-      'openrouter/deepseek/deepseek-chat',
+      'openrouter/deepseek/deepseek-v4-flash:free',
+      'openrouter/deepseek/deepseek-v4-pro',
     ],
   },
   {

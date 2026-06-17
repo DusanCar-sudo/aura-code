@@ -2,6 +2,11 @@
 
 All notable changes to Aura Code are documented here.
 
+## Unreleased
+
+### Added
+- DeepSeek V4 Pro and V4 Flash model shortcuts via OpenRouter (`openrouter/deepseek/deepseek-v4-pro`, `openrouter/deepseek/deepseek-v4-flash:free`)
+
 ## [0.3.0] — 2026-06-15
 
 ### Rebrand

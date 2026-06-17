@@ -100,6 +100,7 @@ aura --analyze                                           # analyze
 | **GPT** (OpenAI) | gpt-4o, gpt-4o-mini |
 | **Gemini** (Google) | gemini-2.5-pro, gemini-2.5-flash |
 | **MiMo** (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 |
+| **DeepSeek** (OpenRouter) | deepseek-v4-pro, deepseek-v4-flash:free |
 | **Ollama** (Local) | Any local model — no API key needed |
 
 Any OpenAI-compatible endpoint also works via `openrouter/<model>`.

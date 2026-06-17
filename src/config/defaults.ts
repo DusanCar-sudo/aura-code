@@ -66,7 +66,7 @@ export const SAFE_SHELL_COMMANDS = [
 export const FALLBACK_CHAIN: readonly string[] = [
   'mimo-v2.5-pro',
   'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
-  'openrouter/deepseek/deepseek-chat',
+  'openrouter/deepseek/deepseek-v4-flash:free',
   'openrouter/minimax/minimax-m2.5',
 ];
 

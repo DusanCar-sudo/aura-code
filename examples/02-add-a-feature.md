@@ -64,9 +64,9 @@ Supported models:
     openrouter/mistralai/mixtral-8x7b-instruct    Open · fast
     openrouter/qwen/qwen-2.5-72b-instruct         Open · strong
     openrouter/qwen/qwen-2.5-coder-32b-instruct   Open · code
-    openrouter/deepseek/deepseek-chat             Open · strong
+    openrouter/deepseek/deepseek-v4-flash:free       Fast · 1M context · free
     openrouter/deepseek/deepseek-r1               Reasoning · open
-    openrouter/deepseek/deepseek-v4-pro           Powerful · open
+    openrouter/deepseek/deepseek-v4-pro           Powerful · 1M context
     openrouter/google/gemma-2-27b-it              Open · fast
     openrouter/nex-agi/nex-n2-pro:free            Free · open
   Ollama
