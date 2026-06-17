@@ -87,12 +87,12 @@ describe('viz dashboard corruption fix', () => {
     const html = fs.readFileSync(outPath, 'utf8');
 
     // Exactly 2 <script> open tags: d3 external + inline DATA
-    const scriptOpenTags = html.match(/<script[\s>]/g) || [];
-    expect(scriptOpenTags.length).toBe(2);
+    const scriptOpenCount = html.split('<script ').length - 1 + html.split('<script>').length - 1;
+    expect(scriptOpenCount).toBe(2);
 
     // Exactly 2 </script> close tags — no extra ones from injected content
-    const scriptCloseTags = html.match(/<\/script>/g) || [];
-    expect(scriptCloseTags.length).toBe(2);
+    const scriptCloseCount = html.split('</script>').length - 1;
+    expect(scriptCloseCount).toBe(2);
 
     // Session history content must NOT appear (history was stripped)
     expect(html).not.toContain('alert("xss")');
@@ -154,10 +154,10 @@ describe('viz dashboard corruption fix', () => {
     expect(html).toContain('</html>');
 
     // Exactly 2 script tags (d3 + inline)
-    const scriptOpenTags = html.match(/<script[\s>]/g) || [];
-    expect(scriptOpenTags.length).toBe(2);
-    const scriptCloseTags = html.match(/<\/script>/g) || [];
-    expect(scriptCloseTags.length).toBe(2);
+    const scriptOpenCount = html.split('<script ').length - 1 + html.split('<script>').length - 1;
+    expect(scriptOpenCount).toBe(2);
+    const scriptCloseCount = html.split('</script>').length - 1;
+    expect(scriptCloseCount).toBe(2);
   });
 
   it('plan steps retain dependsOn for DAG rendering after stripping', () => {
@@ -205,8 +205,8 @@ describe('viz dashboard corruption fix', () => {
     const html = fs.readFileSync(outPath, 'utf8');
 
     // Exactly 2 </script> close tags (one per script block)
-    const scriptCloseTags = html.match(/<\/script>/g) || [];
-    expect(scriptCloseTags.length).toBe(2);
+    const scriptCloseCount = html.split('</script>').length - 1;
+    expect(scriptCloseCount).toBe(2);
 
     // The escaped version should appear inside the DATA
     expect(html).toContain('<\\/script>');
