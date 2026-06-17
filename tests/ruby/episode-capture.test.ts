@@ -8,6 +8,7 @@ import {
   loadEpisodes,
   deleteEpisode,
   getEpisodeStats,
+  estimateTokens,
 } from '../../src/ruby/episode-capture.js';
 import type { Episode } from '../../src/ruby/types.js';
 
@@ -417,6 +418,172 @@ describe('deleteEpisode', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // projectHash determinism
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// estimateTokens
+// ─────────────────────────────────────────────────────────────────────────────
+describe('estimateTokens', () => {
+  it('returns 0 for undefined', () => {
+    expect(estimateTokens(undefined)).toBe(0);
+  });
+
+  it('returns 0 for empty string', () => {
+    expect(estimateTokens('')).toBe(0);
+  });
+
+  it('estimates roughly 1 token per 4 characters', () => {
+    // 100 chars → ceil(100/4) = 25
+    expect(estimateTokens('a'.repeat(100))).toBe(25);
+  });
+
+  it('rounds up', () => {
+    // 5 chars → ceil(5/4) = 2
+    expect(estimateTokens('hello')).toBe(2);
+  });
+
+  it('handles typical model output', () => {
+    const output = 'I have updated the file src/auth.ts to fix the authentication bug.';
+    const est = estimateTokens(output);
+    expect(est).toBeGreaterThan(5);
+    expect(est).toBeLessThan(30);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// saveEpisode — token estimation fallback
+// ─────────────────────────────────────────────────────────────────────────────
+describe('saveEpisode — token estimation fallback', () => {
+  let tmpDir: string;
+  let projectRoot: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-ruby-est-'));
+    vi.stubEnv('HOME', tmpDir);
+    projectRoot = path.join(tmpDir, 'fake-project');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('fills estimated ruby tokens when rubyAttempted and tokensUsed.ruby is 0', async () => {
+    const episode: Episode = {
+      id: 'est-ruby-0',
+      timestamp: Date.now(),
+      task: 'Fix bug',
+      projectRoot,
+      rubyAttempted: true,
+      rubySucceeded: false,
+      rubyOutput: 'I tried to fix the bug but failed. The error is in line 42 of main.ts.',
+      reviewerApproved: false,
+      tokensUsed: { ruby: 0 },
+      durationMs: 1000,
+      taskCategory: 'other',
+    };
+
+    await saveEpisode(projectRoot, episode);
+    const loaded = await loadEpisodes(projectRoot);
+
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].tokensUsed.ruby).toBeGreaterThan(0);
+    expect(loaded[0].tokensUsed.ruby).toBe(estimateTokens(episode.rubyOutput));
+  });
+
+  it('fills estimated largeModel tokens when largeModelUsed and tokensUsed.largeModel is 0', async () => {
+    const output = 'Here is the fixed code. I updated the auth handler to validate tokens correctly.';
+    const episode: Episode = {
+      id: 'est-large-0',
+      timestamp: Date.now(),
+      task: 'Fix auth',
+      projectRoot,
+      rubyAttempted: false,
+      rubySucceeded: false,
+      largeModelUsed: 'mimo-v2.5-pro',
+      largeModelOutput: output,
+      reviewerApproved: true,
+      tokensUsed: { largeModel: 0 },
+      durationMs: 2000,
+      taskCategory: 'other',
+    };
+
+    await saveEpisode(projectRoot, episode);
+    const loaded = await loadEpisodes(projectRoot);
+
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].tokensUsed.largeModel).toBeGreaterThan(0);
+    expect(loaded[0].tokensUsed.largeModel).toBe(estimateTokens(output));
+  });
+
+  it('does NOT overwrite tokens when the provider already reported them', async () => {
+    const episode: Episode = {
+      id: 'est-keep',
+      timestamp: Date.now(),
+      task: 'Fix bug',
+      projectRoot,
+      rubyAttempted: true,
+      rubySucceeded: true,
+      rubyOutput: 'Fixed the bug in auth.ts',
+      reviewerApproved: true,
+      tokensUsed: { ruby: 500 },
+      durationMs: 1000,
+      taskCategory: 'other',
+    };
+
+    await saveEpisode(projectRoot, episode);
+    const loaded = await loadEpisodes(projectRoot);
+
+    expect(loaded[0].tokensUsed.ruby).toBe(500); // original, not estimated
+  });
+
+  it('estimates both ruby and largeModel when both are 0', async () => {
+    const rubyOutput = 'Ruby tried but produced incomplete output.';
+    const largeOutput = 'The large model fixed the remaining issues in the auth module.';
+    const episode: Episode = {
+      id: 'est-both',
+      timestamp: Date.now(),
+      task: 'Fix auth',
+      projectRoot,
+      rubyAttempted: true,
+      rubySucceeded: false,
+      rubyOutput,
+      largeModelUsed: 'mimo-v2.5-pro',
+      largeModelOutput: largeOutput,
+      reviewerApproved: true,
+      tokensUsed: { ruby: 0, largeModel: 0 },
+      durationMs: 3000,
+      taskCategory: 'other',
+    };
+
+    await saveEpisode(projectRoot, episode);
+    const loaded = await loadEpisodes(projectRoot);
+
+    expect(loaded[0].tokensUsed.ruby).toBe(estimateTokens(rubyOutput));
+    expect(loaded[0].tokensUsed.largeModel).toBe(estimateTokens(largeOutput));
+  });
+
+  it('does not estimate when rubyOutput is undefined and ruby tokens are 0', async () => {
+    const episode: Episode = {
+      id: 'est-no-output',
+      timestamp: Date.now(),
+      task: 'Fix bug',
+      projectRoot,
+      rubyAttempted: true,
+      rubySucceeded: false,
+      // no rubyOutput
+      reviewerApproved: false,
+      tokensUsed: { ruby: 0 },
+      durationMs: 1000,
+      taskCategory: 'other',
+    };
+
+    await saveEpisode(projectRoot, episode);
+    const loaded = await loadEpisodes(projectRoot);
+
+    // Should remain 0 since there's no output text to estimate from
+    expect(loaded[0].tokensUsed.ruby).toBe(0);
+  });
+});
+
 describe('episodeStore — projectHash', () => {
   it('produces the same hash for the same projectRoot', () => {
     const h1 = episodeStore.projectHash('/home/user/my-project');

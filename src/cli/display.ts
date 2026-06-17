@@ -219,6 +219,45 @@ function boxLine(text: string, width: number, color = '#4e3d30'): string {
   return chalk.hex(color)('│') + text + ' '.repeat(padding) + chalk.hex(color)('│');
 }
 
+// ── Context bar helpers ──────────────────────────────────────────────────────
+
+/** Format a token count compactly: 1234 → "1.2K", 25400 → "25.4K", 1000000 → "1M". */
+export function formatCompact(n: number): string {
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000;
+    return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + 'M';
+  }
+  if (n >= 1_000) {
+    const v = n / 1_000;
+    return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + 'K';
+  }
+  return String(n);
+}
+
+/** Build the context-bar line, e.g. `  25.4K/1M │ [████░░░░░░] 23%`. */
+export function formatContextBar(
+  used: number,
+  limit: number,
+  estimated: boolean,
+): string {
+  const pct = Math.round((used / limit) * 100);
+  const filled = Math.round(pct / 10);
+  const empty = 10 - filled;
+  const bar = chalk.hex('#cc785c')('█'.repeat(filled)) + chalk.hex('#4e3d30')('░'.repeat(empty));
+
+  const left = estimated
+    ? chalk.hex('#d4903a')(`~${formatCompact(used)}`)
+    : chalk.hex('#5a9e6e')(formatCompact(used));
+  const right = chalk.hex('#8a7768')(formatCompact(limit));
+  const pctStr = estimated
+    ? chalk.hex('#d4903a')(`${pct}%`)
+    : chalk.hex('#8a7768')(`${pct}%`);
+
+  const estTag = estimated ? chalk.hex('#4e3d30')(' (estimated)') : '';
+
+  return `  ${left}/${right} │ [${bar}] ${pctStr}${estTag}`;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toolIcon(name: string): string {

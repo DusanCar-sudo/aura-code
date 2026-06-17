@@ -257,6 +257,69 @@ export function getAllModels(): { id: string; name: string; provider: string; sp
   return all;
 }
 
+// ── Context window limits per model ─────────────────────────────────────────
+// Published/official context window sizes (in tokens).
+// Only real numbers — verified from provider documentation.
+export const CONTEXT_WINDOWS: Record<string, number> = {
+  // Anthropic Claude (all 200K)
+  'claude-opus-4-5-20251001':   200_000,
+  'claude-sonnet-4-5-20251001': 200_000,
+  'claude-haiku-4-5-20251001':  200_000,
+  'claude-3-5-sonnet-20241022': 200_000,
+  'claude-3-5-haiku-20241022':  200_000,
+  'claude-3-opus-20240229':     200_000,
+  // OpenAI
+  'gpt-4o':                     128_000,
+  'gpt-4o-mini':                128_000,
+  'gpt-4-turbo':                128_000,
+  'gpt-3.5-turbo':               16_384,
+  'o1':                         200_000,
+  'o1-mini':                    128_000,
+  'o1-preview':                 128_000,
+  'o3':                         200_000,
+  'o3-mini':                    200_000,
+  'o4-mini':                    200_000,
+  // Google Gemini
+  'gemini-2.5-pro':           1_048_576,
+  'gemini-2.5-flash':         1_048_576,
+  'gemini-2.0-pro':           2_097_152,
+  'gemini-2.0-flash':         1_048_576,
+  'gemini-1.5-pro':           2_097_152,
+  'gemini-1.5-flash':         1_048_576,
+  'gemini-1.5-flash-8b':      1_048_576,
+  // Xiaomi MiMo
+  'mimo-v2.5-pro':            1_048_576,
+  'mimo-v2.5':                1_048_576,
+  'mimo-v2-flash':            1_048_576,
+  'mimo-v1':                    131_072,
+  // xAI Grok
+  'grok-2':                     131_072,
+  'grok-2-mini':                131_072,
+  'grok-beta':                  131_072,
+  'grok-vision-beta':           131_072,
+};
+
+/**
+ * Look up the context window for a model id.
+ * Returns undefined for unknown models (caller should suppress the bar).
+ */
+export function getContextWindow(modelId: string): number | undefined {
+  // Direct match
+  if (CONTEXT_WINDOWS[modelId] !== undefined) return CONTEXT_WINDOWS[modelId];
+  // Strip OpenRouter prefix: "openrouter/anthropic/claude-3.5-sonnet" → "claude-3.5-sonnet"
+  const orPrefix = modelId.match(/^openrouter\/[^/]+\/(.+)$/);
+  if (orPrefix) {
+    const base = orPrefix[1];
+    if (CONTEXT_WINDOWS[base] !== undefined) return CONTEXT_WINDOWS[base];
+  }
+  // Strip Ollama prefix: "ollama/llama3.2" → check without prefix
+  const ollamaPrefix = modelId.replace(/^ollama\//, '');
+  if (ollamaPrefix !== modelId && CONTEXT_WINDOWS[ollamaPrefix] !== undefined) {
+    return CONTEXT_WINDOWS[ollamaPrefix];
+  }
+  return undefined;
+}
+
 /**
  * Check if Ollama is reachable at the given base URL.
  * Returns true if the server responds, false otherwise.
