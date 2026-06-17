@@ -30,6 +30,7 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderDiamond } from './diamond.js';
+import { saveEpisode } from '../ruby/episode-capture.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
@@ -799,6 +800,7 @@ async function main() {
 
     const doVerify = cliVerify || !!fileConfig.verify;
 
+    const episodeStart = Date.now();
     let result;
     if (doVerify) {
       const { runWithVerification } = await import('../verify/index.js');
@@ -831,6 +833,27 @@ async function main() {
         },
         sessionPath,
       });
+    }
+
+    // Persist episode for Ruby Principle training data
+    try {
+      const { randomBytes } = await import('crypto');
+      await saveEpisode(ctx.root, {
+        id: randomBytes(4).toString('hex') + '-' + Date.now().toString(36),
+        timestamp: Date.now(),
+        task,
+        projectRoot: ctx.root,
+        rubyAttempted: false,
+        rubySucceeded: false,
+        largeModelUsed: runtimeConfig.model,
+        largeModelOutput: result.summary,
+        reviewerApproved: result.success,
+        tokensUsed: { largeModel: result.usage.totalTokens },
+        durationMs: Date.now() - episodeStart,
+        taskCategory: 'other',
+      });
+    } catch {
+      // Episode recording is best-effort; never block the user
     }
 
     // Update history so REPL continues the conversation
