@@ -133,7 +133,7 @@ graph TB
 
 ## Key design decisions
 
-- **Single stdin reader**: Only one readline interface is active at any time. The `confirm()` function reads from `process.stdin` directly rather than creating a second readline, preventing keystroke doubling.
+- **Single stdin reader**: Only one readline interface is active at any time. The `confirm()` function saves and removes any existing stdin `data` listeners (e.g. from the REPL readline), creates a temporary readline to read one answer, then restores the original listeners — preventing keystroke doubling.
 - **Provider-agnostic**: All providers implement the same `LLMProvider` interface. New backends require only a new provider module.
 - **Session persistence**: Chat history is saved per-project in `~/.aura/sessions/` and can be resumed with `--resume`.
 - **Orchestration**: Complex tasks are decomposed into sub-tasks executed by specialist agents, with competence scoring to route sub-tasks to the best-suited model.

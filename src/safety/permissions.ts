@@ -1,3 +1,4 @@
+import readline from 'readline';
 import { DANGEROUS_PATTERNS, SAFE_SHELL_COMMANDS } from '../config/defaults.js';
 
 export type PermissionLevel = 'read-only' | 'normal' | 'auto';
@@ -75,16 +76,21 @@ export class PermissionSystem {
 /** Ask user to confirm in the terminal. Returns true if approved. */
 export async function confirm(message: string): Promise<boolean> {
   process.stdout.write(`\n⚠️  ${message} [y/N] `);
+  // Temporarily remove existing stdin data listeners (e.g. from REPL readline)
+  // to ensure only ONE reader is active at a time — prevents input doubling.
+  const existingListeners = process.stdin.rawListeners('data') as Array<(...args: any[]) => void>;
+  for (const listener of existingListeners) {
+    process.stdin.removeListener('data', listener);
+  }
   return new Promise(resolve => {
-    let buf = '';
-    const onData = (data: Buffer) => {
-      buf += data.toString();
-      if (buf.includes('\n') || buf.includes('\r')) {
-        process.stdin.removeListener('data', onData);
-        const answer = buf.trim().toLowerCase();
-        resolve(answer === 'y' || answer === 'yes');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('', (answer) => {
+      rl.close();
+      // Restore original listeners so REPL readline continues working
+      for (const listener of existingListeners) {
+        process.stdin.on('data', listener);
       }
-    };
-    process.stdin.on('data', onData);
+      resolve(answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes');
+    });
   });
 }
