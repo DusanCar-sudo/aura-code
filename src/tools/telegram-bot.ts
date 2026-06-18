@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { execSync } from 'child_process';
+import { exec, execSync } from 'child_process';
 
 import { createProvider } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
@@ -126,16 +126,21 @@ function createSilentDisplay(): Display {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function executeTask(chatId: number, task: string): Promise<string> {
+    console.log("DEBUG-EXEC: executeTask entered");
   let provider: LLMProvider;
   try {
+        console.log("DEBUG-EXEC: creating provider...");
     provider = createLLMProvider();
+        console.log("DEBUG-EXEC: provider created");
   } catch (e: any) {
     return `❌ Failed to create LLM provider: ${e.message}`;
   }
 
   let context;
   try {
+        console.log("DEBUG-EXEC: loading context...");
     context = await loadProjectContext(PROJECT_ROOT);
+        console.log("DEBUG-EXEC: context loaded");
   } catch (e: any) {
     return `❌ Failed to load project context: ${e.message}`;
   }
@@ -159,6 +164,8 @@ async function executeTask(chatId: number, task: string): Promise<string> {
         .replace(/\?$/, '')
         .trim();
 
+      console.log(`Confirm requested: ${desc}`);
+
       const { promise, message: approvalMsg } = await new Promise<{ promise: Promise<boolean>; message: string }>((resolve) => {
         // We need to figure out which tool this is for from the message
         let toolName = 'unknown';
@@ -177,7 +184,7 @@ async function executeTask(chatId: number, task: string): Promise<string> {
 
       // Send the approval request to the user
       try {
-        sendMessage(chatId, approvalMsg);
+        await sendMessage(chatId, approvalMsg);
       } catch {
         // If we can't send, deny for safety
         return false;
@@ -188,6 +195,7 @@ async function executeTask(chatId: number, task: string): Promise<string> {
   }
 
   try {
+    console.log("Starting agent loop...");
     const result = await runAgentLoop({
       provider,
       task,
@@ -198,6 +206,7 @@ async function executeTask(chatId: number, task: string): Promise<string> {
       disableSpawn: true, // no sub-agents via Telegram for now
       confirmFn,
     });
+    console.log("Agent loop completed");
 
     // Build a readable response
     const lines: string[] = [];
@@ -222,6 +231,7 @@ async function executeTask(chatId: number, task: string): Promise<string> {
 
     return lines.join('\n');
   } catch (e: any) {
+    console.error("Agent loop error:", e);
     return `❌ Task error: ${e.message}`;
   }
 }
@@ -242,34 +252,67 @@ function saveOffset(offset: number): void {
   fs.writeFileSync(OFFSET_FILE, String(offset), 'utf8');
 }
 
-function curlPost(method: string, body?: Record<string, unknown>): any {
+async function curlPost(method: string, body?: Record<string, unknown>): Promise<any> {
   const data = body ? JSON.stringify(body) : '';
   const url = `https://api.telegram.org/bot${TOKEN}/${method}`;
   const escaped = data.replace(/'/g, "'\\''");
-  const result = execSync(
-    `curl -s -X POST -H "Content-Type: application/json" -d '${escaped}' "${url}"`,
-    { timeout: 30_000, encoding: 'utf8' }
-  );
-  const parsed = JSON.parse(result);
-  if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
-  return parsed.result;
+  return new Promise((resolve, reject) => {
+    exec(
+      `curl -s -X POST -H "Content-Type: application/json" -d '${escaped}' "${url}"`,
+      { timeout: 30_000, encoding: 'utf8' },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(stdout);
+          if (!parsed.ok) {
+            reject(new Error(`Telegram: ${parsed.description} (${parsed.error_code})`));
+            return;
+          }
+          resolve(parsed.result);
+        } catch (e) {
+          reject(e);
+        }
+      }
+    );
+  });
 }
 
-function curlGet(method: string, params?: Record<string, string>): any {
+async function curlGet(method: string, params?: Record<string, string>): Promise<any> {
   const qs = params ? '?' + new URLSearchParams(params).toString() : '';
   const url = `https://api.telegram.org/bot${TOKEN}/${method}${qs}`;
-  const result = execSync(`curl -s "${url}"`, { timeout: 30_000, encoding: 'utf8' });
-  const parsed = JSON.parse(result);
-  if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
-  return parsed.result;
+  return new Promise((resolve, reject) => {
+    exec(
+      `curl -s "${url}"`,
+      { timeout: 30_000, encoding: 'utf8' },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(stdout);
+          if (!parsed.ok) {
+            reject(new Error(`Telegram: ${parsed.description} (${parsed.error_code})`));
+            return;
+          }
+          resolve(parsed.result);
+        } catch (e) {
+          reject(e);
+        }
+      }
+    );
+  });
 }
 
-function sendMessage(chatId: string | number, text: string, parseMode?: string): void {
+async function sendMessage(chatId: string | number, text: string, parseMode?: string): Promise<void> {
   const chunks = splitMessage(text, 4000);
   for (const chunk of chunks) {
     const body: Record<string, unknown> = { chat_id: chatId, text: chunk };
     if (parseMode) body.parse_mode = parseMode;
-    curlPost('sendMessage', body);
+    await curlPost('sendMessage', body);
   }
 }
 
@@ -380,6 +423,7 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
       `/search <pattern> — Search code`,
       `/run <cmd> — Run shell command`,
       `/git — Git status`,
+      `/cancel — Cancel stuck task`,
       `/clear — Clear context`,
       ``,
       `Or just write anything — I'll execute it as an Aura task!`,
@@ -434,6 +478,7 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
       `🧠 /clear — clear context`,
       `🔒 /safety_on — enable safety`,
       `🔓 /safety_off CONFIRM — disable safety`,
+      `🚫 /cancel — cancel stuck task`,
     ].join('\n');
   }
 
@@ -503,6 +548,14 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
     return `🧹 Context cleared. Starting fresh. ${tag}`;
   }
 
+  if (lower === '/cancel') {
+    if (runningTasks.has(chatId)) {
+      runningTasks.delete(chatId);
+      return `🚫 Task cancelled. You can send a new task now. ${tag}`;
+    }
+    return `ℹ️ No task is running for this chat. ${tag}`;
+  }
+
   // Looks like a shell command — run directly
   const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
   if (looksLikeCommand) {
@@ -544,7 +597,7 @@ function isAuthorized(chatId: number, fromUser: any): boolean {
  */
 const runningTasks = new Set<number>();
 
-function poll(): void {
+async function poll(): Promise<void> {
   let offset = loadOffset();
 
   console.log('💎 Aura Telegram Bot started');
@@ -560,7 +613,7 @@ function poll(): void {
   // Clear old updates on first run
   if (offset === 0) {
     try {
-      const updates = curlGet('getUpdates', { offset: '0', limit: '100' });
+      const updates = await curlGet('getUpdates', { offset: '0', limit: '100' });
       if (updates.length > 0) {
         offset = updates[updates.length - 1].update_id + 1;
         saveOffset(offset);
@@ -575,7 +628,7 @@ function poll(): void {
 
   while (true) {
     try {
-      const updates = curlGet('getUpdates', {
+      const updates = await curlGet('getUpdates', {
         offset: String(offset),
         limit: '100',
         timeout: '3',
@@ -603,7 +656,7 @@ function poll(): void {
 
         // ── Handle voice messages (Phase 2 placeholder) ──────────────────
         if (msg.voice) {
-          sendMessage(chatId, '🎤 Voice messages are not yet supported. Please send text.');
+          await sendMessage(chatId, '🎤 Voice messages are not yet supported. Please send text.');
           continue;
         }
 
@@ -624,7 +677,7 @@ function poll(): void {
         const commandResult = handleCommand(chatId, text, from);
         if (commandResult !== null) {
           try {
-            sendMessage(chatId, commandResult);
+            await sendMessage(chatId, commandResult);
             console.log(`📤 Replied to ${from}`);
           } catch (e: any) {
             console.error(`❌ Reply error: ${e.message}`);
@@ -634,7 +687,7 @@ function poll(): void {
 
         // ── Non-command text → execute as Aura task ─────────────────────
         if (runningTasks.has(chatId)) {
-          sendMessage(chatId, `⏳ A task is already running for this chat. Please wait.`);
+          await sendMessage(chatId, `⏳ A task is already running for this chat. Please wait.`);
           continue;
         }
 
@@ -642,18 +695,18 @@ function poll(): void {
         const tag = safetyLabel(safetyState.safetyOn);
 
         // Send a "thinking" indicator
-        sendMessage(chatId, `⏳ Processing task... ${tag}`);
+        await sendMessage(chatId, `⏳ Processing task... ${tag}`);
 
         // Execute asynchronously — don't block the poll loop
         executeTask(chatId, text)
-          .then(response => {
-            sendMessage(chatId, response);
+          .then(async response => {
+            await sendMessage(chatId, response);
             console.log(`📤 Task result sent to ${from}`);
           })
-          .catch((e: any) => {
+          .catch(async (e: any) => {
             console.error(`❌ Task error: ${e.message}`);
             try {
-              sendMessage(chatId, `❌ Error: ${e.message}`);
+              await sendMessage(chatId, `❌ Error: ${e.message}`);
             } catch { /* give up */ }
           })
           .finally(() => {
@@ -665,10 +718,10 @@ function poll(): void {
       console.error(`⚠️ Poll error (${consecutiveErrors}): ${e.message}`);
       if (consecutiveErrors > 10) {
         console.error('💀 Too many errors, waiting 30s...');
-        execSync('sleep 30');
+        await new Promise(resolve => setTimeout(resolve, 30000));
         consecutiveErrors = 0;
       } else {
-        execSync('sleep 3');
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
   }
@@ -688,4 +741,7 @@ if (AUTHORIZED_USER_IDS.size === 0) {
   process.exit(1);
 }
 
-poll();
+poll().catch(err => {
+  console.error('💀 Fatal polling crash:', err);
+  process.exit(1);
+});
