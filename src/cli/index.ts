@@ -1786,7 +1786,11 @@ function printUsageFooter(
         estimated = false;
       } else {
         // Provider didn't report usage — estimate from history character count
-        const histChars = (opts.history ?? []).reduce((n, m) => n + (m.content?.length ?? 0), 0);
+        const histChars = (opts.history ?? []).reduce((n, m) => {
+          if ('content' in m && typeof m.content === 'string') return n + m.content.length;
+          if ('results' in m) return n + JSON.stringify(m.results).length;
+          return n;
+        }, 0);
         used = Math.ceil(histChars / 4);
         estimated = true;
       }
