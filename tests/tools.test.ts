@@ -106,21 +106,34 @@ describe('runShell', () => {
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
-  it('runs echo', () => {
-    const out = runShell({ command: 'echo hello' }, tmpDir);
+  it('runs echo', async () => {
+    const out = await runShell({ command: 'echo hello' }, tmpDir);
     expect(out).toBe('hello');
   });
 
-  it('respects cwd override', () => {
+  it('respects cwd override', async () => {
     fs.writeFileSync(path.join(tmpDir, 'marker.txt'), 'present');
-    const out = runShell({ command: 'ls marker.txt' }, tmpDir);
+    const out = await runShell({ command: 'ls marker.txt' }, tmpDir);
     expect(out).toContain('marker.txt');
   });
 
-  it('times out gracefully', () => {
-    const out = runShell({ command: 'sleep 5', timeout: 100 }, tmpDir);
+  it('times out gracefully', async () => {
+    const out = await runShell({ command: 'sleep 5', timeout: 100 }, tmpDir);
     expect(out).toMatch(/timed out/i);
   });
+
+  it('kills SIGTERM-immune process with SIGKILL escalation', async () => {
+    // A shell that traps SIGTERM and ignores it — only SIGKILL can stop it.
+    // This simulates a D-state-like unresponsive process without hitting real FUSE mounts.
+    const out = await runShell({ command: 'trap "" TERM; sleep 100', timeout: 300 }, tmpDir);
+    expect(out).toMatch(/timed out/i);
+  }, 10_000);
+
+  it('kills entire process group including grandchildren', async () => {
+    // Shell spawns background children — SIGKILL to the group must clean them up.
+    const out = await runShell({ command: 'sleep 100 & sleep 100 & wait', timeout: 300 }, tmpDir);
+    expect(out).toMatch(/timed out/i);
+  }, 10_000);
 });
 
 describe('searchCode', () => {

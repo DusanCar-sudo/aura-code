@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync, execFileSync } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 import { IGNORE_PATTERNS } from '../config/defaults.js';
 
 export interface ListDirInput { path: string; recursive: boolean; depth: number }
@@ -147,27 +147,81 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
 
 export interface RunShellInput { command: string; cwd?: string; timeout?: number }
 
-export function runShell(input: RunShellInput, projectCwd: string): string {
+/**
+ * Run a shell command with SIGKILL escalation on timeout.
+ *
+ * Uses `spawn` with `detached: true` so the child gets its own process group.
+ * On timeout: SIGTERM is sent to the process group; after a grace period,
+ * SIGKILL follows. This handles processes that trap or ignore SIGTERM.
+ *
+ * NOTE: Even SIGKILL cannot terminate a true D-state process blocked on
+ * hardware/network I/O (e.g. an unresponsive FUSE mount). That is a Linux
+ * kernel limitation — the real fix is preventing traversal into such paths
+ * (see BLOCKED_TRAVERSAL_PATHS in config/defaults.ts).
+ */
+export async function runShell(input: RunShellInput, projectCwd: string): Promise<string> {
   const workDir = input.cwd ? path.resolve(projectCwd, input.cwd) : projectCwd;
   const timeout = input.timeout ?? 30_000;
+  const SIGKILL_GRACE_MS = 2_000;
+  const MAX_BUFFER = 2 * 1024 * 1024;
 
-  try {
-    const result = execSync(input.command, {
+  return new Promise<string>((resolve) => {
+    const proc = spawn(input.command, {
+      shell: true,
+      detached: true,
       cwd: workDir,
-      encoding: 'utf8',
-      timeout,
-      maxBuffer: 2 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return result.trim() || '(command completed with no output)';
-  } catch (e: unknown) {
-    const err = e as { stdout?: string; stderr?: string; message: string; killed?: boolean; signal?: string };
-    // Timeout shows up as either killed=true (with kill) or a SIGTERM/ETIMEDOUT message
-    if (err.killed) return `Error: Command timed out after ${timeout}ms`;
-    if (/ETIMEDOUT|timeout|timed out/i.test(err.message)) return `Error: Command timed out after ${timeout}ms`;
-    const out = [err.stdout?.trim(), err.stderr?.trim()].filter(Boolean).join('\n');
-    return out || `Error: ${err.message}`;
-  }
+
+    let stdout = '';
+    let stderr = '';
+    let exceededBuffer = false;
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      if (!exceededBuffer) {
+        stdout += chunk.toString();
+        if (stdout.length > MAX_BUFFER) exceededBuffer = true;
+      }
+    });
+    proc.stderr.on('data', (chunk: Buffer) => {
+      if (!exceededBuffer) {
+        stderr += chunk.toString();
+        if (stderr.length > MAX_BUFFER) exceededBuffer = true;
+      }
+    });
+
+    // Timeout → SIGTERM → grace → SIGKILL
+    const timer = setTimeout(() => {
+      try { process.kill(-proc.pid!, 'SIGTERM'); } catch { /* already dead */ }
+      const grace = setTimeout(() => {
+        try { process.kill(-proc.pid!, 'SIGKILL'); } catch { /* already dead */ }
+      }, SIGKILL_GRACE_MS);
+      proc.on('exit', () => clearTimeout(grace));
+    }, timeout);
+
+    proc.on('exit', (code, signal) => {
+      clearTimeout(timer);
+
+      if (exceededBuffer) {
+        resolve(`Error: Output exceeded ${MAX_BUFFER} bytes`);
+        return;
+      }
+      if (signal === 'SIGTERM' || signal === 'SIGKILL') {
+        resolve(`Error: Command timed out after ${timeout}ms`);
+        return;
+      }
+      if (code !== 0 && stderr.trim()) {
+        resolve(stderr.trim());
+        return;
+      }
+      resolve(stdout.trim() || '(command completed with no output)');
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      resolve(`Error: ${err.message}`);
+    });
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,7 +230,7 @@ export function runShell(input: RunShellInput, projectCwd: string): string {
 
 export interface RunTestsInput { file_or_pattern?: string }
 
-export function runTests(input: RunTestsInput, cwd: string): string {
+export async function runTests(input: RunTestsInput, cwd: string): Promise<string> {
   // Detect test framework
   let testCmd = detectTestCommand(cwd, input.file_or_pattern);
   return runShell({ command: testCmd, timeout: 60_000 }, cwd);

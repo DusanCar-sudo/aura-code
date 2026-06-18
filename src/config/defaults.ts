@@ -83,3 +83,28 @@ export const BINARY_EXTENSIONS = [
   '.exe', '.dll', '.so', '.dylib',
   '.wasm', '.ttf', '.woff', '.woff2',
 ];
+
+/**
+ * Path prefixes that must NEVER be traversed by recursive filesystem commands
+ * (find, grep -r, rg). These match common FUSE/network mount points where
+ * unresponsive I/O can cause indefinite D-state (uninterruptible sleep) that
+ * even SIGKILL cannot terminate. This is a Linux kernel limitation.
+ *
+ * Blocked by default; override per-project via `allowedMountPaths` in .aura.json.
+ */
+export const BLOCKED_TRAVERSAL_PATHS: readonly string[] = [
+  '/mnt/',
+  '/media/',
+  '/run/media/',
+  '/net/',
+  '/nfs/',
+  '/autofs/',
+  '/snap/',
+];
+
+/**
+ * Regex matching fuse-type fstypes in /proc/mounts (fuse, fuse.sshfs, fuseblk, etc.).
+ * Used at startup to dynamically discover FUSE mount points and add them to the
+ * blocked traversal set.
+ */
+export const FUSE_MOUNT_PATTERN = /fuse[.\w]*/i;

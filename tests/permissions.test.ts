@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { PermissionSystem } from '../src/safety/permissions.js';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { PermissionSystem, ShellCommandValidator } from '../src/safety/permissions.js';
 
 describe('PermissionSystem — read-only mode', () => {
   const p = new PermissionSystem('read-only');
@@ -159,5 +162,195 @@ describe('PermissionSystem — false positive regressions', () => {
 
   it('still blocks fork bomb', () => {
     expect(p.check('run_shell', { command: ':(){ :|:& };:' }).allowed).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ShellCommandValidator — path-scoped command validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ShellCommandValidator — blocks root and mount traversal', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'perm-test-'));
+  const validator = new ShellCommandValidator();
+
+  it('blocks find / (root traversal)', () => {
+    const r = validator.validateCommand('find / -name "*.ts"', tmpDir);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/outside project root/);
+  });
+
+  it('blocks find /mnt/... (blocked mount prefix)', () => {
+    // /mnt/ is a blocked prefix even if somehow inside project root
+    const r = validator.validateCommand('find /mnt/data -name "*.ts"', tmpDir);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/blocked mount prefix/);
+  });
+
+  it('blocks find /media/... (blocked mount prefix)', () => {
+    const r = validator.validateCommand('find /media/usb -name "*.log"', tmpDir);
+    expect(r.allowed).toBe(false);
+  });
+
+  it('blocks find /snap/... (blocked mount prefix)', () => {
+    const r = validator.validateCommand('find /snap/bin -type f', tmpDir);
+    expect(r.allowed).toBe(false);
+  });
+
+  it('blocks find ~ (home directory outside project)', () => {
+    const r = validator.validateCommand('find ~ -name "*.ts"', tmpDir);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/outside project root/);
+  });
+
+  it('blocks find with ../ escaping project root', () => {
+    const r = validator.validateCommand('find ../../../etc -name "*.conf"', tmpDir);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/outside project root/);
+  });
+
+  it('allows find . (project root)', () => {
+    const r = validator.validateCommand('find . -name "*.ts"', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('allows find with relative subdirectory', () => {
+    const r = validator.validateCommand('find src -name "*.ts"', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('allows find with explicit project-root path', () => {
+    const r = validator.validateCommand(`find ${tmpDir} -name "*.ts"`, tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+});
+
+describe('ShellCommandValidator — recursive grep/rg', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'perm-test-'));
+  const validator = new ShellCommandValidator();
+
+  it('blocks grep -r targeting /mnt/', () => {
+    const r = validator.validateCommand('grep -r "pattern" /mnt/data', tmpDir);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/blocked mount prefix/);
+  });
+
+  it('blocks rg targeting /media/', () => {
+    const r = validator.validateCommand('rg "pattern" /media/usb', tmpDir);
+    expect(r.allowed).toBe(false);
+  });
+
+  it('blocks rg -R targeting /snap/', () => {
+    const r = validator.validateCommand('rg -R "pattern" /snap/bin', tmpDir);
+    expect(r.allowed).toBe(false);
+  });
+
+  it('allows grep -r inside project', () => {
+    const r = validator.validateCommand('grep -r "pattern" src/', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('allows rg inside project', () => {
+    const r = validator.validateCommand('rg "pattern" src/', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('allows grep without -r flag on any path', () => {
+    const r = validator.validateCommand('grep "pattern" /etc/hosts', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('blocks rg without -r flag (rg is recursive by default)', () => {
+    const r = validator.validateCommand('rg "pattern" /etc/hosts', tmpDir);
+    expect(r.allowed).toBe(false);
+  });
+
+  it('allows grep -r with no explicit path (defaults to .)', () => {
+    const r = validator.validateCommand('grep -r "pattern"', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('blocks grep -r with ../ escaping root', () => {
+    const r = validator.validateCommand('grep -r "pattern" ../../../etc', tmpDir);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/outside project root/);
+  });
+});
+
+describe('ShellCommandValidator — allowedMountPaths override', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'perm-test-'));
+  const validator = new ShellCommandValidator();
+
+  it('allows find in explicitly whitelisted mount path', () => {
+    const r = validator.validateCommand('find /mnt/bigdata -name "*.ts"', tmpDir, {
+      allowedMountPaths: ['/mnt/bigdata'],
+    });
+    expect(r.allowed).toBe(true);
+  });
+
+  it('blocks find in non-whitelisted mount even when others are whitelisted', () => {
+    const r = validator.validateCommand('find /mnt/other -name "*.ts"', tmpDir, {
+      allowedMountPaths: ['/mnt/bigdata'],
+    });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/blocked mount prefix/);
+  });
+
+  it('allows grep -r in whitelisted mount', () => {
+    const r = validator.validateCommand('grep -r "x" /mnt/bigdata/gdrive', tmpDir, {
+      allowedMountPaths: ['/mnt/bigdata/gdrive'],
+    });
+    expect(r.allowed).toBe(true);
+  });
+});
+
+describe('ShellCommandValidator — non-recursive commands pass through', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'perm-test-'));
+  const validator = new ShellCommandValidator();
+
+  it('allows ls anywhere (not a recursive search command)', () => {
+    const r = validator.validateCommand('ls /mnt/data', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('allows cat on blocked paths (not a traversal risk)', () => {
+    const r = validator.validateCommand('cat /mnt/data/file.txt', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+
+  it('allows echo with any arguments', () => {
+    const r = validator.validateCommand('echo /mnt/data', tmpDir);
+    expect(r.allowed).toBe(true);
+  });
+});
+
+describe('ShellCommandValidator — integrated into PermissionSystem', () => {
+  let tmpDir: string;
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'perm-test-')); });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
+
+  it('blocks find / via PermissionSystem in normal mode', () => {
+    const p = new PermissionSystem('normal', tmpDir);
+    const r = p.check('run_shell', { command: 'find / -name "*.ts"' });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/outside project root/);
+  });
+
+  it('blocks find /mnt/ via PermissionSystem in auto mode', () => {
+    const p = new PermissionSystem('auto', tmpDir);
+    const r = p.check('run_shell', { command: 'find /mnt/data -name "*.ts"' });
+    expect(r.allowed).toBe(false);
+  });
+
+  it('still allows safe commands in normal mode', () => {
+    const p = new PermissionSystem('normal', tmpDir);
+    const r = p.check('run_shell', { command: 'ls -la' });
+    expect(r.allowed).toBe(true);
+    expect(r.needsConfirm).toBeFalsy();
+  });
+
+  it('still blocks dangerous commands regardless of path validation', () => {
+    const p = new PermissionSystem('normal', tmpDir);
+    const r = p.check('run_shell', { command: 'rm -rf /' });
+    expect(r.allowed).toBe(false);
   });
 });

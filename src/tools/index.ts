@@ -175,8 +175,8 @@ export async function executeTool(
       case 'edit_file':    return editFile({ path: input.path as string, find: input.find as string, replace: input.replace as string }, cwd);
       case 'write_file':   return writeFile({ path: input.path as string, content: input.content as string }, cwd);
       case 'search_code':  return searchCode({ pattern: input.pattern as string, path: input.path as string | undefined, file_glob: input.file_glob as string | undefined, literal: (input.literal as boolean) ?? false, case_sensitive: (input.case_sensitive as boolean) ?? false, max_results: (input.max_results as number) ?? 50 }, cwd);
-      case 'run_shell':    return runShell({ command: input.command as string, cwd: input.cwd as string | undefined, timeout: input.timeout as number | undefined }, cwd);
-      case 'run_tests':    return runTests({ file_or_pattern: input.file_or_pattern as string | undefined }, cwd);
+      case 'run_shell':    return await runShell({ command: input.command as string, cwd: input.cwd as string | undefined, timeout: input.timeout as number | undefined }, cwd);
+      case 'run_tests':    return await runTests({ file_or_pattern: input.file_or_pattern as string | undefined }, cwd);
       case 'git_status':   return gitStatus(cwd);
       case 'git_diff':     return gitDiff({ path: input.path as string | undefined, staged: (input.staged as boolean) ?? false }, cwd);
       case 'spawn_task':   return executeSpawnTask(input);
