@@ -30,6 +30,12 @@ export interface LoopOptions {
   disableSpawn?: boolean;
   /** Internal: skip post-task verification (used by runWithVerification wrapper). */
   verify?: boolean;
+  /**
+   * Custom confirmation function for destructive operations.
+   * Defaults to terminal-based confirm() from permissions.
+   * Telegram bot overrides this to send approval requests via Telegram messages.
+   */
+  confirmFn?: (message: string) => Promise<boolean>;
 }
 
 export interface LoopResult {
@@ -210,7 +216,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
         if (perm.needsConfirm) {
           const desc = formatCallForConfirmation(call);
-          const approved = await confirm(`Allow: ${desc}?`);
+          const doConfirm = opts.confirmFn ?? confirm;
+          const approved = await doConfirm(`Allow: ${desc}?`);
           if (!approved) {
             display.toolBlocked(call.name, 'denied by user');
             toolResults.push({ id: call.id, name: call.name, content: 'User denied this action.', isError: true });

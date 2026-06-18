@@ -226,11 +226,11 @@ export class PermissionSystem {
       }
     }
 
-    if (toolName === 'write_file') {
+    if (toolName === 'write_file' || toolName === 'edit_file') {
       const path = String(input.path ?? '');
-      const key = `write:${path}`;
+      const key = `${toolName}:${path}`;
       if (this.sessionApprovals.has(key)) return { allowed: true };
-      return { allowed: true };
+      return { allowed: true, needsConfirm: true };
     }
 
     return { allowed: true };

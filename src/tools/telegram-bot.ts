@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Aura Telegram Bot — listens for messages, processes them, responds
+// Aura Telegram Bot — listens for messages, executes real Aura tasks
 // Uses curl for API calls (Node https.request ETIMEDOUT on this system)
 // Usage: npx tsx src/tools/telegram-bot.ts
 
@@ -8,88 +8,20 @@ import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LLM Integration (Xiaomi MiMo via curl)
-// ─────────────────────────────────────────────────────────────────────────────
+import { createProvider } from '../providers/factory.js';
+import { loadProjectContext } from '../agent/context.js';
+import { runAgentLoop } from '../agent/loop.js';
+import { PermissionSystem } from '../safety/permissions.js';
+import type { Display } from '../cli/display.js';
+import type { LLMProvider } from '../providers/types.js';
 
-const MIMO_KEY = process.env.XIAOMI_API_KEY ?? '';
-const MIMO_BASE_URL = process.env.XIAOMI_BASE_URL ?? 'https://token-plan-sgp.xiaomimimo.com/v1';
-const MIMO_MODEL = 'mimo-v2.5-pro';
-const CONVERSATIONS_FILE = path.join(os.homedir(), '.aura', 'telegram-conversations.json');
-
-interface ConversationEntry {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-function loadConversations(): Record<number, ConversationEntry[]> {
-  try {
-    if (fs.existsSync(CONVERSATIONS_FILE)) {
-      return JSON.parse(fs.readFileSync(CONVERSATIONS_FILE, 'utf8'));
-    }
-  } catch { /* ignore */ }
-  return {};
-}
-
-function saveConversations(convos: Record<number, ConversationEntry[]>): void {
-  fs.writeFileSync(CONVERSATIONS_FILE, JSON.stringify(convos, null, 2), 'utf8');
-}
-
-const conversations: Record<number, ConversationEntry[]> = loadConversations();
-
-function askMiMo(chatId: number, userMessage: string): string {
-  if (!MIMO_KEY) return '❌ XIAOMI_API_KEY not set. Cannot call MiMo.';
-
-  // Init conversation history for this chat
-  if (!conversations[chatId]) {
-    conversations[chatId] = [
-      { role: 'system' as any, content: `You are Aura — a precise, efficient AI coding agent. You are communicating via Telegram with your creator Dušan. Be concise, helpful, and direct. You can discuss code, answer questions, give advice. If asked to run commands or check files, suggest using the /run, /read, /ls commands. Speak in the language the user speaks (Serbian or English). Keep responses short and practical for mobile reading.` } as any,
-    ];
-  }
-
-  // Add user message
-  conversations[chatId].push({ role: 'user', content: userMessage });
-
-  // Keep last 20 messages to stay within token limits
-  const recentMessages = conversations[chatId].slice(-20);
-
-  const body = JSON.stringify({
-    model: MIMO_MODEL,
-    max_tokens: 2048,
-    messages: recentMessages,
-  });
-
-  try {
-    const result = execSync(
-      `curl -s -X POST ${MIMO_BASE_URL}/chat/completions ` +
-      `-H "Content-Type: application/json" ` +
-      `-H "Authorization: Bearer ${MIMO_KEY}" ` +
-      `-d '${body.replace(/'/g, "'\\''")}'`,
-      { timeout: 60_000, encoding: 'utf8' }
-    );
-
-    const parsed = JSON.parse(result);
-
-    if (parsed.error) {
-      return `❌ MiMo error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`;
-    }
-
-    const assistantText = parsed.choices?.[0]?.message?.content ?? 'No response from MiMo.';
-
-    // Save assistant reply to history
-    conversations[chatId].push({ role: 'assistant', content: assistantText });
-    saveConversations(conversations);
-
-    return assistantText;
-  } catch (e: any) {
-    return `❌ MiMo call failed: ${e.message}`;
-  }
-}
-
-function clearConversation(chatId: number): void {
-  delete conversations[chatId];
-  saveConversations(conversations);
-}
+import {
+  loadSafetyState,
+  saveSafetyState,
+  safetyLabel,
+  TelegramConfirmManager,
+  isDestructiveTool,
+} from './telegram-safety.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -98,6 +30,8 @@ function clearConversation(chatId: number): void {
 interface TelegramConfig {
   bot_token: string;
   default_chat_id?: string;
+  /** Comma-separated list of authorized Telegram user IDs. */
+  allowed_user_ids?: string;
 }
 
 function loadConfig(): TelegramConfig {
@@ -109,13 +43,192 @@ function loadConfig(): TelegramConfig {
   return JSON.parse(fs.readFileSync(configPath, 'utf8'));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// API helpers via curl (Node https.request ETIMEDOUT on this system)
-// ─────────────────────────────────────────────────────────────────────────────
-
 const config = loadConfig();
 const TOKEN = config.bot_token;
 const OFFSET_FILE = path.join(os.homedir(), '.aura', 'telegram.offset');
+
+// ── Authorized user IDs ───────────────────────────────────────────────────
+// Check: config file, then env var TELEGRAM_BOT_ALLOWED_USER_IDS (comma-sep)
+function loadAuthorizedUserIds(): Set<number> {
+  const ids = new Set<number>();
+  const raw =
+    config.allowed_user_ids
+    ?? process.env.TELEGRAM_BOT_ALLOWED_USER_IDS
+    ?? '';
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (trimmed) {
+      const n = Number(trimmed);
+      if (!isNaN(n)) ids.add(n);
+    }
+  }
+  return ids;
+}
+
+const AUTHORIZED_USER_IDS = loadAuthorizedUserIds();
+
+// The project root for task execution
+const PROJECT_ROOT = process.env.TELEGRAM_BOT_PROJECT_ROOT
+  ?? path.resolve(__dirname, '../..'); // default to aura-code repo
+
+// The model to use for task execution
+const TASK_MODEL = process.env.TELEGRAM_BOT_MODEL
+  ?? process.env.AURA_MODEL
+  ?? 'mimo-v2.5-pro';
+
+// ── Safety state ───────────────────────────────────────────────────────────
+let safetyState = loadSafetyState();
+const confirmManager = new TelegramConfirmManager();
+
+function saveState(): void {
+  saveSafetyState(safetyState);
+}
+
+// ── Provider (created once, reused) ────────────────────────────────────────
+function createLLMProvider(): LLMProvider {
+  const apiKey = process.env.XIAOMI_API_KEY
+    ?? process.env.ANTHROPIC_API_KEY
+    ?? process.env.OPENAI_API_KEY
+    ?? process.env.GOOGLE_API_KEY
+    ?? process.env.OPENROUTER_API_KEY;
+  return createProvider({
+    model: TASK_MODEL,
+    apiKey,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stub display for Telegram — silent, no terminal output
+// ─────────────────────────────────────────────────────────────────────────────
+
+function createSilentDisplay(): Display {
+  return {
+    agentThinking() {},
+    streamText() {},
+    streamEnd() {},
+    toolStart() {},
+    toolCall() {},
+    toolResult() {},
+    toolBlocked() {},
+    warning() {},
+    success() {},
+    error() {},
+    header() {},
+    summary() {},
+    showPlan() {},
+    stepStarted() {},
+    stepCompleted() {},
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task execution via runAgentLoop
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function executeTask(chatId: number, task: string): Promise<string> {
+  let provider: LLMProvider;
+  try {
+    provider = createLLMProvider();
+  } catch (e: any) {
+    return `❌ Failed to create LLM provider: ${e.message}`;
+  }
+
+  let context;
+  try {
+    context = await loadProjectContext(PROJECT_ROOT);
+  } catch (e: any) {
+    return `❌ Failed to load project context: ${e.message}`;
+  }
+
+  // Permissions:
+  //   safety ON  → 'normal'  (triggers needsConfirm for destructive ops)
+  //   safety OFF → 'auto'    (no confirm needed)
+  const permLevel = safetyState.safetyOn ? 'normal' : 'auto';
+  const permissions = new PermissionSystem(permLevel, context.root);
+
+  const display = createSilentDisplay();
+
+  let confirmFn: ((message: string) => Promise<boolean>) | undefined;
+
+  if (safetyState.safetyOn) {
+    confirmFn = async (message: string): Promise<boolean> => {
+      // Parse the description from the confirm message
+      // "Allow: $ <command>?" or "Allow: overwrite <path>?" or "Allow: toolName({...})?"
+      const desc = message
+        .replace(/^Allow:\s*/, '')
+        .replace(/\?$/, '')
+        .trim();
+
+      const { promise, message: approvalMsg } = await new Promise<{ promise: Promise<boolean>; message: string }>((resolve) => {
+        // We need to figure out which tool this is for from the message
+        let toolName = 'unknown';
+        let description = desc;
+        if (desc.startsWith('$ ')) {
+          toolName = 'run_shell';
+          description = desc.slice(2);
+        } else if (desc.startsWith('overwrite ')) {
+          toolName = 'write_file';
+          description = desc;
+        }
+
+        const result = confirmManager.waitForApproval(chatId, toolName, description);
+        resolve(result);
+      });
+
+      // Send the approval request to the user
+      try {
+        sendMessage(chatId, approvalMsg);
+      } catch {
+        // If we can't send, deny for safety
+        return false;
+      }
+
+      return promise;
+    };
+  }
+
+  try {
+    const result = await runAgentLoop({
+      provider,
+      task,
+      context,
+      permissions,
+      display,
+      maxTurns: 50,
+      disableSpawn: true, // no sub-agents via Telegram for now
+      confirmFn,
+    });
+
+    // Build a readable response
+    const lines: string[] = [];
+    const tag = safetyLabel(safetyState.safetyOn);
+    if (result.success) {
+      lines.push(`✅ Done (${result.turns} turn${result.turns !== 1 ? 's' : ''}) ${tag}`);
+      if (result.summary) {
+        // Trim the summary to a reasonable length
+        const summary = result.summary.length > 3000
+          ? result.summary.slice(0, 3000) + '\n…(truncated)'
+          : result.summary;
+        lines.push('');
+        lines.push(summary);
+      }
+    } else {
+      lines.push(`❌ Failed (${result.turns} turns) ${tag}`);
+      if (result.summary) {
+        lines.push('');
+        lines.push(result.summary);
+      }
+    }
+
+    return lines.join('\n');
+  } catch (e: any) {
+    return `❌ Task error: ${e.message}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API helpers via curl (Node https.request ETIMEDOUT on this system)
+// ─────────────────────────────────────────────────────────────────────────────
 
 function loadOffset(): number {
   try {
@@ -151,10 +264,12 @@ function curlGet(method: string, params?: Record<string, string>): any {
   return parsed.result;
 }
 
-function sendMessage(chatId: string | number, text: string): void {
+function sendMessage(chatId: string | number, text: string, parseMode?: string): void {
   const chunks = splitMessage(text, 4000);
   for (const chunk of chunks) {
-    curlPost('sendMessage', { chat_id: chatId, text: chunk });
+    const body: Record<string, unknown> = { chat_id: chatId, text: chunk };
+    if (parseMode) body.parse_mode = parseMode;
+    curlPost('sendMessage', body);
   }
 }
 
@@ -170,7 +285,7 @@ function splitMessage(text: string, maxLen: number): string[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Command handlers
+// Utility helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_CWD = process.env.HOME ?? '/tmp';
@@ -221,8 +336,7 @@ function listDirTool(dirPath: string): string {
   }
 }
 
-/** Escape a string for use inside double quotes in a shell command.
- *  Escapes: backslash, double-quote, dollar, backtick. */
+/** Escape a string for use inside double quotes in a shell command. */
 function escapeShellDouble(s: string): string {
   return s.replace(/[\\"$]/g, '\\$&').replace(/`/g, '\\`');
 }
@@ -242,18 +356,23 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
   }
 }
 
-function handleCommand(chatId: number, text: string, from: string): string {
+// ─────────────────────────────────────────────────────────────────────────────
+// Command handlers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function handleCommand(chatId: number, text: string, from: string): string | null {
   const lower = text.toLowerCase().trim();
+  const tag = safetyLabel(safetyState.safetyOn);
 
   if (lower === '/start' || lower === '/help') {
     return [
-      `💎 Aura Bot — Online`,
+      `💎 Aura Bot — Online ${tag}`,
       ``,
       `Commands:`,
       `/status — System status`,
       `/tools — Available tools`,
-      `/memory — Memory overview`,
-      `/time — Current time`,
+      `/safety_on — Enable safety mode (default)`,
+      `/safety_off CONFIRM — Disable safety mode`,
       `/ping — Connection check`,
       `/whoami — About me`,
       `/ls <dir> — List directory`,
@@ -261,27 +380,28 @@ function handleCommand(chatId: number, text: string, from: string): string {
       `/search <pattern> — Search code`,
       `/run <cmd> — Run shell command`,
       `/git — Git status`,
-      `/clear — Clear conversation history`,
+      `/clear — Clear context`,
       ``,
-      `Or just write anything — I'll respond via Claude!`,
+      `Or just write anything — I'll execute it as an Aura task!`,
     ].join('\n');
   }
 
-  if (lower === '/ping') return '🏓 Pong! Aura is alive and running.';
-
-  if (lower === '/time') return `🕐 ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`;
+  if (lower === '/ping') return `🏓 Pong! Aura is alive and running. ${tag}`;
 
   if (lower === '/whoami') {
     return [
-      `💎 I am Aura — an agent.`,
+      `💎 I am Aura — an agent. ${tag}`,
       ``,
       `Framework: Aura (Ancient Greek: she who acts)`,
       `Character: Precise, imperial, self-aware`,
       `Motto: "I don't try. I verify."`,
       `Builder: Dušan Milosavljević`,
-      `Tools: 22`,
+      `Tools: 22+`,
       `Tests: 734+ passing`,
       `Version: v0.3.0 (Aura rebrand)`,
+      `Mode: ${safetyState.safetyOn ? '🔒 Safe (asks before destructive ops)' : '🔓 Auto (no confirmation)'}`,
+      `Project: ${PROJECT_ROOT}`,
+      `Model: ${TASK_MODEL}`,
     ].join('\n');
   }
 
@@ -291,30 +411,58 @@ function handleCommand(chatId: number, text: string, from: string): string {
     const mins = Math.floor((uptime % 3600) / 60);
     const mem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     return [
-      `📊 Aura Status`,
+      `📊 Aura Status ${tag}`,
       `Uptime: ${hours}h ${mins}m`,
       `Memory: ${mem}MB`,
       `Node: ${process.version}`,
       `Bot: @Praktessruby_bot`,
       `Status: ✅ Active`,
       `Version: v0.3.0`,
+      `Safety: ${safetyState.safetyOn ? '🔒 ON' : '🔓 OFF'}`,
     ].join('\n');
   }
 
   if (lower === '/tools') {
     return [
-      `🔧 Available tools:`,
+      `🔧 Available tools: ${tag}`,
       ``,
       `📁 /ls <dir> — list directory`,
       `📄 /read <file> — read file`,
       `🔍 /search <pattern> — search code`,
       `⚡ /run <cmd> — shell command`,
       `🌿 /git — git status`,
-      `🧠 /memory — memory overview`,
+      `🧠 /clear — clear context`,
+      `🔒 /safety_on — enable safety`,
+      `🔓 /safety_off CONFIRM — disable safety`,
     ].join('\n');
   }
 
-  // ── Tool commands ──────────────────────────────────────────────────────
+  // ── Safety toggle ───────────────────────────────────────────────────────
+
+  if (lower === '/safety_on') {
+    safetyState.safetyOn = true;
+    saveState();
+    return `🔒 Safety mode enabled. ${safetyLabel(true)} — destructive operations will ask for approval.`;
+  }
+
+  if (lower.startsWith('/safety_off')) {
+    const rest = text.slice('/safety_off'.length).trim();
+    if (rest !== 'CONFIRM') {
+      return [
+        `⚠️ To disable safety, send:`,
+        ``,
+        `/safety_off CONFIRM`,
+        ``,
+        `This prevents accidental toggling.`,
+        `Current state: ${safetyLabel(safetyState.safetyOn)}`,
+      ].join('\n');
+    }
+    safetyState.safetyOn = false;
+    saveState();
+    return `🔓 Safety mode disabled. ${safetyLabel(false)} — all operations will execute without confirmation.`;
+  }
+
+  // ── Tool commands ───────────────────────────────────────────────────────
 
   if (lower.startsWith('/ls')) {
     const dir = text.slice(3).trim() || '.';
@@ -351,28 +499,11 @@ function handleCommand(chatId: number, text: string, from: string): string {
     return `🌿 Git:\n${result.stdout || '(not a git repo)'}`;
   }
 
-  if (lower.startsWith('/memory')) {
-    const memDir = path.join(os.homedir(), '.aura', 'memory');
-    if (!fs.existsSync(memDir)) return '🧠 No memory found.';
-    try {
-      const files = fs.readdirSync(memDir).filter(f => f.endsWith('.json'));
-      if (files.length === 0) return '🧠 Memory empty.';
-      const lines = files.map(f => {
-        const data = JSON.parse(fs.readFileSync(path.join(memDir, f), 'utf8'));
-        return `📁 ${f.replace('.json', '')}: ${Object.keys(data).length} keys`;
-      });
-      return `🧠 Memory:\n${lines.join('\n')}`;
-    } catch {
-      return '🧠 Error reading memory.';
-    }
-  }
-
   if (lower === '/clear') {
-    clearConversation(chatId);
-    return '🧹 Conversation cleared. Starting fresh.';
+    return `🧹 Context cleared. Starting fresh. ${tag}`;
   }
 
-  // Default: try to interpret as a shell command if it looks like one
+  // Looks like a shell command — run directly
   const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
   if (looksLikeCommand) {
     const result = execShell(text);
@@ -381,13 +512,37 @@ function handleCommand(chatId: number, text: string, from: string): string {
     return `⚡ ${text}\n${truncated}`;
   }
 
-  // Default: send to MiMo for real conversation
-  return askMiMo(chatId, text);
+  // Return null to signal "not a command — treat as task"
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Authorization check
+// ─────────────────────────────────────────────────────────────────────────────
+
+function isAuthorized(chatId: number, fromUser: any): boolean {
+  // No open-access fallback — if no IDs configured the bot won't start,
+  // but guard here too as defense-in-depth.
+  if (AUTHORIZED_USER_IDS.size === 0) return false;
+
+  // Check by user ID
+  const userId = fromUser?.id;
+  if (userId && AUTHORIZED_USER_IDS.has(Number(userId))) return true;
+  // Also check chat ID (for group chats where the user might be different)
+  if (AUTHORIZED_USER_IDS.has(chatId)) return true;
+
+  return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main polling loop
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Track whether a task is currently running for a given chat.
+ * If a task is running, new non-command messages are queued.
+ */
+const runningTasks = new Set<number>();
 
 function poll(): void {
   let offset = loadOffset();
@@ -396,6 +551,10 @@ function poll(): void {
   console.log(`   Bot: @Praktessruby_bot`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Polling every 3 seconds...`);
+  console.log(`   Project root: ${PROJECT_ROOT}`);
+  console.log(`   Task model: ${TASK_MODEL}`);
+  console.log(`   Safety: ${safetyState.safetyOn ? 'ON' : 'OFF'}`);
+  console.log(`   Authorized users: ${AUTHORIZED_USER_IDS.size > 0 ? [...AUTHORIZED_USER_IDS].join(', ') : 'ALL (no restriction)'}`);
   console.log('');
 
   // Clear old updates on first run
@@ -429,24 +588,77 @@ function poll(): void {
         saveOffset(offset);
 
         const msg = update.message;
-        if (!msg || !msg.text) continue;
+        if (!msg) continue;
+        if (!msg.text && !msg.voice) continue;
 
         const chatId = msg.chat.id;
-        const text = msg.text;
         const from = msg.from?.first_name ?? msg.from?.username ?? 'unknown';
+
+        // ── Authorization check ────────────────────────────────────────────
+        if (!isAuthorized(chatId, msg.from)) {
+          console.warn(`🚫 Unauthorized message from ${from} (id: ${msg.from?.id})`);
+          // Don't reply to unauthorized users — don't reveal the bot exists
+          continue;
+        }
+
+        // ── Handle voice messages (Phase 2 placeholder) ──────────────────
+        if (msg.voice) {
+          sendMessage(chatId, '🎤 Voice messages are not yet supported. Please send text.');
+          continue;
+        }
+
+        const text = msg.text;
+
+        if (!text) continue;
 
         console.log(`📩 [${from}]: ${text}`);
 
-        try {
-          const response = handleCommand(chatId, text, from);
-          sendMessage(chatId, response);
-          console.log(`📤 Replied to ${from}`);
-        } catch (e: any) {
-          console.error(`❌ Reply error: ${e.message}`);
-          try {
-            sendMessage(chatId, `❌ Error: ${e.message}`);
-          } catch { /* give up */ }
+        // ── Check pending approvals first ───────────────────────────────
+        const approvedId = confirmManager.handleReply(chatId, text);
+        if (approvedId) {
+          console.log(`📤 Approval resolved for ${approvedId}`);
+          continue;
         }
+
+        // ── Handle commands (synchronous) ────────────────────────────────
+        const commandResult = handleCommand(chatId, text, from);
+        if (commandResult !== null) {
+          try {
+            sendMessage(chatId, commandResult);
+            console.log(`📤 Replied to ${from}`);
+          } catch (e: any) {
+            console.error(`❌ Reply error: ${e.message}`);
+          }
+          continue;
+        }
+
+        // ── Non-command text → execute as Aura task ─────────────────────
+        if (runningTasks.has(chatId)) {
+          sendMessage(chatId, `⏳ A task is already running for this chat. Please wait.`);
+          continue;
+        }
+
+        runningTasks.add(chatId);
+        const tag = safetyLabel(safetyState.safetyOn);
+
+        // Send a "thinking" indicator
+        sendMessage(chatId, `⏳ Processing task... ${tag}`);
+
+        // Execute asynchronously — don't block the poll loop
+        executeTask(chatId, text)
+          .then(response => {
+            sendMessage(chatId, response);
+            console.log(`📤 Task result sent to ${from}`);
+          })
+          .catch((e: any) => {
+            console.error(`❌ Task error: ${e.message}`);
+            try {
+              sendMessage(chatId, `❌ Error: ${e.message}`);
+            } catch { /* give up */ }
+          })
+          .finally(() => {
+            runningTasks.delete(chatId);
+          });
       }
     } catch (e: any) {
       consecutiveErrors++;
@@ -465,5 +677,15 @@ function poll(): void {
 // ─────────────────────────────────────────────────────────────────────────────
 // Entry
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Refuse to start without authorized user IDs — no open-access bots
+if (AUTHORIZED_USER_IDS.size === 0) {
+  console.error('');
+  console.error('❌ AUTHORIZED_USER_IDS not configured — refusing to start an unrestricted bot.');
+  console.error('   Set allowed_user_ids in ~/.aura/telegram.json or set');
+  console.error('   TELEGRAM_BOT_ALLOWED_USER_IDS env var before running.');
+  console.error('');
+  process.exit(1);
+}
 
 poll();
