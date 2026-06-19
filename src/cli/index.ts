@@ -31,7 +31,9 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderDiamond } from './diamond.js';
-import { saveEpisode } from '../ruby/episode-capture.js';
+import { saveEpisode, loadEpisodes } from '../ruby/episode-capture.js';
+import { selectModel } from '../ruby/model-selector.js';
+import { formatStats } from '../ruby/stats.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
@@ -39,7 +41,7 @@ import { saveEpisode } from '../ruby/episode-capture.js';
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'once'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'stats', 'workflows', 'propose-harness', 'blueprints', 'once'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -143,6 +145,28 @@ if (argv.analyze) {
     console.log(chalk.hex('#8a7768')(`  ${report.summary}\n`));
   }
   process.exit(0);
+}
+
+if (argv.stats) {
+  (async () => {
+    const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
+    const episodes = await loadEpisodes(root);
+    const output = formatStats(episodes);
+    // Print each line, highlighting the header
+    for (const line of output.split('\n')) {
+      if (line.trim() === 'Aura Stats') {
+        console.log(chalk.hex('#cc785c').bold(line));
+      } else if (line.includes(':')) {
+        const colonIdx = line.indexOf(':');
+        const label = line.slice(0, colonIdx + 1);
+        const value = line.slice(colonIdx + 1);
+        console.log(chalk.hex('#8a7768')(label) + chalk.hex('#ede0cc')(value));
+      } else {
+        console.log(line);
+      }
+    }
+    process.exit(0);
+  })();
 }
 
 if (argv['propose-harness']) {
@@ -811,6 +835,23 @@ async function main() {
       // Router failed — fall through to single agent
     }
 
+    // ── RubyAlternator: suggest model from competence history ─────────────────
+    // Only when the user has NOT explicitly specified --model
+    if (!cliModel) {
+      try {
+        const availableModelIds = getAllModels().map(m => m.id);
+        const suggested = await selectModel(ctx.root, task, availableModelIds);
+        if (suggested && suggested !== runtimeConfig.model) {
+          console.log(chalk.hex('#4e3d30')(`  Using ${suggested} (selected by competence history)\n`));
+          runtimeConfig.model = suggested;
+          // Rebuild provider with the suggested model
+          provider = buildProvider(display);
+        }
+      } catch {
+        // Competence selection is best-effort; never block the user
+      }
+    }
+
     const doVerify = cliVerify || !!fileConfig.verify;
 
     const episodeStart = Date.now();
@@ -929,6 +970,21 @@ async function main() {
         }
 
         // Run task — pass current conversation history for stay-active mode
+        // ── RubyAlternator: suggest model from competence history ──────────────
+        // Only when the user has NOT set a model explicitly via --model or :model
+        if (!cliModel) {
+          try {
+            const availableModelIds = getAllModels().map(m => m.id);
+            const suggested = await selectModel(ctx.root, input, availableModelIds);
+            if (suggested && suggested !== runtimeConfig.model) {
+              console.log(chalk.hex('#4e3d30')(`  Using ${suggested} (selected by competence history)\n`));
+              runtimeConfig.model = suggested;
+            }
+          } catch {
+            // Competence selection is best-effort; never block the user
+          }
+        }
+
         let result;
         try {
           const currentProvider = buildProvider(display);
