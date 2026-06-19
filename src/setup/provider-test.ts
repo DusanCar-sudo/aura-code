@@ -167,7 +167,7 @@ function makeRequest(
           let errorMsg = `HTTP ${res.statusCode}`;
           try {
             const parsed = JSON.parse(data);
-            const msg = parsed.error?.message ?? parsed.error?.type ?? parsed.message ?? '';
+            const msg = parsed.error?.message ?? parsed.error?.type ?? parsed.message ?? parsed.detail ?? parsed.title ?? '';
             if (msg) errorMsg += `: ${msg}`;
           } catch { /* ignore parse errors */ }
           resolve({ ok: false, error: errorMsg });

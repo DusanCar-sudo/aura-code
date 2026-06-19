@@ -105,22 +105,34 @@ function toGoogleHistory(history: HistoryMessage[]): { contents: GoogleContent[]
   const contents: GoogleContent[] = [];
 
   for (const msg of history) {
+    let newContent: GoogleContent | null = null;
+
     if (msg.role === 'user') {
-      contents.push({ role: 'user', parts: [{ text: msg.content }] });
+      const text = msg.content || "(empty)";
+      newContent = { role: 'user', parts: [{ text }] };
     } else if (msg.role === 'assistant') {
       const parts: Part[] = [];
       if (msg.content) parts.push({ text: msg.content });
       for (const tc of msg.toolCalls ?? []) {
         parts.push({ functionCall: { name: tc.name, args: tc.input } });
       }
-      contents.push({ role: 'model', parts });
+      if (parts.length === 0) parts.push({ text: '(empty)' });
+      newContent = { role: 'model', parts };
     } else if (msg.role === 'tool_result') {
-      contents.push({
-        role: 'user',
-        parts: msg.results.map(r => ({
-          functionResponse: { name: r.name, response: { result: r.content } },
-        })),
-      });
+      const parts: Part[] = msg.results.map(r => ({
+        functionResponse: { name: r.name, response: { result: r.content || '(empty)' } },
+      }));
+      if (parts.length === 0) parts.push({ text: '(empty)' });
+      newContent = { role: 'user', parts };
+    }
+
+    if (newContent) {
+      const last = contents[contents.length - 1];
+      if (last && last.role === newContent.role) {
+        last.parts.push(...newContent.parts);
+      } else {
+        contents.push(newContent);
+      }
     }
   }
 

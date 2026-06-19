@@ -164,6 +164,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       }
     } catch (e) {
       display.error(`Provider error: ${String(e)}`);
+      // If we failed on the first turn without making any tool calls, the assistant
+      // never responded. Pop the user's task so we don't poison the chat history
+      // with consecutive user messages on the next attempt.
+      if (turns === 1 && toolCallCount === 0) {
+        history.pop();
+      }
       await persist(opts.sessionPath, history);
       return {
         success: false,
