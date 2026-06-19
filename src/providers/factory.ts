@@ -6,6 +6,7 @@ import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
 import * as http from 'http';
 import { loadProviderConfig } from '../setup/provider-wizard.js';
+import { DEFAULTS } from '../config/defaults.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom provider registry  (populated from .aura.json or programmatically)
@@ -52,6 +53,8 @@ export function detectProviderKind(model: string): 'anthropic' | 'google' | 'ope
  */
 export function createProvider(config: ProviderConfig): LLMProvider {
   const model = config.model.toLowerCase();
+
+  config = { ...config, maxTokens: config.maxTokens ?? DEFAULTS.maxTokens };
 
   // ── Saved provider config (from provider wizard) ────────────────────────
   // Use saved baseUrl / apiKey as fallback when not explicitly provided.

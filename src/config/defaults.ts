@@ -2,7 +2,7 @@ export const DEFAULTS = {
   // No default model — the user picks their own on first run via the wizard.
   // This keeps the codebase provider-agnostic: nothing here assumes a specific vendor.
   defaultModel: undefined as string | undefined,
-  maxTokens: 32000,
+  maxTokens: 16000,
   maxContextFiles: 20,
   maxFileLinesInContext: 300,
   maxDirDepth: 4,
