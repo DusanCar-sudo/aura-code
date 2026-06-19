@@ -55,6 +55,8 @@ export function normaliseError(e: unknown, provider: string): ApiError {
   if (e instanceof ApiError) return e;
 
   // Anthropic / OpenAI / Google SDKs all throw errors with a `status` and sometimes `headers`.
+  // The OpenAI SDK also populates `error` with the parsed response body — always read it so
+  // provider-specific error messages (e.g. DeepSeek 400 details) are not silently discarded.
   const err = e as {
     status?: number;
     statusCode?: number;
@@ -63,10 +65,14 @@ export function normaliseError(e: unknown, provider: string): ApiError {
     headers?: Record<string, string>;
     name?: string;
     errorDetails?: Array<{ '@type'?: string; retryDelay?: string; RetryInfo?: { retryDelay?: string } }>;
+    error?: unknown;
   };
 
   const status = err.status ?? err.statusCode ?? 0;
-  const message = err.message ?? String(e);
+  let message = err.message ?? String(e);
+  if (err.error != null) {
+    try { message += ` — ${JSON.stringify(err.error)}`; } catch { /* ignore */ }
+  }
   const retryAfterMs = parseRetryAfter(err.headers) ?? parseGoogleRetryAfter(err.errorDetails);
 
   // Network/timeout: status 0

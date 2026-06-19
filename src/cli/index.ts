@@ -944,6 +944,11 @@ async function main() {
                 context: ctx, permissions, display,
                 initialHistory: activeChatHistory,
                 maxTurns: resolved.maxTurns,
+                confirmFn: async (msg) => new Promise(res => {
+                  rl.question(`\\n⚠️  ${msg} [y/N] `, a => {
+                    res(a.trim().toLowerCase() === 'y' || a.trim().toLowerCase() === 'yes');
+                  });
+                }),
                 spawnConfig: {
                   apiKey: runtimeConfig.apiKey,
                   baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -961,6 +966,11 @@ async function main() {
               context: ctx, permissions, display,
               initialHistory: activeChatHistory,
               maxTurns: resolved.maxTurns,
+              confirmFn: async (msg) => new Promise(res => {
+                rl.question(`\\n⚠️  ${msg} [y/N] `, a => {
+                  res(a.trim().toLowerCase() === 'y' || a.trim().toLowerCase() === 'yes');
+                });
+              }),
               spawnConfig: {
                 apiKey: runtimeConfig.apiKey,
                 baseUrl: runtimeConfig.baseUrl ?? undefined,

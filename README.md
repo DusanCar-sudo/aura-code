@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/aura-code"><img src="https://img.shields.io/npm/v/aura-code?color=cc0000&label=npm&logo=npm" alt="npm version"></a>
   <a href="https://github.com/milodule3-debug/aura-code/actions/workflows/ci.yml"><img src="https://github.com/milodule3-debug/aura-code/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/tests-734%2B-brightgreen" alt="734+ tests">
+  <img src="https://img.shields.io/badge/tests-999%2B-brightgreen" alt="999+ tests">
   <a href="https://github.com/milodule3-debug/aura-code/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white" alt="Node.js 18+">
   <a href="https://github.com/milodule3-debug/aura-code"><img src="https://img.shields.io/github/stars/milodule3-debug/aura-code?style=social" alt="GitHub Stars"></a>
@@ -111,7 +111,7 @@ Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
 
 | Metric | Value |
 |--------|-------|
-| Tests | 734+ passing, 0 failures |
+| Tests | 999+ passing, 0 failures |
 | Version | v0.3.0 |
 | Language | TypeScript (strict) |
 | License | MIT |
