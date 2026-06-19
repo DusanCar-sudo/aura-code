@@ -360,6 +360,9 @@ const globalCfg = loadGlobalConfig();
 
 // Effective model = CLI > AURA_MODEL env > .aura.json > global config > undefined
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
+// Tracks whether the user has explicitly chosen a model (--model flag OR :model REPL command).
+// The RubyAlternator must not override an explicit user choice.
+let userSetModel = !!cliModel;
 const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
 
 // Effective base URL = CLI > .aura.json > global config > undefined
@@ -836,8 +839,8 @@ async function main() {
     }
 
     // ── RubyAlternator: suggest model from competence history ─────────────────
-    // Only when the user has NOT explicitly specified --model
-    if (!cliModel) {
+    // Only when the user has NOT explicitly specified --model or :model
+    if (!userSetModel) {
       try {
         const availableModelIds = getAllModels().map(m => m.id);
         const suggested = await selectModel(ctx.root, task, availableModelIds);
@@ -972,7 +975,7 @@ async function main() {
         // Run task — pass current conversation history for stay-active mode
         // ── RubyAlternator: suggest model from competence history ──────────────
         // Only when the user has NOT set a model explicitly via --model or :model
-        if (!cliModel) {
+        if (!userSetModel) {
           try {
             const availableModelIds = getAllModels().map(m => m.id);
             const suggested = await selectModel(ctx.root, input, availableModelIds);
@@ -1132,6 +1135,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
   try {
     const test = buildProvider(c.display);
     c.providerConfig.model = newModel;
+    userSetModel = true; // user explicitly chose — alternator must not override
     console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
     return { ok: true };
   } catch (e) {
