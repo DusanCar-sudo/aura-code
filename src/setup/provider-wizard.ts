@@ -33,8 +33,8 @@ export interface ProviderConfig {
  *
  * Returns the chosen config on success, or null if the user cancelled.
  */
-export async function runProviderWizard(): Promise<ProviderConfig | null> {
-  const rl = readline.createInterface({
+export async function runProviderWizard(existingRl?: readline.Interface): Promise<ProviderConfig | null> {
+  const rl = existingRl || readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
@@ -73,7 +73,9 @@ export async function runProviderWizard(): Promise<ProviderConfig | null> {
     const saved = await testAndSave(rl, config);
     return saved;
   } finally {
-    rl.close();
+    if (!existingRl) {
+      rl.close();
+    }
   }
 }
 

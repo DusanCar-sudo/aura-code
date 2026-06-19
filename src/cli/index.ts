@@ -916,6 +916,7 @@ async function main() {
           providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
           permissions, cumulative,
           chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+          rl,
         };
         const cmdResult = await handleReplCommand(input, replCtx);
         if (cmdResult.handled) {
@@ -1047,6 +1048,7 @@ interface ReplCtx {
   permissions: PermissionSystem;
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
+  rl: readline.Interface;
 }
 
 interface ReplCommandResult {
@@ -1077,7 +1079,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
  * Interactive model selector — shows all models grouped by provider,
  * lets the user pick by number or type a custom model ID.
  */
-function showModelSelector(c: ReplCtx): void {
+async function showModelSelector(c: ReplCtx): Promise<void> {
   const allModels = getAllModels();
 
   // Build flat numbered list grouped by provider
@@ -1102,30 +1104,33 @@ function showModelSelector(c: ReplCtx): void {
   console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
   console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.question(chalk.hex('#cc785c')('  ▸ '), (answer) => {
-    const choice = answer.trim();
-    rl.close();
+  return new Promise<void>(resolve => {
+    c.rl.question(chalk.hex('#cc785c')('  ▸ '), (answer) => {
+      const choice = answer.trim();
 
-    if (!choice) {
-      console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
-      return;
-    }
-
-    // Try as a number
-    const num = parseInt(choice, 10);
-    if (!isNaN(num) && num >= 1 && num <= entries.length) {
-      const selected = entries[num - 1];
-      if (selected.id) {
-        trySetModel(c, selected.id);
-      } else {
-        console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
+      if (!choice) {
+        console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
+        resolve();
+        return;
       }
-      return;
-    }
 
-    // Treat as a raw model ID
-    trySetModel(c, choice);
+      // Try as a number
+      const num = parseInt(choice, 10);
+      if (!isNaN(num) && num >= 1 && num <= entries.length) {
+        const selected = entries[num - 1];
+        if (selected.id) {
+          trySetModel(c, selected.id);
+        } else {
+          console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
+        }
+        resolve();
+        return;
+      }
+
+      // Treat as a raw model ID
+      trySetModel(c, choice);
+      resolve();
+    });
   });
 }
 
@@ -1359,7 +1364,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   // ── Provider wizard command ────────────────────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    const cfg = await runProviderWizard();
+    const cfg = await runProviderWizard(c.rl);
     if (cfg) {
       // Update current session's provider without restart
       runtimeConfig.model = cfg.model;
@@ -1393,7 +1398,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':model' || input === '/model') {
-    showModelSelector(c);
+    await showModelSelector(c);
     return { handled: true };
   }
 
