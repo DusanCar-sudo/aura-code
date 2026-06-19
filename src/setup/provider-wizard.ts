@@ -56,7 +56,13 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
     if (apiKey === null && provider.envKey !== null) return null; // Cancelled (needed key but got null)
 
     // Build baseUrl
-    const baseUrl = provider.baseUrl || await askInput(rl, '  ▸ Enter base URL: ');
+    let baseUrlPrompt = '  ▸ Enter base URL: ';
+    if (provider.baseUrl) {
+      baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(provider.baseUrl)}]: `;
+    }
+    const enteredUrl = await askInput(rl, baseUrlPrompt);
+    const baseUrl = enteredUrl.trim() || provider.baseUrl || '';
+
     if (!baseUrl && provider.name === 'Custom endpoint') {
       console.log(chalk.hex('#b15439')('  ✗ Base URL is required for custom endpoints.'));
       return null;

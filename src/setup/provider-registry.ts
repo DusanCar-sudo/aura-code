@@ -107,7 +107,7 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     envKey: 'NVIDIA_API_KEY',
     signupUrl: 'https://build.nvidia.com',
     models: [
-      { id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', label: 'Nemotron Ultra', speed: 'Powerful', contextWindow: 131072 },
+      { id: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'Nemotron 70B', speed: 'Powerful', contextWindow: 131072 },
     ],
   },
   {
