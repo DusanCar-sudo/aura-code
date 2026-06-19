@@ -21,6 +21,7 @@ import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
+import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
@@ -38,7 +39,7 @@ import { saveEpisode } from '../ruby/episode-capture.js';
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'once'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'once'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -426,13 +427,25 @@ async function main() {
   const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
   const skipSetup = argv['no-setup'] === true || argv.help === true || argv.h === true || argv.models === true || argv.version === true || argv.v === true;
   const resetSetup = argv['reset-setup'] === true;
+  const cliSetup = argv['setup'] === true;
   if (resetSetup) {
     // Wipe global config so the wizard fires unconditionally.
     try { fs.unlinkSync(globalConfigPath()); } catch { /* not present */ }
   }
+  // --setup flag: run provider wizard before entering REPL
+  if (cliSetup && !skipSetup) {
+    const cfg = await runProviderWizard();
+    if (cfg) {
+      resolved.model = cfg.model;
+      resolved.baseUrl = cfg.baseUrl;
+      runtimeConfig.model = cfg.model;
+      runtimeConfig.baseUrl = cfg.baseUrl;
+      runtimeConfig.apiKey = cfg.apiKey;
+    }
+  }
   // When --reset-setup is set, force the wizard to fire (overrides env-var
   // detection — the user explicitly wants to reconfigure).
-  const shouldRunWizard = !skipSetup && isInteractive && (
+  const shouldRunWizard = !skipSetup && !cliSetup && isInteractive && (
     resetSetup || needsWizard({ cliApiKey, cliModel })
   );
   if (shouldRunWizard) {
@@ -957,6 +970,10 @@ async function main() {
         } catch (err) {
           const msg = err instanceof Error ? (err.stack || err.message) : String(err);
           console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
+          // Suggest :provider on auth errors
+          if (/\b(401|403|unauthorized|invalid.*api.?key|authentication)\b/i.test(msg)) {
+            console.error(chalk.hex('#cc785c')('  💡 Run :provider to reconfigure your API key\n'));
+          }
           ask();
           return;
         }
@@ -1134,6 +1151,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :delete <id>            Delete a saved session',
       '',
       '  ── Model / API ──────────────────────────────────',
+      '  :provider               Provider setup wizard (configure provider, model, API key)',
       '  :model                  Interactive model selector',
       '  :model <id>             Switch to a specific model',
       '  :models                 List all available models',
@@ -1335,6 +1353,25 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
     } else {
       console.log(chalk.hex('#8a7768')('  No graph.json found after refresh. Run graphify extract first.\n'));
+    }
+    return { handled: true };
+  }
+
+  // ── Provider wizard command ────────────────────────────────────────────────
+  if (input === ':provider' || input === '/provider') {
+    const cfg = await runProviderWizard();
+    if (cfg) {
+      // Update current session's provider without restart
+      runtimeConfig.model = cfg.model;
+      runtimeConfig.baseUrl = cfg.baseUrl;
+      runtimeConfig.apiKey = cfg.apiKey;
+      c.providerConfig.model = cfg.model;
+      c.providerConfig.baseUrl = cfg.baseUrl;
+      c.providerConfig.apiKey = cfg.apiKey;
+      // Keep resolved in sync
+      (resolved as { model?: string }).model = cfg.model;
+      (resolved as { baseUrl?: string }).baseUrl = cfg.baseUrl;
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
     }
     return { handled: true };
   }
@@ -1825,6 +1862,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --resume [id]            Resume latest session, or a specific session by ID
     --chat-id <id>           Attach to a specific chat ID (creates if missing)
     --list-sessions          List all saved sessions for this project
+    --setup                  Run the provider setup wizard before entering REPL
     --no-setup               Skip the first-run setup wizard
     --reset-setup            Wipe saved config and re-run the setup wizard
     --orchestrate            Force multi-agent orchestration mode
