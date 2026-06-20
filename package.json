@@ -1,6 +1,6 @@
 {
   "name": "aura-code",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Aura Code — model-agnostic AI coding agent. Works with Claude, GPT, Gemini, MiMo, Ollama, and any OpenAI-compatible endpoint. MIT licensed.",
   "bin": {
     "aura": "dist/cli/index.js"
