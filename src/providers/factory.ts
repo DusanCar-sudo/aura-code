@@ -53,6 +53,28 @@ export function modelProviderFamily(modelId: string): string {
 }
 
 /**
+ * Known default endpoints, keyed to the same family ids `modelProviderFamily`
+ * returns. Lets us recognise "this baseUrl is MiMo's, but the model is
+ * DeepSeek" even when there is no saved/global config to compare against —
+ * which is exactly the case on a fresh checkout (CI, first run,
+ * `--reset-setup`). Without this, the cross-provider guard below only
+ * activates once *some* prior config already exists to diff against.
+ */
+const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
+  'https://api.deepseek.com/v1': 'deepseek',
+  'https://token-plan-sgp.xiaomimimo.com/v1': 'xiaomi',
+  'https://api.anthropic.com': 'anthropic',
+  'https://generativelanguage.googleapis.com/v1beta': 'google',
+  'https://openrouter.ai/api/v1': 'openrouter',
+  'https://api.x.ai/v1': 'xai',
+};
+
+function baseUrlFamily(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  return KNOWN_PROVIDER_BASE_URLS[url];
+}
+
+/**
  * Drop baseUrl/apiKey from a different wizard setup so we never send DeepSeek to MiMo URL.
  */
 export function resolveProviderTransport(
@@ -93,7 +115,11 @@ export function resolveProviderTransport(
     const tiedToOther =
       (saved?.baseUrl && baseUrl === saved.baseUrl && savedModel && savedModel !== model)
       || (globalCfg?.baseUrl && baseUrl === globalCfg.baseUrl && globalModel && globalModel !== model);
-    if (tiedToOther) baseUrl = undefined;
+
+    const knownFamily = baseUrlFamily(baseUrl);
+    const mismatchedKnownFamily = knownFamily !== undefined && knownFamily !== modelProviderFamily(model);
+
+    if (tiedToOther || mismatchedKnownFamily) baseUrl = undefined;
   }
 
   return { baseUrl, apiKey: opts.apiKey };
