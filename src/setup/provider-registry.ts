@@ -75,12 +75,12 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
   },
   {
     name: 'Xiaomi MiMo',
-    baseUrl: 'https://token-plan-sgp.xiaomimimo.com/v1',
     envKey: 'XIAOMI_API_KEY',
-    signupUrl: 'https://mimo.xiaomiyoupin.com',
+    baseUrl: 'https://token-plan-sgp.xiaomimimo.com/v1',
+    signupUrl: 'https://platform.xiaomimimo.com/#/console/api-keys',
     models: [
-      { id: 'mimo-v2.5-pro', label: 'MiMo V2.5 Pro', speed: 'Powerful', contextWindow: 1000000 },
-      { id: 'mimo-v2-flash', label: 'MiMo V2 Flash', speed: 'Fast', contextWindow: 1000000 },
+      { id: 'mimo-v2.5-pro', label: 'MiMo V2.5 Pro', speed: 'Powerful · Token Plan', contextWindow: 1_048_576 },
+      { id: 'mimo-v2.5', label: 'MiMo V2.5', speed: 'Fast · Token Plan', contextWindow: 1_048_576 },
     ],
   },
   {

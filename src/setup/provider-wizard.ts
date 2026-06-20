@@ -20,6 +20,7 @@ import { PROVIDER_REGISTRY, detectExistingKey, maskApiKey } from './provider-reg
 import type { ProviderEntry } from './provider-registry.js';
 import { testProviderConnection } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
+import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig } from './xiaomi.js';
 
 export interface ProviderConfig {
   provider: string;   // Display name
@@ -55,13 +56,27 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
     const apiKey = await configureApiKey(rl, provider);
     if (apiKey === null && provider.envKey !== null) return null; // Cancelled (needed key but got null)
 
+    let effectiveModel = model;
+
     // Build baseUrl
     let baseUrlPrompt = '  ▸ Enter base URL: ';
-    if (provider.baseUrl) {
-      baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(provider.baseUrl)}]: `;
+    const defaultBase = provider.name === 'Xiaomi MiMo'
+      ? defaultXiaomiBaseUrl(apiKey ?? undefined)
+      : (provider.baseUrl || '');
+    if (defaultBase) {
+      baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(defaultBase)}]: `;
     }
     const enteredUrl = await askInput(rl, baseUrlPrompt);
-    const baseUrl = enteredUrl.trim() || provider.baseUrl || '';
+    let baseUrl = enteredUrl.trim() || defaultBase || provider.baseUrl || '';
+
+    if (provider.name === 'Xiaomi MiMo') {
+      const norm = normalizeXiaomiWizardConfig(effectiveModel, apiKey ?? undefined, baseUrl);
+      effectiveModel = norm.model;
+      baseUrl = norm.baseUrl;
+      if (norm.note) {
+        console.log(chalk.hex('#8a7768')(`  ↪ ${norm.note}\n`));
+      }
+    }
 
     if (!baseUrl && provider.name === 'Custom endpoint') {
       console.log(chalk.hex('#b15439')('  ✗ Base URL is required for custom endpoints.'));
@@ -70,7 +85,7 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
 
     const config: ProviderConfig = {
       provider: provider.name,
-      model,
+      model: effectiveModel,
       baseUrl: baseUrl || provider.baseUrl,
       apiKey: apiKey ?? undefined,
     };

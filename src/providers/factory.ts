@@ -6,6 +6,7 @@ import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
 import * as http from 'http';
 import { loadProviderConfig } from '../setup/provider-wizard.js';
+import { loadGlobalConfig } from '../setup/global-config.js';
 import { DEFAULTS } from '../config/defaults.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +39,66 @@ export function detectProviderKind(model: string): 'anthropic' | 'google' | 'ope
   return 'openai-compatible';
 }
 
+/** Rough provider family for routing / alternator guardrails. */
+export function modelProviderFamily(modelId: string): string {
+  const m = modelId.toLowerCase();
+  if (m.startsWith('deepseek/') || m.startsWith('deepseek-')) return 'deepseek';
+  if (m.startsWith('mimo-') || m.startsWith('xiaomi/') || m.startsWith('mimo/')) return 'xiaomi';
+  if (m.startsWith('claude-')) return 'anthropic';
+  if (m.startsWith('gemini-')) return 'google';
+  if (m.startsWith('openrouter/')) return 'openrouter';
+  if (m.startsWith('grok-') || m.startsWith('xai/')) return 'xai';
+  if (m.startsWith('ollama/')) return 'ollama';
+  return 'openai-compatible';
+}
+
+/**
+ * Drop baseUrl/apiKey from a different wizard setup so we never send DeepSeek to MiMo URL.
+ */
+export function resolveProviderTransport(
+  model: string,
+  opts: { baseUrl?: string; apiKey?: string },
+): { baseUrl?: string; apiKey?: string } {
+  const saved = loadProviderConfig();
+  const globalCfg = loadGlobalConfig();
+  const savedModel = saved?.model;
+  const globalModel = globalCfg?.defaultModel;
+
+  if (savedModel === model) {
+    return {
+      baseUrl: opts.baseUrl ?? saved?.baseUrl,
+      apiKey: opts.apiKey ?? saved?.apiKey,
+    };
+  }
+  if (
+    saved?.apiKey
+    && saved?.baseUrl
+    && modelProviderFamily(savedModel ?? '') === 'xiaomi'
+    && modelProviderFamily(model) === 'xiaomi'
+  ) {
+    return {
+      baseUrl: opts.baseUrl ?? saved.baseUrl,
+      apiKey: opts.apiKey ?? saved.apiKey,
+    };
+  }
+  if (globalModel === model) {
+    return {
+      baseUrl: opts.baseUrl ?? globalCfg?.baseUrl,
+      apiKey: opts.apiKey,
+    };
+  }
+
+  let baseUrl = opts.baseUrl;
+  if (baseUrl) {
+    const tiedToOther =
+      (saved?.baseUrl && baseUrl === saved.baseUrl && savedModel && savedModel !== model)
+      || (globalCfg?.baseUrl && baseUrl === globalCfg.baseUrl && globalModel && globalModel !== model);
+    if (tiedToOther) baseUrl = undefined;
+  }
+
+  return { baseUrl, apiKey: opts.apiKey };
+}
+
 /**
  * Auto-detect the right provider from the model name, then instantiate it.
  *
@@ -59,10 +120,16 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   // ── Saved provider config (from provider wizard) ────────────────────────
   // Use saved baseUrl / apiKey as fallback when not explicitly provided.
   const savedCfg = loadProviderConfig();
-  if (savedCfg && !config.baseUrl && savedCfg.model === config.model) {
-    config = { ...config, baseUrl: config.baseUrl ?? savedCfg.baseUrl };
-    if (!config.apiKey && savedCfg.apiKey) {
-      config = { ...config, apiKey: savedCfg.apiKey };
+  if (savedCfg && !config.baseUrl) {
+    const sameWizardModel = savedCfg.model === config.model;
+    const sameXiaomiFamily =
+      modelProviderFamily(savedCfg.model) === 'xiaomi'
+      && modelProviderFamily(config.model) === 'xiaomi';
+    if (sameWizardModel || sameXiaomiFamily) {
+      config = { ...config, baseUrl: config.baseUrl ?? savedCfg.baseUrl };
+      if (!config.apiKey && savedCfg.apiKey) {
+        config = { ...config, apiKey: savedCfg.apiKey };
+      }
     }
   }
 
@@ -70,7 +137,11 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   for (const def of customProviders) {
     const matched = def.prefixes.some(p => model.startsWith(p.toLowerCase()));
     if (matched) {
-      const stripPrefix = def.prefixes.find(p => model.startsWith(p.toLowerCase()));
+      // Only strip vendor/ style prefixes (e.g. deepseek/). Bare prefixes like mimo- are
+      // match-only — the API model id includes the prefix (mimo-v2.5-pro).
+      const stripPrefix = def.prefixes.find(
+        p => p.endsWith('/') && model.startsWith(p.toLowerCase()),
+      );
       const rawModel = stripPrefix ? model.slice(stripPrefix.length) : model;
       const apiKey = config.apiKey
         ?? (def.apiKey ?? undefined)
@@ -347,4 +418,50 @@ export async function checkOllamaHealth(baseUrl: string = 'http://localhost:1143
     req.on('error', () => resolve(false));
     req.on('timeout', () => { req.destroy(); resolve(false); });
   });
+}
+
+function hasApiKey(...names: string[]): boolean {
+  return names.some(n => !!getApiKey(n));
+}
+
+/**
+ * True when this model can be called with credentials available in env / saved wizard config.
+ * Used to keep competence-based model selection from routing to providers without keys.
+ */
+export function isModelConfigured(modelId: string): boolean {
+  const model = modelId.toLowerCase();
+  const savedCfg = loadProviderConfig();
+
+  for (const def of customProviders) {
+    const matched = def.prefixes.some(p => model.startsWith(p.toLowerCase()));
+    if (matched) {
+      if (def.apiKey?.trim()) return true;
+      if (def.apiKeyEnv && hasApiKey(def.apiKeyEnv)) return true;
+      return false;
+    }
+  }
+
+  if (model.startsWith('claude-')) return hasApiKey('ANTHROPIC_API_KEY');
+  if (model.startsWith('gemini-')) return hasApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY');
+  if (model.startsWith('openrouter/')) return hasApiKey('OPENROUTER_API_KEY');
+  if (model.startsWith('deepseek/')) return hasApiKey('DEEPSEEK_API_KEY');
+  if (model.startsWith('xiaomi/') || model.startsWith('mimo-')) {
+    return hasApiKey('XIAOMI_API_KEY')
+      || !!(savedCfg?.apiKey && savedCfg.model === modelId);
+  }
+  if (model.startsWith('grok-') || model.includes('grok')) return hasApiKey('XAI_API_KEY');
+  if (model.startsWith('ollama/')) return true;
+
+  if (model === 'deepseek-v4-flash' || model.startsWith('deepseek-')) {
+    if (hasApiKey('DEEPSEEK_API_KEY')) return true;
+    if (savedCfg?.apiKey && savedCfg.model === modelId) return true;
+  }
+
+  if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')) {
+    return hasApiKey('OPENAI_API_KEY');
+  }
+
+  if (savedCfg?.apiKey && savedCfg.model === modelId) return true;
+
+  return false;
 }

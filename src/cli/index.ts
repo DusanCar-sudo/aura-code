@@ -34,6 +34,11 @@ import { renderDiamond } from './diamond.js';
 import { saveEpisode, loadEpisodes } from '../ruby/episode-capture.js';
 import { selectModel } from '../ruby/model-selector.js';
 import { formatStats } from '../ruby/stats.js';
+import { bootstrapAuraEnv } from '../util/load-env.js';
+import { isModelConfigured, modelProviderFamily, resolveProviderTransport } from '../providers/factory.js';
+
+// Load API keys from ~/.hermes/.env, ~/.config/aura-code/.env, and project .env
+bootstrapAuraEnv(process.cwd());
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
@@ -358,12 +363,15 @@ const fileConfig = loadProjectConfig(cwd);
 // to re-set their provider on every run.
 const globalCfg = loadGlobalConfig();
 
-// Effective model = CLI > AURA_MODEL env > .aura.json > global config > undefined
+// Effective model = CLI > AURA_MODEL env > global wizard > .aura.json project default
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
 // Tracks whether the user has explicitly chosen a model (--model flag OR :model REPL command).
 // The RubyAlternator must not override an explicit user choice.
 let userSetModel = !!cliModel;
-const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
+const effectiveModel = cliModel
+  ?? process.env.AURA_MODEL
+  ?? globalCfg?.defaultModel
+  ?? fileConfig.model;
 
 // Effective base URL = CLI > .aura.json > global config > undefined
 const cliBaseUrl = typeof argv['base-url'] === 'string' ? argv['base-url'] : undefined;
@@ -408,13 +416,17 @@ if (cliProfile === 'local') {
 function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMProvider {
   // Use runtimeConfig.model (mutable via :model command) falling back to resolved.model.
   const model = runtimeConfig.model ?? resolved.model!;
+  const transport = resolveProviderTransport(model, {
+    baseUrl: runtimeConfig.baseUrl ?? resolved.baseUrl ?? undefined,
+    apiKey: runtimeConfig.apiKey,
+  });
   // Keep resolved in sync so external reads (e.g. header display) reflect the switch.
   (resolved as { model?: string }).model = model;
   return createResilientProvider(
     {
       model,
-      apiKey:  runtimeConfig.apiKey,
-      baseUrl: runtimeConfig.baseUrl ?? undefined,
+      apiKey: transport.apiKey,
+      baseUrl: transport.baseUrl,
     },
     {
       rpm: resolved.rateLimitRpm,
@@ -840,13 +852,18 @@ async function main() {
 
     // ── RubyAlternator: suggest model from competence history ─────────────────
     // Only when the user has NOT explicitly specified --model or :model
-    if (!userSetModel) {
+    if (!userSetModel && !globalCfg?.defaultModel) {
       try {
-        const availableModelIds = getAllModels().map(m => m.id);
+        const availableModelIds = getAllModels()
+          .map(m => m.id)
+          .filter(id => isModelConfigured(id))
+          .filter(id => modelProviderFamily(id) === modelProviderFamily(runtimeConfig.model ?? resolved.model!));
         const suggested = await selectModel(ctx.root, task, availableModelIds);
         if (suggested && suggested !== runtimeConfig.model) {
           console.log(chalk.hex('#4e3d30')(`  Using ${suggested} (selected by competence history)\n`));
           runtimeConfig.model = suggested;
+          runtimeConfig.baseUrl = undefined;
+          runtimeConfig.apiKey = undefined;
           // Rebuild provider with the suggested model
           provider = buildProvider(display);
         }
@@ -975,13 +992,18 @@ async function main() {
         // Run task — pass current conversation history for stay-active mode
         // ── RubyAlternator: suggest model from competence history ──────────────
         // Only when the user has NOT set a model explicitly via --model or :model
-        if (!userSetModel) {
+        if (!userSetModel && !globalCfg?.defaultModel) {
           try {
-            const availableModelIds = getAllModels().map(m => m.id);
+            const availableModelIds = getAllModels()
+              .map(m => m.id)
+              .filter(id => isModelConfigured(id))
+              .filter(id => modelProviderFamily(id) === modelProviderFamily(runtimeConfig.model ?? resolved.model!));
             const suggested = await selectModel(ctx.root, input, availableModelIds);
             if (suggested && suggested !== runtimeConfig.model) {
               console.log(chalk.hex('#4e3d30')(`  Using ${suggested} (selected by competence history)\n`));
               runtimeConfig.model = suggested;
+              runtimeConfig.baseUrl = undefined;
+              runtimeConfig.apiKey = undefined;
             }
           } catch {
             // Competence selection is best-effort; never block the user

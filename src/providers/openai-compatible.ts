@@ -214,7 +214,9 @@ function resolveApiKey(config: ProviderConfig): string {
   if (config.baseUrl?.includes('openrouter')) return getApiKey('OPENROUTER_API_KEY') ?? '';
   if (config.baseUrl?.includes('x.ai') || m.includes('grok')) return getApiKey('XAI_API_KEY') ?? '';
   if (config.baseUrl?.includes('xiaomimimo') || m.startsWith('mimo-')) return getApiKey('XIAOMI_API_KEY') ?? '';
+  if (config.baseUrl?.includes('deepseek')) return getApiKey('DEEPSEEK_API_KEY') ?? '';
   if (config.baseUrl?.includes('localhost') || config.baseUrl?.includes('127.0.0.1')) return 'local';
+  if (m.startsWith('deepseek-')) return getApiKey('DEEPSEEK_API_KEY') ?? '';
   return getApiKey('OPENAI_API_KEY') ?? '';
 }
 
