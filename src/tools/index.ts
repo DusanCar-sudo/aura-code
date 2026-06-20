@@ -24,7 +24,6 @@ import { CRON_DEFINITION, cronTool } from './cron.js';
 import { AUDIO_TRANSCRIBE_DEFINITION, audioTranscribe } from './audio-transcribe.js';
 import { YOUTUBE_TRANSCRIPT_DEFINITION, youtubeTranscript } from './youtube-transcript.js';
 import { MCP_DEFINITION, mcpTool } from './mcp.js';
-import { SHADOW_SHIELD_DEFINITION, shadowShield } from './shadow-shield.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool schemas (what the model sees)
@@ -158,7 +157,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   AUDIO_TRANSCRIBE_DEFINITION,
   YOUTUBE_TRANSCRIPT_DEFINITION,
   MCP_DEFINITION,
-  SHADOW_SHIELD_DEFINITION,
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,7 +196,6 @@ export async function executeTool(
       case 'audio_transcribe':    return audioTranscribe(input as any);
       case 'youtube_transcript':  return youtubeTranscript(input as any);
       case 'mcp':                 return mcpTool(input as any);
-      case 'shadow_shield':       return shadowShield(input as any);
       default:                    return `Error: Unknown tool '${name}'`;
     }
   } catch (e) {
