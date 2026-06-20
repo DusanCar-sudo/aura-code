@@ -44,7 +44,8 @@ export class RateLimiter {
     // `start` is only set once we know we actually have to wait. This keeps
     // the instant-success path free of any wall-clock read, so it returns a
     // literal 0 deterministically instead of `Date.now() - start`, which can
-    // tick from 0 to 1ms under scheduler load even with no real wait.
+    // tick from 0 to 1ms under scheduler load even with no real wait — the
+    // exact flake seen in CI (and intermittently in local runs under load).
     let start: number | undefined;
     while (true) {
       this.refill();
@@ -52,12 +53,14 @@ export class RateLimiter {
         this.tokens -= n;
         return start === undefined ? 0 : Date.now() - start;
       }
+      // Tokens needed minus what we have, divided by refill rate = wait time
       const deficit = n - this.tokens;
       const waitMs = Math.ceil(deficit / this.refillPerMs) + 5;
       this.onWait?.({ needed: n, waitMs });
       start ??= Date.now();
       await this.sleep(waitMs);
     }
+  }
 
   /**
    * Consume tokens without waiting. Returns true if successful, false if
