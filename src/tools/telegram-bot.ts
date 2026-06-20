@@ -10,6 +10,11 @@ import { exec, execSync } from 'child_process';
 
 import { createProvider } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
+import { bootstrapAuraEnv } from '../util/load-env.js';
+import { loadGlobalConfig } from '../setup/global-config.js';
+import { loadProjectConfig } from '../config/project-config.js';
+import { loadProviderConfig } from '../setup/provider-wizard.js';
+import { getApiKey } from '../util/env.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
@@ -71,10 +76,20 @@ const AUTHORIZED_USER_IDS = loadAuthorizedUserIds();
 const PROJECT_ROOT = process.env.TELEGRAM_BOT_PROJECT_ROOT
   ?? path.resolve(__dirname, '../..'); // default to aura-code repo
 
+bootstrapAuraEnv(PROJECT_ROOT);
+
+function resolveTaskModel(): string {
+  const fileConfig = loadProjectConfig(PROJECT_ROOT);
+  const globalCfg = loadGlobalConfig();
+  return process.env.TELEGRAM_BOT_MODEL
+    ?? process.env.AURA_MODEL
+    ?? fileConfig.model
+    ?? globalCfg?.defaultModel
+    ?? 'deepseek/deepseek-v4-flash';
+}
+
 // The model to use for task execution
-const TASK_MODEL = process.env.TELEGRAM_BOT_MODEL
-  ?? process.env.AURA_MODEL
-  ?? 'mimo-v2.5-pro';
+const TASK_MODEL = resolveTaskModel();
 
 // ── Safety state ───────────────────────────────────────────────────────────
 let safetyState = loadSafetyState();
@@ -86,14 +101,25 @@ function saveState(): void {
 
 // ── Provider (created once, reused) ────────────────────────────────────────
 function createLLMProvider(): LLMProvider {
-  const apiKey = process.env.XIAOMI_API_KEY
-    ?? process.env.ANTHROPIC_API_KEY
-    ?? process.env.OPENAI_API_KEY
-    ?? process.env.GOOGLE_API_KEY
-    ?? process.env.OPENROUTER_API_KEY;
+  const saved = loadProviderConfig();
+  const fileConfig = loadProjectConfig(PROJECT_ROOT);
+  const globalCfg = loadGlobalConfig();
+  const apiKey = process.env.AURA_API_KEY
+    ?? saved?.apiKey
+    ?? getApiKey('DEEPSEEK_API_KEY')
+    ?? getApiKey('XIAOMI_API_KEY')
+    ?? getApiKey('ANTHROPIC_API_KEY')
+    ?? getApiKey('OPENAI_API_KEY')
+    ?? getApiKey('GOOGLE_API_KEY')
+    ?? getApiKey('OPENROUTER_API_KEY');
+  const baseUrl = process.env.AURA_BASE_URL
+    ?? fileConfig.baseUrl
+    ?? globalCfg?.baseUrl
+    ?? saved?.baseUrl;
   return createProvider({
     model: TASK_MODEL,
     apiKey,
+    baseUrl,
   });
 }
 
