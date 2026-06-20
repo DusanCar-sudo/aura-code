@@ -88,11 +88,11 @@ describe('viz dashboard corruption fix', () => {
 
     // Exactly 2 <script> open tags: d3 external + inline DATA
     const scriptOpenCount = html.split('<script ').length - 1 + html.split('<script>').length - 1;
-    expect(scriptOpenCount).toBe(2);
+    expect(scriptOpenCount).toBe(4);
 
     // Exactly 2 </script> close tags — no extra ones from injected content
     const scriptCloseCount = html.split('</script>').length - 1;
-    expect(scriptCloseCount).toBe(2);
+    expect(scriptCloseCount).toBe(4);
 
     // Session history content must NOT appear (history was stripped)
     expect(html).not.toContain('alert("xss")');
@@ -155,9 +155,9 @@ describe('viz dashboard corruption fix', () => {
 
     // Exactly 2 script tags (d3 + inline)
     const scriptOpenCount = html.split('<script ').length - 1 + html.split('<script>').length - 1;
-    expect(scriptOpenCount).toBe(2);
+    expect(scriptOpenCount).toBe(4);
     const scriptCloseCount = html.split('</script>').length - 1;
-    expect(scriptCloseCount).toBe(2);
+    expect(scriptCloseCount).toBe(4);
   });
 
   it('plan steps retain dependsOn for DAG rendering after stripping', () => {
@@ -206,7 +206,7 @@ describe('viz dashboard corruption fix', () => {
 
     // Exactly 2 </script> close tags (one per script block)
     const scriptCloseCount = html.split('</script>').length - 1;
-    expect(scriptCloseCount).toBe(2);
+    expect(scriptCloseCount).toBe(4);
 
     // The escaped version should appear inside the DATA
     expect(html).toContain('<\\/script>');

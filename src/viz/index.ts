@@ -113,18 +113,156 @@ function stripPlan(p: ExecutionPlan): Record<string, unknown> {
   };
 }
 
-function loadMemory(projectRoot: string): object[] {
-  const base = path.join(process.env.HOME ?? '/tmp', '.aura', 'memory');
-  const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
-  const dir = path.join(base, safe);
+import { episodeStore } from '../ruby/episode-capture.js';
+import { getCompetenceReport } from '../ruby/competence.js';
+import type { Episode } from '../ruby/types.js';
+
+interface MemoryFact {
+  key: string;
+  namespace: string;
+  value: string;
+  created: string;
+  updated: string;
+}
+
+/**
+ * Reads the REAL memory store: `~/.aura/memory/{namespace}.json`, one flat
+ * file per namespace, each `{ [key]: { value, updated, created? } }`.
+ *
+ * This memory store is global, not project-scoped — the `memory` tool never
+ * keyed entries by project root. (The previous version of this function read
+ * from a per-project-hash subdirectory that nothing in the codebase ever
+ * wrote to, so this panel has always returned an empty list.)
+ */
+function loadMemory(): MemoryFact[] {
+  const dir = path.join(process.env.HOME ?? '/tmp', '.aura', 'memory');
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
-    .map(f => {
-      try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); }
-      catch { return null; }
-    })
-    .filter((m): m is object => m !== null);
+  const facts: MemoryFact[] = [];
+  for (const file of fs.readdirSync(dir)) {
+    if (!file.endsWith('.json') || file.endsWith('.tmp')) continue;
+    const namespace = file.replace(/\.json$/, '');
+    try {
+      const store = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')) as
+        Record<string, { value: string; updated: string; created?: string }>;
+      for (const [key, entry] of Object.entries(store)) {
+        if (!entry || typeof entry.value !== 'string') continue;
+        facts.push({
+          key,
+          namespace,
+          value: entry.value,
+          updated: entry.updated,
+          // Entries written before `created` existed fall back to `updated`
+          // — the earliest timestamp we actually have for them.
+          created: entry.created ?? entry.updated,
+        });
+      }
+    } catch { /* skip an unreadable/corrupt namespace file */ }
+  }
+  return facts.sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+}
+
+/**
+ * Synchronous episode reader. Mirrors `episodeStore.loadEpisodes()` exactly
+ * (same directory via the store's own `projectDir()`, same "never throws,
+ * skip bad files" behaviour) but stays sync — `generateDashboard` must
+ * remain sync, since existing tests call it without `await`.
+ */
+function loadEpisodesSync(projectRoot: string): Episode[] {
+  try {
+    const dir = episodeStore.projectDir(projectRoot);
+    if (!fs.existsSync(dir)) return [];
+    const episodes: Episode[] = [];
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+        if (parsed && typeof parsed.timestamp === 'number') episodes.push(parsed as Episode);
+      } catch { /* skip a corrupt episode file */ }
+    }
+    return episodes.sort((a, b) => a.timestamp - b.timestamp);
+  } catch {
+    return [];
+  }
+}
+
+/** Day-bucketed cumulative growth of remembered facts, by first-created date. */
+function buildMemoryGrowth(facts: MemoryFact[]): { date: string; cumulative: number }[] {
+  const byDay = new Map<string, number>();
+  for (const f of facts) {
+    const day = (f.created || '').slice(0, 10);
+    if (!day) continue;
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+  }
+  const days = Array.from(byDay.keys()).sort();
+  let running = 0;
+  return days.map(date => {
+    running += byDay.get(date)!;
+    return { date, cumulative: running };
+  });
+}
+
+/**
+ * Day-bucketed learning curve: cumulative episode count, plus a rolling
+ * Ruby (small-model) success rate over the last `windowSize` attempted
+ * episodes up to and including each day. This is the actual "is it getting
+ * better at routing to the small model" signal — competence.ts itself
+ * doesn't persist a timeline, it recomputes fresh from episodes each call,
+ * so this reconstructs the trend from each episode's own timestamp.
+ */
+function buildLearningSeries(
+  episodes: Episode[],
+  windowSize = 10,
+): { date: string; cumulativeEpisodes: number; rollingSuccessRate: number }[] {
+  const byDay = new Map<string, Episode[]>();
+  for (const ep of episodes) {
+    const day = new Date(ep.timestamp).toISOString().slice(0, 10);
+    const arr = byDay.get(day) ?? [];
+    arr.push(ep);
+    byDay.set(day, arr);
+  }
+  const days = Array.from(byDay.keys()).sort();
+  let cumulative = 0;
+  const seenSoFar: Episode[] = [];
+  return days.map(date => {
+    const todays = byDay.get(date)!;
+    cumulative += todays.length;
+    seenSoFar.push(...todays);
+    const attempted = seenSoFar.filter(e => e.rubyAttempted);
+    const recent = attempted.slice(-windowSize);
+    const rollingSuccessRate = recent.length === 0
+      ? 0
+      : recent.filter(e => e.rubySucceeded).length / recent.length;
+    return { date, cumulativeEpisodes: cumulative, rollingSuccessRate };
+  });
+}
+
+/** Plain-data summary mirroring formatStats()'s definitions, for stat cards. */
+function summariseEpisodes(episodes: Episode[]) {
+  const total = episodes.length;
+  const completed = episodes.filter(e => e.reviewerApproved).length;
+  const avgDurationMs = total === 0
+    ? 0
+    : episodes.reduce((s, e) => s + (e.durationMs ?? 0), 0) / total;
+  const totalTokens = episodes.reduce(
+    (s, e) => s + (e.tokensUsed?.ruby ?? 0) + (e.tokensUsed?.largeModel ?? 0),
+    0,
+  );
+  const rubyAttempted = episodes.filter(e => e.rubyAttempted);
+  const rubySuccessRate = rubyAttempted.length === 0
+    ? 0
+    : rubyAttempted.filter(e => e.rubySucceeded).length / rubyAttempted.length;
+
+  const modelCounts = new Map<string, number>();
+  for (const e of episodes) {
+    const model = e.largeModelUsed ?? (e.rubySucceeded ? 'ruby (small model)' : undefined);
+    if (model) modelCounts.set(model, (modelCounts.get(model) ?? 0) + 1);
+  }
+  const topModels = Array.from(modelCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([model, count]) => ({ model, count }));
+
+  return { total, completed, avgDurationMs, totalTokens, rubySuccessRate, topModels };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +273,11 @@ function buildHtml(data: {
   graph: object | null;
   plans: Record<string, unknown>[];
   sessions: Record<string, unknown>[];
-  memory: object[];
+  memory: MemoryFact[];
+  memoryGrowth: { date: string; cumulative: number }[];
+  episodeSummary: ReturnType<typeof summariseEpisodes>;
+  learningSeries: { date: string; cumulativeEpisodes: number; rollingSuccessRate: number }[];
+  competenceReport: { category: string; successRate: number; count: number }[];
   projectName: string;
   generatedAt: string;
 }): string {
@@ -148,6 +290,8 @@ function buildHtml(data: {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Aura — Memory Dashboard · ${data.projectName}</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/three@0.130.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.130.0/examples/js/controls/OrbitControls.js"></script>
 <style>
   :root {
     --bg:      #0d1117;
@@ -254,6 +398,30 @@ function buildHtml(data: {
   .memory-table td:first-child { color: var(--primary); white-space: nowrap; font-weight: 600; }
   .memory-table tr:hover td { background: var(--card); }
   .memory-val { max-width: 560px; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+  .ns-badge { background: var(--canvas); border: 1px solid var(--border2); border-radius: 10px; color: var(--blue); font-size: 10px; padding: 1px 8px; white-space: nowrap; }
+
+  /* Line charts (memory growth, learning curve) */
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+  .chart-card .lbl { color: var(--muted); font-size: 10px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .08em; }
+  .chart-svg { width: 100%; height: 220px; overflow: visible; }
+  .chart-line { fill: none; stroke-width: 2; }
+  .chart-area { opacity: .12; }
+  .chart-dot { stroke: var(--bg); stroke-width: 1.5; }
+  .chart-axis text { fill: var(--dim); font-size: 9px; font-family: inherit; }
+  .chart-axis path, .chart-axis line { stroke: var(--border); }
+  .chart-empty { align-items: center; color: var(--dim); display: flex; font-size: 11px; height: 220px; justify-content: center; }
+  .canvas-3d { border-radius: 6px; display: block; height: 260px; width: 100%; }
+
+  /* Learning panel breakdown lists */
+  .bar-list { display: flex; flex-direction: column; gap: 8px; }
+  .bar-row { align-items: center; display: grid; gap: 10px; grid-template-columns: 130px 1fr 70px; }
+  .bar-row .bar-name { color: var(--text); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-row .bar-track { background: var(--canvas); border-radius: 5px; height: 9px; overflow: hidden; }
+  .bar-row .bar-fill { background: var(--primary); height: 100%; }
+  .bar-row .bar-fill.success { background: var(--success); }
+  .bar-row .bar-val { color: var(--muted); font-size: 10px; text-align: right; white-space: nowrap; }
+  .two-col { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
   .empty { color: var(--dim); font-size: 12px; padding: 32px; text-align: center; }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -271,7 +439,8 @@ function buildHtml(data: {
   <button onclick="showPanel('graph',this)">Codebase Graph</button>
   <button onclick="showPanel('sessions',this)">Sessions</button>
   <button onclick="showPanel('plans',this)">Execution Plans</button>
-  <button onclick="showPanel('memory',this)">Agent Memory</button>
+  <button onclick="showPanel('memory',this)">Memory Growth</button>
+  <button onclick="showPanel('learning',this)">Learning</button>
 </nav>
 
 <div id="overview" class="panel active"></div>
@@ -279,6 +448,7 @@ function buildHtml(data: {
 <div id="sessions" class="panel"></div>
 <div id="plans"    class="panel"></div>
 <div id="memory"   class="panel"></div>
+<div id="learning" class="panel"></div>
 
 <div class="tooltip" id="tooltip" style="display:none"></div>
 
@@ -300,6 +470,7 @@ function showPanel(id, btn) {
   const nc = g ? g.nodes.length : 0, ec = g ? g.edges.length : 0;
   const sc = DATA.sessions.length, pc = DATA.plans.length;
   const mc = DATA.memory.length, dc = DATA.plans.filter(p=>p.status==='done').length;
+  const epc = DATA.episodeSummary.total;
   const last = sc ? new Date(DATA.sessions[0].updatedAt).toLocaleString()
              : pc ? new Date(DATA.plans[0].created).toLocaleString() : '—';
 
@@ -320,6 +491,7 @@ function showPanel(id, btn) {
       <div class="stat-card"><div class="num">\${pc}</div><div class="lbl">Exec Plans</div></div>
       <div class="stat-card"><div class="num">\${dc}</div><div class="lbl">Plans Done</div></div>
       <div class="stat-card"><div class="num">\${mc}</div><div class="lbl">Memory Entries</div></div>
+      <div class="stat-card"><div class="num">\${epc}</div><div class="lbl">Episodes Recorded</div></div>
     </div>
     <div class="stat-card" style="max-width:640px">
       <div class="lbl" style="margin-bottom:10px">Codebase Breakdown</div>
@@ -631,29 +803,252 @@ function renderDag(plan) {
   });
 }
 
-// ── Agent Memory ──────────────────────────────────────────────────────────────
+// ── Shared helpers ───────────────────────────────────────────────────────────
+function fmtDuration(ms) {
+  if (!ms || ms < 0) return '—';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + 's';
+  return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+}
+function fmtTokens(n) {
+  if (!n) return '0';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function fmtPct(r) { return Math.round(r * 100) + '%'; }
+
+/** Minimal D3 line+area chart. data is an array of day-bucketed points. */
+function drawLineChart(svg, data, xKey, yKey, color, fmt) {
+  fmt = fmt || (v => v);
+  const W = svg.clientWidth || 600, H = 220;
+  const margin = { top: 10, right: 16, bottom: 24, left: 40 };
+  const x = d3.scaleTime()
+    .domain(d3.extent(data, d => new Date(d[xKey])))
+    .range([margin.left, W - margin.right]);
+  const yMax = Math.max(d3.max(data, d => d[yKey]) || 1, 0.0001);
+  const y = d3.scaleLinear().domain([0, yMax * 1.15]).range([H - margin.bottom, margin.top]);
+
+  const s = d3.select(svg).attr('viewBox', \`0 0 \${W} \${H}\`);
+
+  s.append('g').attr('class', 'chart-axis')
+    .attr('transform', \`translate(0,\${H - margin.bottom})\`)
+    .call(d3.axisBottom(x).ticks(Math.min(6, data.length)).tickFormat(d3.timeFormat('%b %d')));
+  s.append('g').attr('class', 'chart-axis')
+    .attr('transform', \`translate(\${margin.left},0)\`)
+    .call(d3.axisLeft(y).ticks(4).tickFormat(fmt));
+
+  const line = d3.line().x(d => x(new Date(d[xKey]))).y(d => y(d[yKey])).curve(d3.curveMonotoneX);
+  const area = d3.area().x(d => x(new Date(d[xKey]))).y0(H - margin.bottom).y1(d => y(d[yKey])).curve(d3.curveMonotoneX);
+
+  s.append('path').datum(data).attr('class', 'chart-area').attr('fill', color).attr('d', area);
+  s.append('path').datum(data).attr('class', 'chart-line').attr('stroke', color).attr('d', line);
+
+  s.selectAll('.chart-dot').data(data).join('circle')
+    .attr('class', 'chart-dot')
+    .attr('cx', d => x(new Date(d[xKey]))).attr('cy', d => y(d[yKey])).attr('r', 3.5).attr('fill', color)
+    .on('mouseover', (e, d) => {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = \`<strong>\${new Date(d[xKey]).toLocaleDateString()}</strong><br>\${fmt(d[yKey])}\`;
+    })
+    .on('mousemove', e => { tooltip.style.left = (e.clientX + 15) + 'px'; tooltip.style.top = (e.clientY - 8) + 'px'; })
+    .on('mouseout', () => tooltip.style.display = 'none');
+}
+
+function barRow(name, value, max, valLabel, successStyle) {
+  const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
+  return \`<div class="bar-row">
+    <div class="bar-name">\${String(name).replace(/</g,'&lt;')}</div>
+    <div class="bar-track"><div class="bar-fill\${successStyle ? ' success' : ''}" style="width:\${pct}%"></div></div>
+    <div class="bar-val">\${valLabel}</div>
+  </div>\`;
+}
+
+// ── Memory Growth ────────────────────────────────────────────────────────────
 (function() {
   const panel = document.getElementById('memory');
-  if (!DATA.memory.length) {
-    panel.innerHTML = '<div class="empty">No orchestration memory entries found.</div>';
-    return;
-  }
-  const rows = DATA.memory.map(m => {
-    const ts = new Date(m.timestamp).toLocaleString();
-    const val = typeof m.value === 'string' ? m.value : JSON.stringify(m.value, null, 2);
+  const facts = DATA.memory;
+  const growth = DATA.memoryGrowth;
+  const namespaces = new Set(facts.map(f => f.namespace)).size;
+  const oldest = facts.length ? new Date(facts[0].created).toLocaleDateString() : '—';
+  const newest = facts.length ? new Date(facts[facts.length-1].created).toLocaleDateString() : '—';
+
+  const rows = [...facts].reverse().map(f => {
+    const val = f.value || '';
     return \`<tr>
-      <td>\${(m.key||'').replace(/</g,'&lt;')}</td>
-      <td style="color:var(--muted)">\${(m.stepId||'').replace(/</g,'&lt;')}</td>
-      <td style="color:var(--dim);white-space:nowrap">\${ts}</td>
+      <td>\${f.key.replace(/</g,'&lt;')}</td>
+      <td><span class="ns-badge">\${f.namespace.replace(/</g,'&lt;')}</span></td>
+      <td style="color:var(--dim);white-space:nowrap">\${new Date(f.created).toLocaleString()}</td>
+      <td style="color:var(--dim);white-space:nowrap">\${new Date(f.updated).toLocaleString()}</td>
       <td class="memory-val">\${val.slice(0,400).replace(/</g,'&lt;')}\${val.length>400?'…':''}</td>
     </tr>\`;
   }).join('');
+
   panel.innerHTML = \`
-    <table class="memory-table">
-      <thead><tr><th>Key</th><th>Step</th><th>Written</th><th>Value</th></tr></thead>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="num">\${facts.length}</div><div class="lbl">Facts Remembered</div></div>
+      <div class="stat-card"><div class="num">\${namespaces}</div><div class="lbl">Namespaces</div></div>
+      <div class="stat-card"><div class="num" style="font-size:18px">\${oldest}</div><div class="lbl">First Remembered</div></div>
+      <div class="stat-card"><div class="num" style="font-size:18px">\${newest}</div><div class="lbl">Most Recent</div></div>
+    </div>
+    <div class="chart-card">
+      <div class="lbl">Cumulative facts remembered, over time</div>
+      \${growth.length ? '<svg class="chart-svg" id="mem-growth-svg"></svg>' : '<div class="chart-empty">No memory yet — facts appear here as Aura remembers things.</div>'}
+    </div>
+    \${facts.length ? \`<table class="memory-table">
+      <thead><tr><th>Key</th><th>Namespace</th><th>Created</th><th>Updated</th><th>Value</th></tr></thead>
       <tbody>\${rows}</tbody>
-    </table>
+    </table>\` : '<div class="empty">No memory entries found.</div>'}
   \`;
+
+  if (growth.length) {
+    drawLineChart(document.getElementById('mem-growth-svg'), growth, 'date', 'cumulative', 'var(--blue)', v => Math.round(v));
+  }
+})();
+
+// ── Learning ─────────────────────────────────────────────────────────────────
+(function() {
+  const panel = document.getElementById('learning');
+  const sum = DATA.episodeSummary;
+  const series = DATA.learningSeries;
+  const report = DATA.competenceReport;
+
+  if (sum.total === 0) {
+    panel.innerHTML = '<div class="empty">No episodes recorded yet — this fills in as Aura completes tasks with self-improvement enabled.</div>';
+    return;
+  }
+
+  const completePct = sum.total === 0 ? 0 : sum.completed / sum.total;
+  const maxCatCount = Math.max(1, ...report.map(r => r.count));
+  const catRows = report.length
+    ? report.map(r => barRow(r.category, r.count, maxCatCount, \`\${r.count} · \${fmtPct(r.successRate)}\`, true)).join('')
+    : '<div class="empty" style="padding:14px">No Ruby-attempted episodes yet.</div>';
+
+  const maxModelCount = Math.max(1, ...sum.topModels.map(m => m.count));
+  const modelRows = sum.topModels.length
+    ? sum.topModels.map(m => barRow(m.model, m.count, maxModelCount, String(m.count))).join('')
+    : '<div class="empty" style="padding:14px">No model usage recorded yet.</div>';
+
+  panel.innerHTML = \`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="num">\${sum.total}</div><div class="lbl">Episodes Recorded</div></div>
+      <div class="stat-card"><div class="num">\${fmtPct(completePct)}</div><div class="lbl">Tasks Completed</div></div>
+      <div class="stat-card"><div class="num">\${fmtPct(sum.rubySuccessRate)}</div><div class="lbl">Ruby Success Rate</div></div>
+      <div class="stat-card"><div class="num" style="font-size:20px">\${fmtDuration(sum.avgDurationMs)}</div><div class="lbl">Avg Duration</div></div>
+      <div class="stat-card"><div class="num" style="font-size:20px">\${fmtTokens(sum.totalTokens)}</div><div class="lbl">Total Tokens</div></div>
+    </div>
+    <div class="two-col">
+      <div class="chart-card">
+        <div class="lbl">Cumulative episodes, over time</div>
+        \${series.length ? '<svg class="chart-svg" id="ep-growth-svg"></svg>' : '<div class="chart-empty">Not enough data yet.</div>'}
+      </div>
+      <div class="chart-card">
+        <div class="lbl">Ruby (small-model) success rate — rolling, last 10 attempts</div>
+        \${series.length ? '<svg class="chart-svg" id="ep-success-svg"></svg>' : '<div class="chart-empty">Not enough data yet.</div>'}
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="chart-card">
+        <div class="lbl">By task category (Ruby success rate)</div>
+        <div class="bar-list">\${catRows}</div>
+      </div>
+      <div class="chart-card">
+        <div class="lbl">By model used</div>
+        <div class="bar-list">\${modelRows}</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="lbl">3D model usage — drag to rotate · hover for label</div>
+      \${sum.topModels.length ? '<canvas id="three-model-canvas" class="canvas-3d"></canvas>' : '<div class="chart-empty">No model usage recorded yet.</div>'}
+    </div>
+  \`;
+
+  if (series.length) {
+    drawLineChart(document.getElementById('ep-growth-svg'), series, 'date', 'cumulativeEpisodes', 'var(--primary)', v => Math.round(v));
+    drawLineChart(document.getElementById('ep-success-svg'), series, 'date', 'rollingSuccessRate', 'var(--success)', v => fmtPct(v));
+  }
+
+  if (sum.topModels.length && typeof THREE !== 'undefined' && THREE.OrbitControls) {
+    (function() {
+      var canvas = document.getElementById('three-model-canvas');
+      if (!canvas) return;
+      var models = DATA.episodeSummary.topModels;
+      var maxCount = Math.max(1, ...models.map(function(m) { return m.count; }));
+      var W = canvas.clientWidth || 600, H = 260;
+      var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+      renderer.setSize(W, H);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setClearColor(0x21262d, 1);
+      var scene = new THREE.Scene();
+      var camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
+      var maxH = 4;
+      camera.position.set(0, maxH * 0.9, maxH * 2.2);
+      camera.lookAt(0, 0, 0);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+      var dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(5, 10, 5);
+      scene.add(dir);
+      var COLORS = [0xf0883e, 0x58a6ff, 0x3fb950, 0xd2a8ff, 0xffa657, 0x79c0ff];
+      var spacing = 1.4;
+      var offset = (models.length - 1) * spacing / 2;
+      var meshes = [];
+      models.forEach(function(m, i) {
+        var h = Math.max(0.1, m.count / maxCount * maxH);
+        var geo = new THREE.CylinderGeometry(0.35, 0.35, h, 24);
+        var mat = new THREE.MeshStandardMaterial({ color: COLORS[i % COLORS.length], roughness: 0.5, metalness: 0.1 });
+        var mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(i * spacing - offset, h / 2, 0);
+        mesh.userData = { model: m.model, count: m.count };
+        scene.add(mesh);
+        meshes.push(mesh);
+      });
+      var controls = new THREE.OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.enableZoom = false;
+      controls.enablePan = false;
+      controls.minPolarAngle = Math.PI / 6;
+      controls.maxPolarAngle = Math.PI / 2;
+      var userInteracting = false;
+      controls.addEventListener('start', function() { userInteracting = true; });
+      controls.addEventListener('end', function() { userInteracting = false; });
+      var raycaster = new THREE.Raycaster();
+      var mouse = new THREE.Vector2();
+      var hovered = null;
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        mouse.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        var hits = raycaster.intersectObjects(meshes);
+        if (hits.length) {
+          var hit = hits[0].object;
+          if (hovered !== hit) {
+            if (hovered) hovered.material.emissive.setHex(0x000000);
+            hovered = hit;
+            hovered.material.emissive.setHex(0x444444);
+          }
+          tooltip.style.display = 'block';
+          tooltip.innerHTML = '<strong>' + hit.userData.model + '</strong><br>' + hit.userData.count + ' uses';
+          tooltip.style.left = (e.clientX + 15) + 'px';
+          tooltip.style.top = (e.clientY - 8) + 'px';
+        } else {
+          if (hovered) { hovered.material.emissive.setHex(0x000000); hovered = null; }
+          tooltip.style.display = 'none';
+        }
+      });
+      canvas.addEventListener('mouseleave', function() {
+        if (hovered) { hovered.material.emissive.setHex(0x000000); hovered = null; }
+        tooltip.style.display = 'none';
+      });
+      (function animate() {
+        requestAnimationFrame(animate);
+        if (!userInteracting) scene.rotation.y += 0.004;
+        controls.update();
+        renderer.render(scene, camera);
+      })();
+    })();
+  }
 })();
 </script>
 </body>
@@ -668,7 +1063,13 @@ export function generateDashboard(projectRoot: string): string {
   const graph    = loadGraph(projectRoot);
   const plans    = loadPlans(projectRoot).map(stripPlan);
   const sessions = loadSessions(projectRoot).map(stripSession);
-  const memory   = loadMemory(projectRoot);
+  const memory   = loadMemory();
+  const memoryGrowth = buildMemoryGrowth(memory);
+
+  const episodes = loadEpisodesSync(projectRoot);
+  const learningSeries = buildLearningSeries(episodes);
+  const episodeSummary = summariseEpisodes(episodes);
+  const competenceReport = getCompetenceReport(episodes);
 
   const pkgPath = path.join(projectRoot, 'package.json');
   let projectName = path.basename(projectRoot);
@@ -682,6 +1083,10 @@ export function generateDashboard(projectRoot: string): string {
     plans,
     sessions,
     memory,
+    memoryGrowth,
+    episodeSummary,
+    learningSeries,
+    competenceReport,
     projectName,
     generatedAt: new Date().toLocaleString(),
   });
