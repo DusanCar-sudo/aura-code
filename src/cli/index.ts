@@ -23,7 +23,7 @@ import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
-import { loadPerception, isStale, extractPerception } from '../perception/index.js';
+import { loadPerception, isStale, extractPerception, savePerception, saveGraphForViz } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
 import { generateProposals, listProposals, applyHarnessProposal } from '../harness/proposer.js';
 import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflowState } from '../workflows/engine.js';
@@ -838,6 +838,9 @@ async function main() {
       if (!perception || isStale(perception)) {
         display.agentThinking();
         perception = await extractPerception(ctx.root);
+        // Persist so the viz dashboard and context summary stay populated
+        savePerception(perception).catch(() => {});
+        saveGraphForViz(perception).catch(() => {});
       }
 
       const decision = await routeTask({ provider, context: ctx, task, perception: perception ?? undefined });
@@ -1263,7 +1266,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  ── Context / Stats ──────────────────────────────',
       '  :context                Show loaded project context',
       '  :graph                  Show codebase knowledge graph summary',
-      '  :graph refresh          Reload graph from graphify-out/graph.json',
+      '  :graph refresh          Extract + persist codebase graph',
       '  :plans                  List saved execution plans',
       '  :viz, :dashboard        Generate and open the memory dashboard',
       '  /stats, /usage          Show token + cost usage this session',
@@ -1434,22 +1437,23 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':graph refresh') {
-    console.log(chalk.hex('#8a7768')('\n  Refreshing codebase graph...\n'));
-    const { execFileSync } = await import('child_process');
+    console.log(chalk.hex('#8a7768')('\n  Extracting codebase graph...\n'));
     try {
-      // Pass root as sys.argv[1] to avoid shell interpolation
-      execFileSync('python3', [
-        '-c',
-        'import sys,json,os,re,glob; root=sys.argv[1]+"/src"; print("Scanning", root)',
-        c.ctx.root,
-      ], { stdio: 'inherit' });
-    } catch { /* ignore */ }
+      const perception = await extractPerception(c.ctx.root);
+      await savePerception(perception);
+      await saveGraphForViz(perception);
+      const nodeCount = perception.nodes.length;
+      const edgeCount = perception.edges.length;
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Extracted ${nodeCount} nodes, ${edgeCount} edges.\n`));
+    } catch (err) {
+      console.log(chalk.hex('#f85149')(`  ✗ Extraction failed: ${err instanceof Error ? err.message : String(err)}\n`));
+    }
     // Reload context graph
     c.ctx.graphSummary = loadGraphSummary(c.ctx.root);
     if (c.ctx.graphSummary) {
       console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
     } else {
-      console.log(chalk.hex('#8a7768')('  No graph.json found after refresh. Run graphify extract first.\n'));
+      console.log(chalk.hex('#8a7768')('  No graph.json found after refresh.\n'));
     }
     return { handled: true };
   }

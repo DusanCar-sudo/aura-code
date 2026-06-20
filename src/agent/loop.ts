@@ -10,6 +10,7 @@ import { DEFAULTS } from '../config/defaults.js';
 import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
+import { compactHistory } from './compactor.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -125,6 +126,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
   while (turns < maxTurns) {
     turns++;
+
+    compactHistory(history, usage.totalTokens, provider.model);
 
     let responseText = '';
     const responseToolCalls: ToolCall[] = [];

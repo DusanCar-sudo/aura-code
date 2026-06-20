@@ -451,6 +451,8 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
       `/git — Git status`,
       `/cancel — Cancel stuck task`,
       `/clear — Clear context`,
+      `/sur30 — Webcam surveillance 30 min`,
+      `/sur60 — Webcam surveillance 60 min`,
       ``,
       `Or just write anything — I'll execute it as an Aura task!`,
     ].join('\n');
@@ -580,6 +582,22 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
       return `🚫 Task cancelled. You can send a new task now. ${tag}`;
     }
     return `ℹ️ No task is running for this chat. ${tag}`;
+  }
+
+  // ── Surveillance commands ─────────────────────────────────────────────
+  if (lower === '/sur30' || lower === '/sur60') {
+    const duration = lower === '/sur30' ? 30 : 60;
+    const script = path.resolve(PROJECT_ROOT, 'surveillance.sh');
+    if (!fs.existsSync(script)) {
+      return `❌ surveillance.sh not found at ${script}`;
+    }
+    // Run in background — don't block the bot
+    exec(`nohup bash "${script}" ${duration} > /tmp/sur-${duration}-$(date +%s).log 2>&1 &`, {
+      cwd: PROJECT_ROOT,
+      timeout: 5_000,
+      encoding: 'utf8',
+    });
+    return `🔒 Surveillance started — ${duration} minutes, snapshots every 5 min.\nYou'll get photos in this chat. ${tag}`;
   }
 
   // Looks like a shell command — run directly

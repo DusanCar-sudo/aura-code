@@ -290,8 +290,7 @@ function buildHtml(data: {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Aura — Memory Dashboard · ${data.projectName}</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="https://unpkg.com/three@0.130.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.130.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.169.0/build/three.min.js"></script>
 <style>
   :root {
     --bg:      #0d1117;
@@ -332,6 +331,7 @@ function buildHtml(data: {
   #graph-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; cursor: grab; }
   #graph-svg:active { cursor: grabbing; }
   .graph-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .layout-toggle { display: flex; gap: 4px; }
   .graph-controls input {
     background: var(--card); border: 1px solid var(--border2); border-radius: 6px;
     color: var(--text); font: inherit; font-size: 12px; padding: 6px 12px; width: 220px; outline: none;
@@ -410,16 +410,15 @@ function buildHtml(data: {
   .chart-axis text { fill: var(--dim); font-size: 9px; font-family: inherit; }
   .chart-axis path, .chart-axis line { stroke: var(--border); }
   .chart-empty { align-items: center; color: var(--dim); display: flex; font-size: 11px; height: 220px; justify-content: center; }
-  .canvas-3d { border-radius: 6px; display: block; height: 260px; width: 100%; }
 
-  /* Learning panel breakdown lists */
-  .bar-list { display: flex; flex-direction: column; gap: 8px; }
-  .bar-row { align-items: center; display: grid; gap: 10px; grid-template-columns: 130px 1fr 70px; }
-  .bar-row .bar-name { color: var(--text); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-row .bar-track { background: var(--canvas); border-radius: 5px; height: 9px; overflow: hidden; }
-  .bar-row .bar-fill { background: var(--primary); height: 100%; }
-  .bar-row .bar-fill.success { background: var(--success); }
-  .bar-row .bar-val { color: var(--muted); font-size: 10px; text-align: right; white-space: nowrap; }
+  /* 3D bar charts (true.js cylinders) + their HTML legends */
+  .chart-3d-container { height: 260px; position: relative; width: 100%; }
+  .chart-3d-container canvas { display: block; height: 100%; width: 100%; }
+  .legend-3d { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+  .legend-3d-row { align-items: center; display: flex; gap: 7px; }
+  .legend-3d-dot { border-radius: 50%; flex-shrink: 0; height: 10px; width: 10px; }
+  .legend-3d-name { color: var(--text); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-3d-val { color: var(--muted); font-size: 10px; }
   .two-col { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
@@ -462,6 +461,8 @@ function showPanel(id, btn) {
   if (btn) btn.classList.add('active');
   if (id === 'graph'   && !graphInit) initGraph();
   if (id === 'plans'   && !plansInit) initPlans();
+  if (id === 'memory'   && !memoryInit) initMemoryCharts();
+  if (id === 'learning' && !learningInit) initLearningCharts();
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────
@@ -522,9 +523,12 @@ function initGraph() {
     const:     '#ffa657',
     type:      '#79c0ff',
     enum:      '#f85149',
+    concept:    '#e3b341',
+    decision:   '#bc8cff',
+    constraint: '#56d4dd',
     node:      '#8b949e',
   };
-  const NODE_R = { file: 13, class: 11, interface: 10, function: 8, const: 7, type: 7, enum: 8, node: 7 };
+  const NODE_R = { file: 13, class: 11, interface: 10, function: 8, const: 7, type: 7, enum: 8, concept: 9, decision: 9, constraint: 9, node: 7 };
 
   const allTypes = [...new Set(DATA.graph.nodes.map(n => n.type || 'node'))];
   const activeTypes = new Set(allTypes);
@@ -532,6 +536,10 @@ function initGraph() {
   panel.innerHTML = \`
     <div class="graph-controls">
       <input id="graph-search" placeholder="🔍  Search nodes, files…" oninput="filterGraph()">
+      <div class="layout-toggle" id="layout-toggle">
+        <span class="legend-item on" id="layout-force">Force</span>
+        <span class="legend-item" id="layout-radial">Radial</span>
+      </div>
       <div class="legend" id="legend"></div>
       <span class="hint">scroll to zoom · drag to pan · drag nodes</span>
     </div>
@@ -598,6 +606,35 @@ function initGraph() {
     .force('charge',    d3.forceManyBody().strength(d => d.type==='file' ? -300 : -160))
     .force('center',    d3.forceCenter(W/2, H/2))
     .force('collision', d3.forceCollide(d => (NODE_R[d.type||'node']||7) + 6));
+
+  // Ring distance per node type — files innermost (the structural anchors),
+  // then class/interface, then everything else outward. Same key set as
+  // NODE_COLORS/NODE_R above, so every type already has a sensible color
+  // and radius gets a sensible ring too.
+  const RADIAL_BY_TYPE = { file: 70, class: 170, interface: 170, concept: 220, decision: 220, constraint: 220, const: 260, type: 260, enum: 260, function: 320, node: 320 };
+  const radiusFor = d => RADIAL_BY_TYPE[d.type || 'node'] ?? 320;
+
+  function applyLayout(mode) {
+    if (mode === 'radial') {
+      sim.force('center', null);
+      sim.force('radial', d3.forceRadial(radiusFor, W / 2, H / 2).strength(0.9));
+    } else {
+      sim.force('radial', null);
+      sim.force('center', d3.forceCenter(W / 2, H / 2));
+    }
+    sim.alpha(1).restart();
+  }
+
+  const forcePill = document.getElementById('layout-force');
+  const radialPill = document.getElementById('layout-radial');
+  forcePill.onclick = () => {
+    forcePill.classList.add('on'); radialPill.classList.remove('on');
+    applyLayout('force');
+  };
+  radialPill.onclick = () => {
+    radialPill.classList.add('on'); forcePill.classList.remove('on');
+    applyLayout('radial');
+  };
 
   const gLinks = g.append('g').selectAll('line').data(edges).enter().append('line')
     .attr('stroke','#484f58').attr('stroke-width', d => {
@@ -855,16 +892,126 @@ function drawLineChart(svg, data, xKey, yKey, color, fmt) {
     .on('mouseout', () => tooltip.style.display = 'none');
 }
 
-function barRow(name, value, max, valLabel, successStyle) {
-  const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
-  return \`<div class="bar-row">
-    <div class="bar-name">\${String(name).replace(/</g,'&lt;')}</div>
-    <div class="bar-track"><div class="bar-fill\${successStyle ? ' success' : ''}" style="width:\${pct}%"></div></div>
-    <div class="bar-val">\${valLabel}</div>
+// ── 3D bar chart colors (shared between THREE materials and HTML legend swatches —
+//    same string feeds both, so the legend always matches what's on screen) ────
+function successRateColor(rate) {
+  const hue = Math.round(rate * 120); // 0=red (bad) → 120=green (good)
+  return 'hsl(' + hue + ',65%,50%)';
+}
+const MODEL_PALETTE = ['#f0883e', '#58a6ff', '#bc8cff', '#3fb950', '#d29922', '#f85149'];
+
+function legendRow(label, value, swatch) {
+  return \`<div class="legend-3d-row">
+    <span class="legend-3d-dot" style="background:\${swatch}"></span>
+    <span class="legend-3d-name">\${String(label).replace(/</g,'&lt;')}</span>
+    <span class="legend-3d-val">\${value}</span>
   </div>\`;
 }
 
+/**
+ * True rotatable 3D bar chart (cylinders) via three.js. Drag horizontally to
+ * orbit; auto-rotates slowly when idle. Hover a bar for its value via
+ * raycasting into the existing global tooltip div.
+ *
+ * 'items': [{ label, value, color }] — color is any CSS color string, used
+ * directly as both the THREE.js material color and (by the caller) the
+ * legend swatch, so the two can never drift out of sync.
+ *
+ * Must only be called once its canvas is actually visible — a hidden
+ * (display:none) container has zero width, which would size the renderer
+ * wrong. That's why this is invoked from the lazy init*Charts() functions
+ * below, the same way the codebase graph defers initGraph() until shown.
+ */
+function init3DBarChart(canvas, items) {
+  if (!canvas || !items.length) return;
+  const container = canvas.parentElement;
+  const W = container.clientWidth || 480, H = 260;
+  canvas.width = W; canvas.height = H;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setSize(W, H, false);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 0.95);
+  key.position.set(4, 8, 6);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x88aaff, 0.3);
+  rim.position.set(-4, 2, -4);
+  scene.add(rim);
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  const maxVal = Math.max(1, ...items.map(it => it.value));
+  const n = items.length;
+  const spacing = 1.7;
+  const totalWidth = (n - 1) * spacing;
+  const meshes = [];
+
+  items.forEach((it, i) => {
+    const h = Math.max(0.2, (it.value / maxVal) * 3.2);
+    const geo = new THREE.CylinderGeometry(0.55, 0.62, h, 28);
+    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(it.color), roughness: 0.45, metalness: 0.15 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(i * spacing - totalWidth / 2, h / 2, 0);
+    mesh.userData = { label: it.label, value: it.value };
+    group.add(mesh);
+    meshes.push(mesh);
+  });
+
+  const ground = new THREE.Mesh(
+    new THREE.CircleGeometry(totalWidth / 2 + 1.5, 48),
+    new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.95 }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  group.add(ground);
+
+  camera.position.set(0, 3.6, totalWidth + 5.5);
+  camera.lookAt(0, 1, 0);
+
+  let rotY = 0, dragging = false, lastX = 0, autoRotate = true;
+  canvas.style.cursor = 'grab';
+
+  canvas.addEventListener('pointerdown', e => {
+    dragging = true; autoRotate = false; lastX = e.clientX; canvas.style.cursor = 'grabbing';
+  });
+  window.addEventListener('pointerup', () => { dragging = false; canvas.style.cursor = 'grab'; });
+  window.addEventListener('pointermove', e => {
+    if (dragging) { rotY += (e.clientX - lastX) * 0.008; lastX = e.clientX; }
+  });
+
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  canvas.addEventListener('pointermove', e => {
+    const rect = canvas.getBoundingClientRect();
+    ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+    const hit = raycaster.intersectObjects(meshes)[0];
+    if (hit) {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = \`<strong>\${hit.object.userData.label}</strong><br>\${hit.object.userData.value}\`;
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY - 8) + 'px';
+    } else {
+      tooltip.style.display = 'none';
+    }
+  });
+  canvas.addEventListener('pointerleave', () => { tooltip.style.display = 'none'; });
+
+  (function tick() {
+    if (autoRotate) rotY += 0.0025;
+    group.rotation.y = rotY;
+    renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  })();
+}
+
 // ── Memory Growth ────────────────────────────────────────────────────────────
+let memoryInit = false;
 (function() {
   const panel = document.getElementById('memory');
   const facts = DATA.memory;
@@ -900,13 +1047,21 @@ function barRow(name, value, max, valLabel, successStyle) {
       <tbody>\${rows}</tbody>
     </table>\` : '<div class="empty">No memory entries found.</div>'}
   \`;
-
-  if (growth.length) {
-    drawLineChart(document.getElementById('mem-growth-svg'), growth, 'date', 'cumulative', 'var(--blue)', v => Math.round(v));
-  }
 })();
 
+/** Draws the memory-growth line chart. Called once, the first time the
+ *  Memory Growth tab is actually shown (see showPanel above) — doing it at
+ *  page-load time would measure a hidden, zero-width panel. */
+function initMemoryCharts() {
+  memoryInit = true;
+  const svg = document.getElementById('mem-growth-svg');
+  if (svg && DATA.memoryGrowth.length) {
+    drawLineChart(svg, DATA.memoryGrowth, 'date', 'cumulative', 'var(--blue)', v => Math.round(v));
+  }
+}
+
 // ── Learning ─────────────────────────────────────────────────────────────────
+let learningInit = false;
 (function() {
   const panel = document.getElementById('learning');
   const sum = DATA.episodeSummary;
@@ -919,14 +1074,13 @@ function barRow(name, value, max, valLabel, successStyle) {
   }
 
   const completePct = sum.total === 0 ? 0 : sum.completed / sum.total;
-  const maxCatCount = Math.max(1, ...report.map(r => r.count));
-  const catRows = report.length
-    ? report.map(r => barRow(r.category, r.count, maxCatCount, \`\${r.count} · \${fmtPct(r.successRate)}\`, true)).join('')
+
+  const catLegend = report.length
+    ? report.map(r => legendRow(r.category, \`\${r.count} · \${fmtPct(r.successRate)}\`, successRateColor(r.successRate))).join('')
     : '<div class="empty" style="padding:14px">No Ruby-attempted episodes yet.</div>';
 
-  const maxModelCount = Math.max(1, ...sum.topModels.map(m => m.count));
-  const modelRows = sum.topModels.length
-    ? sum.topModels.map(m => barRow(m.model, m.count, maxModelCount, String(m.count))).join('')
+  const modelLegend = sum.topModels.length
+    ? sum.topModels.map((m, i) => legendRow(m.model, String(m.count), MODEL_PALETTE[i % MODEL_PALETTE.length])).join('')
     : '<div class="empty" style="padding:14px">No model usage recorded yet.</div>';
 
   panel.innerHTML = \`
@@ -949,107 +1103,45 @@ function barRow(name, value, max, valLabel, successStyle) {
     </div>
     <div class="two-col">
       <div class="chart-card">
-        <div class="lbl">By task category (Ruby success rate)</div>
-        <div class="bar-list">\${catRows}</div>
+        <div class="lbl">By task category — height = volume, color = Ruby success rate. Drag to rotate.</div>
+        <div class="chart-3d-container"><canvas id="cat-3d-canvas"></canvas></div>
+        <div class="legend-3d">\${catLegend}</div>
       </div>
       <div class="chart-card">
-        <div class="lbl">By model used</div>
-        <div class="bar-list">\${modelRows}</div>
+        <div class="lbl">By model used — height = task count. Drag to rotate.</div>
+        <div class="chart-3d-container"><canvas id="model-3d-canvas"></canvas></div>
+        <div class="legend-3d">\${modelLegend}</div>
       </div>
     </div>
-    <div class="chart-card">
-      <div class="lbl">3D model usage — drag to rotate · hover for label</div>
-      \${sum.topModels.length ? '<canvas id="three-model-canvas" class="canvas-3d"></canvas>' : '<div class="chart-empty">No model usage recorded yet.</div>'}
-    </div>
   \`;
-
-  if (series.length) {
-    drawLineChart(document.getElementById('ep-growth-svg'), series, 'date', 'cumulativeEpisodes', 'var(--primary)', v => Math.round(v));
-    drawLineChart(document.getElementById('ep-success-svg'), series, 'date', 'rollingSuccessRate', 'var(--success)', v => fmtPct(v));
-  }
-
-  if (sum.topModels.length && typeof THREE !== 'undefined' && THREE.OrbitControls) {
-    (function() {
-      var canvas = document.getElementById('three-model-canvas');
-      if (!canvas) return;
-      var models = DATA.episodeSummary.topModels;
-      var maxCount = Math.max(1, ...models.map(function(m) { return m.count; }));
-      var W = canvas.clientWidth || 600, H = 260;
-      var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-      renderer.setSize(W, H);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setClearColor(0x21262d, 1);
-      var scene = new THREE.Scene();
-      var camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
-      var maxH = 4;
-      camera.position.set(0, maxH * 0.9, maxH * 2.2);
-      camera.lookAt(0, 0, 0);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-      var dir = new THREE.DirectionalLight(0xffffff, 0.8);
-      dir.position.set(5, 10, 5);
-      scene.add(dir);
-      var COLORS = [0xf0883e, 0x58a6ff, 0x3fb950, 0xd2a8ff, 0xffa657, 0x79c0ff];
-      var spacing = 1.4;
-      var offset = (models.length - 1) * spacing / 2;
-      var meshes = [];
-      models.forEach(function(m, i) {
-        var h = Math.max(0.1, m.count / maxCount * maxH);
-        var geo = new THREE.CylinderGeometry(0.35, 0.35, h, 24);
-        var mat = new THREE.MeshStandardMaterial({ color: COLORS[i % COLORS.length], roughness: 0.5, metalness: 0.1 });
-        var mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(i * spacing - offset, h / 2, 0);
-        mesh.userData = { model: m.model, count: m.count };
-        scene.add(mesh);
-        meshes.push(mesh);
-      });
-      var controls = new THREE.OrbitControls(camera, canvas);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.08;
-      controls.enableZoom = false;
-      controls.enablePan = false;
-      controls.minPolarAngle = Math.PI / 6;
-      controls.maxPolarAngle = Math.PI / 2;
-      var userInteracting = false;
-      controls.addEventListener('start', function() { userInteracting = true; });
-      controls.addEventListener('end', function() { userInteracting = false; });
-      var raycaster = new THREE.Raycaster();
-      var mouse = new THREE.Vector2();
-      var hovered = null;
-      canvas.addEventListener('mousemove', function(e) {
-        var rect = canvas.getBoundingClientRect();
-        mouse.x = (e.clientX - rect.left) / rect.width * 2 - 1;
-        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-        var hits = raycaster.intersectObjects(meshes);
-        if (hits.length) {
-          var hit = hits[0].object;
-          if (hovered !== hit) {
-            if (hovered) hovered.material.emissive.setHex(0x000000);
-            hovered = hit;
-            hovered.material.emissive.setHex(0x444444);
-          }
-          tooltip.style.display = 'block';
-          tooltip.innerHTML = '<strong>' + hit.userData.model + '</strong><br>' + hit.userData.count + ' uses';
-          tooltip.style.left = (e.clientX + 15) + 'px';
-          tooltip.style.top = (e.clientY - 8) + 'px';
-        } else {
-          if (hovered) { hovered.material.emissive.setHex(0x000000); hovered = null; }
-          tooltip.style.display = 'none';
-        }
-      });
-      canvas.addEventListener('mouseleave', function() {
-        if (hovered) { hovered.material.emissive.setHex(0x000000); hovered = null; }
-        tooltip.style.display = 'none';
-      });
-      (function animate() {
-        requestAnimationFrame(animate);
-        if (!userInteracting) scene.rotation.y += 0.004;
-        controls.update();
-        renderer.render(scene, camera);
-      })();
-    })();
-  }
 })();
+
+/** Draws the two D3 line charts and the two three.js 3D bar charts for the
+ *  Learning tab. Lazy — see initMemoryCharts() for why. */
+function initLearningCharts() {
+  learningInit = true;
+  const series = DATA.learningSeries;
+  const report = DATA.competenceReport;
+  const sum = DATA.episodeSummary;
+
+  const growthSvg = document.getElementById('ep-growth-svg');
+  if (growthSvg && series.length) {
+    drawLineChart(growthSvg, series, 'date', 'cumulativeEpisodes', 'var(--primary)', v => Math.round(v));
+  }
+  const successSvg = document.getElementById('ep-success-svg');
+  if (successSvg && series.length) {
+    drawLineChart(successSvg, series, 'date', 'rollingSuccessRate', 'var(--success)', v => fmtPct(v));
+  }
+
+  init3DBarChart(
+    document.getElementById('cat-3d-canvas'),
+    report.map(r => ({ label: r.category, value: r.count, color: successRateColor(r.successRate) })),
+  );
+  init3DBarChart(
+    document.getElementById('model-3d-canvas'),
+    sum.topModels.map((m, i) => ({ label: m.model, value: m.count, color: MODEL_PALETTE[i % MODEL_PALETTE.length] })),
+  );
+}
 </script>
 </body>
 </html>`;

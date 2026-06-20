@@ -66,12 +66,15 @@ export function normaliseError(e: unknown, provider: string): ApiError {
     name?: string;
     errorDetails?: Array<{ '@type'?: string; retryDelay?: string; RetryInfo?: { retryDelay?: string } }>;
     error?: unknown;
+    response?: { data?: unknown };
   };
 
   const status = err.status ?? err.statusCode ?? 0;
   let message = err.message ?? String(e);
   if (err.error != null) {
     try { message += ` — ${JSON.stringify(err.error)}`; } catch { /* ignore */ }
+  } else if (err.response?.data != null) {
+    try { message += ` — ${JSON.stringify(err.response.data)}`; } catch { /* ignore */ }
   }
   const retryAfterMs = parseRetryAfter(err.headers) ?? parseGoogleRetryAfter(err.errorDetails);
 

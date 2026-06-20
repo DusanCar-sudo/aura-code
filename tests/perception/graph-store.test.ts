@@ -7,6 +7,7 @@ import {
   loadPerception,
   isStale,
   clearPerception,
+  saveGraphForViz,
 } from '../../src/perception/graph-store.js';
 import type { ProjectPerception } from '../../src/perception/types.js';
 
@@ -257,5 +258,81 @@ describe('clearPerception', () => {
 
     const loaded = await loadPerception(storePath);
     expect(loaded).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// saveGraphForViz
+// ─────────────────────────────────────────────────────────────────────────────
+describe('saveGraphForViz', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-gv-'));
+  });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  it('creates graphify-out/graph.json with the D3-compatible shape', async () => {
+    const perception = makePerception({ projectRoot: tmpDir });
+    await saveGraphForViz(perception);
+
+    const graphPath = path.join(tmpDir, 'graphify-out', 'graph.json');
+    expect(fs.existsSync(graphPath)).toBe(true);
+
+    const raw = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+    expect(raw.nodes).toBeDefined();
+    expect(raw.edges).toBeDefined();
+    expect(raw.nodes.length).toBe(perception.nodes.length);
+    expect(raw.edges.length).toBe(perception.edges.length);
+  });
+
+  it('converts edges from { from, to, relationship } to { source, target, relation }', async () => {
+    const perception = makePerception({ projectRoot: tmpDir });
+    await saveGraphForViz(perception);
+
+    const graphPath = path.join(tmpDir, 'graphify-out', 'graph.json');
+    const raw = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+    const edge = raw.edges[0];
+    expect(edge.source).toBe('src/index.ts');
+    expect(edge.target).toBe('src/utils.ts');
+    expect(edge.relation).toBe('depends_on');
+    // Must NOT have the old property names
+    expect(edge.from).toBeUndefined();
+    expect(edge.to).toBeUndefined();
+  });
+
+  it('nodes include id, label, type, and file for file nodes', async () => {
+    const perception = makePerception({ projectRoot: tmpDir });
+    await saveGraphForViz(perception);
+
+    const graphPath = path.join(tmpDir, 'graphify-out', 'graph.json');
+    const raw = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+    const fileNode = raw.nodes.find((n: { type: string }) => n.type === 'file');
+    expect(fileNode).toBeDefined();
+    expect(fileNode.id).toBeDefined();
+    expect(fileNode.label).toBeDefined();
+    expect(fileNode.type).toBe('file');
+    expect(fileNode.file).toBeDefined();
+  });
+
+  it('maps module type to file for viz compatibility', async () => {
+    const perception = makePerception({ projectRoot: tmpDir });
+    await saveGraphForViz(perception);
+
+    const graphPath = path.join(tmpDir, 'graphify-out', 'graph.json');
+    const raw = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+    // The original perception has a 'module' type node ("core")
+    const coreNode = raw.nodes.find((n: { id: string }) => n.id === 'core');
+    expect(coreNode).toBeDefined();
+    expect(coreNode.type).toBe('file'); // mapped from 'module'
+  });
+
+  it('creates graphify-out directory when it does not exist', async () => {
+    const perception = makePerception({ projectRoot: tmpDir });
+    const dirPath = path.join(tmpDir, 'graphify-out');
+    expect(fs.existsSync(dirPath)).toBe(false);
+
+    await saveGraphForViz(perception);
+    expect(fs.existsSync(dirPath)).toBe(true);
   });
 });

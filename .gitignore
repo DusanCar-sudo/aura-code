@@ -25,3 +25,7 @@ coverage/
 .aura.json
 FETCH_HEAD
 main
+surveillance.sh
+webcam-snapshot.sh
+graphify-out/
+.aura/

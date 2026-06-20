@@ -104,7 +104,7 @@ export function createTerminalDisplay(): Display {
     },
 
     header(title: string, subtitle?: string) {
-      const w = Math.min((process.stdout.columns ?? 80) - 2, 72);
+      const w = Math.min((process.stdout.columns ?? 80) - 2, 144);
       const pad = (s: string) => `  ${s}`;
       console.log('');
       console.log(boxTop(w));
@@ -114,14 +114,17 @@ export function createTerminalDisplay(): Display {
     },
 
     summary(text: string, turns: number, toolCount: number) {
-      const w = Math.min((process.stdout.columns ?? 80) - 2, 72);
+      const w = Math.min((process.stdout.columns ?? 80) - 2, 144);
       const pad = (s: string) => `  ${s}`;
       console.log('');
       console.log(boxTop(w));
       console.log(boxLine(chalk.hex('#5a9e6e').bold(pad('✓ Done')), w));
       console.log(boxLine(chalk.hex('#8a7768')(pad(`${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`)), w));
       if (text) {
-        text.split('\n').forEach(l => console.log(boxLine(chalk.hex('#c8b5a0')(pad(l)), w)));
+        const innerWidth = Math.max(w - 4, 10); // w - 2 (border chars) - 2 (pad()'s leading spaces)
+        text.split('\n').forEach(l => {
+          wrapLine(l, innerWidth).forEach(wl => console.log(boxLine(chalk.hex('#c8b5a0')(pad(wl)), w)));
+        });
       }
       console.log(boxBottom(w) + '\n');
     },
@@ -141,7 +144,7 @@ export function createTerminalDisplay(): Display {
     },
 
     showPlan(plan: ExecutionPlan) {
-      const w = Math.min((process.stdout.columns ?? 80) - 2, 72);
+      const w = Math.min((process.stdout.columns ?? 80) - 2, 144);
       const pad = (s: string) => `  ${s}`;
       // Build a position map so dependency arrows show step numbers, not raw UUIDs
       const idxMap = new Map<string, number>(plan.steps.map((s, i) => [s.id, i + 1]));
@@ -181,6 +184,33 @@ export function createTerminalDisplay(): Display {
 function boxTop(width: number, color = '#4e3d30'): string {
   const inner = '─'.repeat(Math.max(width - 2, 2));
   return chalk.hex(color)(`┌${inner}┐`);
+}
+
+/** Word-wrap a single line to fit within `width` visible characters. Breaks
+ *  on whitespace; a token longer than `width` alone is hard-broken rather
+ *  than left to overflow. Used so long lines (markdown table rows, bullet
+ *  points) flow across multiple box lines instead of being truncated. */
+function wrapLine(text: string, width: number): string[] {
+  if (text.length <= width) return [text];
+  const words = text.split(' ');
+  const out: string[] = [];
+  let current = '';
+  for (const word of words) {
+    if (word.length > width) {
+      if (current) { out.push(current); current = ''; }
+      for (let i = 0; i < word.length; i += width) out.push(word.slice(i, i + width));
+      continue;
+    }
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > width) {
+      out.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) out.push(current);
+  return out;
 }
 
 /** Render a colored bottom border: └──────────┘ */

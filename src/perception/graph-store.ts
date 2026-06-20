@@ -73,6 +73,42 @@ export async function clearPerception(filePath: string): Promise<void> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Convert a ProjectPerception into the flat `{ nodes, edges }` shape that
+ * `viz/index.ts#loadGraph()` and `agent/context.ts#loadGraphSummary()` expect,
+ * then write it to `<projectRoot>/graphify-out/graph.json`.
+ *
+ * Node shape:  `{ id, label, type, file?, summary?, source_location? }`
+ * Edge shape:  `{ source, target, relation }`
+ *
+ * Writes atomically (tmp + rename).
+ */
+export async function saveGraphForViz(perception: ProjectPerception): Promise<void> {
+  const dir = path.join(perception.projectRoot, 'graphify-out');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const nodes = perception.nodes.map(n => ({
+    id:    n.id,
+    label: n.label,
+    type:  n.type === 'module' ? 'file' : n.type, // 'module' → 'file' for viz color mapping
+    file:  n.type === 'file' ? n.id : (n.metadata?.source as string | undefined),
+    summary: n.description?.slice(0, 200),
+  }));
+
+  const edges = perception.edges.map(e => ({
+    source:   e.from,
+    target:   e.to,
+    relation: e.relationship,
+  }));
+
+  const target = path.join(dir, 'graph.json');
+  const tmp = target + '.tmp';
+  await fs.promises.writeFile(tmp, JSON.stringify({ nodes, edges }, null, 2), 'utf8');
+  await fs.promises.rename(tmp, target);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function defaultPath(projectRoot: string): string {
   const dir = path.join(projectRoot, '.aura');
   return path.join(dir, 'perception.json');
