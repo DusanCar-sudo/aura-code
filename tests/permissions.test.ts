@@ -354,3 +354,48 @@ describe('ShellCommandValidator — integrated into PermissionSystem', () => {
     expect(r.allowed).toBe(false);
   });
 });
+
+describe('PermissionSystem.setLevel / getLevel', () => {
+  it('reports the level it was constructed with', () => {
+    const p = new PermissionSystem('normal');
+    expect(p.getLevel()).toBe('normal');
+  });
+
+  it('changes behavior immediately after setLevel — write_file no longer needs confirmation in auto mode', () => {
+    const p = new PermissionSystem('normal');
+    const before = p.check('write_file', { path: 'src/foo.ts' });
+    expect(before.needsConfirm).toBe(true);
+
+    p.setLevel('auto');
+    expect(p.getLevel()).toBe('auto');
+    const after = p.check('write_file', { path: 'src/foo.ts' });
+    expect(after.allowed).toBe(true);
+    expect(after.needsConfirm).toBeFalsy();
+  });
+
+  it('can switch back to normal mode after auto', () => {
+    const p = new PermissionSystem('auto');
+    p.setLevel('normal');
+    expect(p.getLevel()).toBe('normal');
+    const r = p.check('write_file', { path: 'src/foo.ts' });
+    expect(r.needsConfirm).toBe(true);
+  });
+
+  it('a shared PermissionSystem reference reflects setLevel everywhere it is held — the exact mechanism :approve all relies on for RubyAlternator', () => {
+    const shared = new PermissionSystem('normal');
+    // Simulate two different modules holding the SAME instance, the way
+    // cli/index.ts and RubyAlternator do today.
+    const holderA = { permissions: shared };
+    const holderB = { permissions: shared };
+
+    expect(holderA.permissions.getLevel()).toBe('normal');
+    expect(holderB.permissions.getLevel()).toBe('normal');
+
+    holderA.permissions.setLevel('auto');
+
+    // holderB never called setLevel itself, but sees the change immediately
+    // because it's the same object reference, not a copy.
+    expect(holderB.permissions.getLevel()).toBe('auto');
+    expect(holderB.permissions).toBe(holderA.permissions);
+  });
+});

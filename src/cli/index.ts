@@ -39,7 +39,6 @@ import { DEFAULT_RUBY_CONFIG } from '../ruby/types.js';
 import type { RubyConfig } from '../ruby/types.js';
 import { bootstrapAuraEnv } from '../util/load-env.js';
 import { isModelConfigured, modelProviderFamily, resolveProviderTransport } from '../providers/factory.js';
-import { startKanbanServer } from '../kanban/server.js';
 
 // Load API keys from ~/.hermes/.env, ~/.config/aura-code/.env, and project .env
 bootstrapAuraEnv(process.cwd());
@@ -2030,8 +2029,6 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --resume-workflow <id>   Resume a paused/failed workflow from last completed step
     --workflows              List all persisted workflows
     --profile local          Use local Ollama model (no API key required)
-    kanban                   Launch Kanban Pipeline board (localhost:7474)
-    kanban --port <n>        Custom port for the Kanban server
 
     --rate-limit-rpm <n>     Cap requests per minute (default: 0=unlimited, Google: 30)
     --rate-limit-tpm <n>     Cap tokens per minute (Google only; default: 0=unlimited)
@@ -2094,10 +2091,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
 `);
 }
 
-if (argv._[0] === 'kanban') {
-  const port = Number(argv.port ?? argv.p ?? 7474);
-  startKanbanServer({ port, cwd }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
-} else if (argv._[0] === 'serve') {
+if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);
   startServer({ port, cwd, model: argv.model, apiKey: argv['api-key'] ?? undefined, baseUrl: argv['base-url'] ?? undefined, open: argv.open !== false }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {

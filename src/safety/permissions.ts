@@ -240,6 +240,20 @@ export class PermissionSystem {
     this.sessionApprovals.add(key);
   }
 
+  /**
+   * Change the permission level mid-session. Used by `:approve all` — since
+   * RubyAlternator stores a reference to this same instance rather than its
+   * own copy, calling this also takes effect for any in-flight or future
+   * Ruby-alternated attempts, with no extra wiring needed.
+   */
+  setLevel(level: PermissionLevel): void {
+    this.level = level;
+  }
+
+  getLevel(): PermissionLevel {
+    return this.level;
+  }
+
   private isDangerous(cmd: string): boolean {
     return DANGEROUS_PATTERNS.some(p => p.test(cmd));
   }
