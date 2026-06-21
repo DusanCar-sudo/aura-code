@@ -36,7 +36,10 @@
 
 ## What is Aura Code?
 
-Aura Code was developed using AI-assisted engineering workflows, with multiple AI agents contributing to design, implementation, testing, and verification. Written in TypeScript — not related to the Ruby programming language.
+Designed and brought to life by **Dušan Milosavljević** using opencode.  
+Built by agents, for agents — AI-assisted engineering workflows with multiple AI agents contributing to design, implementation, testing, and verification.  
+Model-agnostic: works with Claude, GPT, Gemini, MiMo, and any OpenAI-compatible endpoint.  
+Written in TypeScript — not related to the Ruby programming language.
 
 Built on the **Praktess** framework — from Ancient Greek: *she who acts and executes*.
 

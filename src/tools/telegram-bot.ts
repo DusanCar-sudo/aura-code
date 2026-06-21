@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { exec, execSync } from 'child_process';
 
-import { createProvider, getApiKeyForModel } from '../providers/factory.js';
+import { createProvider, getApiKeyForModel, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
 import { bootstrapAuraEnv } from '../util/load-env.js';
 import { loadGlobalConfig } from '../setup/global-config.js';
@@ -76,12 +76,18 @@ const PROJECT_ROOT = process.env.TELEGRAM_BOT_PROJECT_ROOT
 
 bootstrapAuraEnv(PROJECT_ROOT);
 
+// Register custom providers from .aura.json so that prefixed model IDs
+// (e.g. deepseek/v4-flash) route to the correct API endpoint.
+const _projectConfig = loadProjectConfig(PROJECT_ROOT);
+if (_projectConfig?.providers?.length) {
+  registerCustomProviders(_projectConfig.providers);
+}
+
 function resolveTaskModel(): string {
-  const fileConfig = loadProjectConfig(PROJECT_ROOT);
   const globalCfg = loadGlobalConfig();
   return process.env.TELEGRAM_BOT_MODEL
     ?? process.env.AURA_MODEL
-    ?? fileConfig.model
+    ?? _projectConfig.model
     ?? globalCfg?.defaultModel
     ?? 'deepseek/deepseek-v4-flash';
 }
