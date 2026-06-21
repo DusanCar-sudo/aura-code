@@ -52,6 +52,44 @@ export function modelProviderFamily(modelId: string): string {
   return 'openai-compatible';
 }
 
+const FAMILY_API_KEY_ENV: Record<string, string> = {
+  deepseek: 'DEEPSEEK_API_KEY',
+  xiaomi: 'XIAOMI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  xai: 'XAI_API_KEY',
+  'openai-compatible': 'OPENAI_API_KEY',
+};
+
+/**
+ * Resolves an API key for a given model, trying that model's own provider
+ * family first — falling back to other configured keys only as a last
+ * resort. Use this instead of an unconditional "try DeepSeek, then Xiaomi,
+ * then..." chain: that ordering picks whichever key happens to exist first,
+ * completely independent of which model is actually being called, which is
+ * exactly how a MiMo model string ends up paired with a DeepSeek key.
+ */
+export function getApiKeyForModel(model: string): string | undefined {
+  const family = modelProviderFamily(model);
+  const preferredEnvVar = FAMILY_API_KEY_ENV[family];
+  if (preferredEnvVar) {
+    const preferred = getApiKey(preferredEnvVar);
+    if (preferred) return preferred;
+  }
+  // Fall back to any other configured key, in case the user only has one
+  // provider set up and is calling a model from a different family by
+  // mistake — createProvider()'s own baseUrl logic will still catch and
+  // correct an actual family mismatch, so this fallback can't silently
+  // send the wrong key to the wrong endpoint the way the old code could.
+  for (const envVar of Object.values(FAMILY_API_KEY_ENV)) {
+    if (envVar === preferredEnvVar) continue;
+    const key = getApiKey(envVar);
+    if (key) return key;
+  }
+  return undefined;
+}
+
 /**
  * Known default endpoints, keyed to the same family ids `modelProviderFamily`
  * returns. Lets us recognise "this baseUrl is MiMo's, but the model is

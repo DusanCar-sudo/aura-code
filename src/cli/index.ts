@@ -1318,6 +1318,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  /clear, /reset          Reset cumulative usage stats',
       '',
       '  ── General ──────────────────────────────────────',
+      '  :approve all            Auto-approve all tool calls (no confirmations)',
+      '  :approve normal         Require confirmation for destructive ops',
+      '  :approve read-only      Block all write operations',
       '  :quit, :q, /exit        Exit',
       '',
     ].join('\n')));
@@ -1567,6 +1570,19 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     c.cumulative.outputTokens = 0;
     c.cumulative.costUsd = 0;
     console.log(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
+    return { handled: true };
+  }
+
+  // ── Permission commands ──────────────────────────────────────────────────
+  if (input.startsWith(':approve ')) {
+    const raw = input.slice(':approve '.length).trim();
+    const mapped: PermissionLevel = raw === 'all' ? 'auto' : raw as PermissionLevel;
+    if (mapped !== 'auto' && mapped !== 'normal' && mapped !== 'read-only') {
+      console.log(chalk.hex('#b15439')('  ✗ Usage: :approve all | :approve normal | :approve read-only'));
+      return { handled: true };
+    }
+    c.permissions.setLevel(mapped);
+    console.log(chalk.hex('#5a9e6e')(`  ✓ Permission level set to ${mapped}`));
     return { handled: true };
   }
 
