@@ -44,8 +44,29 @@ export function compactHistory(
   const MIN_KEEP = 2 + PRESERVE_RECENT;
   if (history.length <= MIN_KEEP) return false;
 
-  let keepFrom = history.length - PRESERVE_RECENT;
-  while (keepFrom < history.length && history[keepFrom].role === 'tool_result') keepFrom++;
+  // Prefer preserving the ENTIRE most recent user turn intact — search
+  // backward for the last 'user' message (excluding the original task at
+  // index 0). A forward-only search from an arbitrary message-count
+  // boundary can miss this entirely, since the most recent user turn may
+  // start well before that boundary — confirmed by testing a multi-turn
+  // session where a forward search found nothing and fell through to
+  // collapsing the whole session, discarding a real, recent instruction.
+  let keepFrom = -1;
+  for (let i = history.length - 1; i >= 1; i--) {
+    if (history[i].role === 'user') { keepFrom = i; break; }
+  }
+
+  if (keepFrom === -1) {
+    // No later user turn exists (e.g. still mid-task, only the original
+    // instruction so far) — fall back to keeping roughly the last
+    // PRESERVE_RECENT messages, walked forward to avoid landing on an
+    // orphaned tool_result or directly after the assistant-role recap.
+    keepFrom = Math.max(1, history.length - PRESERVE_RECENT);
+    while (
+      keepFrom < history.length &&
+      (history[keepFrom].role === 'tool_result' || history[keepFrom].role === 'assistant')
+    ) keepFrom++;
+  }
 
   const toCompact = history.slice(1, keepFrom);
 
