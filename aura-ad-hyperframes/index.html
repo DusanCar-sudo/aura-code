@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Aura Code Ad</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #0a0a0f;
+        font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+      }
+      #main {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        background: radial-gradient(ellipse at 30% 20%, #1a0a0a 0%, #0a0a0f 55%, #050508 100%);
+      }
+      .glow {
+        position: absolute;
+        width: 900px;
+        height: 900px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(204, 0, 0, 0.35) 0%, transparent 70%);
+        top: -200px;
+        right: -100px;
+        filter: blur(40px);
+      }
+      .title {
+        position: absolute;
+        left: 120px;
+        top: 280px;
+        font-size: 128px;
+        font-weight: 900;
+        letter-spacing: -4px;
+        color: #fff;
+        opacity: 0;
+      }
+      .title span {
+        color: #cc0000;
+      }
+      .tagline {
+        position: absolute;
+        left: 124px;
+        top: 440px;
+        font-size: 42px;
+        font-weight: 500;
+        color: #e8e8e8;
+        opacity: 0;
+      }
+      .pill-row {
+        position: absolute;
+        left: 120px;
+        top: 560px;
+        display: flex;
+        gap: 16px;
+        opacity: 0;
+      }
+      .pill {
+        padding: 14px 28px;
+        border: 2px solid rgba(204, 0, 0, 0.6);
+        border-radius: 999px;
+        color: #fff;
+        font-size: 26px;
+        font-weight: 600;
+        background: rgba(204, 0, 0, 0.12);
+      }
+      .bar {
+        position: absolute;
+        left: 120px;
+        bottom: 180px;
+        width: 0;
+        height: 8px;
+        background: #cc0000;
+        transform-origin: left;
+      }
+      .footer {
+        position: absolute;
+        left: 120px;
+        bottom: 100px;
+        font-size: 28px;
+        color: #888;
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="main"
+      data-composition-id="aura-intro"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="8"
+    >
+      <div class="glow clip" data-start="0" data-duration="8" data-track-index="0"></div>
+      <div class="title clip" id="title" data-start="0" data-duration="8" data-track-index="1">
+        Aura <span>Code</span>
+      </div>
+      <div class="tagline clip" id="tagline" data-start="0" data-duration="8" data-track-index="2">
+        Autonomous coding agent — I don't try. I verify.
+      </div>
+      <div class="pill-row clip" id="pills" data-start="0" data-duration="8" data-track-index="3">
+        <div class="pill">Read</div>
+        <div class="pill">Plan</div>
+        <div class="pill">Execute</div>
+        <div class="pill">Verify</div>
+      </div>
+      <div class="bar clip" id="bar" data-start="0" data-duration="8" data-track-index="4"></div>
+      <div class="footer clip" id="footer" data-start="0" data-duration="8" data-track-index="5">
+        npm install -g aura-code · 1035+ tests · TypeScript
+      </div>
+      <script>
+        const tl = gsap.timeline({ paused: true });
+        tl.fromTo("#title", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" }, 0.2);
+        tl.fromTo("#tagline", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: "power2.out" }, 0.55);
+        tl.fromTo("#pills", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power2.out" }, 1.0);
+        tl.fromTo("#bar", { width: 0 }, { width: 520, duration: 0.8, ease: "power2.inOut" }, 1.35);
+        tl.fromTo("#footer", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 1.6);
+        window.__timelines = window.__timelines || {};
+        window.__timelines["aura-intro"] = tl;
+      </script>
+    </div>
+  </body>
+</html>
