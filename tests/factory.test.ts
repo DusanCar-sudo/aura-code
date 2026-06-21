@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { registerCustomProviders, getCustomProviders, getAllModels, createProvider } from '../src/providers/factory.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { registerCustomProviders, getCustomProviders, getAllModels, createProvider, getApiKeyForModel } from '../src/providers/factory.js';
 import type { ProviderDef } from '../src/config/project-config.js';
 
 // We need to reset custom providers between tests
@@ -145,3 +145,43 @@ describe('createProvider with custom providers', () => {
     expect(provider.model).toBe('exact-model');
   });
 });
+
+describe('getApiKeyForModel', () => {
+  const ENV_KEYS = ['DEEPSEEK_API_KEY', 'XIAOMI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'OPENROUTER_API_KEY', 'XAI_API_KEY', 'OPENAI_API_KEY'];
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of ENV_KEYS) { saved[k] = process.env[k]; delete process.env[k]; }
+  });
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
+    }
+  });
+
+  it("picks the model's own provider key, not whichever key happens to exist first", () => {
+    // The exact bug scenario: a DeepSeek key present, but the model is MiMo.
+    process.env.DEEPSEEK_API_KEY = 'sk-deepseek-real';
+    process.env.XIAOMI_API_KEY = 'tp-xiaomi-real';
+    const key = getApiKeyForModel('mimo-v2.5-pro');
+    expect(key).toBe('tp-xiaomi-real');
+  });
+
+  it('falls back to any other configured key only when the matching family has none', () => {
+    process.env.DEEPSEEK_API_KEY = 'sk-deepseek-real';
+    // No XIAOMI_API_KEY set at all.
+    const key = getApiKeyForModel('mimo-v2.5-pro');
+    expect(key).toBe('sk-deepseek-real');
+  });
+
+  it('returns undefined when no key is configured at all', () => {
+    expect(getApiKeyForModel('mimo-v2.5-pro')).toBeUndefined();
+  });
+
+  it('correctly resolves deepseek models to the deepseek key even when others exist', () => {
+    process.env.XIAOMI_API_KEY = 'tp-xiaomi-real';
+    process.env.DEEPSEEK_API_KEY = 'sk-deepseek-real';
+    expect(getApiKeyForModel('deepseek/deepseek-v4-pro')).toBe('sk-deepseek-real');
+  });
+});
+

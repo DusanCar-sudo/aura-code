@@ -8,13 +8,11 @@ import * as path from 'path';
 import * as os from 'os';
 import { exec, execSync } from 'child_process';
 
-import { createProvider } from '../providers/factory.js';
+import { createProvider, getApiKeyForModel } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
 import { bootstrapAuraEnv } from '../util/load-env.js';
 import { loadGlobalConfig } from '../setup/global-config.js';
 import { loadProjectConfig } from '../config/project-config.js';
-import { loadProviderConfig } from '../setup/provider-wizard.js';
-import { getApiKey } from '../util/env.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
@@ -101,21 +99,18 @@ function saveState(): void {
 
 // ── Provider (created once, reused) ────────────────────────────────────────
 function createLLMProvider(): LLMProvider {
-  const saved = loadProviderConfig();
   const fileConfig = loadProjectConfig(PROJECT_ROOT);
   const globalCfg = loadGlobalConfig();
   const apiKey = process.env.AURA_API_KEY
-    ?? saved?.apiKey
-    ?? getApiKey('DEEPSEEK_API_KEY')
-    ?? getApiKey('XIAOMI_API_KEY')
-    ?? getApiKey('ANTHROPIC_API_KEY')
-    ?? getApiKey('OPENAI_API_KEY')
-    ?? getApiKey('GOOGLE_API_KEY')
-    ?? getApiKey('OPENROUTER_API_KEY');
+    ?? getApiKeyForModel(TASK_MODEL);
   const baseUrl = process.env.AURA_BASE_URL
     ?? fileConfig.baseUrl
-    ?? globalCfg?.baseUrl
-    ?? saved?.baseUrl;
+    ?? globalCfg?.baseUrl;
+    // Deliberately NOT falling back to the wizard's saved baseUrl here —
+    // createProvider() already applies it internally, but only when the
+    // saved config's model actually matches TASK_MODEL. Resolving it here
+    // too bypasses that check entirely, which is exactly how a MiMo model
+    // string previously ended up paired with a DeepSeek endpoint.
   return createProvider({
     model: TASK_MODEL,
     apiKey,
@@ -789,3 +784,4 @@ poll().catch(err => {
   console.error('💀 Fatal polling crash:', err);
   process.exit(1);
 });
+
