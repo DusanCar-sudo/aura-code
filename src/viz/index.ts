@@ -290,7 +290,8 @@ function buildHtml(data: {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Aura — Memory Dashboard · ${data.projectName}</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="https://unpkg.com/three@0.169.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <style>
   :root {
     --bg:      #0d1117;
@@ -330,6 +331,9 @@ function buildHtml(data: {
   /* Graph panel */
   #graph-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; cursor: grab; }
   #graph-svg:active { cursor: grabbing; }
+  #graph-3d-wrap { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; position: relative; overflow: hidden; display: none; }
+  #graph-3d-wrap canvas { display: block; width: 100%; height: 100%; }
+  .graph-3d-hint { position: absolute; bottom: 10px; right: 14px; color: var(--dim); font-size: 10px; pointer-events: none; z-index: 2; }
   .graph-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .layout-toggle { display: flex; gap: 4px; }
   .graph-controls input {
@@ -539,11 +543,14 @@ function initGraph() {
       <div class="layout-toggle" id="layout-toggle">
         <span class="legend-item on" id="layout-force">Force</span>
         <span class="legend-item" id="layout-radial">Radial</span>
+        <span class="legend-item" id="layout-3d-spread">3D Spread</span>
+        <span class="legend-item" id="layout-3d-explore">3D Explore</span>
       </div>
       <div class="legend" id="legend"></div>
-      <span class="hint">scroll to zoom · drag to pan · drag nodes</span>
+      <span class="hint" id="graph-hint">scroll to zoom · drag to pan · drag nodes</span>
     </div>
     <svg id="graph-svg"></svg>
+    <div id="graph-3d-wrap"><div class="graph-3d-hint" id="graph-3d-hint"></div></div>
   \`;
 
   const legendEl = document.getElementById('legend');
@@ -625,17 +632,6 @@ function initGraph() {
     sim.alpha(1).restart();
   }
 
-  const forcePill = document.getElementById('layout-force');
-  const radialPill = document.getElementById('layout-radial');
-  forcePill.onclick = () => {
-    forcePill.classList.add('on'); radialPill.classList.remove('on');
-    applyLayout('force');
-  };
-  radialPill.onclick = () => {
-    radialPill.classList.add('on'); forcePill.classList.remove('on');
-    applyLayout('radial');
-  };
-
   const gLinks = g.append('g').selectAll('line').data(edges).enter().append('line')
     .attr('stroke','#484f58').attr('stroke-width', d => {
       const r = d.relation || '';
@@ -681,6 +677,317 @@ function initGraph() {
     gNodes.attr('cx',d=>d.x).attr('cy',d=>d.y);
     gLabels.attr('x',d=>d.x).attr('y',d=>d.y);
   });
+
+  // ── 3D mode state ──────────────────────────────────────────────────────────
+  let three3dCleanup = null;  // function to stop the 3D render loop
+  let current3dMode = null;   // 'spread' | 'explore' | null
+
+  function destroy3d() {
+    if (three3dCleanup) { three3dCleanup(); three3dCleanup = null; }
+    current3dMode = null;
+    const wrap = document.getElementById('graph-3d-wrap');
+    // Remove old canvas but keep the hint div
+    const oldCanvas = wrap.querySelector('canvas');
+    if (oldCanvas) oldCanvas.remove();
+  }
+
+  function show2d() {
+    destroy3d();
+    document.getElementById('graph-svg').style.display = '';
+    document.getElementById('graph-3d-wrap').style.display = 'none';
+    document.getElementById('graph-hint').textContent = 'scroll to zoom · drag to pan · drag nodes';
+  }
+
+  function show3d(mode) {
+    destroy3d();
+    current3dMode = mode;
+    document.getElementById('graph-svg').style.display = 'none';
+    const wrap = document.getElementById('graph-3d-wrap');
+    wrap.style.display = 'block';
+    const hintEl = document.getElementById('graph-3d-hint');
+    if (mode === 'spread') {
+      document.getElementById('graph-hint').textContent = 'auto-rotating 3D layout · scroll to zoom';
+      hintEl.textContent = '✦ auto-rotate';
+    } else {
+      document.getElementById('graph-hint').textContent = 'drag to rotate · scroll to zoom · right-drag to pan';
+      hintEl.textContent = '✦ orbit controls';
+    }
+    init3dGraph(wrap, mode);
+  }
+
+  function init3dGraph(container, mode) {
+    const W = container.clientWidth || 900;
+    const H = container.clientHeight || 580;
+
+    // ── Scene setup ──────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1c2128);
+    scene.fog = new THREE.FogExp2(0x1c2128, 0.0008);
+
+    const camera = new THREE.PerspectiveCamera(55, W / H, 1, 8000);
+    camera.position.set(0, 0, 600);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(W, H);
+    container.appendChild(renderer.domElement);
+
+    // ── OrbitControls (explore mode) or auto-rotate (spread mode) ─
+    let controls = null;
+    if (mode === 'explore' && typeof THREE.OrbitControls !== 'undefined') {
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.rotateSpeed = 0.6;
+      controls.zoomSpeed = 1.2;
+      controls.minDistance = 80;
+      controls.maxDistance = 3000;
+    }
+
+    // ── Zoom via scroll (spread mode — no orbit controls) ────────
+    if (mode === 'spread') {
+      renderer.domElement.addEventListener('wheel', e => {
+        e.preventDefault();
+        camera.position.z = Math.max(80, Math.min(3000, camera.position.z + e.deltaY * 0.5));
+      }, { passive: false });
+    }
+
+    // ── Node data with 3D positions ──────────────────────────────
+    const n3 = DATA.graph.nodes.map((n, i) => {
+      // Initial sphere around origin, randomised
+      const phi = Math.acos(2 * Math.random() - 1);
+      const theta = Math.random() * Math.PI * 2;
+      const r = 100 + Math.random() * 250;
+      return {
+        ...n,
+        x: r * Math.sin(phi) * Math.cos(theta),
+        y: r * Math.sin(phi) * Math.sin(theta),
+        z: r * Math.cos(phi),
+        vx: 0, vy: 0, vz: 0,
+      };
+    });
+    const idMap = new Map(n3.map((n, i) => [n.id, i]));
+    const e3 = DATA.graph.edges.map(e => ({
+      si: idMap.get(typeof e.source === 'object' ? e.source.id : e.source) ?? -1,
+      ti: idMap.get(typeof e.target === 'object' ? e.target.id : e.target) ?? -1,
+      relation: e.relation,
+    })).filter(e => e.si >= 0 && e.ti >= 0);
+
+    // ── 3D force simulation (simple Euler integration) ──────────
+    const SIM_ITERS = 200;
+    const REPULSION = 800;
+    const SPRING_K = 0.04;
+    const SPRING_REST = 60;
+    const DAMPING = 0.85;
+    const CENTER_PULL = 0.001;
+
+    for (let iter = 0; iter < SIM_ITERS; iter++) {
+      // Repulsion (O(n²) — fine for < 2000 nodes)
+      for (let i = 0; i < n3.length; i++) {
+        for (let j = i + 1; j < n3.length; j++) {
+          let dx = n3[i].x - n3[j].x, dy = n3[i].y - n3[j].y, dz = n3[i].z - n3[j].z;
+          let dist = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+          let force = REPULSION / (dist * dist);
+          let fx = dx / dist * force, fy = dy / dist * force, fz = dz / dist * force;
+          n3[i].vx += fx; n3[i].vy += fy; n3[i].vz += fz;
+          n3[j].vx -= fx; n3[j].vy -= fy; n3[j].vz -= fz;
+        }
+      }
+      // Springs (edges)
+      for (const e of e3) {
+        const s = n3[e.si], t = n3[e.ti];
+        let dx = t.x - s.x, dy = t.y - s.y, dz = t.z - s.z;
+        let dist = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+        let force = SPRING_K * (dist - SPRING_REST);
+        let fx = dx / dist * force, fy = dy / dist * force, fz = dz / dist * force;
+        s.vx += fx; s.vy += fy; s.vz += fz;
+        t.vx -= fx; t.vy -= fy; t.vz -= fz;
+      }
+      // Center pull + damping + integrate
+      for (const n of n3) {
+        n.vx -= n.x * CENTER_PULL;
+        n.vy -= n.y * CENTER_PULL;
+        n.vz -= n.z * CENTER_PULL;
+        n.vx *= DAMPING; n.vy *= DAMPING; n.vz *= DAMPING;
+        n.x += n.vx; n.y += n.vy; n.z += n.vz;
+      }
+    }
+
+    // ── Build Three.js objects ───────────────────────────────────
+    const NC = {
+      file:'#58a6ff', function:'#ff7b72', class:'#d2a8ff', interface:'#3fb950',
+      const:'#ffa657', type:'#79c0ff', enum:'#f85149', concept:'#e3b341',
+      decision:'#bc8cff', constraint:'#56d4dd', node:'#8b949e', module:'#58a6ff',
+    };
+    const NR3 = { file:5, class:4.5, interface:4, function:3.5, const:3, type:3, enum:3.5, concept:3.5, decision:3.5, constraint:3.5, node:3, module:4 };
+
+    // Nodes — glowing spheres
+    const spheres = [];
+    for (const n of n3) {
+      const color = new THREE.Color(NC[n.type||'node'] || '#8b949e');
+      const r = NR3[n.type||'node'] || 3;
+      const geo = new THREE.SphereGeometry(r, 16, 12);
+      const mat = new THREE.MeshBasicMaterial({ color });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(n.x, n.y, n.z);
+      mesh.userData = n;
+      scene.add(mesh);
+      spheres.push(mesh);
+
+      // Glow ring
+      const glowGeo = new THREE.SphereGeometry(r * 1.6, 12, 8);
+      const glowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.08 });
+      const glow = new THREE.Mesh(glowGeo, glowMat);
+      glow.position.copy(mesh.position);
+      scene.add(glow);
+    }
+
+    // Edges — lines
+    const edgeLineMat = new THREE.LineBasicMaterial({ color: 0x484f58, transparent: true, opacity: 0.35 });
+    for (const e of e3) {
+      const s = n3[e.si], t = n3[e.ti];
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(s.x, s.y, s.z),
+        new THREE.Vector3(t.x, t.y, t.z),
+      ]);
+      scene.add(new THREE.Line(geo, edgeLineMat));
+    }
+
+    // Labels (sprite text) — only for file / class / interface
+    const LABEL_TYPES = new Set(['file','class','interface']);
+    for (const n of n3) {
+      if (!LABEL_TYPES.has(n.type || '')) continue;
+      const label = n.label.length > 18 ? n.label.slice(0, 16) + '…' : n.label;
+      const canvas2 = document.createElement('canvas');
+      const ctx2 = canvas2.getContext('2d');
+      canvas2.width = 256; canvas2.height = 48;
+      ctx2.fillStyle = 'transparent';
+      ctx2.fillRect(0, 0, 256, 48);
+      ctx2.font = 'bold 22px monospace';
+      ctx2.fillStyle = NC[n.type||'node'] || '#8b949e';
+      ctx2.fillText(label, 4, 32);
+      const tex = new THREE.CanvasTexture(canvas2);
+      tex.minFilter = THREE.LinearFilter;
+      const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.85, depthWrite: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.position.set(n.x + (NR3[n.type||'node']||3) + 6, n.y + 2, n.z);
+      sprite.scale.set(48, 9, 1);
+      scene.add(sprite);
+    }
+
+    // ── Raycaster for tooltips ──────────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Points = { threshold: 5 };
+    const mouse = new THREE.Vector2();
+    const tooltip3d = document.getElementById('tooltip');
+    let hoveredMesh = null;
+
+    renderer.domElement.addEventListener('mousemove', e => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(spheres);
+      if (hits.length > 0) {
+        const d = hits[0].object.userData;
+        tooltip3d.style.display = 'block';
+        tooltip3d.innerHTML = \`<strong>\${d.label}</strong><br>
+          <span class="t-type">\${d.type||'node'}</span>
+          \${d.file ? \`<br><span class="t-file">\${d.file}</span>\` : ''}\`;
+        tooltip3d.style.left = (e.clientX + 15) + 'px';
+        tooltip3d.style.top = (e.clientY - 8) + 'px';
+        if (hoveredMesh !== hits[0].object) {
+          if (hoveredMesh) hoveredMesh.scale.setScalar(1);
+          hoveredMesh = hits[0].object;
+          hoveredMesh.scale.setScalar(1.5);
+        }
+      } else {
+        tooltip3d.style.display = 'none';
+        if (hoveredMesh) { hoveredMesh.scale.setScalar(1); hoveredMesh = null; }
+      }
+    });
+
+    // ── Ambient particles for depth perception ──────────────────
+    const particleCount = 200;
+    const pGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      pPos[i*3]   = (Math.random() - 0.5) * 1200;
+      pPos[i*3+1] = (Math.random() - 0.5) * 1200;
+      pPos[i*3+2] = (Math.random() - 0.5) * 1200;
+    }
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({ color: 0x30363d, size: 1.5, transparent: true, opacity: 0.5 });
+    scene.add(new THREE.Points(pGeo, pMat));
+
+    // ── Animate ─────────────────────────────────────────────────
+    let animId = null;
+    let autoAngle = 0;
+    function animate() {
+      animId = requestAnimationFrame(animate);
+
+      if (mode === 'spread') {
+        autoAngle += 0.003;
+        camera.position.x = Math.sin(autoAngle) * camera.position.z;
+        camera.position.y = Math.cos(autoAngle * 0.4) * camera.position.z * 0.3;
+        const fwd = Math.cos(autoAngle) * camera.position.z;
+        camera.position.z = Math.abs(fwd) < 80 ? 80 * Math.sign(fwd || 1) : fwd;
+        camera.lookAt(0, 0, 0);
+      }
+
+      if (controls) controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ── Resize handler ──────────────────────────────────────────
+    function onResize() {
+      const w = container.clientWidth || 900;
+      const h = container.clientHeight || 580;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', onResize);
+
+    // ── Cleanup function ────────────────────────────────────────
+    three3dCleanup = () => {
+      if (animId) cancelAnimationFrame(animId);
+      window.removeEventListener('resize', onResize);
+      if (controls) controls.dispose();
+      renderer.dispose();
+    };
+  }
+
+  const forcePill = document.getElementById('layout-force');
+  const radialPill = document.getElementById('layout-radial');
+  const spread3dPill = document.getElementById('layout-3d-spread');
+  const explore3dPill = document.getElementById('layout-3d-explore');
+  const allPills = [forcePill, radialPill, spread3dPill, explore3dPill];
+
+  function activatePill(pill) {
+    allPills.forEach(p => p.classList.remove('on'));
+    pill.classList.add('on');
+  }
+
+  forcePill.onclick = () => {
+    activatePill(forcePill);
+    show2d();
+    applyLayout('force');
+  };
+  radialPill.onclick = () => {
+    activatePill(radialPill);
+    show2d();
+    applyLayout('radial');
+  };
+  spread3dPill.onclick = () => {
+    activatePill(spread3dPill);
+    show3d('spread');
+  };
+  explore3dPill.onclick = () => {
+    activatePill(explore3dPill);
+    show3d('explore');
+  };
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────

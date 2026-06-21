@@ -107,12 +107,61 @@ Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
 
 ---
 
+## Testing
+
+```bash
+npm install
+npm run build      # compiles TypeScript, zero errors expected
+npm test           # runs the full suite (vitest)
+```
+
+For local development:
+
+```bash
+npm run test:watch     # re-runs tests on file changes
+npm run test:coverage  # generates a coverage report
+```
+
+The suite currently runs 1000+ tests across 60+ files, covering the agent
+loop, all provider integrations, the tool registry, safety/permissions, the
+orchestration and self-improvement layers, and the dashboard generator.
+
+Contributions should keep `npm run build` and `npm test` clean before
+opening a pull request.
+
+---
+
+## Known Limitations
+
+- **Self-improvement routing (RubyAlternator) is implemented but inactive.**
+  Episode recording and competence scoring both work and are visible in the
+  dashboard's Learning tab, but the routing logic that would actually use
+  competence scores to pick models isn't wired into the main agent loop yet.
+  Today, model selection doesn't change based on what Aura has learned.
+
+- **Provider behavior varies by model.** Tool-calling support, context
+  window handling, and error message quality differ across providers —
+  some of this is normalized (see CHANGELOG for cross-provider config
+  fixes), but not all of it. If a model behaves unexpectedly with tools,
+  check whether the provider documents function-calling support before
+  assuming it's a bug in Aura.
+
+- **Large refactors still need verification.** `--verify` and `--test-command`
+  catch regressions Aura's own changes introduce, but they don't replace
+  review for changes spanning many files or with subtle behavioral intent.
+
+- **Conversation compaction is new.** Long sessions now auto-summarize older
+  turns to stay within context limits; this is recently added and still
+  being hardened against edge cases in unusual tool-call sequences.
+
+---
+
 ## Stats
 
 | Metric | Value |
 |--------|-------|
 | Tests | 1035+ passing, 0 failures |
-| Version | v0.3.0 |
+| Version | v0.3.7 |
 | Language | TypeScript (strict) |
 | License | MIT |
 
