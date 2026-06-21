@@ -57,7 +57,7 @@ describe('formatStats — empty episode list', () => {
 
   it('shows zero tokens when no episodes', () => {
     const output = formatStats([]);
-    expect(output).toContain('Total tokens:       0 input / 0 output');
+    expect(output).toContain('Total tokens used:  0');
   });
 
   it('includes the Aura Stats header', () => {

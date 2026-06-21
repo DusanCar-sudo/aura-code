@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
 import type { LLMProvider } from '../providers/types.js';
+import type { HistoryMessage } from '../providers/types.js';
 import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
 import { runAgentLoop } from '../agent/loop.js';
+import type { LoopResult } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
@@ -27,10 +29,42 @@ export interface AlternatorOptions {
   context: ProjectContext;
   /** When set, routing and loop events are surfaced to the user. */
   display?: Display;
+  /**
+   * The permission system governing the user's actual session. Pass this
+   * through from the caller so Ruby's attempt respects whatever mode the
+   * user chose (read-only / normal / auto) — without it, this previously
+   * defaulted to a hardcoded 'auto', meaning destructive operations could
+   * get silently approved during the Ruby attempt even in a session the
+   * user explicitly ran in confirmation-required 'normal' mode.
+   */
+  permissions?: PermissionSystem;
+  /**
+   * Confirmation callback for destructive operations, passed through to
+   * both the Ruby attempt and the large-model escalation. Pass the same
+   * one the caller already uses (e.g. the REPL's readline-based prompt) —
+   * without it, each inner loop falls back to its own default terminal
+   * confirm(), which can behave inconsistently alongside an already-active
+   * readline interface.
+   */
+  confirmFn?: (message: string) => Promise<boolean>;
+  /**
+   * Prior conversation history to resume from (e.g. the REPL's stay-active
+   * history, or a loaded session). Without this, every Ruby-alternated
+   * turn would silently start fresh, breaking multi-turn conversation
+   * continuation any time alternation activates mid-conversation.
+   */
+  initialHistory?: HistoryMessage[];
 }
 
 export interface AlternatorRunResult {
-  result: string;
+  /**
+   * The full result from whichever path actually produced the final
+   * output — Ruby's if it succeeded without escalation, otherwise the
+   * large model's. Treat this exactly like a normal runAgentLoop() result:
+   * history, costUsd, turns, and toolCallLog are all populated correctly
+   * from whichever path ran, so callers don't need special-case handling.
+   */
+  loopResult: LoopResult;
   episode: Episode;
   usedRuby: boolean;
   decision: AlternationDecision;
@@ -124,11 +158,12 @@ function buildRubyProvider(config: RubyConfig): OpenAICompatibleProvider {
 export class RubyAlternator {
   private readonly opts: AlternatorOptions;
   private readonly display: Display;
-  private readonly permissions = new PermissionSystem('auto');
+  private readonly permissions: PermissionSystem;
 
   constructor(opts: AlternatorOptions) {
     this.opts = opts;
     this.display = opts.display ?? createNoopDisplay();
+    this.permissions = opts.permissions ?? new PermissionSystem('normal');
   }
 
   /**
@@ -138,6 +173,7 @@ export class RubyAlternator {
   async run(task: string): Promise<AlternatorRunResult> {
     const startMs = Date.now();
     const { rubyConfig, largeModelProvider, projectRoot, context } = this.opts;
+    const confirmFn = this.opts.confirmFn;
 
     let decision: AlternationDecision = {
       useRuby: false,
@@ -148,12 +184,12 @@ export class RubyAlternator {
 
     let rubyAttempted = false;
     let rubySucceeded = false;
-    let rubyOutput: string | undefined;
-    let rubyTokens = 0;
-    let largeModelOutput: string | undefined;
-    let largeModelTokens = 0;
+    let rubyLoopResult: LoopResult | undefined;
+    let largeModelLoopResult: LoopResult | undefined;
     let usedRuby = false;
-    let result = '';
+    // Only used to build the error-path fallback LoopResult below; the
+    // success paths read everything from rubyLoopResult/largeModelLoopResult.
+    let errorSummary: string | undefined;
 
     try {
       const recent = await episodeStore.loadEpisodes(projectRoot, RECENT_EPISODE_LIMIT);
@@ -172,30 +208,27 @@ export class RubyAlternator {
 
           try {
             const rubyProvider = buildRubyProvider(rubyConfig);
-            const loopResult = await runAgentLoop({
+            rubyLoopResult = await runAgentLoop({
               provider: rubyProvider,
               task,
               context,
               permissions: this.permissions,
               display: this.display,
+              confirmFn,
+              initialHistory: this.opts.initialHistory,
               disableSpawn: true,
               maxTurns: 15,
             });
 
-            rubyTokens = loopResult.usage.totalTokens;
-            rubyOutput = loopResult.summary;
-
-            if (isNonEmptyResult(rubyOutput) && loopResult.success) {
+            if (isNonEmptyResult(rubyLoopResult.summary) && rubyLoopResult.success) {
               rubySucceeded = true;
               usedRuby = true;
-              result = rubyOutput!;
               this.display.success('Ruby handled the task without escalation.');
             } else {
               this.display.warning('Ruby did not produce a usable result — escalating.');
             }
           } catch (e) {
             this.display.warning(`Ruby error: ${String(e)} — escalating.`);
-            rubyOutput = rubyOutput ?? `Error: ${String(e)}`;
           }
         }
       }
@@ -203,31 +236,41 @@ export class RubyAlternator {
       if (!usedRuby) {
         this.display.header('Large model', largeModelProvider.name);
         try {
-          const loopResult = await runAgentLoop({
+          largeModelLoopResult = await runAgentLoop({
             provider: largeModelProvider,
             task,
             context,
             permissions: this.permissions,
             display: this.display,
+            confirmFn,
+            initialHistory: this.opts.initialHistory,
             disableSpawn: true,
           });
-          largeModelTokens = loopResult.usage.totalTokens;
-          largeModelOutput = loopResult.summary;
-          result = isNonEmptyResult(largeModelOutput)
-            ? largeModelOutput!
-            : loopResult.success
-              ? '(Task completed with no output)'
-              : `Large model did not complete: ${loopResult.summary}`;
         } catch (e) {
-          result = `Large model error: ${String(e)}`;
-          largeModelOutput = result;
-          this.display.error(result);
+          errorSummary = `Large model error: ${String(e)}`;
+          this.display.error(errorSummary);
         }
       }
     } catch (e) {
-      result = `Alternation error: ${String(e)}`;
-      this.display.error(result);
+      errorSummary = `Alternation error: ${String(e)}`;
+      this.display.error(errorSummary);
     }
+
+    // The full result that actually represents this run's output — Ruby's
+    // if it succeeded, otherwise the large model's, otherwise a safe empty
+    // result for the case where something threw before either path ran.
+    const finalLoopResult: LoopResult = usedRuby
+      ? rubyLoopResult!
+      : largeModelLoopResult ?? {
+          success: false,
+          summary: errorSummary ?? 'Alternation failed before either model ran.',
+          turns: 0,
+          toolCallCount: 0,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          costUsd: 0,
+          history: [],
+          toolCallLog: [],
+        };
 
     const episode: Episode = {
       id: randomUUID(),
@@ -236,13 +279,13 @@ export class RubyAlternator {
       projectRoot,
       rubyAttempted,
       rubySucceeded,
-      rubyOutput,
+      rubyOutput: rubyLoopResult?.summary,
       largeModelUsed: usedRuby ? undefined : largeModelProvider.model,
-      largeModelOutput: usedRuby ? undefined : largeModelOutput,
-      reviewerApproved: isNonEmptyResult(result),
+      largeModelOutput: usedRuby ? undefined : largeModelLoopResult?.summary,
+      reviewerApproved: isNonEmptyResult(finalLoopResult.summary) && finalLoopResult.success,
       tokensUsed: {
-        ruby: rubyAttempted ? rubyTokens : undefined,
-        largeModel: usedRuby ? undefined : largeModelTokens,
+        ruby: rubyAttempted ? rubyLoopResult?.usage.totalTokens : undefined,
+        largeModel: usedRuby ? undefined : largeModelLoopResult?.usage.totalTokens,
       },
       durationMs: Date.now() - startMs,
       taskCategory: inferTaskCategory(task),
@@ -265,7 +308,7 @@ export class RubyAlternator {
       /* best-effort */
     }
 
-    return { result, episode, usedRuby, decision };
+    return { loopResult: finalLoopResult, episode, usedRuby, decision };
   }
 
   /**

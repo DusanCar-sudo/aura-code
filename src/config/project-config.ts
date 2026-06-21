@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import type { RubyConfig } from '../ruby/types.js';
 
 /**
  * Definition of a custom provider in .aura.json.
@@ -45,6 +46,11 @@ export interface ProjectConfig {
   testCommand?: string;
   /** Preset profile — "local" routes to Ollama with compact prompts. */
   profile?: 'local';
+  /**
+   * Override any subset of RubyAlternator's config (see DEFAULT_RUBY_CONFIG).
+   * Set `{ "enabled": false }` to opt out of Ruby-first task routing entirely.
+   */
+  ruby?: Partial<RubyConfig>;
 }
 
 /**

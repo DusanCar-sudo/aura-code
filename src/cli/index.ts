@@ -34,6 +34,9 @@ import { renderDiamond } from './diamond.js';
 import { saveEpisode, loadEpisodes } from '../ruby/episode-capture.js';
 import { selectModel } from '../ruby/model-selector.js';
 import { formatStats } from '../ruby/stats.js';
+import { RubyAlternator } from '../ruby/alternator.js';
+import { DEFAULT_RUBY_CONFIG } from '../ruby/types.js';
+import type { RubyConfig } from '../ruby/types.js';
 import { bootstrapAuraEnv } from '../util/load-env.js';
 import { isModelConfigured, modelProviderFamily, resolveProviderTransport } from '../providers/factory.js';
 
@@ -853,7 +856,11 @@ async function main() {
       // Router failed — fall through to single agent
     }
 
-    // ── RubyAlternator: suggest model from competence history ─────────────────
+    // ── Competence-based model selection ───────────────────────────────────────
+    // Picks the best-performing model among already-configured, same-family
+    // options based on task similarity to past episodes. Distinct from
+    // RubyAlternator below — this only chooses among models you've already
+    // set up; it never tries a free local model first.
     // Only when the user has NOT explicitly specified --model or :model
     if (!userSetModel && !globalCfg?.defaultModel) {
       try {
@@ -876,10 +883,14 @@ async function main() {
     }
 
     const doVerify = cliVerify || !!fileConfig.verify;
+    const rubyConfig: RubyConfig = { ...DEFAULT_RUBY_CONFIG, ...fileConfig.ruby };
 
     const episodeStart = Date.now();
     let result;
+    let alternatorHandledEpisode = false;
     if (doVerify) {
+      // Ruby-alternation doesn't support the verification wrapper yet —
+      // a verified task always runs directly against the selected model.
       const { runWithVerification } = await import('../verify/index.js');
       const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
       const testCommand = cliTestCommand ?? fileConfig.testCommand;
@@ -899,6 +910,19 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
+    } else if (rubyConfig.enabled) {
+      const alternator = new RubyAlternator({
+        rubyConfig,
+        largeModelProvider: provider,
+        projectRoot: ctx.root,
+        context: ctx,
+        display,
+        permissions,
+        initialHistory: activeChatHistory,
+      });
+      const altResult = await alternator.run(task);
+      result = altResult.loopResult;
+      alternatorHandledEpisode = true; // alternator.run() already saved its own episode
     } else {
       result = await runAgentLoop({
         provider, task, context: ctx, permissions, display,
@@ -912,25 +936,29 @@ async function main() {
       });
     }
 
-    // Persist episode for Ruby Principle training data
-    try {
-      const { randomBytes } = await import('crypto');
-      await saveEpisode(ctx.root, {
-        id: randomBytes(4).toString('hex') + '-' + Date.now().toString(36),
-        timestamp: Date.now(),
-        task,
-        projectRoot: ctx.root,
-        rubyAttempted: false,
-        rubySucceeded: false,
-        largeModelUsed: runtimeConfig.model,
-        largeModelOutput: result.summary,
-        reviewerApproved: result.success,
-        tokensUsed: { largeModel: result.usage.totalTokens },
-        durationMs: Date.now() - episodeStart,
-        taskCategory: 'other',
-      });
-    } catch {
-      // Episode recording is best-effort; never block the user
+    // Persist episode for Ruby Principle training data — skip when
+    // RubyAlternator already saved its own (richer) episode above, to
+    // avoid double-counting every task in the stats/dashboard.
+    if (!alternatorHandledEpisode) {
+      try {
+        const { randomBytes } = await import('crypto');
+        await saveEpisode(ctx.root, {
+          id: randomBytes(4).toString('hex') + '-' + Date.now().toString(36),
+          timestamp: Date.now(),
+          task,
+          projectRoot: ctx.root,
+          rubyAttempted: false,
+          rubySucceeded: false,
+          largeModelUsed: runtimeConfig.model,
+          largeModelOutput: result.summary,
+          reviewerApproved: result.success,
+          tokensUsed: { largeModel: result.usage.totalTokens },
+          durationMs: Date.now() - episodeStart,
+          taskCategory: 'other',
+        });
+      } catch {
+        // Episode recording is best-effort; never block the user
+      }
     }
 
     // Update history so REPL continues the conversation
@@ -993,7 +1021,11 @@ async function main() {
         }
 
         // Run task — pass current conversation history for stay-active mode
-        // ── RubyAlternator: suggest model from competence history ──────────────
+        // ── Competence-based model selection ───────────────────────────────
+        // Picks the best-performing model among already-configured, same-family
+        // options based on task similarity to past episodes. Distinct from
+        // RubyAlternator below — this only chooses among models you've already
+        // set up; it never tries a free local model first.
         // Only when the user has NOT set a model explicitly via --model or :model
         if (!userSetModel && !globalCfg?.defaultModel) {
           try {
@@ -1016,9 +1048,17 @@ async function main() {
         let result;
         try {
           const currentProvider = buildProvider(display);
+          const replConfirmFn = async (msg: string) => new Promise<boolean>(res => {
+            rl.question(`\n⚠️  ${msg} [y/N] `, a => {
+              res(a.trim().toLowerCase() === 'y' || a.trim().toLowerCase() === 'yes');
+            });
+          });
 
           const doVerify = argv.verify === true || !!fileConfig.verify;
+          const rubyConfig: RubyConfig = { ...DEFAULT_RUBY_CONFIG, ...fileConfig.ruby };
           if (doVerify) {
+            // Ruby-alternation doesn't support the verification wrapper yet —
+            // a verified task always runs directly against the selected model.
             const { runWithVerification } = await import('../verify/index.js');
             const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
             const testCommand = cliTestCommand ?? fileConfig.testCommand;
@@ -1028,11 +1068,7 @@ async function main() {
                 context: ctx, permissions, display,
                 initialHistory: activeChatHistory,
                 maxTurns: resolved.maxTurns,
-                confirmFn: async (msg) => new Promise(res => {
-                  rl.question(`\\n⚠️  ${msg} [y/N] `, a => {
-                    res(a.trim().toLowerCase() === 'y' || a.trim().toLowerCase() === 'yes');
-                  });
-                }),
+                confirmFn: replConfirmFn,
                 spawnConfig: {
                   apiKey: runtimeConfig.apiKey,
                   baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -1044,17 +1080,26 @@ async function main() {
               display,
             });
             result = wrapperResult.loopResult;
+          } else if (rubyConfig.enabled) {
+            const alternator = new RubyAlternator({
+              rubyConfig,
+              largeModelProvider: currentProvider,
+              projectRoot: ctx.root,
+              context: ctx,
+              display,
+              permissions,
+              confirmFn: replConfirmFn,
+              initialHistory: activeChatHistory,
+            });
+            const altResult = await alternator.run(input);
+            result = altResult.loopResult;
           } else {
             result = await runAgentLoop({
               provider: currentProvider, task: input,
               context: ctx, permissions, display,
               initialHistory: activeChatHistory,
               maxTurns: resolved.maxTurns,
-              confirmFn: async (msg) => new Promise(res => {
-                rl.question(`\\n⚠️  ${msg} [y/N] `, a => {
-                  res(a.trim().toLowerCase() === 'y' || a.trim().toLowerCase() === 'yes');
-                });
-              }),
+              confirmFn: replConfirmFn,
               spawnConfig: {
                 apiKey: runtimeConfig.apiKey,
                 baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -1977,6 +2022,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
     --max-turns <n>          Max agent loop turns before stopping (default: 150)
     --analyze                Mine session history for weakness patterns; save report
+    --stats                  Show episode stats — completion rate, avg duration, top model, tokens
     --propose-harness        Generate system-prompt patches from weakness report
     --apply-harness <id>     Apply a proposal patch; reverts if tests fail
     --workflow <name> ...    Create and run a sequential workflow with named steps

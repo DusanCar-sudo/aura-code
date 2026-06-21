@@ -18,7 +18,7 @@ export function formatStats(episodes: Episode[]): string {
       '  Tasks completed:    0 (0%)',
       '  Avg duration:       —',
       '  Top model:          —',
-      '  Total tokens:       0 input / 0 output',
+      '  Total tokens used:  0',
       '',
     ].join('\n');
   }
@@ -38,8 +38,7 @@ export function formatStats(episodes: Episode[]): string {
     { tasks: number; successes: number; inputTokens: number; outputTokens: number }
   >();
 
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
+  let totalTokens = 0;
 
   for (const ep of episodes) {
     const model = ep.largeModelUsed ?? (ep.rubySucceeded ? 'ruby' : undefined);
@@ -60,11 +59,12 @@ export function formatStats(episodes: Episode[]): string {
       modelStats.set(model, existing);
     }
 
-    // Accumulate global token totals
-    totalInputTokens += ep.tokensUsed?.largeModel ?? 0;
-    totalInputTokens += ep.tokensUsed?.ruby ?? 0;
-    // Episodes don't separately track output tokens; use 0 as the split is unknown
-    totalOutputTokens += 0;
+    // Episode.tokensUsed tracks per-model totals only — there is no
+    // input/output split captured at recording time, so we report a single
+    // honest total rather than inventing an "output" figure that was never
+    // actually measured.
+    totalTokens += ep.tokensUsed?.largeModel ?? 0;
+    totalTokens += ep.tokensUsed?.ruby ?? 0;
   }
 
   let topModel = '—';
@@ -77,8 +77,7 @@ export function formatStats(episodes: Episode[]): string {
     topModel = `${name} (${stats.tasks} task${stats.tasks === 1 ? '' : 's'}, ${successPct}% success)`;
   }
 
-  const inputStr = formatTokenCount(totalInputTokens);
-  const outputStr = formatTokenCount(totalOutputTokens);
+  const tokensStr = formatTokenCount(totalTokens);
 
   return [
     '',
@@ -88,7 +87,7 @@ export function formatStats(episodes: Episode[]): string {
     `  Tasks completed:    ${completed} (${completePct}%)`,
     `  Avg duration:       ${avgDurationStr}`,
     `  Top model:          ${topModel}`,
-    `  Total tokens:       ${inputStr} input / ${outputStr} output`,
+    `  Total tokens used:  ${tokensStr}`,
     '',
   ].join('\n');
 }
