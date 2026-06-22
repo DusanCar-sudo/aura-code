@@ -1009,6 +1009,7 @@ async function main() {
           permissions, cumulative,
           chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
           rl,
+          rubyEnabled: { ...DEFAULT_RUBY_CONFIG, ...fileConfig.ruby }.enabled,
         };
         const cmdResult = await handleReplCommand(input, replCtx);
         if (cmdResult.handled) {
@@ -1016,6 +1017,10 @@ async function main() {
           if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
           if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
           if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
+          // :ruby on/off persists by mutating the loaded config the gate reads.
+          if (cmdResult.rubyEnabled !== undefined) {
+            fileConfig.ruby = { ...fileConfig.ruby, enabled: cmdResult.rubyEnabled };
+          }
           ask();
           return;
         }
@@ -1188,6 +1193,7 @@ interface ReplCtx {
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
   rl: readline.Interface;
+  rubyEnabled: boolean;
 }
 
 interface ReplCommandResult {
@@ -1195,6 +1201,7 @@ interface ReplCommandResult {
   newChatId?: string | undefined;
   newHistory?: import('../providers/types.js').HistoryMessage[];
   newTitle?: string | undefined;
+  rubyEnabled?: boolean;
 }
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
@@ -1314,6 +1321,10 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :graph refresh          Extract + persist codebase graph',
       '  :plans                  List saved execution plans',
       '  :viz, :dashboard        Generate and open the memory dashboard',
+      '  :dream                  Consolidate today\'s episodes into a dated dream (dreams/*.md)',
+      '  :dream full             Consolidate ALL episodes, ignoring the last-dream cutoff',
+      '  :rem                    List dream files and open the most recent one',
+      '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
       '  /stats, /usage          Show token + cost usage this session',
       '  /clear, /reset          Reset cumulative usage stats',
       '',
@@ -1459,6 +1470,61 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
+  }
+
+  if (input === ':dream' || input === ':dream full') {
+    const full = input === ':dream full';
+    console.log(chalk.hex('#8a7768')('\n  Dreaming — consolidating episodes…\n'));
+    try {
+      const { runDream } = await import('../dream/dream.js');
+      const { createResilientProvider } = await import('../providers/resilient-factory.js');
+      const provider = createResilientProvider(
+        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+        {},
+        c.display,
+      );
+      const res = await runDream({ projectRoot: c.ctx.root, provider, full });
+      if (res.skipped) {
+        console.log(chalk.hex('#cc9e5c')(`  ⤳ Nothing to dream about — ${res.reason}.\n`));
+      } else {
+        console.log(chalk.hex('#5a9e6e')(`  ✓ Dream written: ${res.path}`));
+        console.log(chalk.hex('#8a7768')(`  Consolidated ${res.episodeCount} episode(s).\n`));
+      }
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+
+  if (input === ':rem') {
+    const dir = path.join(c.ctx.root, 'dreams');
+    let files: string[] = [];
+    try {
+      files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort().reverse();
+    } catch { /* no dreams dir */ }
+    if (files.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No dreams yet. Run :dream after some work.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Dreams\n'));
+      for (const f of files.slice(0, 20)) console.log(chalk.hex('#ede0cc')(`  ${f}`));
+      const latest = path.join(dir, files[0]);
+      console.log(chalk.hex('#8a7768')(`\n  Most recent: ${latest}\n`));
+      console.log(chalk.hex('#4e3d30')(fs.readFileSync(latest, 'utf8')));
+    }
+    return { handled: true };
+  }
+
+  if (input === ':ruby' || input === ':ruby on' || input === ':ruby off') {
+    if (input === ':ruby') {
+      const state = c.rubyEnabled ? chalk.hex('#5a9e6e')('ON') : chalk.hex('#b15439')('OFF');
+      console.log(chalk.hex('#8a7768')(`\n  Ruby Principle is ${state}. Use :ruby on / :ruby off to change.\n`));
+      return { handled: true };
+    }
+    const on = input === ':ruby on';
+    c.rubyEnabled = on;
+    const state = on ? chalk.hex('#5a9e6e')('ON') : chalk.hex('#b15439')('OFF');
+    console.log(chalk.hex('#8a7768')(`\n  Ruby Principle is now ${state} for this session.\n`));
+    return { handled: true, rubyEnabled: on };
   }
 
   if (input === ':plans') {

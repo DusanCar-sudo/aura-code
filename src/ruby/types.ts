@@ -61,7 +61,7 @@ export const DEFAULT_RUBY_CONFIG: RubyConfig = {
   ollamaBaseUrl: 'http://localhost:11434/v1',
   competenceThreshold: 0.7,
   minAttempts: 3,
-  enabled: true,
+  enabled: false,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
