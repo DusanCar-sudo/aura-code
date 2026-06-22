@@ -96,6 +96,7 @@ function normalise(raw: unknown): ProjectConfig {
   if (typeof r.maxVerifyRetries === 'number' && r.maxVerifyRetries > 0) out.maxVerifyRetries = Math.floor(r.maxVerifyRetries as number);
   if (typeof r.testCommand === 'string') out.testCommand = r.testCommand as string;
   if (r.profile === 'local') out.profile = 'local';
+  if (typeof r.ruby === 'object' && r.ruby !== null) out.ruby = r.ruby as ProjectConfig['ruby'];
   if (Array.isArray(r.providers)) {
     out.providers = r.providers
       .filter((p: unknown): p is Record<string, unknown> =>

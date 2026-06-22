@@ -73,71 +73,91 @@ export class OpenAICompatibleProvider implements LLMProvider {
     let textBuffer = '';
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
-    // We capture the finished response here rather than yielding `done` and
-    // returning the moment we see finish_reason. With stream_options.include_usage
-    // the API sends the usage figures in a SEPARATE trailing chunk (choices: [],
-    // usage: {...}) AFTER the finish_reason chunk. Returning early discarded it,
-    // leaving `usage` undefined on every turn — which zeroed the loop's token
-    // accounting and disabled context compaction. So we keep draining the stream
-    // until it ends, then emit `done` once with whatever usage finally arrived.
-    let finished: { text: string; toolCalls: ToolCall[]; stopReason: 'tools' | 'done' } | null = null;
 
-    for await (const chunk of stream) {
-      // Usage may arrive on its own trailing chunk (choices is empty there).
-      if (chunk.usage) {
-        usage = { inputTokens: chunk.usage.prompt_tokens ?? 0, outputTokens: chunk.usage.completion_tokens ?? 0 };
+    // Emit `done` as soon as we see finish_reason and RETURN. We do NOT keep
+    // draining the stream to wait for a trailing usage-only chunk: many servers
+    // (Ollama, some DeepSeek/OpenRouter endpoints) close the socket immediately
+    // after the finish chunk, so an extra read throws "Premature close" — which
+    // previously failed otherwise-successful turns and forced a fallback. Usage
+    // is captured opportunistically if it arrives on or before the finish chunk;
+    // when it doesn't, that's harmless — context compaction is driven by a local
+    // size estimate (see compactor.ts/estimateContextTokens), not this figure.
+    //
+    // The whole iteration is wrapped so that if the connection drops mid-stream
+    // we still surface whatever partial output we have as a clean `done` rather
+    // than throwing and nuking the turn.
+    const emitDone = (toolCalls: ToolCall[], stopReason: 'tools' | 'done'): StreamChunk => ({
+      type: 'done',
+      response: { text: textBuffer, toolCalls, stopReason, usage },
+    });
+
+    const finalizeToolCalls = (): ToolCall[] => {
+      const calls: ToolCall[] = [];
+      for (const [, b] of toolCallBuilders) {
+        let input: Record<string, unknown> = {};
+        try { input = JSON.parse(b.args); } catch { input = { _raw: b.args }; }
+        calls.push({ id: b.id, name: b.name, input });
       }
+      return calls;
+    };
 
-      const delta = chunk.choices[0]?.delta;
-      if (delta) {
-        // Text content
-        if (delta.content) {
-          textBuffer += delta.content;
-          yield { type: 'text', text: delta.content };
+    try {
+      for await (const chunk of stream) {
+        // Usage may ride on its own chunk (choices empty) or alongside finish.
+        if (chunk.usage) {
+          usage = { inputTokens: chunk.usage.prompt_tokens ?? 0, outputTokens: chunk.usage.completion_tokens ?? 0 };
         }
 
-        // Tool calls (streamed in pieces)
-        for (const tc of delta.tool_calls ?? []) {
-          if (!toolCallBuilders.has(tc.index)) {
-            const id = tc.id ?? `tc_${tc.index}`;
-            const name = tc.function?.name ?? '';
-            toolCallBuilders.set(tc.index, { id, name, args: '' });
-            yield { type: 'tool_start', id, name };
+        const delta = chunk.choices[0]?.delta;
+        if (delta) {
+          // Text content
+          if (delta.content) {
+            textBuffer += delta.content;
+            yield { type: 'text', text: delta.content };
           }
-          const builder = toolCallBuilders.get(tc.index)!;
-          if (tc.function?.arguments) {
-            builder.args += tc.function.arguments;
-            yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
+
+          // Tool calls (streamed in pieces)
+          for (const tc of delta.tool_calls ?? []) {
+            if (!toolCallBuilders.has(tc.index)) {
+              const id = tc.id ?? `tc_${tc.index}`;
+              const name = tc.function?.name ?? '';
+              toolCallBuilders.set(tc.index, { id, name, args: '' });
+              yield { type: 'tool_start', id, name };
+            }
+            const builder = toolCallBuilders.get(tc.index)!;
+            if (tc.function?.arguments) {
+              builder.args += tc.function.arguments;
+              yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
+            }
           }
         }
-      }
 
-      // Finish: finalise tool calls and remember the result, but DON'T return —
-      // the usage-only chunk (if any) still follows.
-      const finishReason = chunk.choices[0]?.finish_reason;
-      if ((finishReason === 'tool_calls' || finishReason === 'stop') && !finished) {
-        const calls: ToolCall[] = [];
-        for (const [, b] of toolCallBuilders) {
-          let input: Record<string, unknown> = {};
-          try { input = JSON.parse(b.args); } catch { input = { _raw: b.args }; }
-          const call: ToolCall = { id: b.id, name: b.name, input };
-          calls.push(call);
-          yield { type: 'tool_end', call };
+        // Finish: finalise tool calls, emit done, and return immediately.
+        const finishReason = chunk.choices[0]?.finish_reason;
+        if (finishReason === 'tool_calls' || finishReason === 'stop') {
+          const calls = finalizeToolCalls();
+          for (const call of calls) yield { type: 'tool_end', call };
+          yield emitDone(calls, finishReason === 'tool_calls' ? 'tools' : 'done');
+          return;
         }
-        finished = {
-          text: textBuffer,
-          toolCalls: calls,
-          stopReason: finishReason === 'tool_calls' ? 'tools' : 'done',
-        };
       }
+    } catch (err) {
+      // Connection dropped (e.g. "Premature close") after the model had already
+      // produced output. If we have content or tool calls, treat it as a
+      // completed turn rather than an error — the response is usable. Only
+      // re-throw when nothing was produced, since that's a genuine failure.
+      const hadOutput = textBuffer.length > 0 || toolCallBuilders.size > 0;
+      if (!hadOutput) throw err;
+      const calls = finalizeToolCalls();
+      for (const call of calls) yield { type: 'tool_end', call };
+      yield emitDone(calls, calls.length > 0 ? 'tools' : 'done');
+      return;
     }
 
-    // Stream exhausted — emit a single done with the usage we ultimately saw.
-    if (finished) {
-      yield { type: 'done', response: { ...finished, usage } };
-    } else {
-      yield { type: 'done', response: { text: textBuffer, toolCalls: [], stopReason: 'done', usage } };
-    }
+    // Stream ended without an explicit finish_reason — emit whatever we have.
+    const calls = finalizeToolCalls();
+    for (const call of calls) yield { type: 'tool_end', call };
+    yield emitDone(calls, calls.length > 0 ? 'tools' : 'done');
   }
 }
 
