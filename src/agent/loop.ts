@@ -10,7 +10,7 @@ import { DEFAULTS } from '../config/defaults.js';
 import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
-import { compactHistory } from './compactor.js';
+import { compactHistory, estimateContextTokens } from './compactor.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -127,7 +127,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   while (turns < maxTurns) {
     turns++;
 
-    compactHistory(history, usage.totalTokens, provider.model);
+    // Compact BEFORE the next provider call, using the size of the payload we
+    // are about to send (system + current history), measured locally. This was
+    // previously driven by `usage.totalTokens`, which stays 0 whenever the
+    // provider omits streamed usage — so compaction silently never fired and
+    // history grew until the provider rejected the request. See compactor.ts.
+    compactHistory(history, estimateContextTokens(system, history), provider.model);
 
     let responseText = '';
     const responseToolCalls: ToolCall[] = [];

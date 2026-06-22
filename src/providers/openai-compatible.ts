@@ -73,40 +73,49 @@ export class OpenAICompatibleProvider implements LLMProvider {
     let textBuffer = '';
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
+    // We capture the finished response here rather than yielding `done` and
+    // returning the moment we see finish_reason. With stream_options.include_usage
+    // the API sends the usage figures in a SEPARATE trailing chunk (choices: [],
+    // usage: {...}) AFTER the finish_reason chunk. Returning early discarded it,
+    // leaving `usage` undefined on every turn — which zeroed the loop's token
+    // accounting and disabled context compaction. So we keep draining the stream
+    // until it ends, then emit `done` once with whatever usage finally arrived.
+    let finished: { text: string; toolCalls: ToolCall[]; stopReason: 'tools' | 'done' } | null = null;
 
     for await (const chunk of stream) {
-      // OpenAI sends a final usage-only chunk when stream_options.include_usage is set
+      // Usage may arrive on its own trailing chunk (choices is empty there).
       if (chunk.usage) {
         usage = { inputTokens: chunk.usage.prompt_tokens ?? 0, outputTokens: chunk.usage.completion_tokens ?? 0 };
       }
+
       const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
+      if (delta) {
+        // Text content
+        if (delta.content) {
+          textBuffer += delta.content;
+          yield { type: 'text', text: delta.content };
+        }
 
-      // Text content
-      if (delta.content) {
-        textBuffer += delta.content;
-        yield { type: 'text', text: delta.content };
+        // Tool calls (streamed in pieces)
+        for (const tc of delta.tool_calls ?? []) {
+          if (!toolCallBuilders.has(tc.index)) {
+            const id = tc.id ?? `tc_${tc.index}`;
+            const name = tc.function?.name ?? '';
+            toolCallBuilders.set(tc.index, { id, name, args: '' });
+            yield { type: 'tool_start', id, name };
+          }
+          const builder = toolCallBuilders.get(tc.index)!;
+          if (tc.function?.arguments) {
+            builder.args += tc.function.arguments;
+            yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
+          }
+        }
       }
 
-      // Tool calls (streamed in pieces)
-      for (const tc of delta.tool_calls ?? []) {
-        if (!toolCallBuilders.has(tc.index)) {
-          const id = tc.id ?? `tc_${tc.index}`;
-          const name = tc.function?.name ?? '';
-          toolCallBuilders.set(tc.index, { id, name, args: '' });
-          yield { type: 'tool_start', id, name };
-        }
-        const builder = toolCallBuilders.get(tc.index)!;
-        if (tc.function?.arguments) {
-          builder.args += tc.function.arguments;
-          yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
-        }
-      }
-
-      // Finish
+      // Finish: finalise tool calls and remember the result, but DON'T return —
+      // the usage-only chunk (if any) still follows.
       const finishReason = chunk.choices[0]?.finish_reason;
-      if (finishReason === 'tool_calls' || finishReason === 'stop') {
-        // Finalise all tool calls
+      if ((finishReason === 'tool_calls' || finishReason === 'stop') && !finished) {
         const calls: ToolCall[] = [];
         for (const [, b] of toolCallBuilders) {
           let input: Record<string, unknown> = {};
@@ -115,20 +124,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
           calls.push(call);
           yield { type: 'tool_end', call };
         }
-        yield {
-          type: 'done',
-          response: {
-            text: textBuffer,
-            toolCalls: calls,
-            stopReason: finishReason === 'tool_calls' ? 'tools' : 'done',
-            usage,
-          },
+        finished = {
+          text: textBuffer,
+          toolCalls: calls,
+          stopReason: finishReason === 'tool_calls' ? 'tools' : 'done',
         };
-        return;
       }
     }
 
-    yield { type: 'done', response: { text: textBuffer, toolCalls: [], stopReason: 'done', usage } };
+    // Stream exhausted — emit a single done with the usage we ultimately saw.
+    if (finished) {
+      yield { type: 'done', response: { ...finished, usage } };
+    } else {
+      yield { type: 'done', response: { text: textBuffer, toolCalls: [], stopReason: 'done', usage } };
+    }
   }
 }
 

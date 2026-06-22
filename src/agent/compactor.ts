@@ -5,6 +5,44 @@ const COMPACTION_THRESHOLD = 0.7;
 const PRESERVE_RECENT = 3;
 const DEFAULT_WINDOW = 128_000;
 
+/** Average characters per token used for the local size estimate. Deliberately
+ *  conservative (real ratio is ~4 for English prose, lower for code/JSON) so we
+ *  err toward compacting slightly early rather than overflowing. */
+const CHARS_PER_TOKEN = 3.5;
+
+/**
+ * Provider-independent upper-bound estimate of how many tokens the *next*
+ * prompt will carry, measured directly from the system prompt + current
+ * history. This is the signal that should drive compaction: it reflects the
+ * payload we are about to send, it never lags a turn, and — critically — it
+ * does not depend on the provider reporting streamed `usage`, which several
+ * OpenAI-compatible endpoints omit on tool-call turns. Do NOT substitute a
+ * running sum of per-turn `usage.totalTokens`: each turn's input already
+ * contains the entire history, so summing them N-counts the same bytes.
+ */
+export function estimateContextTokens(system: string, history: HistoryMessage[]): number {
+  let chars = system.length;
+  for (const msg of history) {
+    switch (msg.role) {
+      case 'user':
+        chars += msg.content.length;
+        break;
+      case 'assistant':
+        chars += msg.content?.length ?? 0;
+        for (const call of msg.toolCalls ?? []) {
+          chars += call.name.length + JSON.stringify(call.input).length;
+        }
+        break;
+      case 'tool_result':
+        for (const r of msg.results) {
+          chars += r.name.length + (r.content?.length ?? 0);
+        }
+        break;
+    }
+  }
+  return Math.ceil(chars / CHARS_PER_TOKEN);
+}
+
 function summariseMessage(msg: HistoryMessage): string {
   switch (msg.role) {
     case 'user':

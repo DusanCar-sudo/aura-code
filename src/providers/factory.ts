@@ -70,6 +70,16 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
  * completely independent of which model is actually being called, which is
  * exactly how a MiMo model string ends up paired with a DeepSeek key.
  */
+/**
+ * Returns the env var name (not the value) that getApiKeyForModel would
+ * prefer for this model — e.g. 'XIAOMI_API_KEY' for a mimo- model. Used by
+ * the Telegram setup wizard to write the correct Environment= line into a
+ * generated systemd service file.
+ */
+export function apiKeyEnvVarForModel(model: string): string | undefined {
+  return FAMILY_API_KEY_ENV[modelProviderFamily(model)];
+}
+
 export function getApiKeyForModel(model: string): string | undefined {
   const family = modelProviderFamily(model);
   const preferredEnvVar = FAMILY_API_KEY_ENV[family];
