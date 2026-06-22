@@ -53,7 +53,7 @@ function assertValidDecision(d: AlternationDecision): void {
 // assessCompetence
 // ─────────────────────────────────────────────────────────────────────────────
 describe('assessCompetence', () => {
-  const config: RubyConfig = { ...DEFAULT_RUBY_CONFIG };
+  const config: RubyConfig = { ...DEFAULT_RUBY_CONFIG, enabled: true };
   // minAttempts = 3, competenceThreshold = 0.7
 
   // ── Empty / cold-start ──────────────────────────────────────────────────
