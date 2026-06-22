@@ -53,6 +53,60 @@ function getAudioInfo(filePath: string): string {
   ].join('\n');
 }
 
+export interface GroqWhisperResult {
+  text: string;
+  language?: string;
+  duration?: number;
+  segments?: Array<{ start: number; end: number; text: string }>;
+}
+
+/**
+ * Calls Groq's Whisper transcription API directly and returns the parsed
+ * result — no formatting, no file validation beyond what's needed to build
+ * the request. Used by audioTranscribe() below (which wraps this with the
+ * rich report format / error-string convention tools use), and by the
+ * Telegram bot's voice-message handler (which just wants the raw text to
+ * use directly as a task description, not a formatted report about it).
+ * Throws on any failure — callers decide how to present that.
+ */
+export async function callGroqWhisper(
+  filePath: string,
+  apiKey: string,
+  language?: string,
+): Promise<GroqWhisperResult> {
+  const stat = fs.statSync(filePath);
+  const sizeMB = stat.size / (1024 * 1024);
+  if (sizeMB > 25) {
+    throw new Error(`Audio file is ${sizeMB.toFixed(1)} MB, Groq limit is 25 MB. Compress or split the file first.`);
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const fileBuffer = fs.readFileSync(filePath);
+  const blob = new Blob([fileBuffer], { type: `audio/${ext.slice(1) || 'ogg'}` });
+
+  const formData = new FormData();
+  formData.append('file', blob, path.basename(filePath));
+  formData.append('model', WHISPER_MODEL);
+  if (language && language !== 'auto') {
+    formData.append('language', language);
+  }
+  formData.append('response_format', 'verbose_json');
+
+  const response = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+    body: formData,
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Groq API returned ${response.status}: ${errorBody}`);
+  }
+
+  return response.json() as Promise<GroqWhisperResult>;
+}
+
 export async function audioTranscribe(input: AudioTranscribeInput): Promise<string> {
   const filePath = path.resolve(input.path);
 
@@ -80,46 +134,8 @@ export async function audioTranscribe(input: AudioTranscribeInput): Promise<stri
     return 'Error: GROQ_API_KEY not set. Get a free key at https://console.groq.com/keys and set it: export GROQ_API_KEY=gsk_...';
   }
 
-  // Check file size (Groq limit is 25 MB)
-  const stat = fs.statSync(filePath);
-  const sizeMB = stat.size / (1024 * 1024);
-  if (sizeMB > 25) {
-    return `Error: Audio file is ${sizeMB.toFixed(1)} MB, Groq limit is 25 MB. Compress or split the file first.`;
-  }
-
   try {
-    const fileBuffer = fs.readFileSync(filePath);
-    const blob = new Blob([fileBuffer], { type: `audio/${ext.slice(1)}` });
-
-    const formData = new FormData();
-    formData.append('file', blob, path.basename(filePath));
-    formData.append('model', WHISPER_MODEL);
-
-    if (input.language && input.language !== 'auto') {
-      formData.append('language', input.language);
-    }
-    formData.append('response_format', 'verbose_json');
-
-    const response = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: formData,
-      signal: AbortSignal.timeout(120_000), // 2 min timeout for large files
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      return `Error: Groq API returned ${response.status}: ${errorBody}`;
-    }
-
-    const result = await response.json() as {
-      text: string;
-      language?: string;
-      duration?: number;
-      segments?: Array<{ start: number; end: number; text: string }>;
-    };
+    const result = await callGroqWhisper(filePath, apiKey, input.language);
 
     const lines: string[] = [];
     lines.push(`Transcription (${WHISPER_MODEL}):`);

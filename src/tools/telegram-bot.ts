@@ -9,6 +9,8 @@ import * as os from 'os';
 import { exec, execSync } from 'child_process';
 
 import { createProvider, getApiKeyForModel, registerCustomProviders } from '../providers/factory.js';
+import { getApiKey } from '../util/env.js';
+import * as voiceModule from './telegram-voice.js';
 import { loadProjectContext } from '../agent/context.js';
 import { bootstrapAuraEnv } from '../util/load-env.js';
 import { loadGlobalConfig } from '../setup/global-config.js';
@@ -341,6 +343,19 @@ async function sendMessage(chatId: string | number, text: string, parseMode?: st
     if (parseMode) body.parse_mode = parseMode;
     await curlPost('sendMessage', body);
   }
+}
+
+// Voice handling lives in telegram-voice.ts — that module has no side
+// effects at import time, unlike this file (which starts a real polling
+// loop unconditionally below), so it's safe to unit test directly.
+async function transcribeVoiceMessage(fileId: string): Promise<string> {
+  return voiceModule.transcribeVoiceMessage(TOKEN, fileId);
+}
+async function textToSpeech(text: string, apiKey: string): Promise<Buffer> {
+  return voiceModule.textToSpeech(text, apiKey);
+}
+async function sendVoiceMessage(chatId: string | number, audioBuffer: Buffer): Promise<void> {
+  return voiceModule.sendVoiceMessage(TOKEN, chatId, audioBuffer);
 }
 
 function splitMessage(text: string, maxLen: number): string[] {
@@ -699,13 +714,26 @@ async function poll(): Promise<void> {
           continue;
         }
 
-        // ── Handle voice messages (Phase 2 placeholder) ──────────────────
-        if (msg.voice) {
-          await sendMessage(chatId, '🎤 Voice messages are not yet supported. Please send text.');
-          continue;
-        }
+        // ── Handle voice messages: transcribe, then fall through into the
+        // same pipeline as typed text ─────────────────────────────────────
+        let isVoiceInput = false;
+        let text: string | undefined = msg.text;
 
-        const text = msg.text;
+        if (msg.voice) {
+          isVoiceInput = true;
+          try {
+            text = await transcribeVoiceMessage(msg.voice.file_id);
+            if (!text) {
+              await sendMessage(chatId, "🎤 Couldn't make out any words in that voice message — try again?");
+              continue;
+            }
+            console.log(`🎤 [${from}] transcribed: ${text}`);
+          } catch (e: any) {
+            console.error(`❌ Voice transcription error: ${e.message}`);
+            await sendMessage(chatId, `🎤 Couldn't transcribe that voice message: ${e.message}`);
+            continue;
+          }
+        }
 
         if (!text) continue;
 
@@ -747,6 +775,22 @@ async function poll(): Promise<void> {
           .then(async response => {
             await sendMessage(chatId, response);
             console.log(`📤 Task result sent to ${from}`);
+
+            if (isVoiceInput) {
+              try {
+                const groqKey = getApiKey('GROQ_API_KEY', 'groq_api_key');
+                if (groqKey) {
+                  const audio = await textToSpeech(response, groqKey);
+                  await sendVoiceMessage(chatId, audio);
+                  console.log(`🎤 Voice reply sent to ${from}`);
+                }
+              } catch (e: any) {
+                // Voice reply is a bonus on top of the text reply already
+                // sent above — never let a TTS failure look like the task
+                // itself failed.
+                console.error(`⚠️  Voice reply failed (text reply already sent): ${e.message}`);
+              }
+            }
           })
           .catch(async (e: any) => {
             console.error(`❌ Task error: ${e.message}`);

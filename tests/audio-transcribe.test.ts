@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { audioTranscribe, AUDIO_TRANSCRIBE_DEFINITION } from '../src/tools/audio-transcribe.js';
+import { audioTranscribe, AUDIO_TRANSCRIBE_DEFINITION, callGroqWhisper } from '../src/tools/audio-transcribe.js';
 
 const testDir = path.join(os.tmpdir(), 'ruby-test-audio-' + Date.now());
 
@@ -72,5 +72,40 @@ describe('audioTranscribe — transcribe', () => {
   it('returns error for missing file on transcribe', async () => {
     const r = await audioTranscribe({ path: '/nonexistent/audio.mp3' });
     expect(r).toContain('Error: File not found');
+  });
+});
+
+describe('callGroqWhisper', () => {
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the parsed result on success', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: 'hello world', language: 'en', duration: 2.5 }),
+    });
+    const result = await callGroqWhisper(path.join(testDir, 'test.mp3'), 'fake-key');
+    expect(result.text).toBe('hello world');
+    expect(result.language).toBe('en');
+  });
+
+  it('throws with the response body on a non-ok response', async () => {
+    fetchSpy.mockResolvedValue({ ok: false, status: 400, text: async () => 'bad request detail' });
+    await expect(callGroqWhisper(path.join(testDir, 'test.mp3'), 'fake-key'))
+      .rejects.toThrow(/400.*bad request detail/);
+  });
+
+  it('throws before calling fetch at all if the file exceeds the 25MB limit', async () => {
+    const bigFile = path.join(testDir, 'big.mp3');
+    fs.writeFileSync(bigFile, Buffer.alloc(26 * 1024 * 1024));
+    await expect(callGroqWhisper(bigFile, 'fake-key')).rejects.toThrow(/25 MB/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
