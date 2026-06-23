@@ -3,6 +3,7 @@ import * as path from 'path';
 import { loadEpisodes } from '../ruby/episode-capture.js';
 import type { Episode } from '../ruby/types.js';
 import type { LLMProvider } from '../providers/types.js';
+import { createProvider, checkOllamaHealth } from '../providers/factory.js';
 
 /**
  * Aura's "dream": an offline consolidation pass over recorded episodes.
@@ -25,6 +26,8 @@ export interface DreamResult {
   recalledSince: number;
   skipped: boolean;
   reason?: string;
+  /** Set when the LLM consolidation failed — episodes are preserved and NOT burned. */
+  providerError?: string;
 }
 
 const DREAMS_DIRNAME = 'dreams';
@@ -93,6 +96,11 @@ function header(date: string, episodes: Episode[], since: number): string {
 /**
  * Run a dream. Pure with respect to I/O sources: caller supplies the provider.
  * Never throws on an empty day — returns { skipped: true }.
+ *
+ * IMPORTANT: the `.last.json` state cutoff is only advanced when the LLM
+ * consolidation succeeds. If the primary provider fails, a single retry on a
+ * local Ollama instance is attempted before giving up gracefully. Episodes are
+ * NEVER burned (cut off) when the provider is unreachable.
  */
 export async function runDream(opts: {
   projectRoot: string;
@@ -101,8 +109,15 @@ export async function runDream(opts: {
   since?: number;
   /** If true, consolidate ALL episodes regardless of last-dream cutoff. */
   full?: boolean;
+  /**
+   * Ollama model to use as a local fallback when the primary provider fails.
+   * Set to false to disable. Defaults to 'llama3.2'.
+   */
+  ollamaFallbackModel?: string | false;
 }): Promise<DreamResult> {
   const { projectRoot, provider } = opts;
+  const ollamaFallbackModel =
+    opts.ollamaFallbackModel === undefined ? 'llama3.2' : opts.ollamaFallbackModel;
   const date = new Date().toISOString().slice(0, 10);
   const since = opts.full ? 0 : (opts.since ?? lastDreamTimestamp(projectRoot));
 
@@ -113,17 +128,70 @@ export async function runDream(opts: {
     return { path: '', date, episodeCount: 0, recalledSince: since, skipped: true, reason: 'no new episodes since last dream' };
   }
 
-  // Consolidate via the LLM.
+  // ── Consolidate via the LLM ──────────────────────────────────────────────
+  // Critical invariant: we do NOT advance the cutoff unless this succeeds.
   const { system, user } = buildConsolidationPrompt(episodes);
-  let body: string;
+  let body: string | undefined;
+  let providerError: string | undefined;
+
+  const tryComplete = async (p: LLMProvider): Promise<string> => {
+    const res = await p.complete(system, [{ role: 'user', content: user }], []);
+    const text = (res.text ?? '').trim();
+    if (!text) throw new Error('Provider returned an empty response');
+    return text;
+  };
+
+  // Primary attempt
   try {
-    const res = await provider.complete(system, [{ role: 'user', content: user }], []);
-    body = (res.text ?? '').trim();
-  } catch (err) {
-    body = `## Lessons\n- [error] consolidation model failed: ${err instanceof Error ? err.message : String(err)}\n\n## Patterns\n- none\n\n## Open threads\n- [todo] re-run :dream once the provider is reachable\n\n## Tomorrow brief\nConsolidation could not run; episodes are preserved and will be recalled next dream.`;
+    body = await tryComplete(provider);
+  } catch (primaryErr) {
+    const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+
+    // ── Ollama fallback ───────────────────────────────────────────────────
+    // Attempt one retry on a local Ollama instance before giving up.
+    if (ollamaFallbackModel) {
+      const ollamaBaseUrl = 'http://localhost:11434/v1';
+      const ollamaHealthy = await checkOllamaHealth('http://localhost:11434').catch(() => false);
+
+      if (ollamaHealthy) {
+        try {
+          const ollamaProvider = createProvider({
+            model: `ollama/${ollamaFallbackModel}`,
+            baseUrl: ollamaBaseUrl,
+            // Dream consolidations are bounded by episode digest size, not raw
+            // context — keep max_tokens conservative for small local models.
+            maxTokens: 2048,
+          });
+          body = await tryComplete(ollamaProvider);
+          // Ollama succeeded — note it but don't treat as an error.
+          providerError = undefined;
+        } catch (ollamaErr) {
+          const ollamaMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
+          providerError = `primary: ${primaryMsg}; ollama fallback: ${ollamaMsg}`;
+        }
+      } else {
+        providerError = `${primaryMsg} (Ollama not reachable at ${ollamaBaseUrl})`;
+      }
+    } else {
+      providerError = primaryMsg;
+    }
   }
 
-  const md = `${header(date, episodes, since)}\n${body}\n`;
+  // ── Provider failed — preserve episodes, return without writing state ─────
+  if (providerError !== undefined) {
+    return {
+      path: '',
+      date,
+      episodeCount: episodes.length,
+      recalledSince: since,
+      skipped: true,
+      reason: 'provider error — episodes preserved for next :dream run',
+      providerError,
+    };
+  }
+
+  // ── Write dream file ──────────────────────────────────────────────────────
+  const md = `${header(date, episodes, since)}\n${body!}\n`;
 
   const dir = dreamsDir(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
@@ -131,7 +199,7 @@ export async function runDream(opts: {
   const outPath = path.join(dir, `${date}.md`);
   fs.writeFileSync(outPath, md);
 
-  // Advance the cutoff to the newest episode consolidated.
+  // Advance the cutoff ONLY on success.
   const newest = Math.max(...episodes.map(e => e.timestamp));
   writeState(projectRoot, newest);
 
