@@ -11,36 +11,69 @@ const DEFAULT_WINDOW = 128_000;
 const CHARS_PER_TOKEN = 3.5;
 
 /**
- * Provider-independent upper-bound estimate of how many tokens the *next*
- * prompt will carry, measured directly from the system prompt + current
- * history. This is the signal that should drive compaction: it reflects the
- * payload we are about to send, it never lags a turn, and — critically — it
- * does not depend on the provider reporting streamed `usage`, which several
- * OpenAI-compatible endpoints omit on tool-call turns. Do NOT substitute a
- * running sum of per-turn `usage.totalTokens`: each turn's input already
- * contains the entire history, so summing them N-counts the same bytes.
+ * Optional precise tokenizer. `gpt-tokenizer` is pure-JS (o200k/cl100k BPE),
+ * which matches the OpenAI-compatible families Aura routes through (DeepSeek,
+ * MiMo, OpenAI). Loaded lazily and defensively: if the package is absent or
+ * errors, we silently fall back to the char-ratio estimate so compaction never
+ * depends on it being installed.
+ */
+let encodeFn: ((text: string) => number[]) | null | undefined;
+function loadEncoder(): ((text: string) => number[]) | null {
+  if (encodeFn !== undefined) return encodeFn;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('gpt-tokenizer') as { encode?: (t: string) => number[] };
+    encodeFn = typeof mod.encode === 'function' ? mod.encode : null;
+  } catch {
+    encodeFn = null;
+  }
+  return encodeFn;
+}
+
+/** Tokens for a single string: exact via tokenizer, else char-ratio estimate. */
+function countText(text: string): number {
+  if (!text) return 0;
+  const enc = loadEncoder();
+  if (enc) {
+    try { return enc(text).length; } catch { /* fall through */ }
+  }
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+/**
+ * Provider-independent estimate of how many tokens the *next* prompt will
+ * carry, measured directly from the system prompt + current history. This is
+ * the signal that should drive compaction: it reflects the payload we are
+ * about to send, it never lags a turn, and — critically — it does not depend
+ * on the provider reporting streamed `usage`, which several OpenAI-compatible
+ * endpoints omit on tool-call turns. Do NOT substitute a running sum of
+ * per-turn `usage.totalTokens`: each turn's input already contains the entire
+ * history, so summing them N-counts the same bytes.
+ *
+ * Uses the precise tokenizer when available (see loadEncoder), otherwise a
+ * conservative char-ratio estimate. Result is identical in shape either way.
  */
 export function estimateContextTokens(system: string, history: HistoryMessage[]): number {
-  let chars = system.length;
+  let tokens = countText(system);
   for (const msg of history) {
     switch (msg.role) {
       case 'user':
-        chars += msg.content.length;
+        tokens += countText(msg.content);
         break;
       case 'assistant':
-        chars += msg.content?.length ?? 0;
+        tokens += countText(msg.content ?? '');
         for (const call of msg.toolCalls ?? []) {
-          chars += call.name.length + JSON.stringify(call.input).length;
+          tokens += countText(call.name) + countText(JSON.stringify(call.input));
         }
         break;
       case 'tool_result':
         for (const r of msg.results) {
-          chars += r.name.length + (r.content?.length ?? 0);
+          tokens += countText(r.name) + countText(r.content ?? '');
         }
         break;
     }
   }
-  return Math.ceil(chars / CHARS_PER_TOKEN);
+  return tokens;
 }
 
 function summariseMessage(msg: HistoryMessage): string {
