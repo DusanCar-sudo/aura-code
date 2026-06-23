@@ -467,8 +467,9 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
       `/git — Git status`,
       `/cancel — Cancel stuck task`,
       `/clear — Clear context`,
-      `/sur30 — Webcam surveillance 30 min`,
-      `/sur60 — Webcam surveillance 60 min`,
+      `/sur30 — Surveillance 30 min (snapshots every 5 min)`,
+      `/sur60 — Surveillance 60 min (snapshots every 5 min)`,
+      `/sur <min> — Surveillance with custom duration`,
       ``,
       `Or just write anything — I'll execute it as an Aura task!`,
     ].join('\n');
@@ -601,8 +602,15 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
   }
 
   // ── Surveillance commands ─────────────────────────────────────────────
-  if (lower === '/sur30' || lower === '/sur60') {
-    const duration = lower === '/sur30' ? 30 : 60;
+  if (/^\/sur(\d+)?$/.test(lower)) {
+    const duration =
+      lower === '/sur60' ? 60 :
+      lower === '/sur30' ? 30 :
+      lower === '/sur'    ? 30 : // default fallback: 30 min
+      parseInt(lower.match(/^\/sur(\d+)$/)?.[1] ?? '30', 10);
+    if (duration < 5 || duration > 240) {
+      return `❌ Duration must be between 5 and 240 minutes. ${tag}`;
+    }
     const script = path.resolve(PROJECT_ROOT, 'surveillance.sh');
     if (!fs.existsSync(script)) {
       return `❌ surveillance.sh not found at ${script}`;
