@@ -745,10 +745,11 @@ function initGraph() {
     }
 
     // ── Zoom via scroll (spread mode — no orbit controls) ────────
+    let spreadRadius = 600;
     if (mode === 'spread') {
       renderer.domElement.addEventListener('wheel', e => {
         e.preventDefault();
-        camera.position.z = Math.max(80, Math.min(3000, camera.position.z + e.deltaY * 0.5));
+        spreadRadius = Math.max(120, Math.min(3000, spreadRadius + e.deltaY * 0.5));
       }, { passive: false });
     }
 
@@ -928,10 +929,13 @@ function initGraph() {
 
       if (mode === 'spread') {
         autoAngle += 0.003;
-        camera.position.x = Math.sin(autoAngle) * camera.position.z;
-        camera.position.y = Math.cos(autoAngle * 0.4) * camera.position.z * 0.3;
-        const fwd = Math.cos(autoAngle) * camera.position.z;
-        camera.position.z = Math.abs(fwd) < 80 ? 80 * Math.sign(fwd || 1) : fwd;
+        // Orbit on a fixed radius. Previously x/y were derived from the live,
+        // mutating camera.position.z (read and overwritten in the same frame),
+        // which made the camera teleport between frames — the flicker. Driving
+        // the orbit from a stable radius keeps it smooth; the wheel adjusts it.
+        camera.position.x = Math.sin(autoAngle) * spreadRadius;
+        camera.position.z = Math.cos(autoAngle) * spreadRadius;
+        camera.position.y = Math.sin(autoAngle * 0.4) * spreadRadius * 0.3;
         camera.lookAt(0, 0, 0);
       }
 
