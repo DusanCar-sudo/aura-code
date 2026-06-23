@@ -107,8 +107,12 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     envKey: 'OPENCODE_API_KEY',
     signupUrl: 'https://opencode.ai',
     models: [
-      { id: 'opencode/deepseek-v3', label: 'DeepSeek V3 (Zen)', speed: 'Fast', contextWindow: 128000 },
-      { id: 'opencode/grok-code', label: 'Grok Code (Zen)', speed: 'Fast', contextWindow: 128000 },
+      { id: 'opencode/gpt-5-nano', label: 'GPT-5 Nano (free)', speed: 'Fast · free', contextWindow: 128000 },
+      { id: 'opencode/big-pickle', label: 'Big Pickle (free)', speed: 'Powerful · free', contextWindow: 128000 },
+      { id: 'opencode/mimo-v2.5-free', label: 'MiMo V2.5 (free)', speed: 'Fast · free', contextWindow: 128000 },
+      { id: 'opencode/minimax-m2.5-free', label: 'MiniMax M2.5 (free)', speed: 'Reasoning · free', contextWindow: 128000 },
+      { id: 'opencode/nemotron-3-super-free', label: 'Nemotron 3 Super (free)', speed: 'Fast · free', contextWindow: 128000 },
+      { id: 'opencode/ling-2.6-flash-free', label: 'Ling 2.6 Flash (free)', speed: 'Fast · free', contextWindow: 128000 },
     ],
   },
   {
