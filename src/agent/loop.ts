@@ -82,7 +82,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const maxTurns = opts.maxTurns ?? DEFAULTS.maxTurns;
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = buildSystemPrompt(context, provider.name);
+  const system = buildSystemPrompt(context, provider.name, task);
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
     { role: 'user', content: task },

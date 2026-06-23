@@ -1325,6 +1325,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :dream full             Consolidate ALL episodes, ignoring the last-dream cutoff',
       '  :rem                    List dream files and open the most recent one',
       '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
+      '  :design [slug|list|off] Set/list the design system auto-applied to UI builds',
       '  /stats, /usage          Show token + cost usage this session',
       '  /clear, /reset          Reset cumulative usage stats',
       '',
@@ -1525,6 +1526,35 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const state = on ? chalk.hex('#5a9e6e')('ON') : chalk.hex('#b15439')('OFF');
     console.log(chalk.hex('#8a7768')(`\n  Ruby Principle is now ${state} for this session.\n`));
     return { handled: true, rubyEnabled: on };
+  }
+
+  if (input === ':design' || input.startsWith(':design ')) {
+    const { listDesignSlugs } = await import('../agent/design.js');
+    const slugs = listDesignSlugs(c.ctx.root);
+    const arg = input.slice(':design'.length).trim();
+    if (slugs.length === 0) {
+      console.log(chalk.hex('#b15439')('\n  No design-systems/ folder found in this project.\n'));
+      return { handled: true };
+    }
+    if (arg === '' || arg === 'list') {
+      const current = process.env.AURA_DESIGN || 'terracotta';
+      console.log(chalk.hex('#cc785c').bold(`\n  Design systems (${slugs.length}) — default: ${current}\n`));
+      console.log(chalk.hex('#ede0cc')('  ' + slugs.join('  ')));
+      console.log(chalk.hex('#8a7768')('\n  :design <slug> sets the default · auto-applies on website/UI tasks.\n'));
+      return { handled: true };
+    }
+    if (arg === 'off') {
+      process.env.AURA_DESIGN = '__none__';
+      console.log(chalk.hex('#8a7768')('\n  Design auto-injection disabled for this session.\n'));
+      return { handled: true };
+    }
+    if (slugs.includes(arg)) {
+      process.env.AURA_DESIGN = arg;
+      console.log(chalk.hex('#5a9e6e')(`\n  Default design set to "${arg}" for this session.\n`));
+    } else {
+      console.log(chalk.hex('#b15439')(`\n  Unknown design "${arg}". Run :design to list available slugs.\n`));
+    }
+    return { handled: true };
   }
 
   if (input === ':plans') {

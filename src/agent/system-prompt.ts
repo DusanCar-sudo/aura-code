@@ -1,6 +1,9 @@
 import type { ProjectContext } from './context.js';
+import { selectDesign, designPromptSection } from './design.js';
 
-export function buildSystemPrompt(ctx: ProjectContext, providerName: string): string {
+export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task?: string): string {
+  const design = task ? selectDesign(ctx.root, task) : null;
+  const designSection = design ? designPromptSection(design) : '';
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
 
@@ -66,7 +69,7 @@ ${ctx.readme}
 ### Recent git history
 ${ctx.recentCommits}
 
-Provider: ${providerName}. Work efficiently — minimize unnecessary tool calls.`;
+Provider: ${providerName}. Work efficiently — minimize unnecessary tool calls.${designSection}`;
 }
 
 export function buildArchitectPrompt(task: string, projectRoot: string): string {
