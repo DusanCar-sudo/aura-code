@@ -11,6 +11,26 @@ import * as https from 'https';
 import * as http from 'http';
 import { URL } from 'url';
 
+/**
+ * Strip routing/vendor prefixes that Aura adds to model IDs for internal
+ * routing (e.g. "opencode/big-pickle" → "big-pickle", "ollama/llama3.2" → "llama3.2").
+ * These prefixes must not be forwarded to the actual API.
+ */
+function stripModelPrefix(model: string): string {
+  // opencode/ or zen/ prefix (OpenCode Zen gateway)
+  if (/^(opencode|zen)\//.test(model)) return model.replace(/^(opencode|zen)\//, '');
+  // openrouter/vendor/model  → just model (last segment)
+  if (model.startsWith('openrouter/')) {
+    const parts = model.split('/');
+    return parts.slice(2).join('/') || model;
+  }
+  // ollama/model, local/model, lmstudio/model
+  if (/^(ollama|local|lmstudio)\//.test(model)) return model.replace(/^[^/]+\//, '');
+  // xai/model
+  if (model.startsWith('xai/')) return model.replace('xai/', '');
+  return model;
+}
+
 export interface ProviderTestConfig {
   provider: string;  // Display name (e.g. "DeepSeek", "Anthropic (Claude)")
   model: string;     // Model ID
@@ -106,7 +126,7 @@ async function testAnthropicConnection(config: ProviderTestConfig): Promise<Test
   const url = new URL(`${config.baseUrl}/v1/messages`);
 
   const body = JSON.stringify({
-    model: config.model,
+    model: stripModelPrefix(config.model),
     max_tokens: 10,
     messages: [{ role: 'user', content: "Say 'ok' and nothing else" }],
   });
@@ -129,7 +149,7 @@ async function testOpenAICompatibleConnection(config: ProviderTestConfig): Promi
   const url = new URL(`${config.baseUrl}/chat/completions`);
 
   const body = JSON.stringify({
-    model: config.model,
+    model: stripModelPrefix(config.model),
     max_tokens: 10,
     messages: [{ role: 'user', content: "Say 'ok' and nothing else" }],
   });
