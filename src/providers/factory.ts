@@ -48,6 +48,7 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('gemini-')) return 'google';
   if (m.startsWith('openrouter/')) return 'openrouter';
   if (m.startsWith('grok-') || m.startsWith('xai/')) return 'xai';
+  if (m.startsWith('opencode/') || m.startsWith('zen/')) return 'opencode';
   if (m.startsWith('ollama/')) return 'ollama';
   return 'openai-compatible';
 }
@@ -59,8 +60,19 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   google: 'GOOGLE_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   xai: 'XAI_API_KEY',
+  opencode: 'OPENCODE_API_KEY',
   'openai-compatible': 'OPENAI_API_KEY',
 };
+
+/**
+ * The name of the environment variable that holds the API key for a given
+ * model's provider family (e.g. "deepseek/..." → "DEEPSEEK_API_KEY"). Returns
+ * the key's *name*, not its value — used by setup wizards to tell the user
+ * which variable to set. Falls back to OPENAI_API_KEY for unknown families.
+ */
+export function apiKeyEnvVarForModel(model: string): string {
+  return FAMILY_API_KEY_ENV[modelProviderFamily(model)] ?? 'OPENAI_API_KEY';
+}
 
 /**
  * Resolves an API key for a given model, trying that model's own provider
@@ -70,16 +82,6 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
  * completely independent of which model is actually being called, which is
  * exactly how a MiMo model string ends up paired with a DeepSeek key.
  */
-/**
- * Returns the env var name (not the value) that getApiKeyForModel would
- * prefer for this model — e.g. 'XIAOMI_API_KEY' for a mimo- model. Used by
- * the Telegram setup wizard to write the correct Environment= line into a
- * generated systemd service file.
- */
-export function apiKeyEnvVarForModel(model: string): string | undefined {
-  return FAMILY_API_KEY_ENV[modelProviderFamily(model)];
-}
-
 export function getApiKeyForModel(model: string): string | undefined {
   const family = modelProviderFamily(model);
   const preferredEnvVar = FAMILY_API_KEY_ENV[family];
@@ -258,6 +260,17 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       baseUrl: config.baseUrl ?? getEnv('XIAOMI_BASE_URL') ?? 'https://token-plan-sgp.xiaomimimo.com/v1',
       apiKey: config.apiKey ?? getApiKey('XIAOMI_API_KEY'),
     }, 'Xiaomi MiMo');
+  }
+
+  // ── OpenCode Zen (OpenAI-compatible gateway) ──────────────────────────────
+  if (model.startsWith('opencode/') || model.startsWith('zen/')) {
+    const zenModel = model.replace(/^(opencode|zen)\//, '');
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: zenModel,
+      baseUrl: config.baseUrl ?? getEnv('OPENCODE_BASE_URL') ?? 'https://opencode.ai/zen/v1',
+      apiKey: config.apiKey ?? getApiKey('OPENCODE_API_KEY'),
+    }, 'OpenCode Zen');
   }
 
   // ── xAI / Grok ─────────────────────────────────────────────────────────────
@@ -451,6 +464,15 @@ export const CONTEXT_WINDOWS: Record<string, number> = {
   'mimo-v2.5':                1_048_576,
   'mimo-v2-flash':            1_048_576,
   'mimo-v1':                    131_072,
+  // DeepSeek — also covers OpenRouter-hosted ids; getContextWindow() strips the
+  // "openrouter/<vendor>/" prefix before lookup, so "openrouter/deepseek/deepseek-v4-pro"
+  // resolves here. Adjust the numbers to the real published limits as needed.
+  'deepseek-v4-pro':          1_048_576,
+  'deepseek-v4-flash':        1_048_576,
+  'deepseek-v4':              1_048_576,
+  'deepseek-r1':                131_072,
+  'deepseek-chat':              131_072,
+  'deepseek-coder-v2':          131_072,
   // xAI Grok
   'grok-2':                     131_072,
   'grok-2-mini':                131_072,
