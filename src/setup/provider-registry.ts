@@ -102,6 +102,16 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    name: 'OpenCode Zen',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    envKey: 'OPENCODE_API_KEY',
+    signupUrl: 'https://opencode.ai',
+    models: [
+      { id: 'opencode/deepseek-v3', label: 'DeepSeek V3 (Zen)', speed: 'Fast', contextWindow: 128000 },
+      { id: 'opencode/grok-code', label: 'Grok Code (Zen)', speed: 'Fast', contextWindow: 128000 },
+    ],
+  },
+  {
     name: 'NVIDIA NIM',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     envKey: 'NVIDIA_API_KEY',
