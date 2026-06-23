@@ -118,6 +118,73 @@ async function apiGet(token: string, method: string, params?: Record<string, str
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Check if a path is a local file (exists on disk), not a URL */
+function isLocalPath(p: string): boolean {
+  return !p.startsWith('http://') && !p.startsWith('https://') && fs.existsSync(p);
+}
+
+/** Get MIME type from file extension */
+function mimeFromExt(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.mp4': 'video/mp4',
+    '.avi': 'video/x-msvideo',
+    '.mov': 'video/quicktime',
+    '.webm': 'video/webm',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.zip': 'application/zip',
+  };
+  return mimeMap[ext] ?? 'application/octet-stream';
+}
+
+/**
+ * Send a file to Telegram via multipart/form-data upload.
+ * Used when the file is a local path rather than a URL.
+ */
+async function sendFileMultipart(
+  token: string,
+  method: string,
+  fields: Record<string, string>,
+  fileField: string,
+  filePath: string,
+): Promise<any> {
+  const url = `${API_BASE}/bot${token}/${method}`;
+  const formData = new FormData();
+
+  for (const [key, val] of Object.entries(fields)) {
+    formData.append(key, val);
+  }
+
+  const fileName = path.basename(filePath);
+  const mimeType = mimeFromExt(filePath);
+  const fileBuffer = fs.readFileSync(filePath);
+  const file = new File([fileBuffer], fileName, { type: mimeType });
+  formData.append(fileField, file);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  const data = await response.json() as any;
+  if (!data.ok) {
+    throw new Error(`Telegram API error: ${data.description ?? 'Unknown error'} (code: ${data.error_code})`);
+  }
+  return data.result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Actions
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -142,9 +209,22 @@ async function doSendPhoto(config: TelegramConfig, input: TelegramInput): Promis
   if (!chatId) return 'Error: chat_id required';
   if (!input.photo) return 'Error: photo required';
 
+  const photo = input.photo;
+
+  if (isLocalPath(photo)) {
+    // Local file — upload via multipart/form-data
+    const fields: Record<string, string> = { chat_id: chatId };
+    if (input.caption) fields.caption = input.caption;
+    if (input.parse_mode) fields.parse_mode = input.parse_mode;
+
+    const result = await sendFileMultipart(config.bot_token, 'sendPhoto', fields, 'photo', photo);
+    return `Photo sent to ${chatId} (msg_id: ${result.message_id})`;
+  }
+
+  // URL or file_id — send as JSON (Telegram fetches the URL)
   const body: Record<string, unknown> = {
     chat_id: chatId,
-    photo: input.photo,
+    photo: photo,
   };
   if (input.caption) body.caption = input.caption;
   if (input.parse_mode) body.parse_mode = input.parse_mode;
@@ -179,9 +259,22 @@ async function doSendDocument(config: TelegramConfig, input: TelegramInput): Pro
   if (!chatId) return 'Error: chat_id required';
   if (!input.document) return 'Error: document required';
 
+  const document = input.document;
+
+  if (isLocalPath(document)) {
+    // Local file — upload via multipart/form-data
+    const fields: Record<string, string> = { chat_id: chatId };
+    if (input.caption) fields.caption = input.caption;
+    if (input.parse_mode) fields.parse_mode = input.parse_mode;
+
+    const result = await sendFileMultipart(config.bot_token, 'sendDocument', fields, 'document', document);
+    return `Document sent to ${chatId} (msg_id: ${result.message_id})`;
+  }
+
+  // URL — send as JSON (Telegram fetches the URL)
   const body: Record<string, unknown> = {
     chat_id: chatId,
-    document: input.document,
+    document: document,
   };
   if (input.caption) body.caption = input.caption;
 

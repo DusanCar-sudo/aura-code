@@ -7,36 +7,65 @@
 // real API. This module has no side effects at import time, so it's safe
 // to import directly in tests.
 //
-// Uses native fetch + FormData throughout, not telegram-bot.ts's curlPost
-// shell-curl pattern — these calls move binary audio data, and Blob+FormData
-// avoids shell-escaping binary content through a command line entirely.
-// Same approach already proven in audio-transcribe.ts's Groq call.
+// All network calls shell out to the real `curl` binary, matching the exact
+// pattern already proven reliable everywhere else in telegram-bot.ts
+// (curlPost/curlGet). This is deliberate, not stylistic: Node's native
+// fetch was tried first here and failed with ETIMEDOUT/ENETUNREACH on the
+// deployed machine — a known class of issue where Node's dual-stack
+// "Happy Eyeballs" connection racing breaks on networks where IPv6 is
+// advertised but not actually routable. `curl` does not hit the same
+// failure on the same machine, so it's the safe choice here, not just a
+// style preference.
 
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { getApiKey } from '../util/env.js';
-import { callGroqWhisper } from './audio-transcribe.js';
 
+const execAsync = promisify(exec);
 const VOICE_TTS_CHAR_LIMIT = 800; // conservative cap; full text always still sent separately as a regular message
+
+/** Shell-escapes a string for safe embedding inside single quotes in a curl command. */
+function shellEscape(value: string): string {
+  return value.replace(/'/g, "'\\''");
+}
 
 /** Downloads a Telegram-hosted file (by file_id) to a local temp path. */
 export async function downloadTelegramFile(token: string, fileId: string): Promise<string> {
-  const getFileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`, {
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!getFileRes.ok) throw new Error(`getFile failed: ${getFileRes.status}`);
-  const getFileJson = await getFileRes.json() as { ok: boolean; result?: { file_path?: string } };
-  const filePath = getFileJson.result?.file_path;
+  const getFileUrl = `https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`;
+  const { stdout: getFileOut } = await execAsync(`curl -s "${getFileUrl}"`, { timeout: 30_000 });
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(getFileOut);
+  } catch {
+    throw new Error(`getFile returned non-JSON response: ${getFileOut.slice(0, 200)}`);
+  }
+  if (!parsed.ok) {
+    throw new Error(`Telegram getFile error: ${parsed.description} (${parsed.error_code})`);
+  }
+  const filePath = parsed.result?.file_path;
   if (!filePath) throw new Error('getFile did not return a file_path');
 
-  const url = `https://api.telegram.org/file/bot${token}/${filePath}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-  if (!res.ok) throw new Error(`Failed to download Telegram file: ${res.status}`);
+  // Telegram voice messages report a file_path ending in .oga internally,
+  // but Groq's Whisper API rejects that extension outright (even though
+  // the actual content is genuine Ogg/Opus audio it does accept under
+  // .ogg/.opus) — confirmed directly: "file must be one of the following
+  // types: [flac mp3 mp4 mpeg mpga m4a ogg opus wav webm]". Since this
+  // function is currently only ever used for voice messages, always
+  // labeling the local copy .ogg sidesteps that extension-based rejection
+  // without touching the actual bytes at all. Revisit if this function
+  // ever gets reused for non-voice file downloads.
+  const localPath = path.join(os.tmpdir(), `tg-voice-${randomUUID()}.ogg`);
+  const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
 
-  const ext = path.extname(filePath) || '.ogg';
-  const localPath = path.join(os.tmpdir(), `tg-voice-${fileId}${ext}`);
-  fs.writeFileSync(localPath, Buffer.from(await res.arrayBuffer()));
+  await execAsync(`curl -s -o "${localPath}" "${fileUrl}"`, { timeout: 60_000 });
+  if (!fs.existsSync(localPath) || fs.statSync(localPath).size === 0) {
+    throw new Error('Downloaded voice file is missing or empty');
+  }
   return localPath;
 }
 
@@ -51,42 +80,66 @@ export async function textToSpeech(text: string, apiKey: string): Promise<Buffer
     ? text.slice(0, VOICE_TTS_CHAR_LIMIT) + '... see full message above for the rest.'
     : text;
 
-  const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'playai-tts',
-      voice: 'Fritz-PlayAI',
-      input: truncated,
-      response_format: 'ogg',
-    }),
-    signal: AbortSignal.timeout(60_000),
+  const body = JSON.stringify({
+    model: 'playai-tts',
+    voice: 'Fritz-PlayAI',
+    input: truncated,
+    response_format: 'ogg',
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Groq TTS API returned ${res.status}: ${body}`);
+  const outPath = path.join(os.tmpdir(), `tts-out-${randomUUID()}.ogg`);
+  const errPath = path.join(os.tmpdir(), `tts-err-${randomUUID()}.json`);
+  try {
+    // -f makes curl exit non-zero on an HTTP error instead of writing the
+    // error body to outPath as if it were audio; capture that error body
+    // separately via -o on failure so the real message can still surface.
+    await execAsync(
+      `curl -sS -f -X POST ` +
+      `-H "Authorization: Bearer ${apiKey}" ` +
+      `-H "Content-Type: application/json" ` +
+      `-d '${shellEscape(body)}' ` +
+      `-o "${outPath}" "https://api.groq.com/openai/v1/audio/speech"`,
+      { timeout: 60_000 },
+    );
+  } catch (e: any) {
+    // Re-run without -f to capture the actual error body for a useful message.
+    try {
+      await execAsync(
+        `curl -sS -X POST -H "Authorization: Bearer ${apiKey}" -H "Content-Type: application/json" ` +
+        `-d '${shellEscape(body)}' -o "${errPath}" "https://api.groq.com/openai/v1/audio/speech"`,
+        { timeout: 60_000 },
+      );
+      const errBody = fs.existsSync(errPath) ? fs.readFileSync(errPath, 'utf8') : '';
+      throw new Error(`Groq TTS API error: ${errBody.slice(0, 500)}`);
+    } finally {
+      fs.rm(errPath, () => {});
+    }
   }
-  return Buffer.from(await res.arrayBuffer());
+
+  if (!fs.existsSync(outPath) || fs.statSync(outPath).size === 0) {
+    throw new Error('Groq TTS returned an empty response');
+  }
+  const audio = fs.readFileSync(outPath);
+  fs.rm(outPath, () => {});
+  return audio;
 }
 
 /** Sends a voice reply (ogg/opus audio) to a chat via Telegram's sendVoice. */
 export async function sendVoiceMessage(token: string, chatId: string | number, audioBuffer: Buffer): Promise<void> {
-  const form = new FormData();
-  form.append('chat_id', String(chatId));
-  form.append('voice', new Blob([audioBuffer], { type: 'audio/ogg' }), 'reply.ogg');
-
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendVoice`, {
-    method: 'POST',
-    body: form,
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`sendVoice failed: ${res.status}: ${body}`);
+  const tempPath = path.join(os.tmpdir(), `voice-reply-${randomUUID()}.ogg`);
+  fs.writeFileSync(tempPath, audioBuffer);
+  try {
+    const url = `https://api.telegram.org/bot${token}/sendVoice`;
+    const { stdout } = await execAsync(
+      `curl -s -X POST -F "chat_id=${String(chatId)}" -F "voice=@${tempPath}" "${url}"`,
+      { timeout: 30_000 },
+    );
+    const parsed = JSON.parse(stdout);
+    if (!parsed.ok) {
+      throw new Error(`sendVoice failed: ${parsed.description} (${parsed.error_code})`);
+    }
+  } finally {
+    fs.rm(tempPath, () => {});
   }
 }
 
@@ -95,6 +148,10 @@ export async function sendVoiceMessage(token: string, chatId: string | number, a
  * the raw transcribed text — ready to feed straight into the same pipeline
  * that handles typed text. Throws on any failure; caller decides how to
  * report that back to the chat.
+ *
+ * Deliberately has its own curl-based Whisper call rather than reusing
+ * audio-transcribe.ts's callGroqWhisper (which uses native fetch) — keeps
+ * the bot's voice pipeline fully insulated from the fetch issue above.
  */
 export async function transcribeVoiceMessage(token: string, fileId: string): Promise<string> {
   const groqKey = getApiKey('GROQ_API_KEY', 'groq_api_key');
@@ -102,10 +159,21 @@ export async function transcribeVoiceMessage(token: string, fileId: string): Pro
     throw new Error('GROQ_API_KEY not set — voice messages need it for transcription.');
   }
   const localPath = await downloadTelegramFile(token, fileId);
+  const outPath = path.join(os.tmpdir(), `whisper-out-${randomUUID()}.json`);
   try {
-    const result = await callGroqWhisper(localPath, groqKey);
-    return result.text.trim();
+    await execAsync(
+      `curl -sS -X POST -H "Authorization: Bearer ${groqKey}" ` +
+      `-F "file=@${localPath}" -F "model=whisper-large-v3-turbo" -F "response_format=verbose_json" ` +
+      `-o "${outPath}" "https://api.groq.com/openai/v1/audio/transcriptions"`,
+      { timeout: 120_000 },
+    );
+    if (!fs.existsSync(outPath)) throw new Error('Whisper API returned no response');
+    const parsed = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    if (parsed.error) throw new Error(`Groq Whisper API error: ${JSON.stringify(parsed.error)}`);
+    if (typeof parsed.text !== 'string') throw new Error(`Unexpected Whisper response: ${JSON.stringify(parsed).slice(0, 300)}`);
+    return parsed.text.trim();
   } finally {
-    fs.rm(localPath, () => {}); // best-effort cleanup, don't block on it
+    fs.rm(localPath, () => {});
+    fs.rm(outPath, () => {});
   }
 }
