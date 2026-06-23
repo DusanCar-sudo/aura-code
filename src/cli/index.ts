@@ -1486,7 +1486,13 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const res = await runDream({ projectRoot: c.ctx.root, provider, full });
       if (res.skipped) {
-        console.log(chalk.hex('#cc9e5c')(`  ⤳ Nothing to dream about — ${res.reason}.\n`));
+        if (res.providerError) {
+          console.log(chalk.hex('#cc9e5c')(`  ⚠ Dream skipped — ${res.reason}\n`));
+          console.log(chalk.hex('#b15439')(`  Provider error: ${res.providerError}\n`));
+          console.log(chalk.hex('#8a7768')(`  ${res.episodeCount} episode(s) preserved for next :dream run.\n`));
+        } else {
+          console.log(chalk.hex('#cc9e5c')(`  ⤳ Nothing to dream about — ${res.reason}.\n`));
+        }
       } else {
         console.log(chalk.hex('#5a9e6e')(`  ✓ Dream written: ${res.path}`));
         console.log(chalk.hex('#8a7768')(`  Consolidated ${res.episodeCount} episode(s).\n`));
