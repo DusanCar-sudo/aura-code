@@ -51,7 +51,10 @@ function buildResearchTask(topic: string): string {
     `"Bottom line" section at the end summarising the most defensible conclusion.\n` +
     `4. List sources used at the end under a "Sources" heading.\n\n` +
     `Respond with ONLY the finished Markdown report — no preamble, no meta-commentary about ` +
-    `your process, no questions back to the user.`
+    `your process, no questions back to the user.\n\n` +
+    `IMPORTANT: the report must be about "${topic}" — and nothing else. Do not write about ` +
+    `yourself, this tool, Aura, or this conversation; if you are tempted to, that means you have ` +
+    `drifted off-topic and should redirect back to "${topic}".`
   );
 }
 
