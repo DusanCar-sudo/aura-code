@@ -23,12 +23,17 @@ function defaultSlug(): string {
   return process.env.AURA_DESIGN || 'terracotta';
 }
 
-/** Phrases that mark a task as UI/website work. */
+/** Phrases that mark a task as UI/website work. Deliberately narrow — generic
+ *  words like "design" or "page" alone false-positive on requests that have
+ *  nothing to do with building a UI (e.g. "make a page summarizing my Tesla
+ *  research" should NOT pull in a design skill). Multi-word phrases here are
+ *  much less ambiguous than single common words. */
 const WEB_SIGNALS = [
   'website', 'web site', 'webpage', 'web page', 'landing page', 'homepage',
-  'home page', 'ui', 'frontend', 'front-end', 'front end', 'web app', 'webapp',
-  'html', 'css', 'tailwind', 'react component', 'design', 'redesign', 'restyle',
-  'portfolio', 'dashboard', 'hero section', 'marketing page', 'site for',
+  'home page', 'frontend', 'front-end', 'front end', 'web app', 'webapp',
+  'react component', 'ui component', 'ui design', 'redesign the site',
+  'restyle the site', 'portfolio site', 'hero section', 'marketing page',
+  'site for', 'design system', 'visual design',
 ];
 
 export interface DesignSelection {
