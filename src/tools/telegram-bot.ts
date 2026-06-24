@@ -19,6 +19,7 @@ import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
 import type { LLMProvider } from '../providers/types.js';
+import type { HistoryMessage } from '../providers/types.js';
 
 import {
   loadSafetyState,
@@ -234,8 +235,10 @@ async function executeTask(chatId: number, task: string): Promise<string> {
       maxTurns: 50,
       disableSpawn: true, // no sub-agents via Telegram for now
       confirmFn,
+      initialHistory: getChatHistory(chatId),
     });
     console.log("Agent loop completed");
+    setChatHistory(chatId, result.history);
 
     // Build a readable response
     const lines: string[] = [];
@@ -467,9 +470,8 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
       `/git — Git status`,
       `/cancel — Cancel stuck task`,
       `/clear — Clear context`,
-      `/sur30 — Surveillance 30 min (snapshots every 5 min)`,
-      `/sur60 — Surveillance 60 min (snapshots every 5 min)`,
-      `/sur <min> — Surveillance with custom duration`,
+      `/sur30 — Webcam surveillance 30 min`,
+      `/sur60 — Webcam surveillance 60 min`,
       ``,
       `Or just write anything — I'll execute it as an Aura task!`,
     ].join('\n');
@@ -590,6 +592,7 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
   }
 
   if (lower === '/clear') {
+    chatHistories.delete(chatId);
     return `🧹 Context cleared. Starting fresh. ${tag}`;
   }
 
@@ -602,15 +605,8 @@ function handleCommand(chatId: number, text: string, from: string): string | nul
   }
 
   // ── Surveillance commands ─────────────────────────────────────────────
-  if (/^\/sur(\d+)?$/.test(lower)) {
-    const duration =
-      lower === '/sur60' ? 60 :
-      lower === '/sur30' ? 30 :
-      lower === '/sur'    ? 30 : // default fallback: 30 min
-      parseInt(lower.match(/^\/sur(\d+)$/)?.[1] ?? '30', 10);
-    if (duration < 5 || duration > 240) {
-      return `❌ Duration must be between 5 and 240 minutes. ${tag}`;
-    }
+  if (lower === '/sur30' || lower === '/sur60') {
+    const duration = lower === '/sur30' ? 30 : 60;
     const script = path.resolve(PROJECT_ROOT, 'surveillance.sh');
     if (!fs.existsSync(script)) {
       return `❌ surveillance.sh not found at ${script}`;
@@ -664,6 +660,30 @@ function isAuthorized(chatId: number, fromUser: any): boolean {
  * If a task is running, new non-command messages are queued.
  */
 const runningTasks = new Set<number>();
+
+/**
+ * Per-chat conversation history. Without this, every Telegram message
+ * started a brand-new `runAgentLoop` call with no `initialHistory` — so
+ * replies like "B", "Ok", or "/approve" to a previous question had zero
+ * context, and Aura would respond as if the conversation had never
+ * happened. Keyed by chatId, threaded into runAgentLoop below, and updated
+ * with the loop's returned history after each task — same pattern the CLI
+ * REPL uses for `activeChatHistory`. Capped per-chat to avoid unbounded
+ * growth in a long-running bot process.
+ */
+const chatHistories = new Map<number, HistoryMessage[]>();
+const MAX_HISTORY_MESSAGES = 200;
+
+function getChatHistory(chatId: number): HistoryMessage[] {
+  return chatHistories.get(chatId) ?? [];
+}
+
+function setChatHistory(chatId: number, history: HistoryMessage[]): void {
+  const trimmed = history.length > MAX_HISTORY_MESSAGES
+    ? history.slice(history.length - MAX_HISTORY_MESSAGES)
+    : history;
+  chatHistories.set(chatId, trimmed);
+}
 
 async function poll(): Promise<void> {
   let offset = loadOffset();
