@@ -1325,6 +1325,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :dream full             [experimental] Consolidate ALL episodes, ignoring the last-dream cutoff',
       '  :rem                    [experimental] List dream files and open the most recent one',
       '  :research <topic>       Multi-step research pass, saved to research/*.md (inspired by DeerFlow)',
+      '  :council <topic>        Ecclesia — 5 independent agents research the topic, synthesized into one verdict (council/*.md)',
       '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
       '  :design [slug|list|off] Set/list the design system auto-applied to UI builds',
       '  /stats, /usage          Show token + cost usage this session',
@@ -1523,6 +1524,37 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
       console.log(chalk.hex('#8a7768')(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+
+  if (input.startsWith(':council ')) {
+    const topic = input.slice(':council '.length).trim();
+    if (!topic) {
+      console.log(chalk.hex('#b15439')('\n  Usage: :council <topic>\n'));
+      return { handled: true };
+    }
+    console.log(chalk.hex('#8a7768')(`\n  Convening Ecclesia on "${topic}" — 5 independent agents…\n`));
+    try {
+      const { runCouncil } = await import('../research/council.js');
+      const { createResilientProvider } = await import('../providers/resilient-factory.js');
+      const synthesisProvider = createResilientProvider(
+        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+        {},
+        c.display,
+      );
+      const res = await runCouncil({
+        projectRoot: c.ctx.root,
+        topic,
+        synthesisProvider,
+        context: c.ctx,
+        permissions: c.permissions,
+        display: c.display,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict: ${res.path}`));
+      console.log(chalk.hex('#8a7768')(`  ${res.panelSize} agents` + (res.agentFailures > 0 ? `, ${res.agentFailures} failed` : '') + `.\n`));
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
