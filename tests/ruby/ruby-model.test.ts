@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RubyModel } from '../../src/ruby/ruby-model.js';
+import { OpenAICompatibleProvider } from '../../src/providers/openai-compatible.js';
 import type { RubyConfig } from '../../src/ruby/types.js';
 
 // ── Mock fetch for Ollama health checks ─────────────────────────────────────
@@ -141,14 +142,42 @@ describe('RubyModel — getVersion / updateModel', () => {
 // complete
 // ─────────────────────────────────────────────────────────────────────────────
 describe('RubyModel — complete', () => {
-  it('delegates to internal OpenAICompatibleProvider', async () => {
+  it('delegates to internal OpenAICompatibleProvider and returns its result', async () => {
+    // RubyModel.complete() delegates to an internal OpenAICompatibleProvider,
+    // which uses the `openai` SDK client rather than global fetch — so
+    // stubbing global fetch (as the rest of this file does for the Ollama
+    // /api/tags health check) does NOT intercept this call. Mocking the
+    // prototype method directly makes this test deterministic regardless of
+    // whether a real Ollama instance happens to be running on the machine.
+    const completeSpy = vi
+      .spyOn(OpenAICompatibleProvider.prototype, 'complete')
+      .mockResolvedValueOnce({
+        text: 'mocked response',
+        toolCalls: [],
+        stopReason: 'done',
+        usage: { inputTokens: 1, outputTokens: 1 },
+      });
+
     const ruby = makeRuby();
-    // The complete method delegates to the OpenAICompatibleProvider.
-    // Without mocking fetch, it will try to reach Ollama and fail.
-    // We test that the method exists and is callable.
-    const promise = ruby.complete('system', [{ role: 'user', content: 'test' }], []);
-    // Will reject because no real Ollama, but the method exists
-    await expect(promise).rejects.toThrow();
+    const result = await ruby.complete('system', [{ role: 'user', content: 'test' }], []);
+
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    expect(result.text).toBe('mocked response');
+
+    completeSpy.mockRestore();
+  });
+
+  it('propagates a rejection from the delegate', async () => {
+    const completeSpy = vi
+      .spyOn(OpenAICompatibleProvider.prototype, 'complete')
+      .mockRejectedValueOnce(new Error('Connection refused'));
+
+    const ruby = makeRuby();
+    await expect(
+      ruby.complete('system', [{ role: 'user', content: 'test' }], []),
+    ).rejects.toThrow('Connection refused');
+
+    completeSpy.mockRestore();
   });
 });
 
@@ -156,16 +185,48 @@ describe('RubyModel — complete', () => {
 // stream
 // ─────────────────────────────────────────────────────────────────────────────
 describe('RubyModel — stream', () => {
-  it('delegates to internal OpenAICompatibleProvider', async () => {
-    const ruby = makeRuby();
-    const generator = ruby.stream('system', [{ role: 'user', content: 'test' }], []);
-    // Will throw on first iteration because no real Ollama
-    try {
-      for await (const _ of generator) { /* noop */ }
-    } catch {
-      // Expected — no real backend
+  it('delegates to internal OpenAICompatibleProvider and yields its chunks', async () => {
+    // Same rationale as the `complete` tests above: mock the actual delegate
+    // method rather than rely on no real Ollama being reachable.
+    async function* fakeStream() {
+      yield { type: 'text' as const, text: 'mocked ' };
+      yield { type: 'text' as const, text: 'chunk' };
+      yield {
+        type: 'done' as const,
+        response: { text: 'mocked chunk', toolCalls: [], stopReason: 'done' as const, usage: { inputTokens: 1, outputTokens: 2 } },
+      };
     }
-    // Test just verifies the method exists and doesn't crash on call
+    const streamSpy = vi
+      .spyOn(OpenAICompatibleProvider.prototype, 'stream')
+      .mockImplementation(fakeStream);
+
+    const ruby = makeRuby();
+    const chunks: unknown[] = [];
+    for await (const chunk of ruby.stream('system', [{ role: 'user', content: 'test' }], [])) {
+      chunks.push(chunk);
+    }
+
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+    expect(chunks.length).toBe(3);
+    expect(chunks[chunks.length - 1]).toMatchObject({ type: 'done' });
+
+    streamSpy.mockRestore();
+  });
+
+  it('propagates a rejection from the delegate stream', async () => {
+    async function* failingStream(): AsyncGenerator<never> {
+      throw new Error('Connection refused');
+    }
+    const streamSpy = vi
+      .spyOn(OpenAICompatibleProvider.prototype, 'stream')
+      .mockImplementation(failingStream);
+
+    const ruby = makeRuby();
+    await expect(async () => {
+      for await (const _ of ruby.stream('system', [{ role: 'user', content: 'test' }], [])) { /* noop */ }
+    }).rejects.toThrow('Connection refused');
+
+    streamSpy.mockRestore();
   });
 });
 
