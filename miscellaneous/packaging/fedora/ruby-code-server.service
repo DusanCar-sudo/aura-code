@@ -1,0 +1,14 @@
+[Unit]
+Description=Ruby Code AI coding agent web server
+Documentation=https://github.com/YOUR_USERNAME/ruby-code
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%{_bindir}/ruby-code serve --no-open
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+
+[Install]
+WantedBy=default.target

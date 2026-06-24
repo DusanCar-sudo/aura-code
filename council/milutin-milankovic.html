@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Milutin Milanković — The Man Who Decoded Earth's Climate</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --card: #1c2128;
+    --text: #e6edf3; --muted: #8b949e;
+    --accent: #f0883e; --accent-glow: #f0883e66;
+    --blue: #58a6ff; --green: #3fb950; --purple: #bc8cff;
+    --border: #30363d; --radius: 16px; --radius-sm: 8px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --serif: 'Georgia', 'Times New Roman', serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --max-w: 960px;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7;font-size:17px;-webkit-font-smoothing:antialiased}
+
+  nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(13,17,23,0.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 1.5rem}
+  nav .nav-inner{max-width:var(--max-w);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+  nav .logo{font-weight:800;font-size:1.1rem;color:var(--accent);text-decoration:none}
+  nav .links{display:flex;gap:1.5rem;list-style:none}
+  nav .links a{color:var(--muted);text-decoration:none;font-size:0.85rem;font-weight:500;transition:color 0.2s}
+  nav .links a:hover{color:var(--text)}
+
+  .hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:6rem 1.5rem 4rem;text-align:center}
+  .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,rgba(240,136,62,0.08) 0%,transparent 70%),radial-gradient(ellipse 40% 50% at 20% 60%,rgba(88,166,255,0.06) 0%,transparent 60%),radial-gradient(ellipse 40% 50% at 80% 70%,rgba(188,140,255,0.05) 0%,transparent 60%);z-index:0}
+  .hero .orbital-ring{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(240,136,62,0.12);animation:orbit-spin 60s linear infinite;z-index:0}
+  .hero .orbital-ring:nth-child(1){width:520px;height:520px}
+  .hero .orbital-ring:nth-child(2){width:400px;height:400px;border-color:rgba(88,166,255,0.10);animation-duration:45s;animation-direction:reverse}
+  .hero .orbital-ring:nth-child(3){width:280px;height:280px;border-color:rgba(188,140,255,0.08);animation-duration:30s}
+  @keyframes orbit-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+  .hero .orbital-dot{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent-glow);top:-3px;left:50%;margin-left:-3px}
+  .hero-content{position:relative;z-index:1;max-width:720px}
+  .hero-content .portrait{width:172px;height:172px;border-radius:50%;object-fit:cover;border:3px solid var(--accent);box-shadow:0 0 60px var(--accent-glow),0 0 120px rgba(240,136,62,0.15);margin-bottom:2rem}
+  .hero-content .eyebrow{display:inline-block;font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);background:rgba(240,136,62,0.1);padding:0.35em 1em;border-radius:100px;margin-bottom:1.5rem}
+  .hero-content h1{font-size:clamp(2.6rem,5vw,4rem);font-weight:800;line-height:1.1;letter-spacing:-0.03em;margin-bottom:1rem;background:linear-gradient(135deg,#f0883e 0%,#ffb347 40%,#e6edf3 70%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .hero-content .subtitle{font-family:var(--serif);font-size:1.25rem;color:var(--muted);font-style:italic;line-height:1.5;max-width:560px;margin:0 auto 2.5rem}
+  .hero-content .hero-dates{font-size:0.85rem;color:var(--muted);letter-spacing:0.05em;font-weight:500}
+  .scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:1;color:var(--muted);font-size:0.75rem;display:flex;flex-direction:column;align-items:center;gap:0.4rem;animation:hint-pulse 2s ease-in-out infinite}
+  @keyframes hint-pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+
+  section{padding:5rem 1.5rem}
+  .section-inner{max-width:var(--max-w);margin:0 auto}
+  .section-label{font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);margin-bottom:0.75rem}
+  .section-title{font-size:2.2rem;font-weight:800;letter-spacing:-0.02em;line-height:1.25;margin-bottom:2.5rem}
+
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:2rem}
+  .stat-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1.5rem 1rem;text-align:center}
+  .stat-box .stat-num{font-size:2rem;font-weight:800;color:var(--accent);line-height:1.1;margin-bottom:0.3rem}
+  .stat-box .stat-label{font-size:0.72rem;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.06em}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem;box-shadow:var(--shadow);margin-bottom:1.5rem}
+  .card h3{font-size:1.25rem;font-weight:700;margin-bottom:1rem}
+  .card p{color:var(--muted);line-height:1.75}
+  .card p+p{margin-top:1rem}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+
+  .cycles-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin:2rem 0}
+  .cycle-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;text-align:center;transition:transform 0.2s,box-shadow 0.2s}
+  .cycle-card:hover{transform:translateY(-4px);box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+  .cycle-card .cycle-icon{font-size:2.5rem;margin-bottom:0.75rem}
+  .cycle-card .cycle-name{font-size:1.1rem;font-weight:700;margin-bottom:0.3rem}
+  .cycle-card .cycle-period{font-family:var(--mono);font-size:0.8rem;color:var(--accent);margin-bottom:0.75rem}
+  .cycle-card p{color:var(--muted);font-size:0.9rem;line-height:1.6}
+
+  .timeline{position:relative;padding-left:2rem}
+  .timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--border)}
+  .timeline-item{position:relative;margin-bottom:2.5rem;padding-left:1.5rem}
+  .timeline-item::before{content:'';position:absolute;left:-2.35rem;top:0.5rem;width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent-glow)}
+  .timeline-item .tl-date{font-family:var(--mono);font-size:0.8rem;color:var(--accent);font-weight:600;margin-bottom:0.3rem}
+  .timeline-item .tl-title{font-size:1.05rem;font-weight:700;margin-bottom:0.4rem}
+  .timeline-item p{color:var(--muted);font-size:0.95rem}
+
+  .image-showcase{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:2rem 0}
+  .image-showcase .img-wrap{text-align:center}
+  .image-showcase img{width:100%;border-radius:var(--radius);border:1px solid var(--border);transition:transform 0.3s,box-shadow 0.3s}
+  .image-showcase img:hover{transform:scale(1.02);box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+  .image-showcase .img-wrap span{display:block;margin-top:0.5rem;font-size:0.8rem;color:var(--muted);font-style:italic}
+
+  .quote-block{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:3rem 2.5rem;border-left:4px solid var(--accent);margin:2rem 0}
+  .quote-block blockquote{font-family:var(--serif);font-size:1.3rem;font-style:italic;line-height:1.6;color:var(--text);margin-bottom:1rem}
+  .quote-block .attribution{color:var(--muted);font-size:0.85rem}
+
+  .highlight-box{background:linear-gradient(135deg,rgba(240,136,62,0.08),rgba(88,166,255,0.06));border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem;margin:2rem 0}
+  .highlight-box h3{color:var(--accent);margin-bottom:0.75rem}
+
+  .calendar-compare{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.5rem 0}
+  .calendar-compare .cal-col{text-align:center;padding:1.5rem;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .calendar-compare .cal-col.best{border-color:var(--accent);background:rgba(240,136,62,0.05)}
+  .calendar-compare .cal-name{font-weight:700;margin-bottom:0.3rem}
+  .calendar-compare .cal-year{font-family:var(--mono);font-size:1.1rem;color:var(--accent);margin-bottom:0.2rem}
+  .calendar-compare .cal-error{font-size:0.8rem;color:var(--muted)}
+
+  .honors-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.5rem 0}
+  .honor-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1.5rem;text-align:center}
+  .honor-item .honor-icon{font-size:2rem;margin-bottom:0.5rem}
+  .honor-item .honor-name{font-weight:700;font-size:0.95rem;margin-bottom:0.25rem}
+  .honor-item .honor-detail{font-size:0.78rem;color:var(--muted)}
+
+  footer{text-align:center;padding:3rem 1.5rem;border-top:1px solid var(--border)}
+  footer .footer-symbol{font-size:2rem;margin-bottom:0.75rem;display:block}
+  footer .footer-text{color:var(--muted);font-size:0.8rem}
+  footer .footer-text a{color:var(--accent);text-decoration:none}
+  footer .footer-emblem{margin-bottom:1rem;font-size:0.75rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase}
+
+  @media(max-width:640px){
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .two-col{grid-template-columns:1fr}
+    .cycles-grid{grid-template-columns:1fr}
+    .calendar-compare{grid-template-columns:1fr}
+    .honors-grid{grid-template-columns:1fr}
+    .image-showcase{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="logo">&#x2600; Milanković</a>
+    <ul class="links">
+      <li><a href="#life">Life</a></li>
+      <li><a href="#cycles">The Cycles</a></li>
+      <li><a href="#legacy">Legacy</a></li>
+      <li><a href="#calendar">Calendar</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="orbital-ring"><div class="orbital-dot"></div></div>
+  <div class="orbital-ring"><div class="orbital-dot"></div></div>
+  <div class="orbital-ring"><div class="orbital-dot"></div></div>
+  <div class="hero-content">
+    <img src="../research/Milutin Milankovic/images.jpeg" alt="Milutin Milanković" class="portrait">
+    <div class="eyebrow">Polymath &bull; Visionary &bull; 1879–1958</div>
+    <h1>Milutin<br>Milanković</h1>
+    <p class="subtitle">The Serbian mathematician who taught the Earth to keep time — decoding the astronomical rhythms that drive ice ages, long before anyone believed him.</p>
+    <p class="hero-dates">DALJ, AUSTRIA-HUNGARY → BELGRADE, YUGOSLAVIA</p>
+  </div>
+  <div class="scroll-hint">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
+    Scroll
+  </div>
+</section>
+
+<section id="life">
+  <div class="section-inner">
+    <div class="section-label">Timeline</div>
+    <h2 class="section-title">A life in two orbits</h2>
+
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-num">6</div><div class="stat-label">Patents held</div></div>
+      <div class="stat-box"><div class="stat-num">79</div><div class="stat-label">Years lived</div></div>
+      <div class="stat-box"><div class="stat-num">10</div><div class="stat-label">Power plants built</div></div>
+      <div class="stat-box"><div class="stat-num">25</div><div class="stat-label">Years on his theory</div></div>
+    </div>
+
+    <div class="image-showcase">
+      <div class="img-wrap">
+        <img src="../research/Milutin Milankovic/Milutin-Milankovic-zivot-i-delo.jpg" alt="Milutin Milankovic - Life and Work">
+        <span>Milutin Milankovic - Zivot i delo (Life and Work)</span>
+      </div>
+      <div class="img-wrap">
+        <img src="../research/Milutin Milankovic/images.jpeg" alt="Milutin Milankovic portrait">
+        <span>Portrait of the polymath</span>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="tl-date">1879</div>
+        <div class="tl-title">Born in Dalj, Austria-Hungary</div>
+        <p>Born 28 May along with a twin sister, the eldest of seven children in a prosperous Serb family on the banks of the Danube. Father died when he was seven; raised by mother, grandmother, and uncle.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1904</div>
+        <div class="tl-title">PhD from TU Wien at age 25</div>
+        <p>Doctorate in Civil Engineering with a thesis on pressure curves - fundamental to bridge, cupola, and abutment design. Immediately joined an elite Viennese engineering firm.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1905-1909</div>
+        <div class="tl-title">Master builder of Austria-Hungary</div>
+        <p>Built dams, bridges, viaducts, aqueducts, and hydroelectric plants in reinforced concrete. Patented the Milankovic-Kreutz ceiling system with integrated thermal and sound insulation. Held six patents and earned substantial wealth.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1909</div>
+        <div class="tl-title">Professor at University of Belgrade</div>
+        <p>Accepted the chair of Applied Mathematics: rational mechanics, celestial mechanics, and theoretical physics. Designed Serbia's first reinforced concrete railway bridges (19 bridges from a single design).</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1912</div>
+        <div class="tl-title">Turned to cosmic climatology</div>
+        <p>Realized meteorology was "a collection of empirical findings with traces of physics." Applied advanced mathematics to climate for the first time.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1914-1918</div>
+        <div class="tl-title">WWI: interned, rescued, productive</div>
+        <p>Arrested as a Serb by Austro-Hungarian authorities. His former professor Emanuel Czuber secured his release. Confined to Budapest - used the time to calculate the climates of Mars, Venus, Mercury, and the Moon.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1920</div>
+        <div class="tl-title">Mathematical Theory of Thermal Phenomena</div>
+        <p>Published the first paper linking astronomical cycles to climate. His solar radiation curve was used by Wegener and Koppen in their 1924 book.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1941</div>
+        <div class="tl-title">Canon of Insolation - the masterwork</div>
+        <p>After 25 years of labor - much of it by hand, with logarithmic tables - published the <em>Canon of Insolation of the Earth and Its Application to the Problem of the Ice Ages</em>.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1955-1976</div>
+        <div class="tl-title">From rejection to vindication</div>
+        <p>Emiliani (1955) found Milankovic's cycles matched oxygen-isotope data. Hays, Imbrie & Shackleton (1976) published <em>Pacemaker of the Ice Ages</em> in Science - proving the cycles over 450,000 years.</p>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-date">1958</div>
+        <div class="tl-title">Died in Belgrade, aged 79</div>
+        <p>Died 12 December. He did not live to see the full vindication of his life's work - but today his name is spoken in every climatology textbook on Earth.</p>
+      </div>
+    </div>
+
+    <div class="quote-block">
+      <blockquote>"The main results of this work were obtained, as its basic programmatic idea demanded, from Newton's law of gravitation and from the law of irradiation, without taking recourse to any hypothesis."</blockquote>
+      <div class="attribution">- Milutin Milankovic, preface to <em>Canon of Insolation</em>, 1941</div>
+    </div>
+
+    <div class="card">
+      <h3>The engineer who never stopped building</h3>
+      <p>Even at the height of his academic career, Milankovic never abandoned his "passion for the entire range of construction work, from theoretical ideas to craftsmanship." He personally supervised concrete mixing on Serbia's first reinforced-concrete bridges. He proved in 1908 that the ideal shape for a water reservoir of uniform wall thickness is that of a falling drop of water.</p>
+      <p>In 1912, he built 19 bridges on the Nis-Knjazevac railway from a single optimised design - a feat of engineering efficiency that anticipated modern modular construction by half a century.</p>
+    </div>
+  </div>
+</section>
+
+<section id="cycles">
+  <div class="section-inner">
+    <div class="section-label">The Discovery</div>
+    <h2 class="section-title">The Milankovitch Cycles</h2>
+
+    <p style="color:var(--muted);margin-bottom:2rem;font-size:1.1rem;line-height:1.8">
+      Milankovic's central insight: the Earth does not orbit the Sun in a fixed, unchanging way. Three astronomical cycles combine to vary solar energy at mid-latitudes by up to <strong style="color:var(--accent)">25%</strong>. Together, they are the metronome for ice ages.
+    </p>
+
+    <div class="cycles-grid">
+      <div class="cycle-card">
+        <div class="cycle-icon">&#x2B1C;</div>
+        <div class="cycle-name">Eccentricity</div>
+        <div class="cycle-period">~100,000 years</div>
+        <p>The shape of Earth's orbit stretches from nearly circular to slightly elliptical and back. Driven by the gravity of Jupiter and Saturn. Determines the <em>distance</em> between Earth and Sun through the year.</p>
+      </div>
+      <div class="cycle-card">
+        <div class="cycle-icon">&#x21BB;</div>
+        <div class="cycle-name">Obliquity</div>
+        <div class="cycle-period">~41,000 years</div>
+        <p>Earth's axial tilt oscillates between 22.1&deg; and 24.5&deg;. Greater tilt means more extreme seasons. The dominant driver of the ice-age cycle at high latitudes.</p>
+      </div>
+      <div class="cycle-card">
+        <div class="cycle-icon">&#x25CE;</div>
+        <div class="cycle-name">Precession</div>
+        <div class="cycle-period">~23,000 years</div>
+        <p>The Earth wobbles like a spinning top. This determines <em>which hemisphere</em> faces the Sun at perihelion. Currently, the Southern Hemisphere gets summers at perihelion - this reverses in ~10,000 years.</p>
+      </div>
+    </div>
+
+    <div class="highlight-box">
+      <h3>Why cool summers matter more than cold winters</h3>
+      <p style="color:var(--muted);line-height:1.8">
+        Milankovic adopted Koppen's insight: ice ages are triggered not by brutally cold winters, but by <em>unusually cool summers</em>. In a cool summer, last winter's ice lingers longer. White surfaces reflect sunlight (albedo). Less heat is absorbed. Temperatures drop further. More ice accumulates. The feedback loop begins - and an ice age is born. The Northern Hemisphere, with two-thirds of Earth's landmass, is the climate's control room.
+      </p>
+    </div>
+
+    <div class="quote-block">
+      <blockquote>"Once you catch a big fish, you can't be bothered with small ones any longer. I worked for 25 years on my theory of solar radiation and now that it's complete, I'm without work."</blockquote>
+      <div class="attribution">- Milutin Milankovic, 1941, upon completing his life's work</div>
+    </div>
+  </div>
+</section>
+
+<section id="legacy">
+  <div class="section-inner">
+    <div class="section-label">Legacy</div>
+    <h2 class="section-title">Written in the stars - and on the Moon</h2>
+
+    <div class="honors-grid">
+      <div class="honor-item"><div class="honor-icon">&#x1F319;</div><div class="honor-name">Lunar crater</div><div class="honor-detail">Milankovic crater on the far side of the Moon</div></div>
+      <div class="honor-item"><div class="honor-icon">&#x2642;</div><div class="honor-name">Martian crater</div><div class="honor-detail">Named crater on Mars</div></div>
+      <div class="honor-item"><div class="honor-icon">&#x2604;</div><div class="honor-name">Asteroid 1605</div><div class="honor-detail">Main-belt asteroid 1605 Milankovitch</div></div>
+      <div class="honor-item"><div class="honor-icon">&#x1F4B0;</div><div class="honor-name">2000 Dinar banknote</div><div class="honor-detail">His portrait on Serbia's 2,000-dinar note</div></div>
+      <div class="honor-item"><div class="honor-icon">&#x1F3C5;</div><div class="honor-name">EGU Medal</div><div class="honor-detail">The Milankovic Medal for climate research</div></div>
+      <div class="honor-item"><div class="honor-icon">&#x1F4EE;</div><div class="honor-name">Commemorative stamp</div><div class="honor-detail">Serbian stamp for his 125th birthday, 2004</div></div>
+    </div>
+
+    <div class="card">
+      <h3>The most cited Serbian scientist in history</h3>
+      <p>Described as "the most cited Serbian scientist" - a mathematician whose work is cited daily in climate science, astronomy, and geology. Yet his three-volume autobiography <em>Recollection, Experiences and Vision</em> remains untranslated from Serbo-Croatian.</p>
+      <p>His birthplace in Dalj now houses the Cultural and Scientific Center "Milutin Milankovic." His son Vasko completed the biography <em>My Father, Milutin Milankovic</em>.</p>
+    </div>
+
+    <div class="two-col" style="margin-top:1.5rem">
+      <div class="card">
+        <h3>Planetary climatology</h3>
+        <p>Decades before the space age, Milankovic calculated surface temperatures of Mercury, Venus, Mars, and the Moon - founding planetary climatology. His 1916 paper <em>Investigation of the Climate of the Planet Mars</em> predated the first Mars lander by 60 years.</p>
+      </div>
+      <div class="card">
+        <h3>Polar wandering</h3>
+        <p>Milankovic explored how Earth's rotational axis might shift over geological time - the theory of "polar wandering." A radical idea in his era, preceding plate tectonics and anticipating paleomagnetism discoveries.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="calendar">
+  <div class="section-inner">
+    <div class="section-label">The Calendar</div>
+    <h2 class="section-title">The most accurate calendar ever devised</h2>
+
+    <p style="color:var(--muted);margin-bottom:2rem;font-size:1.05rem;line-height:1.8">
+      In 1923, the Eastern Orthodox churches still used the Julian calendar, drifting from the seasons. Milankovic was asked to propose a solution. What he delivered was <strong style="color:var(--accent)">the most mathematically precise calendar in history</strong>.
+    </p>
+
+    <div class="calendar-compare">
+      <div class="cal-col"><div class="cal-name">Julian</div><div class="cal-year">365.25 days</div><div class="cal-error">Error: ~11 min/year</div></div>
+      <div class="cal-col"><div class="cal-name">Gregorian</div><div class="cal-year">365.2425 days</div><div class="cal-error">Error: ~27 sec/year</div></div>
+      <div class="cal-col best"><div class="cal-name">Milankovic &#x2605;</div><div class="cal-year">365.242222 days</div><div class="cal-error">Error: ~2 sec/year</div></div>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:2rem">
+      Tropical year (actual): <span style="font-family:var(--mono);color:var(--accent)">365.24219 days</span>
+    </p>
+
+    <div class="highlight-box">
+      <h3>The elegant leap-year rule</h3>
+      <p style="color:var(--muted);line-height:1.8">
+        In the Milankovic (Revised Julian) calendar, century years are <em>not</em> leap years - <strong>except</strong> those with remainder 200 or 600 when divided by 900. This produces an average year closer to the tropical year than any other calendar. It aligns with the Gregorian calendar from 1 March 1600 through 28 February 2800.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Adopted by millions, unknown by billions</h3>
+      <p>The Revised Julian calendar was adopted at the 1923 Council of Constantinople. Today it governs the liturgical life of Orthodox churches in Constantinople, Alexandria, Antioch, Greece, Romania, Bulgaria, Cyprus, Ukraine, and the Orthodox Church in America - representing millions of faithful.</p>
+      <p>But the Serbian Orthodox Church - Milankovic's own - never adopted it. Neither did Russia, Jerusalem, Georgia, or Poland. The reasons were ecclesiastical and political, not mathematical. No nation has adopted it as its official civil calendar.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span class="footer-symbol">&#x2600;</span>
+  <div class="footer-emblem">Milutin Milankovic &middot; 1879-1958</div>
+  <p class="footer-text">
+    Built with reverence by <a href="https://github.com/milodule3-debug/aura-code">Aura Code</a> &middot;
+    Sources: <a href="https://en.wikipedia.org/wiki/Milutin_Milankovic">Wikipedia</a>,
+    <a href="https://science.nasa.gov/science-research/earth-science/milankovitch-orbital-cycles-and-their-role-in-earths-climate/">NASA</a>,
+    <a href="https://www.famousscientists.org/milutin-milankovic/">FamousScientists.org</a>
+  </p>
+</footer>
+
+</body>
+</html>

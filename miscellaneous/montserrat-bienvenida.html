@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>¡Bienvenida, Montserrat!</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #f5f0ff 0%, #e8dff5 50%, #fce4ec 100%);
+      padding: 1.5rem;
+    }
+
+    .card {
+      max-width: 640px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border-radius: 2rem;
+      padding: 3rem 2.5rem;
+      box-shadow: 0 20px 60px rgba(120, 80, 160, 0.15), 0 8px 24px rgba(0,0,0,0.06);
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #4a2564;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subrayado {
+      width: 60px;
+      height: 4px;
+      background: linear-gradient(90deg, #9c7bc2, #e889b0);
+      border-radius: 2px;
+      margin: 0 auto 1.5rem auto;
+    }
+
+    .nombre-destacado {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: #7b4a9e;
+      margin-bottom: 1.25rem;
+    }
+
+    p {
+      font-size: 1.1rem;
+      line-height: 1.7;
+      color: #3d2a4f;
+      margin-bottom: 1rem;
+    }
+
+    .mensaje {
+      background: linear-gradient(135deg, #f3edfc, #fce7f0);
+      border-radius: 1.25rem;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      border-left: 4px solid #9c7bc2;
+      text-align: left;
+    }
+
+    .mensaje p {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .mensaje p:last-child { margin-bottom: 0; }
+
+    .firma {
+      margin-top: 2rem;
+      font-size: 0.95rem;
+      color: #7a5f8e;
+    }
+
+    .firma span {
+      font-weight: 600;
+      color: #4a2564;
+    }
+
+    .detalle {
+      display: inline-block;
+      margin-top: 1rem;
+      padding: 0.4rem 1.2rem;
+      background: rgba(156, 123, 194, 0.12);
+      border-radius: 2rem;
+      font-size: 0.85rem;
+      color: #6b4b8a;
+      letter-spacing: 0.3px;
+    }
+
+    @media (max-width: 480px) {
+      .card { padding: 2rem 1.5rem; }
+      h1 { font-size: 1.7rem; }
+      .nombre-destacado { font-size: 1.3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="icon">🌸</span>
+    <h1>¡Bienvenida!</h1>
+    <div class="subrayado"></div>
+
+    <div class="nombre-destacado">
+      Montserrat Prior Herreros
+    </div>
+
+    <p>
+      Este es tu espacio de aprendizaje. Un lugar donde cada pregunta importa,
+      cada idea se explora y cada paso cuenta.
+    </p>
+
+    <div class="mensaje">
+      <p>✨ <strong>Esto es lo que encontrarás aquí:</strong></p>
+      <p>📖 Lecciones diseñadas para ti, a tu ritmo.</p>
+      <p>💡 Ejercicios prácticos que retan y enseñan.</p>
+      <p>💬 Retroalimentación directa, clara y constructiva.</p>
+      <p>🚀 Un camino que construimos juntos, paso a paso.</p>
+    </div>
+
+    <p>
+      No importa por dónde empieces — lo importante es que has comenzado.
+    </p>
+
+    <div class="firma">
+      Con mucho ánimo,<br>
+      <span>Dušan</span>
+    </div>
+
+    <div class="detalle">★ Montserrat Prior · estudiante ★</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,156 @@
+.map-header {
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.level-tabs {
+  display: inline-flex;
+  padding: 0.5rem;
+  margin-top: 2rem;
+  gap: 0.5rem;
+}
+
+.level-tab {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transition: all var(--transition-fast);
+}
+
+.level-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.level-tab.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.tab-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.tab-badge.b1-color { background: var(--b1-color); color: white; }
+.tab-badge.b2-color { background: var(--b2-color); color: white; }
+.tab-badge.c1-color { background: var(--c1-color); color: white; }
+
+.map-path {
+  position: relative;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.course-node {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 3rem;
+  position: relative;
+  opacity: 1;
+  transition: all var(--transition-normal);
+}
+
+.course-node.locked {
+  opacity: 0.6;
+}
+
+.course-node:nth-child(even) {
+  flex-direction: row-reverse;
+}
+
+.node-line {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 3rem;
+  background: var(--glass-border);
+  z-index: 0;
+}
+
+.course-node:last-child .node-line {
+  display: none;
+}
+
+.course-node.completed .node-line,
+.course-node.current .node-line {
+  background: var(--accent-color);
+}
+
+.node-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  border: 4px solid var(--bg-primary);
+  box-shadow: 0 0 0 2px var(--glass-border);
+  transition: all var(--transition-fast);
+}
+
+.course-node.completed .node-circle {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+}
+
+.course-node.current .node-circle {
+  background: white;
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.6);
+  transform: scale(1.1);
+}
+
+.course-node.locked .node-circle {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.node-content {
+  flex: 1;
+  padding: 1.5rem;
+  text-align: left;
+  transition: transform var(--transition-fast);
+}
+
+.course-node:nth-child(even) .node-content {
+  text-align: right;
+}
+
+.course-node:hover:not(.locked) .node-content {
+  transform: translateY(-5px);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.unit-number {
+  color: var(--accent-color);
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.node-content h4 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.start-btn {
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+}
