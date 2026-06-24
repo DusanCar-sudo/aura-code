@@ -1324,6 +1324,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :dream                  [experimental] Consolidate today\'s episodes into a dated dream (dreams/*.md)',
       '  :dream full             [experimental] Consolidate ALL episodes, ignoring the last-dream cutoff',
       '  :rem                    [experimental] List dream files and open the most recent one',
+      '  :research <topic>       Multi-step research pass, saved to research/*.md (inspired by DeerFlow)',
       '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
       '  :design [slug|list|off] Set/list the design system auto-applied to UI builds',
       '  /stats, /usage          Show token + cost usage this session',
@@ -1486,17 +1487,42 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const res = await runDream({ projectRoot: c.ctx.root, provider, full });
       if (res.skipped) {
-        if (res.providerError) {
-          console.log(chalk.hex('#cc9e5c')(`  ⚠ Dream skipped — ${res.reason}\n`));
-          console.log(chalk.hex('#b15439')(`  Provider error: ${res.providerError}\n`));
-          console.log(chalk.hex('#8a7768')(`  ${res.episodeCount} episode(s) preserved for next :dream run.\n`));
-        } else {
-          console.log(chalk.hex('#cc9e5c')(`  ⤳ Nothing to dream about — ${res.reason}.\n`));
-        }
+        console.log(chalk.hex('#cc9e5c')(`  ⤳ Nothing to dream about — ${res.reason}.\n`));
       } else {
         console.log(chalk.hex('#5a9e6e')(`  ✓ Dream written: ${res.path}`));
         console.log(chalk.hex('#8a7768')(`  Consolidated ${res.episodeCount} episode(s).\n`));
       }
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+
+  if (input.startsWith(':research ')) {
+    const topic = input.slice(':research '.length).trim();
+    if (!topic) {
+      console.log(chalk.hex('#b15439')('\n  Usage: :research <topic>\n'));
+      return { handled: true };
+    }
+    console.log(chalk.hex('#8a7768')(`\n  Researching "${topic}"…\n`));
+    try {
+      const { runResearch } = await import('../research/research.js');
+      const { createResilientProvider } = await import('../providers/resilient-factory.js');
+      const provider = createResilientProvider(
+        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
+        {},
+        c.display,
+      );
+      const res = await runResearch({
+        projectRoot: c.ctx.root,
+        topic,
+        provider,
+        context: c.ctx,
+        permissions: c.permissions,
+        display: c.display,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
+      console.log(chalk.hex('#8a7768')(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
