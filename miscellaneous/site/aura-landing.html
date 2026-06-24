@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en" data-design="imperial-crystal">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Code — I don't try. I verify.</title>
+  <meta name="description" content="Model-agnostic AI coding agent. Built by agents, for agents. Works with Claude, GPT, Gemini, MiMo, Ollama.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;900&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Space+Grotesk:wght@400;500;600;700&family=Audiowide&family=Darker+Grotesque:wght@400;500;600;700;800;900&family=Oswald:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Macondo&family=STIX+Two+Text:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500&family=Montserrat:wght@400;500;600;700&family=Anonymous+Pro:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       IMPERIAL CRYSTAL (default) — ruby + gold + deep obsidian
+       ============================================================ */
+    :root {
+      --deep: #08080C; --card: #111116; --raised: #18181F; --field: #1C1C24;
+      --ruby: #CC0A1F; --ruby-glow: #FF1A3D; --gold: #C9A84C; --gold-light: #E4C76B;
+      --t1: #F5F0EB; --t2: #C4BFB8; --t3: #8B8B96; --t4: #5C5C66;
+      --b1: #1E1E24; --b2: #2A2A36; --grn: #16A34A;
+      --fd: "DM Serif Display", "Playfair Display", Georgia, serif;
+      --fb: "Inter", system-ui, sans-serif;
+      --fm: "JetBrains Mono", monospace;
+      --fi: "Outfit", sans-serif;
+      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --hero-gradient: linear-gradient(135deg, #fff 0%, #E4C76B 30%, #FF1A3D 70%, #CC0A1F 100%);
+    }
+
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{font-size:18px;scroll-behavior:smooth;-webkit-font-smoothing:antialiased;background:var(--deep);color:var(--t1)}
+    body{font-family:var(--fb);background:var(--deep);color:var(--t2);line-height:1.7;overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.022;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+    ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--deep)}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--ruby)}
+
+    #particle-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+    #progress-bar{position:fixed;top:0;left:0;height:2px;z-index:10000;background:linear-gradient(90deg,var(--ruby),var(--gold));width:0;box-shadow:0 0 12px rgba(204,10,31,0.5)}
+
+    .design-switcher{position:fixed;bottom:28px;right:28px;z-index:10001;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+    .design-switcher-btn{background:var(--card);border:1px solid var(--b2);color:var(--t3);padding:9px 18px;border-radius:24px;font-family:var(--fm);font-size:0.7rem;cursor:pointer;transition:all 250ms var(--ease);white-space:nowrap;display:flex;align-items:center;gap:8px;backdrop-filter:blur(12px)}
+    .design-switcher-btn:hover{border-color:var(--ruby);color:var(--ruby);transform:translateX(-4px)}
+    .design-switcher-btn.active{background:var(--ruby);color:#fff;border-color:var(--ruby)}
+    .design-switcher-btn .swatch{width:10px;height:10px;border-radius:50%;display:inline-block}
+    #design-menu{display:none;flex-direction:column;gap:3px;background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:6px;box-shadow:0 8px 32px rgba(0,0,0,0.6);margin-bottom:8px;max-height:380px;overflow-y:auto;backdrop-filter:blur(16px)}
+    #design-menu.open{display:flex}
+
+    nav{position:fixed;top:0;left:0;right:0;z-index:9000;padding:20px 32px;display:flex;justify-content:space-between;align-items:center;transition:all 350ms var(--ease)}
+    nav.scrolled{background:rgba(8,8,12,0.88);backdrop-filter:blur(20px);border-bottom:1px solid rgba(201,168,76,0.08);padding:14px 32px}
+    .nav-logo{font-family:var(--fd);font-size:1.5rem;font-weight:900;color:var(--t1);text-decoration:none;letter-spacing:-0.02em;display:flex;align-items:center;gap:10px}
+    .nav-logo .gem{width:30px;height:30px;background:linear-gradient(135deg,var(--ruby),var(--ruby-glow));border-radius:6px;transform:rotate(45deg);box-shadow:0 0 16px rgba(204,10,31,0.4);animation:gemShine 3s ease-in-out infinite}
+    @keyframes gemShine{0%,100%{box-shadow:0 0 16px rgba(204,10,31,0.4)}50%{box-shadow:0 0 28px rgba(255,26,61,0.7),0 0 48px rgba(201,168,76,0.2)}}
+    .nav-links{display:flex;gap:28px;align-items:center}
+    .nav-links a{font-family:var(--fm);font-size:0.78rem;color:var(--t3);text-decoration:none;transition:color 250ms var(--ease);position:relative;letter-spacing:0.03em}
+    .nav-links a::after{content:"";position:absolute;bottom:-4px;left:0;width:0;height:1px;background:var(--ruby);transition:width 350ms var(--ease)}
+    .nav-links a:hover{color:var(--t1)}.nav-links a:hover::after{width:100%}
+    .nav-cta{background:transparent;border:1px solid var(--ruby);color:var(--ruby);padding:8px 20px;border-radius:24px;font-family:var(--fm);font-size:0.75rem;cursor:pointer;transition:all 300ms var(--ease);text-decoration:none}
+    .nav-cta:hover{background:var(--ruby);color:#fff;box-shadow:0 0 24px rgba(204,10,31,0.35)}
+
+    .hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:120px 24px 80px}
+    .hero-content{position:relative;z-index:2;text-align:center;max-width:880px}
+    .hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(204,10,31,0.08);border:1px solid rgba(204,10,31,0.25);border-radius:50px;padding:8px 20px;font-family:var(--fm);font-size:0.68rem;color:var(--ruby);margin-bottom:var(--s6);letter-spacing:0.1em;text-transform:uppercase}
+    .hero-badge .dot{width:7px;height:7px;background:var(--ruby);border-radius:50%;animation:pulse-dot 2s ease-in-out infinite}
+    @keyframes pulse-dot{0%,100%{opacity:0.4;box-shadow:0 0 4px rgba(204,10,31,0.3)}50%{opacity:1;box-shadow:0 0 14px rgba(255,26,61,0.8)}}
+    .hero h1{font-family:var(--fd);font-size:clamp(2.8rem,7vw,5.5rem);line-height:1.05;font-weight:900;letter-spacing:-0.03em;color:var(--t1);margin-bottom:var(--s5)}
+    .hero h1 .accent{background:var(--hero-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero .tagline{font-family:var(--fd);font-size:clamp(1.1rem,2.5vw,1.5rem);font-style:italic;color:var(--gold);margin-bottom:var(--s4)}
+    .hero .subtitle{font-family:var(--fb);font-size:1rem;color:var(--t3);max-width:600px;margin:0 auto var(--s6)}
+    .hero-actions{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+    .btn-primary{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--ruby);color:#fff;border:none;border-radius:50px;font-family:var(--fi);font-size:0.95rem;font-weight:600;cursor:pointer;text-decoration:none;transition:all 350ms var(--ease);box-shadow:0 4px 24px rgba(204,10,31,0.3)}
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 36px rgba(255,26,61,0.5)}
+    .btn-ghost{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:transparent;color:var(--t1);border:1px solid var(--b2);border-radius:50px;font-family:var(--fi);font-size:0.95rem;font-weight:600;cursor:pointer;text-decoration:none;transition:all 350ms var(--ease)}
+    .btn-ghost:hover{border-color:var(--gold);color:var(--gold);box-shadow:0 0 20px rgba(201,168,76,0.15)}
+
+    .glitch{position:relative;display:inline-block;cursor:default}
+    .glitch::before,.glitch::after{content:attr(data-text);position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none}
+    .glitch:hover::before{opacity:1;left:2px;text-shadow:-2px 0 var(--ruby);animation:glitch-1 0.4s infinite linear alternate-reverse;clip:rect(44px,450px,56px,0)}
+    .glitch:hover::after{opacity:1;left:-2px;text-shadow:-2px 0 #0af;animation:glitch-2 0.5s infinite linear alternate-reverse;clip:rect(12px,450px,92px,0)}
+    @keyframes glitch-1{0%,100%{clip:rect(54px,9999px,30px,0)}10%{clip:rect(4px,9999px,66px,0)}20%{clip:rect(86px,9999px,12px,0)}30%{clip:rect(34px,9999px,78px,0)}40%{clip:rect(66px,9999px,44px,0)}50%{clip:rect(14px,9999px,58px,0)}60%{clip:rect(24px,9999px,90px,0)}70%{clip:rect(72px,9999px,22px,0)}80%{clip:rect(44px,9999px,64px,0)}90%{clip:rect(8px,9999px,48px,0)}}
+    @keyframes glitch-2{0%,100%{clip:rect(34px,9999px,82px,0)}10%{clip:rect(78px,9999px,44px,0)}20%{clip:rect(12px,9999px,56px,0)}30%{clip:rect(52px,9999px,22px,0)}40%{clip:rect(88px,9999px,36px,0)}50%{clip:rect(28px,9999px,72px,0)}60%{clip:rect(66px,9999px,14px,0)}70%{clip:rect(42px,9999px,86px,0)}80%{clip:rect(16px,9999px,52px,0)}90%{clip:rect(94px,9999px,26px,0)}}
+
+    section{padding:100px 24px;position:relative;z-index:1}
+    .container{max-width:1100px;margin:0 auto;position:relative}
+    .section-eyebrow{font-family:var(--fm);font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ruby);margin-bottom:var(--s3)}
+    .section-title{font-family:var(--fd);font-size:clamp(2rem,4.5vw,3.2rem);font-weight:700;color:var(--t1);margin-bottom:var(--s4);line-height:1.15;letter-spacing:-0.02em}
+    .section-subtitle{font-family:var(--fb);font-size:1rem;color:var(--t3);max-width:600px;line-height:1.6}
+    .accent-line{width:64px;height:3px;background:linear-gradient(90deg,var(--ruby),var(--gold));border-radius:2px;margin-bottom:var(--s5)}
+
+    .features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--s5);margin-top:var(--s7)}
+    .feature-card{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:var(--s6);transition:all 400ms var(--ease);position:relative;overflow:hidden;cursor:default}
+    .feature-card::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--ruby),var(--gold),transparent);opacity:0;transition:opacity 400ms var(--ease)}
+    .feature-card:hover{transform:translateY(-6px);border-color:var(--b2);box-shadow:0 16px 48px rgba(0,0,0,0.4)}
+    .feature-card:hover::before{opacity:1}
+    .feature-icon{font-size:2.2rem;margin-bottom:var(--s4);display:block}
+    .feature-card h3{font-family:var(--fd);font-size:1.2rem;color:var(--t1);margin-bottom:var(--s2);letter-spacing:-0.01em}
+    .feature-card p{font-family:var(--fb);font-size:0.85rem;color:var(--t3);line-height:1.6}
+
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--s5);margin-top:var(--s7)}
+    .stat-card{text-align:center;padding:var(--s6) var(--s4)}
+    .stat-number{font-family:var(--fd);font-size:clamp(2.5rem,5vw,3.5rem);font-weight:900;color:var(--t1);line-height:1}
+    .stat-number .plus{color:var(--ruby)}
+    .stat-label{font-family:var(--fm);font-size:0.75rem;color:var(--t3);margin-top:var(--s2);letter-spacing:0.06em;text-transform:uppercase}
+
+    .terminal-demo{background:var(--card);border:1px solid var(--b1);border-radius:12px;overflow:hidden;max-width:800px;margin:var(--s7) auto 0;box-shadow:0 16px 48px rgba(0,0,0,0.4)}
+    .terminal-bar{background:var(--raised);padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--b1)}
+    .terminal-dot{width:10px;height:10px;border-radius:50%}
+    .terminal-dot.red{background:#FF5F56}.terminal-dot.yellow{background:#FFBD2E}.terminal-dot.green{background:#27C93F}
+    .terminal-title{font-family:var(--fm);font-size:0.7rem;color:var(--t3);margin-left:8px}
+    .terminal-body{padding:var(--s5);font-family:var(--fm);font-size:0.78rem;line-height:1.8;color:var(--t2)}
+    .terminal-body .prompt{color:var(--grn)}.terminal-body .cmd{color:var(--t1)}.terminal-body .out{color:var(--t3)}.terminal-body .accent-out{color:var(--gold)}.terminal-body .ruby-out{color:var(--ruby)}
+    .terminal-body .cursor{display:inline-block;width:8px;height:1em;background:var(--t2);animation:blink 0.8s step-end infinite;vertical-align:text-bottom}
+    @keyframes blink{50%{opacity:0}}
+
+    .architecture-diagram{max-width:900px;margin:var(--s7) auto 0;text-align:center}
+    .arch-layers{display:flex;flex-direction:column;gap:2px}
+    .arch-layer{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;padding:12px}
+    .arch-block{background:var(--card);border:1px solid var(--b1);border-radius:8px;padding:12px 20px;font-family:var(--fm);font-size:0.7rem;color:var(--t3);transition:all 300ms var(--ease);min-width:100px;text-align:center}
+    .arch-block:hover{border-color:var(--ruby);color:var(--t1);box-shadow:0 0 16px rgba(204,10,31,0.15)}
+    .arch-block.core{border-color:var(--ruby);color:var(--ruby);font-weight:700}
+    .arch-arrow{color:var(--t4);font-size:1.2rem;text-align:center;padding:4px}
+
+    footer{padding:60px 24px;text-align:center;border-top:1px solid var(--b1);position:relative;z-index:1}
+    footer p{font-family:var(--fm);font-size:0.7rem;color:var(--t4)}
+    footer a{color:var(--gold);text-decoration:none;transition:color 250ms}
+    footer a:hover{color:var(--gold-light)}
+    .footer-gem{font-size:2rem;margin-bottom:var(--s4);animation:gemShine 3s ease-in-out infinite}
+
+    [data-design="neon-dark"] { --bg: #0a0614; --card: #1a1333; --raised: #221a40; --t1: #f0e6ff; --t2: #b8a9d4; --t3: #6e608f; --t4: #4a3d6e; --ruby: #8B5CF6; --ruby-glow: #A78BFA; --gold: #00D4FF; --gold-light: #66E3FF; --b1: rgba(139,92,246,0.15); --b2: rgba(139,92,246,0.3); --hero-gradient: linear-gradient(135deg, #fff 0%, #00D4FF 50%, #8B5CF6 100%); }
+    [data-design="matrix"] { --bg: #0A0B0E; --card: #0D0F14; --raised: #111520; --t1: #C0D8C0; --t2: #7FA07F; --t3: #3A5A3A; --t4: #1A2A1A; --ruby: #2DB58A; --ruby-glow: #3DD5A0; --gold: #1A8A5A; --gold-light: #2DB58A; --b1: rgba(45,181,138,0.15); --b2: rgba(45,181,138,0.3); --hero-gradient: none; --fd: "Space Mono"; --fb: "Space Mono"; --fm: "Space Mono"; --fi: "Space Mono"; }
+    [data-design="matrix"] .hero h1 .accent{-webkit-text-fill-color:#2DB58A;text-shadow:0 0 20px rgba(45,181,138,0.4)}
+    [data-design="matrix"] .feature-card::before{background:linear-gradient(90deg,transparent,#2DB58A,#0F4F2F,transparent)}
+    [data-design="matrix"] .accent-line{background:#2DB58A}
+    [data-design="matrix"] .btn-primary{background:#2DB58A;box-shadow:0 4px 24px rgba(45,181,138,0.3)}
+    [data-design="cosmic"] { --bg: #06081A; --card: #0D1133; --raised: #151B4A; --t1: #E8E8FF; --t2: #A0A8D4; --t3: #5A6088; --t4: #3A4068; --ruby: #3B82F6; --ruby-glow: #60A5FA; --gold: #8B5CF6; --gold-light: #A78BFA; --b1: rgba(59,130,246,0.2); --b2: rgba(59,130,246,0.4); --hero-gradient: linear-gradient(135deg, #fff 0%, #8B5CF6 40%, #3B82F6 100%); --fd: "Audiowide"; }
+    [data-design="brutalism"] { --bg: #FFFFFF; --card: #FFFFFF; --raised: #F5F0EB; --t1: #111827; --t2: #444444; --t3: #888888; --t4: #BBBBBB; --ruby: #DD614C; --ruby-glow: #EE7A68; --gold: #DAA144; --gold-light: #E8B866; --b1: #111827; --b2: #DD614C; --hero-gradient: none; --fd: "Darker Grotesque"; --fb: "Darker Grotesque"; --fi: "Darker Grotesque"; }
+    [data-design="brutalism"] body::before{display:none}
+    [data-design="brutalism"] .hero h1 .accent{-webkit-text-fill-color:#111827;font-size:clamp(3.5rem,8vw,6.5rem);font-weight:900}
+    [data-design="brutalism"] .feature-card,.terminal-demo,.arch-block{border:2px solid #111827;border-radius:0;box-shadow:6px 6px 0 #111827}
+    [data-design="brutalism"] .btn-primary{border-radius:0;background:#111827}
+    [data-design="brutalism"] .btn-ghost{border:2px solid #111827;border-radius:0;color:#111827}
+    [data-design="minimal"] { --bg: #F4F4F1; --card: #FFFFFF; --raised: #F8F8F5; --t1: #0C0C09; --t2: #555555; --t3: #999999; --t4: #CCCCCC; --ruby: #0C0C09; --ruby-glow: #333333; --gold: #312C85; --gold-light: #4A44B0; --b1: rgba(0,0,0,0.06); --b2: rgba(49,44,133,0.2); --hero-gradient: none; --fd: "Inter"; --fb: "Inter"; }
+    [data-design="minimal"] body::before{display:none}
+    [data-design="minimal"] .hero h1 .accent{-webkit-text-fill-color:#0C0C09;font-weight:300}
+
+  </style>
+</head>
+<body>
+  <canvas id="particle-canvas"></canvas>
+  <div id="progress-bar"></div>
+
+  <nav id="nav">
+    <a href="#" class="nav-logo">
+      <span class="gem"></span>
+      Aura Code
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#terminal">Demo</a>
+      <a href="#stats">Stats</a>
+      <a href="https://github.com/milodule3-debug/aura-code" target="_blank" class="nav-cta">GitHub</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        Built by agents, for agents
+      </div>
+      <h1>
+        <span class="accent">Aura Code</span>
+      </h1>
+      <p class="tagline">I don't try. I verify.</p>
+      <p class="subtitle">Model-agnostic AI coding agent. Works with Claude, GPT, Gemini, MiMo, Ollama, and any OpenAI-compatible endpoint. MIT licensed.</p>
+      <div class="hero-actions">
+        <a href="https://www.npmjs.com/package/aura-code" target="_blank" class="btn-primary">
+          <span>npm install -g aura-code</span>
+        </a>
+        <a href="https://github.com/milodule3-debug/aura-code" target="_blank" class="btn-ghost">
+          <span>View on GitHub</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="container">
+      <div class="section-eyebrow">Capabilities</div>
+      <h2 class="section-title">Why Aura Code</h2>
+      <div class="accent-line"></div>
+      <p class="section-subtitle">Aura doesn't try. Aura verifies. Every change is tested, every claim is checked. Built on the Praktess framework.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">Multi-Model</span>
+          <h3>Model-Agnostic</h3>
+          <p>Switch between Claude, GPT, Gemini, MiMo, Ollama, or any OpenAI-compatible endpoint. One agent, any provider.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">Autonomous</span>
+          <h3>Autonomous Loop</h3>
+          <p>Reads context, plans, executes tools, verifies results, and repeats until done. Full autonomous coding cycle.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">Verification</span>
+          <h3>Self-Verification</h3>
+          <p>Every change triggers test runs. Regressions are caught instantly. 1035+ tests in the core test suite.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">Providers</span>
+          <h3>Multi-Provider</h3>
+          <p>Resilient provider layer with fallback chains, circuit breakers, and rate limiting. Never blocked by API issues.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">Telegram</span>
+          <h3>Telegram Control</h3>
+          <p>Control Aura remotely via Telegram. Send tasks, receive results, voice commands supported. Always connected.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">Ruby</span>
+          <h3>Ruby Fine-tuning</h3>
+          <p>Built-in episode capture, training data generation, model selection, and fine-tuning pipeline. Self-improving agent.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="container">
+      <div class="section-eyebrow">Architecture</div>
+      <h2 class="section-title">How Aura Works</h2>
+      <div class="accent-line"></div>
+      <p class="section-subtitle">A modular, layered architecture from CLI input through orchestration, tool execution, to verified output.</p>
+      <div class="architecture-diagram">
+        <div class="arch-layers">
+          <div class="arch-layer">
+            <div class="arch-block">CLI</div>
+            <div class="arch-block">Telegram</div>
+            <div class="arch-block">Server API</div>
+          </div>
+          <div class="arch-arrow">|</div>
+          <div class="arch-layer">
+            <div class="arch-block">Router</div>
+            <div class="arch-block">Safety</div>
+          </div>
+          <div class="arch-arrow">|</div>
+          <div class="arch-layer">
+            <div class="arch-block core">Orchestrator</div>
+            <div class="arch-block">Specialists</div>
+            <div class="arch-block">Ruby Model</div>
+          </div>
+          <div class="arch-arrow">|</div>
+          <div class="arch-layer">
+            <div class="arch-block">Agent Loop</div>
+            <div class="arch-block">Compactor</div>
+            <div class="arch-block">Perception</div>
+          </div>
+          <div class="arch-arrow">|</div>
+          <div class="arch-layer">
+            <div class="arch-block">Tools</div>
+            <div class="arch-block">Web Search</div>
+            <div class="arch-block">Browser</div>
+            <div class="arch-block">File Edit</div>
+            <div class="arch-block">Tests</div>
+          </div>
+          <div class="arch-arrow">|</div>
+          <div class="arch-layer">
+            <div class="arch-block">Providers</div>
+            <div class="arch-block">Anthropic</div>
+            <div class="arch-block">OpenAI</div>
+            <div class="arch-block">Google</div>
+            <div class="arch-block">Ollama</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="terminal">
+    <div class="container">
+      <div class="section-eyebrow">Demo</div>
+      <h2 class="section-title">See It In Action</h2>
+      <div class="accent-line"></div>
+      <div class="terminal-demo">
+        <div class="terminal-bar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">aura — model-agnostic coding agent</span>
+        </div>
+        <div class="terminal-body">
+          <div><span class="prompt">$</span> <span class="cmd">aura "Add rate limiting to the Telegram bot"</span></div>
+          <div><span class="out">[Aura]</span> Reading src/integrations/telegram.ts...</div>
+          <div><span class="out">[Aura]</span> Planning: add rate-limiter middleware to bot handlers</div>
+          <div><span class="out">[Aura]</span> Editing src/tools/telegram-bot.ts — adding rateLimit() wrapper</div>
+          <div><span class="accent-out">[Aura]</span> Running tests: 42 passed, 0 failed</div>
+          <div><span class="ruby-out">[Aura]</span> Verified. Change complete. No regressions.</div>
+          <div><span class="prompt">$</span> <span class="cursor"></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="stats">
+    <div class="container">
+      <div class="section-eyebrow">By The Numbers</div>
+      <h2 class="section-title">Aura in Numbers</h2>
+      <div class="accent-line"></div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-number"><span class="counter" data-target="1035">0</span><span class="plus">+</span></div>
+          <div class="stat-label">Tests</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number"><span class="counter" data-target="67">0</span></div>
+          <div class="stat-label">Design Systems</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number"><span class="counter" data-target="8">0</span><span class="plus">+</span></div>
+          <div class="stat-label">Providers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number"><span class="counter" data-target="2024">0</span></div>
+          <div class="stat-label">MIT Licensed Since</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-gem">Diamond</div>
+    <p>Built with Ruby by <a href="https://github.com/milodule3-debug" target="_blank">Dusan Milosavljevic</a> &middot; <a href="https://github.com/milodule3-debug/aura-code" target="_blank">GitHub</a> &middot; <a href="https://www.npmjs.com/package/aura-code" target="_blank">npm</a></p>
+    <p style="margin-top:8px">Aura Code v0.5.0 — I don't try. I verify.</p>
+  </footer>
+
+  <div class="design-switcher">
+    <div id="design-menu">
+      <button class="design-switcher-btn active" onclick="setDesign('imperial-crystal')"><span class="swatch" style="background:linear-gradient(135deg,#CC0A1F,#C9A84C)"></span>Imperial Crystal</button>
+      <button class="design-switcher-btn" onclick="setDesign('neon-dark')"><span class="swatch" style="background:linear-gradient(135deg,#8B5CF6,#00D4FF)"></span>Neon Dark</button>
+      <button class="design-switcher-btn" onclick="setDesign('matrix')"><span class="swatch" style="background:#2DB58A"></span>Matrix</button>
+      <button class="design-switcher-btn" onclick="setDesign('cosmic')"><span class="swatch" style="background:linear-gradient(135deg,#3B82F6,#8B5CF6)"></span>Cosmic</button>
+      <button class="design-switcher-btn" onclick="setDesign('brutalism')"><span class="swatch" style="background:#DD614C"></span>Brutalism</button>
+      <button class="design-switcher-btn" onclick="setDesign('minimal')"><span class="swatch" style="background:linear-gradient(135deg,#0C0C09,#312C85)"></span>Minimal</button>
+    </div>
+    <button class="design-switcher-btn" onclick="toggleDesignMenu()" id="design-label">Themes</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('particle-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let w, h;
+
+    function resize() {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    class Particle {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = Math.random() * w;
+        this.y = Math.random() * h;
+        this.size = Math.random() * 2 + 0.5;
+        this.speedX = (Math.random() - 0.5) * 0.4;
+        this.speedY = (Math.random() - 0.5) * 0.4;
+        this.opacity = Math.random() * 0.6 + 0.1;
+        this.pulse = Math.random() * Math.PI * 2;
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.pulse += 0.02;
+        if (this.x < 0 || this.x > w || this.y < 0 || this.y > h) this.reset();
+      }
+      draw() {
+        const alpha = this.opacity + Math.sin(this.pulse) * 0.2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(201,168,76,${alpha})`;
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+    function animate() {
+      ctx.clearRect(0, 0, w, h);
+      particles.forEach(p => { p.update(); p.draw(); });
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    const nav = document.getElementById('nav');
+    const progressBar = document.getElementById('progress-bar');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 50);
+      const sp = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+      progressBar.style.width = sp + '%';
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(link => {
+      link.addEventListener('click', e => {
+        const target = document.querySelector(link.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    function toggleDesignMenu() {
+      document.getElementById('design-menu').classList.toggle('open');
+    }
+    function setDesign(name) {
+      document.documentElement.setAttribute('data-design', name);
+      document.querySelectorAll('#design-menu .design-switcher-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.querySelector('#design-menu .design-switcher-btn[onclick*="' + name + '"]');
+      if (btn) btn.classList.add('active');
+      document.getElementById('design-menu').classList.remove('open');
+    }
+
+    const counterEls = document.querySelectorAll('.counter');
+    let countersAnimated = false;
+
+    function animateCounters() {
+      if (countersAnimated) return;
+      const statsSection = document.getElementById('stats');
+      if (!statsSection) return;
+      const rect = statsSection.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.8) {
+        countersAnimated = true;
+        counterEls.forEach(el => {
+          const target = parseInt(el.getAttribute('data-target'));
+          const duration = 2000;
+          const start = performance.now();
+          function update(now) {
+            const elapsed = now - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.floor(eased * target);
+            if (progress < 1) requestAnimationFrame(update);
+            else el.textContent = target;
+          }
+          requestAnimationFrame(update);
+        });
+      }
+    }
+
+    window.addEventListener('scroll', animateCounters);
+    animateCounters();
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.design-switcher')) {
+        document.getElementById('design-menu').classList.remove('open');
+      }
+    });
+  </script>
+</body>
+</html>

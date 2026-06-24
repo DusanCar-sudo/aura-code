@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Code — Information Flow Diagram</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f4f1ee;
+      color: #2d241c;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      color: #4e3d30;
+      margin-bottom: 0.25rem;
+    }
+
+    h1 strong { font-weight: 600; color: #2d241c; }
+
+    .subtitle {
+      text-align: center;
+      font-size: 1rem;
+      color: #7a6b5e;
+      margin-bottom: 2.5rem;
+      font-style: italic;
+    }
+
+    /* ── canvas ── */
+    .canvas {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fffcf8;
+      border-radius: 1.5rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      padding: 2rem 1.5rem;
+      overflow-x: auto;
+    }
+
+    .canvas svg {
+      display: block;
+      margin: 0 auto;
+      width: 100%;
+      height: auto;
+      max-width: 1000px;
+    }
+
+    /* ── legend ── */
+    .legend {
+      max-width: 900px;
+      margin: 2rem auto 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem 2rem;
+      justify-content: center;
+      font-size: 0.85rem;
+      color: #4e3d30;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .legend-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    /* ── explanation ── */
+    .steps {
+      max-width: 900px;
+      margin: 2.5rem auto 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .step {
+      background: #fffcf8;
+      border-radius: 1rem;
+      padding: 1.25rem 1.25rem 1rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+      border-left: 4px solid #d4c8bc;
+    }
+
+    .step h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #2d241c;
+      margin-bottom: 0.35rem;
+    }
+
+    .step p {
+      font-size: 0.88rem;
+      line-height: 1.5;
+      color: #5a4a3c;
+    }
+
+    .step .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #fff;
+      background: #b15439;
+      border-radius: 3px;
+      padding: 0.1rem 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: #8a7a6c;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 1rem 0.75rem 2rem; }
+      .canvas { padding: 1rem; }
+      h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>⟐ Aura Code — <strong>Information Flow Diagram</strong></h1>
+  <p class="subtitle">how information moves through the system</p>
+
+  <div class="canvas">
+    <svg viewBox="0 0 960 820" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+          <path d="M0,0 L10,4 L0,8 Z" fill="#7a6b5e"/>
+        </marker>
+        <marker id="arrow-green" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+          <path d="M0,0 L10,4 L0,8 Z" fill="#2ea043"/>
+        </marker>
+        <marker id="arrow-blue" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+          <path d="M0,0 L10,4 L0,8 Z" fill="#1f6feb"/>
+        </marker>
+        <marker id="arrow-purple" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+          <path d="M0,0 L10,4 L0,8 Z" fill="#8957e5"/>
+        </marker>
+        <marker id="arrow-orange" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+          <path d="M0,0 L10,4 L0,8 Z" fill="#f0883e"/>
+        </marker>
+
+        <filter id="shadow">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
+        </filter>
+      </defs>
+
+      <!-- ─── arrows (connections) ─── -->
+      <g stroke="#7a6b5e" stroke-width="1.5" fill="none" marker-end="url(#arrow)" opacity="0.6">
+        <!-- 1 → 2 -->
+        <path d="M 480,52  Q 480,85  480,102"/>
+
+        <!-- 2 → 3 -->
+        <path d="M 480,140  Q 480,170  480,188"/>
+
+        <!-- 3 → 4 -->
+        <path d="M 480,226  Q 480,256  480,272"/>
+
+        <!-- 4 → 5 -->
+        <path d="M 480,310  Q 480,340  480,355"/>
+
+        <!-- 5 → 6 (ruby alternation) -->
+        <path d="M 480,392  Q 480,422  480,438"/>
+
+        <!-- 6 → 7 (agent loop) -->
+        <path d="M 480,476  Q 480,506  480,522"/>
+
+        <!-- 7 → 8 (tool execution) -->
+        <path d="M 480,560  Q 480,590  480,605"/>
+
+        <!-- 8 → 9 (episode) -->
+        <path d="M 480,642  Q 480,672  480,688"/>
+
+        <!-- 9 → 10 (feedback) -->
+        <path d="M 480,726  Q 480,756  480,772"/>
+
+        <!-- 10 → 3 (loop back) -->
+        <path d="M 550,800  Q 730,800  730,580  Q 730,360  610,226"
+              stroke="#1f6feb" stroke-dasharray="6,4" marker-end="url(#arrow-blue)" opacity="0.4"/>
+        <text x="730" y="540" font-size="10" fill="#1f6feb" opacity="0.5" text-anchor="start">feedback loop</text>
+      </g>
+
+      <!-- ─── nodes ─── -->
+
+      <!-- 1. User input -->
+      <rect x="380" y="20" width="200" height="36" rx="18" fill="#fde4d0" stroke="#f0883e" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="43" text-anchor="middle" font-size="13" font-weight="600" fill="#2d241c">① User input</text>
+
+      <!-- 2. CLI / arg parsing -->
+      <rect x="360" y="105" width="240" height="38" rx="10" fill="#e8e8e8" stroke="#6e7681" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="129" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">② CLI — argument parsing</text>
+      <text x="480" y="140" text-anchor="middle" font-size="9" fill="#6e7681">minimist + .aura.json + env</text>
+
+      <!-- 3. Router -->
+      <rect x="360" y="192" width="240" height="38" rx="10" fill="#ecdcfc" stroke="#8957e5" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="214" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">③ Router</text>
+      <text x="480" y="227" text-anchor="middle" font-size="9" fill="#6e3d9e">direct or orchestrated?</text>
+
+      <!-- 3a. Orchestrator -->
+      <rect x="140" y="240" width="150" height="34" rx="8" fill="#ecdcfc" stroke="#8957e5" stroke-width="1.2" stroke-dasharray="3,2"/>
+      <text x="215" y="261" text-anchor="middle" font-size="10" fill="#4a2564">Orchestrator</text>
+      <path d="M 360,210  Q 300,210  295,240" stroke="#8957e5" stroke-width="1.2" fill="none" marker-end="url(#arrow-purple)" stroke-dasharray="3,2" opacity="0.5"/>
+
+      <!-- 4. Model selection -->
+      <rect x="355" y="276" width="250" height="38" rx="10" fill="#d6e8fc" stroke="#1f6feb" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="298" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">④ Model selection</text>
+      <text x="480" y="311" text-anchor="middle" font-size="9" fill="#1f6feb">selectModel() — episodes → history</text>
+
+      <!-- 5. Provider layer -->
+      <rect x="355" y="360" width="250" height="36" rx="10" fill="#d6e8fc" stroke="#1f6feb" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="382" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">⑤ Provider Layer</text>
+      <text x="480" y="394" text-anchor="middle" font-size="9" fill="#1f6feb">Anthropic · Google · OpenAI · Ollama</text>
+
+      <!-- 6. Ruby alternation -->
+      <rect x="355" y="442" width="250" height="38" rx="10" fill="#ecdcfc" stroke="#8957e5" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="464" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">⑥ Ruby alternation</text>
+      <text x="480" y="477" text-anchor="middle" font-size="9" fill="#6e3d9e">competence → Ollama? or large model?</text>
+
+      <!-- 7. Agent loop -->
+      <rect x="355" y="526" width="250" height="38" rx="10" fill="#fbe7b8" stroke="#bf8700" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="548" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">⑦ Agent loop</text>
+      <text x="480" y="561" text-anchor="middle" font-size="9" fill="#8a6a00">LLM → stream → tools → confirm</text>
+
+      <!-- 7a. Safety -->
+      <rect x="640" y="526" width="120" height="34" rx="8" fill="#fbdada" stroke="#cf222e" stroke-width="1.2"/>
+      <text x="700" y="547" text-anchor="middle" font-size="10" fill="#8b1a1a">Safety</text>
+      <path d="M 605,545  Q 625,545  640,543" stroke="#cf222e" stroke-width="1.2" fill="none" marker-end="url(#arrow)" opacity="0.5"/>
+
+      <!-- 7b. Compactor -->
+      <rect x="640" y="568" width="120" height="28" rx="8" fill="#fbe7b8" stroke="#bf8700" stroke-width="0.8"/>
+      <text x="700" y="586" text-anchor="middle" font-size="9" fill="#8a6a00">compactor &gt;70%</text>
+      <path d="M 605,545  Q 640,545  640,582" stroke="#bf8700" stroke-width="1" fill="none" marker-end="url(#arrow)" opacity="0.4"/>
+
+      <!-- 8. Tool execution -->
+      <rect x="340" y="610" width="280" height="36" rx="10" fill="#d7f5dd" stroke="#2ea043" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="632" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">⑧ Tool execution</text>
+      <text x="480" y="644" text-anchor="middle" font-size="9" fill="#1a6b2e">read/write/edit · shell · test · search · web</text>
+
+      <!-- 8a. Codebase Perception -->
+      <rect x="110" y="610" width="185" height="34" rx="8" fill="#d7f5dd" stroke="#2ea043" stroke-width="1.2" stroke-dasharray="3,2"/>
+      <text x="202" y="631" text-anchor="middle" font-size="10" fill="#1a6b2e">Codebase Perception</text>
+      <path d="M 340,628  Q 300,628  295,628" stroke="#2ea043" stroke-width="1" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="3,2" opacity="0.4"/>
+
+      <!-- 9. Episode capture -->
+      <rect x="380" y="692" width="200" height="36" rx="18" fill="#ecdcfc" stroke="#8957e5" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="715" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">⑨ Episode capture</text>
+
+      <!-- 10. Verification -->
+      <rect x="380" y="776" width="200" height="36" rx="10" fill="#fbdada" stroke="#cf222e" stroke-width="1.5" filter="url(#shadow)"/>
+      <text x="480" y="798" text-anchor="middle" font-size="12" font-weight="600" fill="#2d241c">⑩ Verification</text>
+      <text x="480" y="811" text-anchor="middle" font-size="9" fill="#8b1a1a">tests pass? → yes / no</text>
+
+      <!-- ─── output ─── -->
+      <rect x="430" y="836" width="100" height="28" rx="14" fill="#2d241c" opacity="0.08"/>
+      <text x="480" y="855" text-anchor="middle" font-size="11" fill="#6e5a48">✓ result</text>
+
+      <!-- ─── parallel flows (right) ─── -->
+
+      <!-- Dashboard -->
+      <rect x="740" y="360" width="170" height="32" rx="8" fill="#d7f5dd" stroke="#2ea043" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="825" y="380" text-anchor="middle" font-size="10" fill="#1a6b2e">Dashboard / :viz</text>
+      <path d="M 605,378  Q 680,378  740,378" stroke="#2ea043" stroke-width="1" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="3,2" opacity="0.4"/>
+
+      <!-- Harness -->
+      <rect x="740" y="440" width="170" height="32" rx="8" fill="#d7f5dd" stroke="#2ea043" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="825" y="460" text-anchor="middle" font-size="10" fill="#1a6b2e">Harness / --analyze</text>
+      <path d="M 605,378  Q 680,420  740,456" stroke="#2ea043" stroke-width="1" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="3,2" opacity="0.4"/>
+
+      <!-- Statistics -->
+      <rect x="740" y="510" width="170" height="32" rx="8" fill="#d7f5dd" stroke="#2ea043" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="825" y="530" text-anchor="middle" font-size="10" fill="#1a6b2e">Statistics / --stats</text>
+      <path d="M 580,710  Q 660,710  740,526" stroke="#2ea043" stroke-width="1" fill="none" marker-end="url(#arrow-green)" stroke-dasharray="3,2" opacity="0.4"/>
+
+      <!-- Workflows -->
+      <rect x="740" y="580" width="170" height="32" rx="8" fill="#fbe7b8" stroke="#bf8700" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="825" y="600" text-anchor="middle" font-size="10" fill="#8a6a00">Workflows</text>
+      <path d="M 600,548  Q 680,560  740,596" stroke="#bf8700" stroke-width="1" fill="none" marker-end="url(#arrow)" stroke-dasharray="3,2" opacity="0.4"/>
+
+      <!-- Architect -->
+      <rect x="740" y="640" width="170" height="32" rx="8" fill="#fbe7b8" stroke="#bf8700" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="825" y="660" text-anchor="middle" font-size="10" fill="#8a6a00">Architect / blueprint</text>
+      <path d="M 600,210  Q 680,210  740,656" stroke="#bf8700" stroke-width="1" fill="none" marker-end="url(#arrow)" stroke-dasharray="3,2" opacity="0.4"/>
+    </svg>
+  </div>
+
+  <!-- legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#fde4d0;border:1px solid #f0883e"></div> Input</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#e8e8e8;border:1px solid #6e7681"></div> Configuration</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#ecdcfc;border:1px solid #8957e5"></div> Routing / Decision</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#d6e8fc;border:1px solid #1f6feb"></div> Provider / Model</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#fbe7b8;border:1px solid #bf8700"></div> Execution</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#d7f5dd;border:1px solid #2ea043"></div> Analysis / Insight</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#fbdada;border:1px solid #cf222e"></div> Safety / Verification</div>
+    <div class="legend-item"><div class="legend-swatch" style="width:22px;height:2px;background:#1f6feb;border-radius:1px"></div> Feedback loop</div>
+  </div>
+
+  <!-- step-by-step explanation -->
+  <div class="steps">
+    <div class="step" style="border-left-color:#f0883e">
+      <span class="badge" style="background:#f0883e">①</span>
+      <h3>User input</h3>
+      <p>Task is entered as text: <code>aura "refactor auth"</code></p>
+    </div>
+
+    <div class="step" style="border-left-color:#6e7681">
+      <span class="badge" style="background:#6e7681">②</span>
+      <h3>CLI — argument parsing</h3>
+      <p><code>minimist</code> parses flags, <code>.aura.json</code> is loaded, env variables are merged. Decision: REPL or single task?</p>
+    </div>
+
+    <div class="step" style="border-left-color:#8957e5">
+      <span class="badge" style="background:#8957e5">③</span>
+      <h3>Router</h3>
+      <p>Decides whether the task goes directly into the <strong>agent loop</strong> or is <strong>orchestrated</strong> (decomposed into sub-tasks for specialists).</p>
+    </div>
+
+    <div class="step" style="border-left-color:#1f6feb">
+      <span class="badge" style="background:#1f6feb">④</span>
+      <h3>Model selection</h3>
+      <p><code>selectModel()</code> picks the best model from the same family based on episode history — which model has most often succeeded at similar tasks.</p>
+    </div>
+
+    <div class="step" style="border-left-color:#1f6feb">
+      <span class="badge" style="background:#1f6feb">⑤</span>
+      <h3>Provider Layer</h3>
+      <p>Abstracts the API call: <strong>retry</strong> (exponential backoff + jitter), <strong>circuit breaker</strong> (after 5 failures), <strong>fallback</strong> to next model.</p>
+    </div>
+
+    <div class="step" style="border-left-color:#8957e5">
+      <span class="badge" style="background:#8957e5">⑥</span>
+      <h3>Ruby alternation</h3>
+      <p>If Ruby is enabled (default), <code>RubyAlternator</code> assesses whether a free local Ollama model can solve the task — based on competence from past episodes. If it fails, escalates to the large model.</p>
+    </div>
+
+    <div class="step" style="border-left-color:#bf8700">
+      <span class="badge" style="background:#bf8700">⑦</span>
+      <h3>Agent loop</h3>
+      <p>Main loop: LLM generates response → parses tools → <strong>safety</strong> check → execution → continue. Compactor summarizes history at &gt;70% context.</p>
+    </div>
+
+    <div class="step" style="border-left-color:#2ea043">
+      <span class="badge" style="background:#2ea043">⑧</span>
+      <h3>Tool execution</h3>
+      <p>The registry calls the right tool: <code>read_file</code>, <code>edit_file</code>, <code>run_shell</code>, <code>web_search</code>, etc. Each tool is an independent module.</p>
+    </div>
+
+    <div class="step" style="border-left-color:#8957e5">
+      <span class="badge" style="background:#8957e5">⑨</span>
+      <h3>Episode capture</h3>
+      <p>Every outcome is saved as an <strong>Episode</strong> — task, model, success/failure, duration. Episodes are the single source of truth for "learning".</p>
+    </div>
+
+    <div class="step" style="border-left-color:#cf222e">
+      <span class="badge" style="background:#cf222e">⑩</span>
+      <h3>Verification (feedback loop)</h3>
+      <p>If enabled, runs tests. Failure → retry. The dashed blue line in the diagram shows how information loops back to ③ (model selection learns from episodes).</p>
+    </div>
+  </div>
+
+  <p class="footer">⟐ Aura Code v0.5.0 — built by Dušan, 2026.</p>
+
+</body>
+</html>

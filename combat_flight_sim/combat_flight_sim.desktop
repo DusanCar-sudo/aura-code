@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Combat Flight Simulator
+Comment=Study-level combat flight simulator with 6DOF physics
+Exec=/home/dusan/aura-code/combat_flight_sim/run_sim.sh
+Icon=/home/dusan/aura-code/combat_flight_sim/data/icon.png
+Terminal=false
+Type=Application
+Categories=Game;Simulation;
+StartupNotify=true

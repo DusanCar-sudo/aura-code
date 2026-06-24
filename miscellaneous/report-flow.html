@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>:report — How It Works</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0d0d12;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #e0ddd5;
+    display: flex;
+    justify-content: center;
+    padding: 60px 20px;
+  }
+
+  .graphic {
+    max-width: 1000px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+  }
+
+  /* ── Header ─────────────────────────── */
+  .header {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .header .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #1a1a24;
+    border: 1px solid #2a2a3a;
+    border-radius: 20px;
+    padding: 5px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #cc785c;
+    margin: 0 auto;
+    letter-spacing: 0.5px;
+  }
+  .header h1 {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #cc785c 0%, #e8a87c 50%, #f4c9a0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header p {
+    color: #8a8a9a;
+    font-size: 16px;
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ── Flow diagram ───────────────────── */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .node {
+    background: #14141e;
+    border: 1px solid #252535;
+    border-radius: 14px;
+    padding: 20px 28px;
+    text-align: center;
+    min-width: 110px;
+    position: relative;
+  }
+  .node .icon {
+    font-size: 28px;
+    margin-bottom: 6px;
+  }
+  .node .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #cc785c;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .node .desc {
+    font-size: 11px;
+    color: #6a6a7a;
+    margin-top: 4px;
+  }
+  .arrow-line {
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, #cc785c44, #cc785c);
+    flex-shrink: 0;
+    position: relative;
+  }
+  .arrow-line::after {
+    content: '›';
+    position: absolute;
+    right: -4px;
+    top: -12px;
+    font-size: 22px;
+    color: #cc785c;
+    font-weight: 700;
+  }
+  .arrow-down {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .arrow-down span {
+    color: #cc785c55;
+    font-size: 20px;
+  }
+
+  /* ── Decision tree ──────────────────── */
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #8a8a9a;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #1f1f30;
+  }
+
+  .branches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+  }
+  .branch {
+    background: #14141e;
+    border: 1px solid #252535;
+    border-radius: 14px;
+    padding: 24px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .branch::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .branch.word::before    { background: #5a9e6e; }
+  .branch.phrase::before  { background: #5a9eb4; }
+  .branch.sentence::before{ background: #cc785c; }
+  .branch.question::before{ background: #b5a55a; }
+  .branch.empty::before   { background: #6a6a7a; }
+
+  .branch .trigger {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .branch.word     .trigger { color: #5a9e6e; }
+  .branch.phrase   .trigger { color: #5a9eb4; }
+  .branch.sentence .trigger { color: #cc785c; }
+  .branch.question .trigger { color: #b5a55a; }
+  .branch.empty    .trigger { color: #6a6a7a; }
+
+  .branch .example-in {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    background: #0d0d16;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 8px 0;
+    color: #c0c0cc;
+    word-break: break-all;
+  }
+  .branch .arrow-resp {
+    color: #6a6a7a;
+    font-size: 18px;
+    margin: 4px 0;
+  }
+  .branch .example-out {
+    font-size: 12px;
+    color: #a0a0b0;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .branch .logic {
+    font-size: 10px;
+    color: #4a4a58;
+    margin-top: 10px;
+    line-height: 1.4;
+  }
+
+  /* ── System prompt peek ─────────────── */
+  .prompt-box {
+    background: #0a0a12;
+    border: 1px solid #1f1f30;
+    border-radius: 14px;
+    padding: 24px 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #5a5a6e;
+    line-height: 1.8;
+    position: relative;
+  }
+  .prompt-box .line { display: block; }
+  .prompt-box .hl { color: #cc785c; font-weight: 700; }
+  .prompt-box .hl2 { color: #5a9e6e; font-weight: 700; }
+  .prompt-box .hl3 { color: #5a9eb4; font-weight: 700; }
+  .prompt-box .dim { color: #3a3a4a; }
+
+  .prompt-box .sticky {
+    position: absolute;
+    top: -11px;
+    left: 24px;
+    background: #cc785c;
+    color: #0d0d12;
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 4px 12px;
+    border-radius: 6px;
+  }
+
+  /* ── Footer ─────────────────────────── */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    background: #1a1420;
+    border-radius: 14px;
+    border: 1px solid #2a2038;
+    font-size: 13px;
+    color: #8a7a90;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .footer strong { color: #cc785c; font-weight: 700; }
+
+  /* ── Responsive ─────────────────────── */
+  @media (max-width: 600px) {
+    .flow { flex-direction: column; gap: 0; }
+    .arrow-line { width: 2px; height: 24px; }
+    .arrow-line::after { right: -8px; top: 8px; transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<div class="graphic">
+
+  <!-- ─── HEADER ─────────────────────────────── -->
+  <div class="header">
+    <div class="badge">🔤 LearnLight · English Tutoring</div>
+    <h1>:report</h1>
+    <p>
+      Instant English feedback — right in the terminal.
+      Powered by the same AI provider as the coding agent.
+    </p>
+  </div>
+
+  <!-- ─── TOP-LEVEL FLOW ──────────────────────── -->
+  <div class="section-title">Execution flow</div>
+  <div class="flow">
+    <div class="node">
+      <div class="icon">⌨️</div>
+      <div class="label">:report smile</div>
+      <div class="desc">CLI input</div>
+    </div>
+    <div class="arrow-line"></div>
+    <div class="node">
+      <div class="icon">🧠</div>
+      <div class="label">Inspect Input</div>
+      <div class="desc">count words,<br>detect patterns</div>
+    </div>
+    <div class="arrow-line"></div>
+    <div class="node">
+      <div class="icon">📋</div>
+      <div class="label">Sys Prompt</div>
+      <div class="desc">5 rules injected<br>into system prompt</div>
+    </div>
+    <div class="arrow-line"></div>
+    <div class="node">
+      <div class="icon">⚡</div>
+      <div class="label">Provider.stream()</div>
+      <div class="desc">LLM answers<br>in real time</div>
+    </div>
+    <div class="arrow-line"></div>
+    <div class="node">
+      <div class="icon">📤</div>
+      <div class="label">Terminal</div>
+      <div class="desc">colour-formatted<br>response printed</div>
+    </div>
+  </div>
+
+  <!-- ─── FIVE BRANCHES ───────────────────────── -->
+  <div class="section-title">The five rules — one path per input shape</div>
+  <div class="branches">
+
+    <!-- 1 word -->
+    <div class="branch word">
+      <div class="trigger">▸ 1 word</div>
+      <div class="example-in">:report smile</div>
+      <div class="arrow-resp">→</div>
+      <div class="example-out">smile = /smīl/</div>
+      <div class="logic">Rule: word = /pronunciation/</div>
+    </div>
+
+    <!-- 2 words -->
+    <div class="branch phrase">
+      <div class="trigger">▸▸ 2 words</div>
+      <div class="example-in">:report she does</div>
+      <div class="arrow-resp">→</div>
+      <div class="example-out">She <em>does</em> like that meal.</div>
+      <div class="logic">Rule: phrase = Example *phrase* in a sentence.</div>
+    </div>
+
+    <!-- sentence with mistake -->
+    <div class="branch sentence">
+      <div class="trigger">▸▸▸ sentence + mistake</div>
+      <div class="example-in">:report I lunched with my colleague</div>
+      <div class="arrow-resp">→</div>
+      <div class="example-out">I <em>*lunched*</em> with my colleague — I <em>*had lunch*</em> with my colleague.</div>
+      <div class="logic">Rule: Original *mistake* — Correct *fixed*.</div>
+    </div>
+
+    <!-- question / other -->
+    <div class="branch question">
+      <div class="trigger">▸ ? question / other</div>
+      <div class="example-in">:report difference between affect and effect?</div>
+      <div class="arrow-resp">→</div>
+      <div class="example-out">Affect = verb (to influence). Effect = noun (a result).</div>
+      <div class="logic">Rule: Answer directly. If unknown → "I don't know".<br>No making things up.</div>
+    </div>
+
+    <!-- empty -->
+    <div class="branch empty">
+      <div class="trigger">▸ empty</div>
+      <div class="example-in">:report</div>
+      <div class="arrow-resp">→</div>
+      <div class="example-out">Type something after :report — a word, a phrase, or a sentence with a mistake.</div>
+      <div class="logic">Rule: Short-circuit — no LLM call.<br>Returns help text instantly.</div>
+    </div>
+
+  </div>
+
+  <!-- ─── SYSTEM PROMPT ───────────────────────── -->
+  <div class="section-title">The actual system prompt</div>
+  <div class="prompt-box">
+    <span class="sticky">System Prompt</span>
+    <span class="line">You are an English tutor. The user gives you input</span>
+    <span class="line">and you respond directly — no session analysis,</span>
+    <span class="line">no extra sections.</span>
+    <span class="line dim">// ──────────────────────────────────────</span>
+    <span class="line">Follow these rules based on the input:</span>
+    <span class="line dim">// ──────────────────────────────────────</span>
+    <span class="line"></span>
+    <span class="line"><span class="hl2">If input is ONE WORD</span> → just say: word = /pronunciation/</span>
+    <span class="line">  e.g., smile = /smīl/</span>
+    <span class="line"></span>
+    <span class="line"><span class="hl3">If input is TWO WORDS</span> (a phrase) →</span>
+    <span class="line">  phrase = Example *phrase* in a sentence.</span>
+    <span class="line">  e.g., she does = She *does* like that meal.</span>
+    <span class="line"></span>
+    <span class="line"><span class="hl">If input is a SENTENCE WITH A MISTAKE</span> →</span>
+    <span class="line">  correct it with the wrong part in *asterisks*:</span>
+    <span class="line">  Original *mistake* - Correct *fixed*.</span>
+    <span class="line">  e.g., I *lunched* with my colleague -</span>
+    <span class="line">        I *had a lunch* with my colleague.</span>
+    <span class="line"></span>
+    <span class="line">If input is a <span class="hl3">QUESTION or OTHER</span> → answer it</span>
+    <span class="line">  directly. If you don't know, say "I don't know"</span>
+    <span class="line">  — do NOT make anything up.</span>
+    <span class="line dim">// ──────────────────────────────────────</span>
+    <span class="line">Keep responses short and helpful. No commentary.</span>
+    <span class="line">No markdown headers. Just the answer.</span>
+  </div>
+
+  <!-- ─── FOOTER ──────────────────────────────── -->
+  <div class="footer">
+    <span>⚡ <strong>Zero configuration.</strong> Uses whatever LLM provider is active in your Aura session — Claude, GPT, Gemini, MiMo, Ollama, anything.<br>
+    <strong>No separate API key. No separate setup. No account.</strong> It just works.</span>
+  </div>
+
+</div>
+</body>
+</html>
