@@ -104,7 +104,7 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
     component: 'limit',
     description: 'T_max — the hard halting bound that makes the REAL machine decidable (terminates within 150 turns), unlike the unbounded theoretical AAM.',
     file: 'src/config/defaults.ts',
-    line: 10,
+    line: 17,
     mustContain: 'maxTurns: 150',
   },
   {

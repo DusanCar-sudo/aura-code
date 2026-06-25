@@ -1,6 +1,50 @@
 # Changelog
 
 All notable changes to Aura Code are documented here.
+## [0.6.1] — 2026-06-25
+
+### Added
+- **`:rem` graph** — parses `dreams/*.md` into a night/tag relations graph instead of just dumping the latest dream file; terminal view (timeline, top recurring tags, recent detail) plus `:rem --html` for a standalone SVG graph + ranked table at `dreams/rem.html`
+- **`:machina`** — formal model of Aura as an Abstract Agent Machine, the 5-tuple (S, P, O, δ, s₀); every structural claim (main loop, oracle call, safety gate, compaction threshold, maxTurns, primitives) is checked against the live source tree at run time rather than asserted once and left to drift. `:machina --html` writes the full writeup + diagram to `docs/machina.html`
+- `⚠` high-token-usage marker for `:machina` in `:help`, plus a runtime warning printed before it executes
+
+### Fixed
+- **402 cost-gate errors** — default `maxTokens` lowered from 4096 to 2048 (aligned across all providers); cost-gated endpoints (OpenRouter `:free` routes, low-balance keys) reject on worst-case cost (`prompt_tokens + max_tokens`), so a high ceiling could trigger 402 even with credit remaining
+
+### Tests
+- `:dream` consolidation: 8 new tests covering the empty-day skip, cutoff advancement, `since`/`full` filtering, and the no-burn-on-failure invariant (including the Ollama fallback path)
+- `:rem`: 20 new tests covering dream-file parsing, graph construction, and both renderers
+- `:machina`: 15 new tests, including one that runs against the real checked-out source and fails if any AAM claim has drifted
+
+## [0.6.0] — 2026-06-25
+
+### Added
+- **Gmail OAuth setup flow** — `setup`/`setup_finish`/`setup_status` commands; tokens never echoed in chat
+- **`:research` command** — multi-step research saved to `research/*.md`
+- **`:council` (Ecclesia)** — 5-agent panel research with synthesized verdict
+- **Gmail API tool** — read, send, and list emails directly from Aura
+- **Telegram wizard** — interactive Telegram bot setup through CLI
+- **Telegram per-chat history** — conversation history no longer starts fresh every message; `/clear` actually clears it
+- **Telegram voice** — IPv6 fix with curl fallback; local file upload support
+- **Learnlight engine** — lesson-prep, report, and driven modules
+- **Video render** — animation rendering pipeline
+- **Viz** — stable 3D-spread orbit (no flicker) + working scroll-zoom
+- Gmail send now detects HTML content and sets correct Content-Type; adds `From` header from authenticated user
+
+### Documentation
+- `docs/GMAIL-SETUP.md` — Gmail OAuth setup guide
+- `docs/TELEGRAM-SETUP.md` — Telegram bot setup guide (recovered)
+- `docs/HER_RUBYNESS.md` — Her Rubyness documentation
+- `docs/KANBAN-MANUAL.md` — Kanban board manual
+
+### Fixed
+- `marked` dependency added to `package.json` (was only in lockfile, broke `npm ci` in CI)
+- RubyModel tests now deterministic (mock delegate, not global fetch)
+- Web-build detector false positives narrowed
+- `:dream` no longer burns episodes on provider failure
+- Provider test strips routing prefixes from model IDs
+- Puppeteer `page.evaluate` now has DOM lib reference
+- Gmail send includes proper `From` header and HTML content type detection
 
 ## Unreleased
 
