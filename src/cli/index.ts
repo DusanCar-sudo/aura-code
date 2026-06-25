@@ -1323,7 +1323,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :viz, :dashboard        Generate and open the memory dashboard',
       '  :dream                  [experimental] Consolidate today\'s episodes into a dated dream (dreams/*.md)',
       '  :dream full             [experimental] Consolidate ALL episodes, ignoring the last-dream cutoff',
-      '  :rem                    [experimental] List dream files and open the most recent one',
+      '  :rem                    Show the dream relations graph (which tags recur, and when) in the terminal',
+      '  :rem --html              Also write a visual graph to dreams/rem.html',
       '  :research <topic>       Multi-step research pass, saved to research/*.md (inspired by DeerFlow)',
       '  :council <topic>        Ecclesia — 5 independent agents research the topic, synthesized into one verdict (council/*.md)',
       '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
@@ -1561,20 +1562,13 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':rem') {
-    const dir = path.join(c.ctx.root, 'dreams');
-    let files: string[] = [];
-    try {
-      files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort().reverse();
-    } catch { /* no dreams dir */ }
-    if (files.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No dreams yet. Run :dream after some work.\n'));
-    } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Dreams\n'));
-      for (const f of files.slice(0, 20)) console.log(chalk.hex('#ede0cc')(`  ${f}`));
-      const latest = path.join(dir, files[0]);
-      console.log(chalk.hex('#8a7768')(`\n  Most recent: ${latest}\n`));
-      console.log(chalk.hex('#4e3d30')(fs.readFileSync(latest, 'utf8')));
+  if (input === ':rem' || input === ':rem --html' || input === ':rem -html') {
+    const wantsHtml = input !== ':rem';
+    const { runRem } = await import('../rem/index.js');
+    const res = runRem({ projectRoot: c.ctx.root, writeHtml: wantsHtml });
+    console.log(res.terminalOutput);
+    if (res.htmlPath) {
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Graph written: ${res.htmlPath}\n`));
     }
     return { handled: true };
   }
