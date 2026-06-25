@@ -75,7 +75,7 @@ function loadToken(): TokenFile {
 
 function saveToken(token: TokenFile) {
   fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2));
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
 }
 
 /**
@@ -98,7 +98,7 @@ function saveSetupState(s: { client_id: string; client_secret: string }) {
   // restart between step 1 and step 2 of the SAME setup attempt, and is
   // deleted as soon as setup_finish succeeds or fails terminally.
   fs.mkdirSync(path.dirname(SETUP_STATE_PATH), { recursive: true });
-  fs.writeFileSync(SETUP_STATE_PATH, JSON.stringify(s));
+  fs.writeFileSync(SETUP_STATE_PATH, JSON.stringify(s), { mode: 0o600 });
 }
 
 function loadSetupState(): { client_id: string; client_secret: string } | null {
