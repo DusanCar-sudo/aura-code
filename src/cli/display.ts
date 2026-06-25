@@ -271,7 +271,12 @@ export function formatContextBar(
   estimated: boolean,
 ): string {
   const pct = Math.round((used / limit) * 100);
-  const filled = Math.round(pct / 10);
+  // Clamp: `used` can exceed `limit` (e.g. a session overruns the model's
+  // context window faster than compaction catches up, or `limit` is wrong
+  // for the active model). Without clamping, filled > 10 makes `empty`
+  // negative, and '░'.repeat(negative) throws RangeError, crashing the
+  // entire process on what should just be a "100% full" bar.
+  const filled = Math.min(10, Math.max(0, Math.round(pct / 10)));
   const empty = 10 - filled;
   const bar = chalk.hex('#cc785c')('█'.repeat(filled)) + chalk.hex('#4e3d30')('░'.repeat(empty));
 
