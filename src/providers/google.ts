@@ -15,7 +15,7 @@ export class GoogleProvider implements LLMProvider {
 
   constructor(config: ProviderConfig) {
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 8192;
+    this.maxTokens = config.maxTokens ?? 2048; // aligned with DEFAULTS.maxTokens (402 cost-gate fix)
     this.client = new GoogleGenerativeAI(
       config.apiKey ?? getApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY') ?? '',
     );
