@@ -47,6 +47,7 @@ function loadToken() {
     client_secret: string;
     scopes?: string[];
     expiry?: string;
+    email?: string;
   };
 }
 
@@ -198,8 +199,16 @@ export async function gmailTool(input: GmailInput): Promise<string> {
         if (!input.subject) return 'Error: subject is required for send';
         if (!input.body) return 'Error: body is required for send';
 
+        // Determine content type — HTML if body contains HTML tags, otherwise plain text
+        const isHtml = /<html|<body|<div|<p|<br|<table|<h[1-6]/i.test(input.body);
+        const contentType = isHtml ? 'text/html; charset=UTF-8' : 'text/plain; charset=UTF-8';
+
+        // Get sender email from token or use default
+        const tokenData = loadToken();
+        const fromEmail = tokenData.email || 'milodule3@gmail.com';
+
         const raw = Buffer.from(
-          `To: ${input.to}\r\nSubject: ${input.subject}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${input.body}`,
+          `From: ${fromEmail}\r\nTo: ${input.to}\r\nSubject: ${input.subject}\r\nMIME-Version: 1.0\r\nContent-Type: ${contentType}\r\n\r\n${input.body}`,
         ).toString('base64url');
 
         const data = (await gmailApi<{ id: string }>('/users/me/messages', {
