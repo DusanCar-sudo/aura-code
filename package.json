@@ -41,6 +41,7 @@
     "express": "^5.2.1",
     "glob": "^10.4.5",
     "gpt-tokenizer": "^3.4.0",
+    "marked": "^18.0.5",
     "minimist": "^1.2.8",
     "openai": "^4.68.4",
     "pptxgenjs": "^4.0.1",
