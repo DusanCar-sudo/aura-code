@@ -80,7 +80,7 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
     component: 'delta',
     description: 'The safety gate inside δ — tool calls are checked against permissions before primitives execute.',
     file: 'src/agent/loop.ts',
-    line: 224,
+    line: 241,
     mustContain: 'permissions.check(',
   },
   {
