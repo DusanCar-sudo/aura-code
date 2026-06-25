@@ -1323,11 +1323,12 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :viz, :dashboard        Generate and open the memory dashboard',
       '  :dream                  [experimental] Consolidate today\'s episodes into a dated dream (dreams/*.md)',
       '  :dream full             [experimental] Consolidate ALL episodes, ignoring the last-dream cutoff',
-      '  :rem                    Show the dream relations graph (which tags recur, and when) in the terminal',
-      '  :rem --html              Also write a visual graph to dreams/rem.html',
+      '  :rem                    [experimental] List dream files and open the most recent one',
       '  :research <topic>       Multi-step research pass, saved to research/*.md (inspired by DeerFlow)',
       '  :council <topic>        Ecclesia — 5 independent agents research the topic, synthesized into one verdict (council/*.md)',
       '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
+      '  ⚠ :machina               The Abstract Agent Machine — formal model, verified against this source tree',
+      '  ⚠ :machina --html        Also write the full writeup + diagram to docs/machina.html',
       '  :design [slug|list|off] Set/list the design system auto-applied to UI builds',
       '  /stats, /usage          Show token + cost usage this session',
       '  /clear, /reset          Reset cumulative usage stats',
@@ -1337,6 +1338,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :approve normal         Require confirmation for destructive ops',
       '  :approve read-only      Block all write operations',
       '  :quit, :q, /exit        Exit',
+      '',
+      '  ⚠ = extremely high token usage — reads multiple source files and writes a careful long-form result',
       '',
     ].join('\n')));
     return { handled: true };
@@ -1562,13 +1565,20 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':rem' || input === ':rem --html' || input === ':rem -html') {
-    const wantsHtml = input !== ':rem';
-    const { runRem } = await import('../rem/index.js');
-    const res = runRem({ projectRoot: c.ctx.root, writeHtml: wantsHtml });
-    console.log(res.terminalOutput);
-    if (res.htmlPath) {
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Graph written: ${res.htmlPath}\n`));
+  if (input === ':rem') {
+    const dir = path.join(c.ctx.root, 'dreams');
+    let files: string[] = [];
+    try {
+      files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort().reverse();
+    } catch { /* no dreams dir */ }
+    if (files.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No dreams yet. Run :dream after some work.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold('\n  Dreams\n'));
+      for (const f of files.slice(0, 20)) console.log(chalk.hex('#ede0cc')(`  ${f}`));
+      const latest = path.join(dir, files[0]);
+      console.log(chalk.hex('#8a7768')(`\n  Most recent: ${latest}\n`));
+      console.log(chalk.hex('#4e3d30')(fs.readFileSync(latest, 'utf8')));
     }
     return { handled: true };
   }
@@ -1584,6 +1594,18 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const state = on ? chalk.hex('#5a9e6e')('ON') : chalk.hex('#b15439')('OFF');
     console.log(chalk.hex('#8a7768')(`\n  Ruby Principle is now ${state} for this session.\n`));
     return { handled: true, rubyEnabled: on };
+  }
+
+  if (input === ':machina' || input === ':machina --html' || input === ':machina -html') {
+    const wantsHtml = input !== ':machina';
+    console.log(chalk.hex('#b15439')('\n  ⚠ :machina reads several source files and writes a careful long-form result — extremely high token usage.\n'));
+    const { runMachina } = await import('../machina/index.js');
+    const res = runMachina({ outputRoot: c.ctx.root, writeHtml: wantsHtml });
+    console.log(res.terminalOutput);
+    if (res.htmlPath) {
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Written: ${res.htmlPath}\n`));
+    }
+    return { handled: true };
   }
 
   if (input === ':design' || input.startsWith(':design ')) {
