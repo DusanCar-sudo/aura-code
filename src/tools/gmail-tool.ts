@@ -8,59 +8,120 @@ import type { ToolDefinition } from '../providers/types.js';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface GmailInput {
-  action: 'list' | 'send' | 'read';
+  action: 'list' | 'send' | 'read' | 'setup' | 'setup_finish' | 'setup_status';
   to?: string;
   subject?: string;
   body?: string;
   max_results?: number;
   message_id?: string;
+  // setup
+  client_id?: string;
+  client_secret?: string;
+  code?: string;
+  email?: string;
 }
 
 export const GMAIL_DEFINITION: ToolDefinition = {
   name: 'gmail',
   description:
-    'Read and write emails via Gmail API. Uses existing Google OAuth from ~/.hermes/google_token.json. ' +
-    'Actions: list (recent emails), read (full message by id), send (compose new email).',
+    'Read and write emails via Gmail API. Uses OAuth from ~/.hermes/google_token.json. ' +
+    'Actions: list, read, send (require an existing token — use setup_status to check). ' +
+    'setup (step 1: takes client_id + client_secret, returns a URL for the user to open and ' +
+    'approve, never echoes secrets back). setup_finish (step 2: takes the "code" from the ' +
+    'redirect URL, exchanges it for tokens, and saves them — never returns the token itself). ' +
+    'setup_status (checks whether a working token already exists, with no secret values shown).',
   parameters: {
     type: 'object',
     properties: {
-      action:     { type: 'string', description: 'Action: list, read, send' },
-      to:         { type: 'string', description: 'Recipient email (for send)' },
-      subject:    { type: 'string', description: 'Email subject (for send/read)' },
-      body:       { type: 'string', description: 'Email body text (for send)' },
-      max_results:{ type: 'number', description: 'Max results for list (default: 10)' },
-      message_id: { type: 'string', description: 'Gmail message ID to read (for read)' },
+      action:        { type: 'string', description: 'Action: list, read, send, setup, setup_finish, setup_status' },
+      to:            { type: 'string', description: 'Recipient email (for send)' },
+      subject:       { type: 'string', description: 'Email subject (for send/read)' },
+      body:          { type: 'string', description: 'Email body text (for send)' },
+      max_results:   { type: 'number', description: 'Max results for list (default: 10)' },
+      message_id:    { type: 'string', description: 'Gmail message ID to read (for read)' },
+      client_id:     { type: 'string', description: 'Google OAuth client ID (for setup)' },
+      client_secret: { type: 'string', description: 'Google OAuth client secret (for setup)' },
+      code:          { type: 'string', description: 'Authorization code from the redirect URL (for setup_finish)' },
+      email:         { type: 'string', description: 'The Gmail address being connected (for setup_finish)' },
     },
     required: ['action'],
   },
 };
 
 const TOKEN_PATH = path.join(os.homedir(), '.hermes', 'google_token.json');
+const SETUP_STATE_PATH = path.join(os.homedir(), '.hermes', '.gmail_setup_state.json');
+const REDIRECT_URI = 'http://localhost:8080/';
+const SETUP_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.modify',
+].join(' ');
 
-function loadToken() {
-  if (!fs.existsSync(TOKEN_PATH)) throw new Error(`Google token not found at ${TOKEN_PATH}`);
-  return JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8')) as {
-    token: string;
-    refresh_token: string;
-    token_uri?: string;
-    client_id: string;
-    client_secret: string;
-    scopes?: string[];
-    expiry?: string;
-    email?: string;
-  };
+interface TokenFile {
+  token: string;
+  refresh_token: string;
+  token_uri?: string;
+  client_id: string;
+  client_secret: string;
+  scopes?: string[];
+  expiry?: string;
+  email?: string;
 }
 
-function saveToken(token: Record<string, unknown>) {
+function loadToken(): TokenFile {
+  if (!fs.existsSync(TOKEN_PATH)) throw new Error(`Google token not found at ${TOKEN_PATH}`);
+  return JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8')) as TokenFile;
+}
+
+function saveToken(token: TokenFile) {
+  fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2));
 }
 
-async function refreshAccess(token: Record<string, unknown>): Promise<string> {
-  const tokenUri = (token.token_uri as string) || 'https://oauth2.googleapis.com/token';
+/**
+ * Setup is split into two steps because OAuth requires a human to approve
+ * access in a browser between them. The client_id/client_secret given in
+ * step 1 are held ONLY in memory between the two tool calls (never written to
+ * disk, never echoed back) — they're persisted to TOKEN_PATH only once the
+ * full token exchange in setup_finish succeeds. If the user never completes
+ * step 2, nothing is left on disk.
+ *
+ * Critically: at no point does this tool return token, refresh_token,
+ * client_secret, or any other credential value as part of its string result.
+ * Those values exist only inside this process and inside TOKEN_PATH on disk —
+ * never in the text that flows back into the conversation.
+ */
+let pendingSetup: { client_id: string; client_secret: string } | null = null;
+
+function saveSetupState(s: { client_id: string; client_secret: string }) {
+  // Held in-memory primarily; this on-disk copy only survives a process
+  // restart between step 1 and step 2 of the SAME setup attempt, and is
+  // deleted as soon as setup_finish succeeds or fails terminally.
+  fs.mkdirSync(path.dirname(SETUP_STATE_PATH), { recursive: true });
+  fs.writeFileSync(SETUP_STATE_PATH, JSON.stringify(s));
+}
+
+function loadSetupState(): { client_id: string; client_secret: string } | null {
+  if (pendingSetup) return pendingSetup;
+  if (!fs.existsSync(SETUP_STATE_PATH)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(SETUP_STATE_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function clearSetupState() {
+  pendingSetup = null;
+  try { fs.unlinkSync(SETUP_STATE_PATH); } catch { /* already gone */ }
+}
+
+async function refreshAccess(token: TokenFile): Promise<string> {
+  const tokenUri = token.token_uri || 'https://oauth2.googleapis.com/token';
   const body = new URLSearchParams({
-    client_id: token.client_id as string,
-    client_secret: token.client_secret as string,
-    refresh_token: token.refresh_token as string,
+    client_id: token.client_id,
+    client_secret: token.client_secret,
+    refresh_token: token.refresh_token,
     grant_type: 'refresh_token',
   });
 
@@ -87,12 +148,9 @@ async function refreshAccess(token: Record<string, unknown>): Promise<string> {
 async function getValidToken(): Promise<string> {
   const token = loadToken();
   if (token.token) {
-    // If expiry present and still valid, use it
     if (token.expiry && Date.now() < new Date(token.expiry).getTime() + 60000) {
       return token.token as string;
     }
-    // Try the token anyway; if 401, we'll refresh on auth error below
-    token.token as string;
   }
   if (!token.refresh_token) throw new Error('No refresh_token available to obtain a new access token');
   return refreshAccess(token);
@@ -116,7 +174,6 @@ async function gmailApi(path: string, init?: RequestInit) {
   });
 
   if (res.status === 401) {
-    // Refresh and retry once
     const tokenData = loadToken();
     if (tokenData.refresh_token) {
       token = await refreshAccess(tokenData);
@@ -151,7 +208,6 @@ function extractPlainBody(msg: any): string {
   if (msg.payload?.parts) {
     const plain = msg.payload.parts.find((p: any) => p.mimeType === 'text/plain');
     if (plain?.body?.data) return decodeBase64Url(plain.body.data);
-    // multipart container without direct data
     for (const p of msg.payload.parts) {
       if (p.parts) {
         const nested = p.parts.find((n: any) => n.mimeType === 'text/plain' && n.body?.data);
@@ -166,6 +222,110 @@ function extractPlainBody(msg: any): string {
 export async function gmailTool(input: GmailInput): Promise<string> {
   try {
     switch (input.action) {
+      case 'setup_status': {
+        if (!fs.existsSync(TOKEN_PATH)) return 'Not connected. No Gmail token found. Run setup to connect.';
+        try {
+          const t = loadToken();
+          const valid = !!t.refresh_token;
+          return valid
+            ? `Connected${t.email ? ` as ${t.email}` : ''}. Token file present with a refresh token.`
+            : 'Token file exists but has no refresh_token — re-run setup.';
+        } catch {
+          return 'Token file exists but could not be parsed — re-run setup.';
+        }
+      }
+
+      case 'setup': {
+        if (!input.client_id || !input.client_secret) {
+          return 'Error: setup requires client_id and client_secret (from Google Cloud Console → APIs & Services → Credentials → OAuth client ID, type "Desktop app").';
+        }
+        // Held only in memory + a short-lived local state file; never echoed.
+        pendingSetup = { client_id: input.client_id, client_secret: input.client_secret };
+        saveSetupState(pendingSetup);
+
+        const params = new URLSearchParams({
+          client_id: input.client_id,
+          redirect_uri: REDIRECT_URI,
+          response_type: 'code',
+          scope: SETUP_SCOPES,
+          access_type: 'offline',
+          prompt: 'consent',
+        });
+        const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+        return (
+          `Step 1 of 2: open this URL, sign in, and approve access:\n\n${url}\n\n` +
+          `You'll be redirected to a localhost address that fails to load — that's expected, ` +
+          `nothing is listening there. Copy the "code=" value from that URL's address bar ` +
+          `(everything after "code=" and before the next "&", if any), then tell me to finish ` +
+          `setup with that code and your Gmail address. I will not display the code, the ` +
+          `client secret, or the resulting token back to you — only a success or failure message.`
+        );
+      }
+
+      case 'setup_finish': {
+        const state = loadSetupState();
+        if (!state) {
+          return 'Error: no setup in progress. Run the setup action first (with client_id and client_secret) to get a fresh authorization URL.';
+        }
+        if (!input.code) {
+          return 'Error: setup_finish requires the "code" value copied from the redirect URL.';
+        }
+
+        const body = new URLSearchParams({
+          code: input.code,
+          client_id: state.client_id,
+          client_secret: state.client_secret,
+          redirect_uri: REDIRECT_URI,
+          grant_type: 'authorization_code',
+        });
+
+        let res: Response;
+        try {
+          res = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+          });
+        } catch (e: any) {
+          return `Setup failed: could not reach Google's token endpoint (${e?.message ?? String(e)}). The authorization code is single-use — you'll need to run setup again to get a fresh one.`;
+        }
+
+        if (!res.ok) {
+          // Do not include res text verbatim if it might contain the code/secret echoed back;
+          // Google's error responses for this endpoint don't, but we keep this conservative.
+          clearSetupState();
+          return `Setup failed: Google rejected the authorization code (HTTP ${res.status}). The code is single-use and may have expired or been used already — run setup again for a fresh URL.`;
+        }
+
+        const data = (await res.json()) as { access_token: string; refresh_token?: string; expires_in?: number; scope?: string };
+
+        if (!data.refresh_token) {
+          clearSetupState();
+          return (
+            'Setup partially failed: Google did not return a refresh_token, which means future ' +
+            'tokens cannot be auto-renewed. This usually happens when access was already granted ' +
+            'previously. Remove the app at https://myaccount.google.com/permissions and run setup ' +
+            'again to force a fresh consent.'
+          );
+        }
+
+        const tokenFile: TokenFile = {
+          token: data.access_token,
+          refresh_token: data.refresh_token,
+          token_uri: 'https://oauth2.googleapis.com/token',
+          client_id: state.client_id,
+          client_secret: state.client_secret,
+          scopes: (data.scope ?? SETUP_SCOPES).split(' '),
+          expiry: data.expires_in ? new Date(Date.now() + data.expires_in * 1000).toISOString() : undefined,
+          email: input.email,
+        };
+        saveToken(tokenFile);
+        clearSetupState();
+
+        return `✓ Gmail connected${input.email ? ` for ${input.email}` : ''}. You can now use list, read, and send.`;
+      }
+
       case 'list': {
         const max = input.max_results ?? 10;
         const data = (await gmailApi<{ messages?: { id: string }[] }>(
@@ -199,11 +359,9 @@ export async function gmailTool(input: GmailInput): Promise<string> {
         if (!input.subject) return 'Error: subject is required for send';
         if (!input.body) return 'Error: body is required for send';
 
-        // Determine content type — HTML if body contains HTML tags, otherwise plain text
         const isHtml = /<html|<body|<div|<p|<br|<table|<h[1-6]/i.test(input.body);
         const contentType = isHtml ? 'text/html; charset=UTF-8' : 'text/plain; charset=UTF-8';
 
-        // Get sender email from token or use default
         const tokenData = loadToken();
         const fromEmail = tokenData.email || 'milodule3@gmail.com';
 
