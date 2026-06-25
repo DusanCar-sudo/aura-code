@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { exec, execSync } from 'child_process';
 
-import { createProvider, getApiKeyForModel, registerCustomProviders } from '../providers/factory.js';
+import { createProvider, getApiKeyForModel, registerCustomProviders, resolveTaskModelBaseUrl } from '../providers/factory.js';
 import { getApiKey } from '../util/env.js';
 import * as voiceModule from './telegram-voice.js';
 import { loadProjectContext } from '../agent/context.js';
@@ -112,14 +112,12 @@ function createLLMProvider(): LLMProvider {
   const globalCfg = loadGlobalConfig();
   const apiKey = process.env.AURA_API_KEY
     ?? getApiKeyForModel(TASK_MODEL);
-  const baseUrl = process.env.AURA_BASE_URL
-    ?? fileConfig.baseUrl
-    ?? globalCfg?.baseUrl;
-    // Deliberately NOT falling back to the wizard's saved baseUrl here —
-    // createProvider() already applies it internally, but only when the
-    // saved config's model actually matches TASK_MODEL. Resolving it here
-    // too bypasses that check entirely, which is exactly how a MiMo model
-    // string previously ended up paired with a DeepSeek endpoint.
+  const baseUrl = resolveTaskModelBaseUrl({
+    taskModel: TASK_MODEL,
+    envBaseUrl: process.env.AURA_BASE_URL,
+    fileConfig,
+    globalCfg,
+  });
   return createProvider({
     model: TASK_MODEL,
     apiKey,

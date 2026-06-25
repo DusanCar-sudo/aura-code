@@ -176,6 +176,38 @@ export function resolveProviderTransport(
 }
 
 /**
+ * Resolve which baseUrl (if any) should be trusted for a given task model,
+ * given a project-level config and/or a global config that each carry their
+ * own (model, baseUrl) pair.
+ *
+ * A saved config's baseUrl is only trustworthy if it was saved alongside
+ * the SAME model that's actually about to be called. Without this check, a
+ * project's .aura.json or the global config can hold a baseUrl from a
+ * previous provider setup (e.g. DeepSeek's https://api.deepseek.com/v1)
+ * that gets paired with whatever the task model resolves to NOW (e.g.
+ * opencode/big-pickle, from a later env-var override) — sending an
+ * OpenCode model name to DeepSeek's endpoint, which DeepSeek then rejects
+ * with a 400 ("supported API model names are deepseek-v4-pro or
+ * deepseek-v4-flash, but you passed big-pickle").
+ *
+ * createProvider()'s own internal saved-config merge has an equivalent
+ * guard for provider.json (the wizard's saved config) — this function
+ * covers the OTHER two config sources (project-level fileConfig and the
+ * global config), which callers like telegram-bot.ts read independently
+ * before ever reaching createProvider().
+ */
+export function resolveTaskModelBaseUrl(opts: {
+  taskModel: string;
+  envBaseUrl?: string;
+  fileConfig?: { model?: string; baseUrl?: string };
+  globalCfg?: { defaultModel?: string; baseUrl?: string } | null;
+}): string | undefined {
+  return opts.envBaseUrl
+    ?? (opts.fileConfig?.model === opts.taskModel ? opts.fileConfig?.baseUrl : undefined)
+    ?? (opts.globalCfg?.defaultModel === opts.taskModel ? opts.globalCfg?.baseUrl : undefined);
+}
+
+/**
  * Auto-detect the right provider from the model name, then instantiate it.
  *
  * Model naming conventions:
