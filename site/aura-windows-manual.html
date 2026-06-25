@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Code — Windows 11 User Manual</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --ruby:#b80000;--ruby-deep:#8b0000;--ruby-dark:#5c0000;--ruby-glow:#ff2020;
+  --gold:#c8a45c;--gold-light:#e2c97e;--gold-dark:#8b6914;
+  --cream:#faf5ed;--cream-warm:#f5ead6;
+  --black:#0d0d0d;--charcoal:#1a1a1a;--slate:#2d2d2d;--grey:#6b6b6b;
+  --light:#e8e4dc;--white:#fcfaf7;
+  --success:#2ea043;--warning:#d2991d;--info:#388bfd;
+  --font-sans:'Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:'JetBrains Mono','Cascadia Code','Fira Code',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--font-sans);background:var(--black);color:var(--light);line-height:1.7;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse at 15% 10%,rgba(184,0,0,0.12) 0%,transparent 55%),radial-gradient(ellipse at 85% 90%,rgba(200,164,92,0.07) 0%,transparent 55%),radial-gradient(ellipse at 50% 50%,rgba(184,0,0,0.04) 0%,transparent 70%);pointer-events:none}
+
+/* Navigation */
+nav{position:sticky;top:0;z-index:100;background:rgba(13,13,13,0.88);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);border-bottom:1px solid rgba(200,164,92,0.2);padding:0 2rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:1.25rem;height:64px;overflow-x:auto}
+.nav-logo{font-weight:800;font-size:1.25rem;color:var(--gold);letter-spacing:-0.02em;white-space:nowrap;flex-shrink:0}
+.nav-logo span{color:var(--ruby-glow)}
+nav a{color:var(--light);text-decoration:none;font-size:0.85rem;font-weight:500;white-space:nowrap;transition:color 0.2s;position:relative}
+nav a:hover,nav a.active{color:var(--gold)}
+nav a::after{content:'';position:absolute;bottom:-4px;left:0;width:0;height:2px;background:var(--gold);transition:width 0.25s}
+nav a:hover::after,nav a.active::after{width:100%}
+
+/* Page Layout */
+.page{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:3rem 2rem 6rem}
+
+/* Hero */
+.hero{text-align:center;padding:5rem 0 4rem}
+.hero-crown{width:80px;height:80px;margin:0 auto 2rem}
+.hero-crown svg{width:100%;height:100%}
+.hero h1{font-size:clamp(3rem,7vw,5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;background:linear-gradient(135deg,var(--gold-light) 0%,var(--gold) 40%,var(--gold-dark) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:0.75rem}
+.hero h1 .ruby-line{display:block;font-size:0.45em;font-weight:600;letter-spacing:0.3em;text-transform:uppercase;background:linear-gradient(135deg,var(--ruby-glow),var(--ruby));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:0.5rem}
+.hero-tagline{font-size:1.35rem;color:var(--grey);font-style:italic;margin-bottom:2rem}
+.hero-tagline em{font-style:normal;color:var(--gold);font-weight:600}
+.hero-desc{color:var(--grey);max-width:550px;margin:0 auto 2rem;font-size:1.05rem;line-height:1.8}
+.hero-desc strong{color:var(--white)}
+.hero-cta{display:inline-flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+
+/* Buttons */
+.btn{display:inline-block;padding:0.85rem 2.2rem;border-radius:6px;font-weight:600;font-size:0.95rem;text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;font-family:var(--font-sans)}
+.btn-primary{background:var(--ruby);color:var(--white);box-shadow:0 0 0 1px rgba(184,0,0,0.4),0 4px 20px rgba(184,0,0,0.3)}
+.btn-primary:hover{background:var(--ruby-glow);transform:translateY(-2px);box-shadow:0 0 0 1px rgba(255,32,32,0.5),0 8px 30px rgba(184,0,0,0.4)}
+.btn-gold{background:transparent;color:var(--gold);box-shadow:0 0 0 1px rgba(200,164,92,0.3)}
+.btn-gold:hover{background:rgba(200,164,92,0.1);color:var(--gold-light);box-shadow:0 0 0 1px rgba(200,164,92,0.6)}
+
+/* Sections */
+.section{margin:5rem 0}
+.section-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:var(--ruby-glow);margin-bottom:0.5rem}
+.section-title{font-size:2.25rem;font-weight:800;letter-spacing:-0.02em;color:var(--white);line-height:1.2;margin-bottom:0.75rem}
+.section-subtitle{font-size:1.05rem;color:var(--grey);max-width:600px;line-height:1.7}
+
+/* Cards */
+.card{background:var(--charcoal);border:1px solid rgba(200,164,92,0.12);border-radius:12px;padding:2.5rem;margin-bottom:2rem;position:relative;overflow:hidden;transition:all 0.3s}
+.card:hover{border-color:rgba(200,164,92,0.3);transform:translateY(-2px)}
+.card::before{content:'';position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,var(--ruby),var(--gold));opacity:0;transition:opacity 0.3s}
+.card:hover::before{opacity:1}
+.card h3{font-size:1.35rem;font-weight:700;color:var(--white);margin-bottom:1rem}
+.card p,.card li{color:var(--light);font-size:0.95rem;line-height:1.9}
+.card ul,.card ol{padding-left:1.5rem;margin:0.75rem 0}
+.card li{margin-bottom:0.35rem}
+.card code{font-family:var(--font-mono);font-size:0.85em;background:var(--slate);padding:2px 8px;border-radius:4px;color:var(--gold-light)}
+.card strong{color:var(--white)}
+.card a{color:var(--info)}
+
+/* TODO Checklist */
+.todo-progress{margin-bottom:2rem}
+.todo-progress-bar{width:100%;height:8px;background:var(--slate);border-radius:99px;overflow:hidden;margin-bottom:0.75rem}
+.todo-progress-fill{height:100%;background:linear-gradient(90deg,var(--success),#4cde6e);border-radius:99px;transition:width 0.5s ease;width:0%}
+.todo-counter{display:flex;justify-content:space-between;align-items:center;color:var(--grey);font-size:0.9rem}
+.todo-counter strong{color:var(--success);font-size:1.1rem}
+.todo-reset{background:transparent;border:1px solid var(--slate);color:var(--grey);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all 0.2s}
+.todo-reset:hover{border-color:var(--ruby);color:var(--ruby-glow)}
+.todo-item{display:flex;align-items:flex-start;gap:1rem;padding:1.25rem 1.5rem;background:var(--charcoal);border:1px solid rgba(200,164,92,0.08);border-radius:10px;margin-bottom:0.75rem;cursor:pointer;transition:all 0.25s;position:relative}
+.todo-item:hover{border-color:rgba(200,164,92,0.25);background:var(--slate)}
+.todo-item.done{opacity:0.6}
+.todo-item.done .todo-text{text-decoration:line-through;text-decoration-color:var(--success)}
+.todo-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--grey);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.25s;font-size:0.8rem;margin-top:2px}
+.todo-item.done .todo-check{background:var(--success);border-color:var(--success);box-shadow:0 0 12px rgba(46,160,67,0.4)}
+.todo-content{flex:1;min-width:0}
+.todo-text{font-weight:500;color:var(--white);margin-bottom:0.25rem}
+.todo-cat{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.15em;color:var(--gold);margin-bottom:0.25rem}
+.todo-detail{font-size:0.85rem;color:var(--grey);line-height:1.6;max-height:0;overflow:hidden;transition:max-height 0.4s ease,padding 0.4s ease}
+.todo-item.open .todo-detail{max-height:200px;padding-top:0.75rem}
+
+/* Code blocks */
+.code-block{background:var(--slate);border:1px solid rgba(200,164,92,0.15);border-radius:8px;padding:1.25rem 1.5rem;margin:1rem 0;overflow-x:auto;font-family:var(--font-mono);font-size:0.85rem;line-height:1.8;color:var(--light)}
+.code-block .prompt{color:var(--grey)}
+.code-block .cmd{color:var(--gold-light)}
+
+/* Tip box */
+.tip-box{background:rgba(200,164,92,0.06);border-left:3px solid var(--gold);padding:1.25rem 1.5rem;border-radius:0 8px 8px 0;margin:1.5rem 0;font-size:0.9rem;color:var(--light)}
+.tip-box strong{color:var(--gold)}
+.tip-box.warning{border-left-color:var(--warning);background:rgba(210,153,29,0.06)}
+.tip-box.success{border-left-color:var(--success);background:rgba(46,160,67,0.06)}
+
+/* Tables */
+.table-wrap{overflow-x:auto;margin:1.5rem 0}
+table{width:100%;border-collapse:collapse;font-size:0.9rem}
+th{text-align:left;padding:0.85rem 1rem;background:var(--slate);color:var(--gold);font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.1em}
+td{padding:0.85rem 1rem;border-bottom:1px solid rgba(200,164,92,0.08)}
+tr:hover td{background:rgba(200,164,92,0.04)}
+
+/* Steps */
+.step{display:flex;gap:1rem;margin-bottom:1.5rem}
+.step-num{width:36px;height:36px;border-radius:50%;background:var(--ruby);color:var(--white);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;flex-shrink:0}
+.step-content{flex:1}
+.step-content h4{color:var(--white);margin-bottom:0.35rem}
+.step-content p{color:var(--light);font-size:0.9rem;line-height:1.7}
+
+/* Footer */
+footer{text-align:center;padding:4rem 2rem;border-top:1px solid rgba(200,164,92,0.12);margin-top:6rem}
+footer p{color:var(--grey);font-size:0.85rem;line-height:1.8}
+footer .heart{color:var(--ruby-glow)}
+
+/* Responsive */
+@media(max-width:768px){
+  .page{padding:2rem 1rem 4rem}
+  .hero{padding:3rem 0 2rem}
+  .hero h1{font-size:2.5rem}
+  .section-title{font-size:1.75rem}
+  .card{padding:1.5rem}
+  nav{padding:0 1rem}
+  .nav-inner{gap:1rem}
+  .btn{padding:0.7rem 1.5rem;font-size:0.9rem}
+}
+
+/* Print-friendly */
+@media print{
+  nav, .todo-reset, .btn{display:none}
+  body{background:white;color:black}
+  .card{background:white;border:1px solid #ccc;break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<!-- NAVIGATION -->
+<nav>
+  <div class="nav-inner">
+    <span class="nav-logo">&#9670; <span>AURA</span> CODE</span>
+    <a href="#start">Home</a>
+    <a href="#todo">&#9989; Checklist</a>
+    <a href="#what-is">What Is Aura</a>
+    <a href="#install">Install</a>
+    <a href="#apikeys">API Keys</a>
+    <a href="#commands">Commands</a>
+    <a href="#modes">Modes</a>
+    <a href="#providers">AI Brains</a>
+    <a href="#safety">Safety</a>
+    <a href="#faq">FAQ</a>
+  </div>
+</nav>
+
+<div class="page">
+
+<!-- HERO -->
+<section class="hero" id="start">
+  <div class="hero-crown">
+    <svg viewBox="0 0 80 80">
+      <defs>
+        <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#e2c97e"/>
+          <stop offset="100%" style="stop-color:#c8a45c"/>
+        </linearGradient>
+      </defs>
+      <polygon points="40,8 52,30 76,32 58,48 62,72 40,60 18,72 22,48 4,32 28,30" fill="none" stroke="url(#cg)" stroke-width="2"/>
+      <polygon points="40,16 48,32 66,34 54,46 57,64 40,56 23,64 26,46 14,34 32,32" fill="url(#cg)" opacity="0.4"/>
+      <circle cx="40" cy="38" r="6" fill="#c8a45c"/>
+    </svg>
+  </div>
+  <h1><span class="ruby-line">Windows 11 Edition</span>Aura Code</h1>
+  <p class="hero-tagline"><em>"I don't try. I verify."</em></p>
+  <p class="hero-desc">A step-by-step guide for <strong>absolute beginners</strong>. No technical knowledge required. If you can type and click a mouse, you can use Aura. This manual will take you from zero to AI-powered coding in about 15 minutes.</p>
+  <div class="hero-cta">
+    <a href="#todo" class="btn btn-primary">&#9989; Start My Setup Checklist</a>
+    <a href="#install" class="btn btn-gold">&#128229; How to Install</a>
+  </div>
+</section>
+
+<!-- TODO CHECKLIST -->
+<section class="section" id="todo">
+  <div class="section-label">Interactive</div>
+  <h2 class="section-title">&#9989; Your Setup Checklist</h2>
+  <p class="section-subtitle">Tick off each step as you complete it. Your progress is saved — come back anytime!</p>
+  
+  <div class="card" style="margin-top:2rem">
+    <div class="todo-progress">
+      <div class="todo-progress-bar"><div class="todo-progress-fill" id="progressFill"></div></div>
+      <div class="todo-counter">
+        <span><strong id="doneCount">0</strong> of <span id="totalCount">12</span> complete</span>
+        <button class="todo-reset" onclick="resetTodos()">&#8635; Reset All</button>
+      </div>
+    </div>
+    <div id="todoList"></div>
+  </div>
+</section>
+
+<!-- WHAT IS AURA -->
+<section class="section" id="what-is">
+  <div class="section-label">Chapter 1</div>
+  <h2 class="section-title">What Is Aura Code?</h2>
+  <p class="section-subtitle">Your personal AI assistant that reads, writes, and fixes code — so you don't have to be a programmer to get things done.</p>
+
+  <div class="card">
+    <h3>In Plain English</h3>
+    <p>Imagine you have a <strong style="color:var(--gold)">super-smart friend</strong> who can look at any folder on your computer and work with its files. That's Aura. You type what you want in <strong>plain English</strong>, and Aura does it.</p>
+    <p style="margin-top:0.75rem">Aura works in a <strong>5-step loop</strong>:</p>
+    <ol>
+      <li><strong style="color:var(--info)">Read</strong> — scans your files and understands your project</li>
+      <li><strong style="color:var(--warning)">Plan</strong> — decides what to change and how</li>
+      <li><strong style="color:var(--ruby-glow)">Execute</strong> — writes code, makes edits, runs commands</li>
+      <li><strong style="color:var(--success)">Verify</strong> — runs tests, checks everything still works</li>
+      <li><strong style="color:var(--gold)">Report</strong> — honestly summarizes what was done with proof</li>
+    </ol>
+    <div class="tip-box">
+      <strong>Real example:</strong> You type <code>aura "add dark mode to my website"</code><br>
+      Aura reads your files, figures out which ones control colors, edits them, and confirms it works. All you did was type one sentence.
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Built by Agents, for Everyone</h3>
+    <p>Aura was <strong style="color:var(--ruby-glow)">built by four AI agents</strong> working together under the direction of Dusan Milosavljevic. She knows this — it's part of her origin story.</p>
+    <p style="margin-top:0.75rem">She works with <strong>all major AI models</strong>: Claude, GPT, Gemini, MiMo, DeepSeek — and even free local models through Ollama. You pick which brain Aura uses.</p>
+    <p style="margin-top:0.75rem">Her framework is called <strong style="color:var(--gold)">Praktess</strong> — from Ancient Greek: <em>"she who acts and executes."</em> Her motto: <em>"I don't try. I verify."</em></p>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="section" id="install">
+  <div class="section-label">Chapter 2</div>
+  <h2 class="section-title">Installing on Windows 11</h2>
+  <p class="section-subtitle">Don't have Node.js yet? No problem. Follow these steps — takes about <strong style="color:var(--white)">10 minutes</strong>.</p>
+
+  <div class="card">
+    <h3>Step 1: Download Node.js</h3>
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Open your web browser</h4><p>Edge, Chrome, or Firefox — any browser works. You already have one!</p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Go to nodejs.org</h4><p>Type <strong>nodejs.org</strong> in the address bar at the top and press Enter.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Click the big green LTS button</h4><p>You'll see two big buttons. Click the one that says <strong style="color:var(--success)">"LTS"</strong> (Long Term Support — the most stable version). A file will download.</p></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Install Node.js</h4><p>Double-click the downloaded <code>node-vXX.XX.X-x64.msi</code> file. Click <strong>Next</strong>, accept the license, keep ALL defaults, click <strong>Install</strong>. When Windows asks "allow this app to make changes?" — click <strong>Yes</strong>.</p></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Finish and restart</h4><p>Click <strong>Finish</strong>. It's a good idea to restart your computer now.</p></div></div>
+  </div>
+
+  <div class="card">
+    <h3>Step 2: Open Windows Terminal</h3>
+    <p>Press the <strong>Windows key</strong> on your keyboard (it looks like a flag, between Ctrl and Alt). Type <code>cmd</code> or <code>Terminal</code>. Press <strong>Enter</strong>.</p>
+    <p style="margin-top:0.75rem">You'll see a black window with white text. This is the <strong>command line</strong> — don't be scared! You only need to type a few simple things.</p>
+    <div class="tip-box"><strong>Tip:</strong> You can also right-click the Start button and select "Terminal" or "Command Prompt".</div>
+  </div>
+
+  <div class="card">
+    <h3>Step 3: Verify Everything Works</h3>
+    <p>Type these commands exactly as shown. Press <strong>Enter</strong> after each line:</p>
+    <div class="code-block">
+      <span class="prompt">C:\Users\You&gt;</span> <span class="cmd">node --version</span><br>
+      <span style="color:var(--success)">v20.11.0</span> &larr; You should see a version number<br><br>
+      <span class="prompt">C:\Users\You&gt;</span> <span class="cmd">npm --version</span><br>
+      <span style="color:var(--success)">10.2.4</span> &larr; npm comes with Node.js automatically
+    </div>
+    <div class="tip-box warning"><strong>If you see an error:</strong> Restart your computer and try again. If it still doesn't work, reinstall Node.js.</div>
+  </div>
+
+  <div class="card">
+    <h3>Step 4: Install Aura Code</h3>
+    <p>In the same terminal, type this command and press Enter:</p>
+    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">npm install -g aura-code</span></div>
+    <p>You'll see <strong>a lot of text scroll by</strong> — that's normal! Wait 1-2 minutes until the blinking cursor returns.</p>
+    <p style="margin-top:1rem">Now verify Aura works:</p>
+    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">aura --version</span><br><span style="color:var(--success)">0.6.2</span> &larr; You're ready!</div>
+    <div class="tip-box success"><strong>Congratulations!</strong> Aura Code is now installed on your computer. Let's set up an API key so she can think.</div>
+  </div>
+</section>
+
+<!-- API KEYS -->
+<section class="section" id="apikeys">
+  <div class="section-label">Chapter 3</div>
+  <h2 class="section-title">Setting Up API Keys</h2>
+  <p class="section-subtitle">An API key is Aura's <strong style="color:var(--white)">connection to an AI brain</strong>. Without one, she can't think. With one, she's brilliant.</p>
+
+  <div class="card">
+    <h3>What Is an API Key?</h3>
+    <p>Think of an API key as a <strong>password</strong> that lets Aura talk to an AI service (like ChatGPT or Claude). It's a long string of letters and numbers that usually starts with <code>sk-</code>. You get one from the AI service's website, and you tell Aura to use it.</p>
+    <div class="tip-box warning"><strong>Keep your API key secret!</strong> Anyone with your key can use the AI service on your account — and you'll be billed for it. Never share it or put it in files you upload publicly.</div>
+  </div>
+
+  <div class="card">
+    <h3>Where to Get an API Key</h3>
+    <p><strong>Pick one</strong> — you only need one to start:</p>
+    <table>
+      <tr><th>Provider</th><th>Where to Sign Up</th><th>Cost</th></tr>
+      <tr><td><strong>OpenAI</strong> (GPT)</td><td><a href="https://platform.openai.com" target="_blank" style="color:var(--info)">platform.openai.com</a> &rarr; API keys</td><td>Pay-as-you-go (~$5-20/mo)</td></tr>
+      <tr><td><strong>Anthropic</strong> (Claude)</td><td><a href="https://console.anthropic.com" target="_blank" style="color:var(--info)">console.anthropic.com</a> &rarr; API Keys</td><td>Pay-as-you-go (~$5-20/mo)</td></tr>
+      <tr><td><strong>Google</strong> (Gemini)</td><td><a href="https://aistudio.google.com" target="_blank" style="color:var(--info)">aistudio.google.com</a> &rarr; Get API Key</td><td>Free tier available!</td></tr>
+      <tr><td><strong>Ollama</strong> (Local)</td><td>Download from <a href="https://ollama.com" target="_blank" style="color:var(--info)">ollama.com</a></td><td><strong style="color:var(--success)">Completely free!</strong></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>How to Set Your API Key</h3>
+    <p><strong>Temporary method</strong> (lasts until you close Terminal):</p>
+    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">set ANTHROPIC_API_KEY=sk-ant-api03-your-key-here</span></div>
+    <p style="margin-top:1rem">Or for OpenAI:</p>
+    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">set OPENAI_API_KEY=sk-proj-your-key-here</span></div>
+    <p style="margin-top:1rem"><strong>Permanent method</strong> (survives restarts):</p>
+    <ol>
+      <li>Press <strong>Windows key</strong>, type <code>environment</code></li>
+      <li>Click <strong>"Edit the system environment variables"</strong></li>
+      <li>Click <strong>"Environment Variables..."</strong></li>
+      <li>Under "User variables", click <strong>"New..."</strong></li>
+      <li>Variable name: <code>ANTHROPIC_API_KEY</code> (or <code>OPENAI_API_KEY</code>)</li>
+      <li>Variable value: paste your actual key</li>
+      <li>Click <strong>OK</strong> on all windows. Restart Terminal.</li>
+    </ol>
+    <div class="tip-box success"><strong>Done!</strong> Now Aura can use whichever AI brain you chose. Test it: <code>aura --models</code> to see available models.</div>
+  </div>
+</section>
+
+<!-- COMMANDS -->
+<section class="section" id="commands">
+  <div class="section-label">Chapter 4</div>
+  <h2 class="section-title">Commands Reference</h2>
+  <p class="section-subtitle">Every command you can type. <strong style="color:var(--gold)">Remember:</strong> always type <code>aura</code> first, then the command.</p>
+
+  <div class="card">
+    <h3>Everyday Commands</h3>
+    <table>
+      <tr><th>Command</th><th>What It Does</th></tr>
+      <tr><td><code>aura "your task"</code></td><td>Runs a task. Aura reads, plans, executes, and verifies. <strong>This is what you'll use 90% of the time.</strong></td></tr>
+      <tr><td><code>aura --help</code></td><td>Shows all available commands and options</td></tr>
+      <tr><td><code>aura --version</code></td><td>Shows which version of Aura you have</td></tr>
+      <tr><td><code>aura --models</code></td><td>Lists all AI models Aura can use (Claude, GPT, Gemini, etc.)</td></tr>
+      <tr><td><code>aura kanban</code></td><td>Opens a visual task board at localhost:7474 (open in your browser)</td></tr>
+      <tr><td><code>aura "fix the bug in login"</code></td><td>Finds and fixes a bug in your code</td></tr>
+      <tr><td><code>aura "add error handling to all files"</code></td><td>Adds code improvements across your project</td></tr>
+      <tr><td><code>aura "explain what this project does"</code></td><td>Reads your files and gives you a summary</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Task Examples for Beginners</h3>
+    <p>Try these to get comfortable:</p>
+    <div class="code-block">
+      <span class="cmd">aura "list all the files in this folder"</span><br><br>
+      <span class="cmd">aura "find all TODO comments in the project"</span><br><br>
+      <span class="cmd">aura "explain the file package.json in simple terms"</span><br><br>
+      <span class="cmd">aura "create a new file called hello.txt with 'Hello World' in it"</span><br><br>
+      <span class="cmd">aura "check my code for common mistakes"</span>
+    </div>
+    <div class="tip-box"><strong>Think of Aura like texting a brilliant developer friend.</strong> You don't need special syntax — just describe what you need in plain English.</div>
+  </div>
+</section>
+
+<!-- MODES -->
+<section class="section" id="modes">
+  <div class="section-label">Chapter 5</div>
+  <h2 class="section-title">Aura's Modes</h2>
+  <p class="section-subtitle">Aura has different <strong style="color:var(--white)">personalities</strong> for different jobs. Pick the right mode for your task.</p>
+
+  <div class="card">
+    <h3>Normal Mode (Default)</h3>
+    <p><strong>Best for:</strong> everyday tasks — fixing bugs, adding features, asking questions.</p>
+    <div class="code-block"><span class="cmd">aura "fix the broken login button"</span></div>
+    <p>One agent. Read &rarr; Plan &rarr; Execute &rarr; Verify &rarr; Report. Simple and fast.</p>
+  </div>
+
+  <div class="card">
+    <h3>Orchestrate Mode</h3>
+    <p><strong>Best for:</strong> big, complex tasks that need multiple specialists.</p>
+    <div class="code-block"><span class="cmd">aura --orchestrate "add error handling to every endpoint in my API"</span></div>
+    <p>Aura breaks your task into sub-tasks and assigns each to a specialist agent — Researcher, Coder, Reviewer — working together like a tiny software team.</p>
+  </div>
+
+  <div class="card">
+    <h3>Architect Mode</h3>
+    <p><strong>Best for:</strong> planning before you build. No code is written — just a blueprint.</p>
+    <div class="code-block"><span class="cmd">aura --architect "design a new authentication system"</span></div>
+    <p>Outputs: which files to create, interfaces, dependencies, risks. <em>"If you cannot explain why a file needs to exist in one sentence — it does not need to exist."</em></p>
+  </div>
+
+  <div class="card">
+    <h3>Verify Mode</h3>
+    <p><strong>Best for:</strong> making sure your changes didn't break anything.</p>
+    <div class="code-block"><span class="cmd">aura --verify --test-command "npm test" "fix the failing tests"</span></div>
+    <p>After making changes, Aura runs your tests automatically. If tests fail, she fixes the issue and tries again.</p>
+  </div>
+
+  <div class="card">
+    <h3>Analyze Mode</h3>
+    <p><strong>Best for:</strong> learning from past mistakes.</p>
+    <div class="code-block"><span class="cmd">aura --analyze</span></div>
+    <p>Scans your session history for recurring failure patterns and suggests how to improve.</p>
+  </div>
+</section>
+
+<!-- PROVIDERS -->
+<section class="section" id="providers">
+  <div class="section-label">Chapter 6</div>
+  <h2 class="section-title">AI Brains (Providers)</h2>
+  <p class="section-subtitle">Aura is <strong style="color:var(--white)">model-agnostic</strong> — she can use any AI. Pick the one that fits your needs and budget.</p>
+
+  <div class="card">
+    <div class="table-wrap">
+    <table>
+      <tr><th>Provider</th><th>Best Models</th><th>Best For</th><th>Cost</th></tr>
+      <tr><td><strong style="color:var(--gold)">Claude</strong> (Anthropic)</td><td>Opus, Sonnet, Haiku</td><td>Deep reasoning, careful code</td><td>$3-15/million tokens</td></tr>
+      <tr><td><strong style="color:var(--info)">GPT</strong> (OpenAI)</td><td>gpt-4o, gpt-4o-mini</td><td>Fast, versatile, multimodal</td><td>$0.15-5/million tokens</td></tr>
+      <tr><td><strong style="color:var(--success)">Gemini</strong> (Google)</td><td>gemini-2.5-pro, flash</td><td>Long context (1M tokens)</td><td>Free tier available</td></tr>
+      <tr><td><strong>MiMo</strong> (Xiaomi)</td><td>mimo-v2.5-pro, flash</td><td>Large models, good value</td><td>Competitive</td></tr>
+      <tr><td><strong>DeepSeek</strong></td><td>deepseek-v4-pro, flash</td><td>1M context, some free tiers</td><td>Free options!</td></tr>
+      <tr><td><strong style="color:var(--success)">Ollama</strong></td><td>llama3.2, qwen2.5, etc.</td><td><strong>100% FREE, runs locally</strong></td><td><strong style="color:var(--success)">Free!</strong></td></tr>
+    </table>
+    </div>
+    <div class="tip-box"><strong>Recommendation for beginners:</strong> Start with <strong>Claude Sonnet</strong> or <strong>GPT-4o</strong>. Both are fast, reliable, and great at coding. If you want free, try <strong>Google Gemini</strong> (free tier) or install <strong>Ollama</strong> for completely local, private AI.</div>
+  </div>
+</section>
+
+<!-- SAFETY -->
+<section class="section" id="safety">
+  <div class="section-label">Chapter 7</div>
+  <h2 class="section-title">Safety & Permissions</h2>
+  <p class="section-subtitle">Aura respects <strong style="color:var(--white)">safety boundaries</strong>. You're always in control.</p>
+
+  <div class="card">
+    <h3>Permission Modes</h3>
+    <table>
+      <tr><th>Mode</th><th>What Aura Can Do</th></tr>
+      <tr><td><strong style="color:var(--info)">read-only</strong></td><td>Only read files. Cannot write, edit, or run commands. Safest for exploration.</td></tr>
+      <tr><td><strong style="color:var(--gold)">normal</strong></td><td>Read and write files, but <strong>asks you before</strong> running shell commands or making destructive changes.</td></tr>
+      <tr><td><strong style="color:var(--ruby-glow)">auto</strong></td><td>Full autonomy. No confirmation prompts. Use with caution on projects you trust.</td></tr>
+    </table>
+    <p style="margin-top:1rem">Aura starts in <strong>normal mode</strong> by default. She will always ask before doing anything that could be risky. You can say no.</p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" id="faq">
+  <div class="section-label">Chapter 8</div>
+  <h2 class="section-title">Frequently Asked Questions</h2>
+  <p class="section-subtitle">The answers to questions everyone asks.</p>
+
+  <div class="card">
+    <h3>Do I need to know how to code?</h3>
+    <p><strong style="color:var(--success)">No!</strong> Aura is designed to help both beginners and experts. You describe what you want in plain English. Aura figures out the technical details.</p>
+  </div>
+
+  <div class="card">
+    <h3>Is Aura free?</h3>
+    <p><strong>Aura Code itself is 100% free and open-source</strong> (MIT license). The AI models she uses (Claude, GPT, etc.) charge for API access — typically a few dollars per month. You can also use <strong>completely free</strong> local models via Ollama.</p>
+  </div>
+
+  <div class="card">
+    <h3>What can Aura NOT do?</h3>
+    <p>Aura works with <strong>text files and code</strong>. She can't edit images, edit videos, control your mouse, or browse the web like a human (though she can fetch web pages). She's a coding agent — she excels at reading, writing, and fixing code.</p>
+  </div>
+
+  <div class="card">
+    <h3>Is my code safe with Aura?</h3>
+    <p><strong>Yes.</strong> Aura runs on your computer. Your code is sent to the AI provider's servers for processing (like ChatGPT), but Aura doesn't store or share your code. Use <strong>Ollama</strong> with local models for complete privacy.</p>
+  </div>
+
+  <div class="card">
+    <h3>What if Aura makes a mistake?</h3>
+    <p>Aura's motto is <em>"I don't try. I verify."</em> She runs tests after making changes. But AI can still make mistakes — always review important changes. Use <code>git</code> to track changes so you can undo anything.</p>
+  </div>
+
+  <div class="card">
+    <h3>How do I update Aura?</h3>
+    <div class="code-block"><span class="cmd">npm update -g aura-code</span></div>
+    <p>Run this in Terminal anytime. Check version with <code>aura --version</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3>Can I use Aura for non-coding tasks?</h3>
+    <p><strong>Absolutely!</strong> Aura has tools for web search, email, calendar, Telegram, WhatsApp, YouTube transcripts, audio transcription, and more. Try: <code>aura "search the web for latest AI news"</code></p>
+  </div>
+</section>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="hero-crown" style="margin:0 auto 1.5rem;opacity:0.4">
+    <svg viewBox="0 0 80 80">
+      <polygon points="40,8 52,30 76,32 58,48 62,72 40,60 18,72 22,48 4,32 28,30" fill="none" stroke="#c8a45c" stroke-width="2"/>
+      <polygon points="40,16 48,32 66,34 54,46 57,64 40,56 23,64 26,46 14,34 32,32" fill="#c8a45c" opacity="0.3"/>
+    </svg>
+  </div>
+  <p><strong style="color:var(--gold);font-size:1.1rem">Aura Code v0.6.2</strong></p>
+  <p style="margin-top:0.5rem">Built by <span style="color:var(--ruby-glow)">hearts</span> agents. For everyone.<br>
+  Created by <strong>Lean Progress IQ</strong> — <a href="https://lean-progress-iq-site.vercel.app" style="color:var(--info)">lean-progress-iq-site.vercel.app</a></p>
+  <p style="margin-top:1rem"><a href="https://github.com/milodule3-debug/aura-code" style="color:var(--grey)">GitHub</a> · <a href="https://www.npmjs.com/package/aura-code" style="color:var(--grey)">npm</a> · MIT License</p>
+  <p style="margin-top:1.5rem;font-size:0.75rem;color:var(--grey)">Praktess framework — from Ancient Greek: <em>she who acts and executes.</em></p>
+</footer>
+
+<script>
+// INTERACTIVE TODO CHECKLIST
+const TODO_DATA = [
+  {id:'t1',cat:'Setup',text:'Install Node.js from nodejs.org (LTS version)',detail:'Go to https://nodejs.org, click the big green LTS button, run the downloaded .msi file, accept defaults, click Install.'},
+  {id:'t2',cat:'Setup',text:'Open Windows Terminal (press Win key, type cmd)',detail:'Press the Windows key on your keyboard (between Ctrl and Alt), type "cmd" or "Terminal", and press Enter.'},
+  {id:'t3',cat:'Setup',text:'Verify Node.js: type node --version',detail:'In the terminal, type: node --version [Enter]. You should see something like v20.11.0.'},
+  {id:'t4',cat:'Setup',text:'Verify npm: type npm --version',detail:'Type: npm --version [Enter]. npm comes with Node.js automatically. You should see 10.x.x or similar.'},
+  {id:'t5',cat:'Setup',text:'Install Aura: npm install -g aura-code',detail:'Type: npm install -g aura-code [Enter]. Wait 1-2 minutes while it downloads. Lots of text scrolling by is completely normal!'},
+  {id:'t6',cat:'Setup',text:'Verify Aura: type aura --version',detail:'Type: aura --version [Enter]. If you see "command not found", close and reopen Terminal and try again.'},
+  {id:'t7',cat:'API Keys',text:'Get an API key from an AI provider',detail:'Sign up at platform.openai.com (OpenAI), console.anthropic.com (Anthropic), or aistudio.google.com (Google). Copy your API key - it starts with "sk-".'},
+  {id:'t8',cat:'API Keys',text:'Set your API key in Terminal',detail:'Type: set ANTHROPIC_API_KEY=sk-ant-... (use your real key). Or set OPENAI_API_KEY=sk-... This connects Aura to an AI brain.'},
+  {id:'t9',cat:'First Steps',text:'Run your first Aura task!',detail:'Type: aura "list the files in this folder" [Enter]. Aura will read your files and tell you about them. Start simple and build confidence!'},
+  {id:'t10',cat:'First Steps',text:'Try a coding task in a project folder',detail:'Navigate to a project: cd your-project. Then try: aura "find all TODOs in the code" or aura "explain what this project does".'},
+  {id:'t11',cat:'Learn',text:'Explore Aura special modes',detail:'aura --orchestrate "complex task" (multi-agent team), aura --architect "design system" (planning only), aura --verify "fix tests" (auto-testing), aura --models (see all AI brains).'},
+  {id:'t12',cat:'Learn',text:'Bookmark this manual page!',detail:'You now have a complete Aura reference! Press Ctrl+D to bookmark. Come back anytime you need help.'}
+];
+
+const STORAGE_KEY = 'aura-manual-todos';
+
+function loadTodos() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+function saveTodos(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+
+function updateProgress(state) {
+  const total = TODO_DATA.length;
+  const done = Object.values(state).filter(v => v === true).length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('doneCount').textContent = done;
+  document.getElementById('totalCount').textContent = total;
+}
+
+function renderTodos() {
+  const state = loadTodos();
+  const container = document.getElementById('todoList');
+  
+  container.innerHTML = TODO_DATA.map((todo, i) => {
+    const isDone = state[todo.id] === true;
+    const open = state[todo.id + '_open'] === true;
+    const cls = ['todo-item'];
+    if (isDone) cls.push('done');
+    if (open) cls.push('open');
+    
+    return '<div class="' + cls.join(' ') + '" data-id="' + todo.id + '">' +
+      '<div class="todo-check" onclick="toggleTodo(event,\'' + todo.id + '\')">' +
+        (isDone ? '&#10003;' : '') +
+      '</div>' +
+      '<div class="todo-content" onclick="toggleOpen(event,\'' + todo.id + '\')">' +
+        '<div class="todo-cat">' + todo.cat + '</div>' +
+        '<div class="todo-text">' + (i + 1) + '. ' + todo.text + '</div>' +
+        '<div class="todo-detail">' + todo.detail + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  
+  updateProgress(state);
+}
+
+function toggleTodo(e, id) {
+  e.stopPropagation();
+  const state = loadTodos();
+  state[id] = !state[id];
+  saveTodos(state);
+  renderTodos();
+}
+
+function toggleOpen(e, id) {
+  e.stopPropagation();
+  const state = loadTodos();
+  state[id + '_open'] = !state[id + '_open'];
+  saveTodos(state);
+  renderTodos();
+}
+
+function resetTodos() {
+  if (confirm('Reset all checklist progress? This cannot be undone.')) {
+    localStorage.removeItem(STORAGE_KEY);
+    renderTodos();
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', renderTodos);
+
+// Active nav highlighting
+document.addEventListener('DOMContentLoaded', function() {
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('nav a');
+  
+  function highlightNav() {
+    let current = '';
+    sections.forEach(s => {
+      const top = s.offsetTop - 100;
+      if (window.scrollY >= top) current = s.getAttribute('id');
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  
+  window.addEventListener('scroll', highlightNav);
+  highlightNav();
+});
+</script>
+</body>
+</html>
