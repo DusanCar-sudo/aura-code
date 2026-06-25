@@ -15,7 +15,7 @@ export class AnthropicProvider implements LLMProvider {
 
   constructor(config: ProviderConfig) {
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 8096;
+    this.maxTokens = config.maxTokens ?? 2048; // aligned with DEFAULTS.maxTokens (402 cost-gate fix)
     this.client = new Anthropic({
       apiKey: config.apiKey ?? getApiKey('ANTHROPIC_API_KEY'),
     });

@@ -2,7 +2,14 @@ export const DEFAULTS = {
   // No default model — the user picks their own on first run via the wizard.
   // This keeps the codebase provider-agnostic: nothing here assumes a specific vendor.
   defaultModel: undefined as string | undefined,
-  maxTokens: 4096,
+  // Output-token ceiling per request. Kept low (2048) because cost-gated
+  // endpoints — OpenRouter ":free" routes, low-balance keys — reject with HTTP
+  // 402 when the WORST-CASE cost (prompt_tokens + max_tokens) exceeds the
+  // available credit, even if real usage would be far smaller. A high ceiling
+  // is the usual cause of those 402s. Raise per-project in .aura.json
+  // (`"maxTokens": N`) when using a provider with credit that needs longer
+  // single completions.
+  maxTokens: 2048,
   maxContextFiles: 20,
   maxFileLinesInContext: 300,
   maxDirDepth: 4,

@@ -28,7 +28,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
   constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 8096;
+    this.maxTokens = config.maxTokens ?? 2048; // aligned with DEFAULTS.maxTokens (402 cost-gate fix)
     this.temperature = config.temperature ?? 0.2;
     this.name = providerName ?? deriveProviderName(config);
 
