@@ -221,6 +221,23 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       let result: string;
       let isError = false;
       try {
+        // If the provider failed to parse this call's arguments as JSON, the
+        // input was replaced with a raw-string fallback (see openai-compatible.ts
+        // / anthropic.ts) rather than real structured fields. Running a tool
+        // against that — or worse, letting the model keep reasoning as if it
+        // were valid data — is exactly the kind of malformed context that
+        // produces confabulated output downstream (confirmed in a :council run).
+        // Fail loudly and immediately instead: tell the model its own call
+        // didn't parse, so it can retry with corrected arguments.
+        if ('_raw' in call.input) {
+          const raw = String(call.input._raw ?? '').slice(0, 300);
+          result = `Tool error (${call.name}): your previous call's arguments did not parse as valid JSON and were not executed. Raw fragment received: ${raw}${raw.length >= 300 ? '…' : ''}. Re-issue this call with corrected, valid JSON arguments.`;
+          isError = true;
+          display.error(result);
+          toolResults.push({ id: call.id, name: call.name, content: result, isError: true });
+          continue;
+        }
+
         const perm = permissions.check(call.name, call.input);
         if (!perm.allowed) {
           display.toolBlocked(call.name, perm.reason ?? 'not permitted');
