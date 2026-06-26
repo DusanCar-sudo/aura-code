@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/aura-code"><img src="https://img.shields.io/npm/v/aura-code?color=cc0000&label=npm&logo=npm" alt="npm version"></a>
   <a href="https://github.com/milodule3-debug/aura-code/actions/workflows/ci.yml"><img src="https://github.com/milodule3-debug/aura-code/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/tests-1035%2B-brightgreen" alt="1035+ tests">
+  <img src="https://img.shields.io/badge/tests-1205%2B-brightgreen" alt="1205+ tests">
   <a href="https://github.com/milodule3-debug/aura-code/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white" alt="Node.js 18+">
   <a href="https://github.com/milodule3-debug/aura-code"><img src="https://img.shields.io/github/stars/milodule3-debug/aura-code?style=social" alt="GitHub Stars"></a>
@@ -163,8 +163,8 @@ opening a pull request.
 
 | Metric | Value |
 |--------|-------|
-| Tests | 1035+ passing, 0 failures |
-| Version | v0.3.7 |
+| Tests | 1205+ passing, 0 failures |
+| Version | v0.6.2 |
 | Language | TypeScript (strict) |
 | License | MIT |
 
