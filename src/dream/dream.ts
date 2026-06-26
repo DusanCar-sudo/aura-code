@@ -4,19 +4,29 @@ import { loadEpisodes } from '../ruby/episode-capture.js';
 import type { Episode } from '../ruby/types.js';
 import type { LLMProvider } from '../providers/types.js';
 import { createProvider, checkOllamaHealth } from '../providers/factory.js';
+import { loadExistingDreams } from './parser.js';
+import { reconcileDreams } from './reconcile.js';
 
 /**
  * Aura's "dream": an offline consolidation pass over recorded episodes.
  *
- * Stages (minimum viable — Study/web research is a later, flag-driven add):
+ * Stages:
  *   1. Recall      — load episodes since the last dream.
  *   2. Consolidate — distil them into lessons + patterns via the LLM.
  *   3. Prepare     — write a short brief of open threads for tomorrow.
+ *   4. Reconcile   — if ≥3 existing dreams, run memory reconciliation
+ *                    across all dreams and write `dreams/.reconciled.md`.
+ *                    This step is BEST-EFFORT: if it fails, the dream
+ *                    file is still written and the cutoff is advanced.
  *
  * Output is one dated Markdown file per night under `<projectRoot>/dreams/`.
  * The structure is deliberately stable and entity-tagged so a later pass
  * (`:rem`) can parse these files into a relations graph. Do not reformat the
- * headers without updating the parser.
+ * headers without updating the parser (parser.ts).
+ *
+ * Memory reconciliation produces `dreams/.reconciled.md` — a PROJECTION
+ * (materialized view) of current beliefs with annotations showing lineage.
+ * Old dream files stay untouched as an append-only audit trail.
  */
 
 export interface DreamResult {
@@ -28,6 +38,8 @@ export interface DreamResult {
   reason?: string;
   /** Set when the LLM consolidation failed — episodes are preserved and NOT burned. */
   providerError?: string;
+  /** True if memory reconciliation ran successfully after the dream was written. */
+  reconciled?: boolean;
 }
 
 const DREAMS_DIRNAME = 'dreams';
@@ -74,9 +86,11 @@ function buildConsolidationPrompt(episodes: Episode[]): { system: string; user: 
     '## Open threads\n(bullet list of unresolved problems worth picking up tomorrow; ' +
     'prefix each with [todo]. Empty bullet "- none" if nothing.)\n\n' +
     '## Tomorrow brief\n(2–4 sentences: what Aura should be ready for next session.)';
+
   const user =
     `Today's episodes (${episodes.length}):\n\n` +
     episodes.map(digestEpisode).join('\n');
+
   return { system, user };
 }
 
@@ -101,6 +115,12 @@ function header(date: string, episodes: Episode[], since: number): string {
  * consolidation succeeds. If the primary provider fails, a single retry on a
  * local Ollama instance is attempted before giving up gracefully. Episodes are
  * NEVER burned (cut off) when the provider is unreachable.
+ *
+ * After a successful dream write, memory reconciliation runs (if ≥3 dreams
+ * exist). Reconciliation is best-effort — if it fails, the dream file and
+ * cutoff are already committed. The reconciliation log is appended to today's
+ * dream file for traceability, and `dreams/.reconciled.md` is updated as the
+ * current memory projection.
  */
 export async function runDream(opts: {
   projectRoot: string;
@@ -152,7 +172,6 @@ export async function runDream(opts: {
     if (ollamaFallbackModel) {
       const ollamaBaseUrl = 'http://localhost:11434/v1';
       const ollamaHealthy = await checkOllamaHealth('http://localhost:11434').catch(() => false);
-
       if (ollamaHealthy) {
         try {
           const ollamaProvider = createProvider({
@@ -192,9 +211,9 @@ export async function runDream(opts: {
 
   // ── Write dream file ──────────────────────────────────────────────────────
   const md = `${header(date, episodes, since)}\n${body!}\n`;
-
   const dir = dreamsDir(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
+
   // One file per date; re-running the same day overwrites that day's dream.
   const outPath = path.join(dir, `${date}.md`);
   fs.writeFileSync(outPath, md);
@@ -203,5 +222,25 @@ export async function runDream(opts: {
   const newest = Math.max(...episodes.map(e => e.timestamp));
   writeState(projectRoot, newest);
 
-  return { path: outPath, date, episodeCount: episodes.length, recalledSince: since, skipped: false };
+  // ── Reconciliation (best-effort) ──────────────────────────────────────────
+  // Gate: only runs when ≥3 dreams exist (handled inside reconcileDreams).
+  // If this fails, the dream file and cutoff are already committed — no harm.
+  let reconciled = false;
+  try {
+    const allDreams = loadExistingDreams(projectRoot);
+    const result = await reconcileDreams({
+      projectRoot,
+      provider,
+      dreams: allDreams,
+    });
+    if (result) {
+      // Append reconciliation log to today's dream file for traceability.
+      fs.appendFileSync(outPath, result.logSection);
+      reconciled = true;
+    }
+  } catch {
+    // Reconciliation failure is silent — dream is already saved.
+  }
+
+  return { path: outPath, date, episodeCount: episodes.length, recalledSince: since, skipped: false, reconciled };
 }
