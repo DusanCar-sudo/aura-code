@@ -37,10 +37,10 @@ aura-ad-hyperframes/
 .env*
 
 # Generated output (per-user, not source)
-council/
-research/
-dreams/
-mail/
+/council/
+/research/
+/dreams/
+/mail/
 docs/test-write.txt
 
 # Personal files
