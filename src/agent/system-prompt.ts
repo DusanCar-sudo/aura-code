@@ -4,6 +4,17 @@ import { selectDesign, designPromptSection } from './design.js';
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task?: string): string {
   const design = task ? selectDesign(ctx.root, task) : null;
   const designSection = design ? designPromptSection(design) : '';
+
+  // Optional sections — only included when data exists, so new users
+  // with no dreams or graph don't see empty placeholders.
+  const graphSection = ctx.graphSummary
+    ? `\n### Codebase knowledge graph\n${ctx.graphSummary}\n`
+    : '';
+
+  const memorySection = ctx.reconciledMemory
+    ? `\n### Memory (from past sessions)\nThe following lessons, patterns, and open threads were distilled from your previous work on this project. Use them to avoid repeating past mistakes and to continue unfinished work.\n\n${ctx.reconciledMemory}\n`
+    : '';
+
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
 
@@ -68,7 +79,7 @@ ${ctx.readme}
 
 ### Recent git history
 ${ctx.recentCommits}
-
+${graphSection}${memorySection}
 Provider: ${providerName}. Work efficiently — minimize unnecessary tool calls.${designSection}`;
 }
 

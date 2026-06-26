@@ -13,6 +13,10 @@ export interface ProjectContext {
   config: string;        // package.json / requirements.txt / Cargo.toml
   recentCommits: string; // last 5 git commits
   graphSummary?: string; // top nodes from graphify-out/graph.json, if present
+  /** Reconciled memory from dreams/.reconciled.md — the agent's current
+   *  beliefs about this project, distilled from past work sessions.
+   *  Truncated to ~2000 chars to stay within token budget. */
+  reconciledMemory?: string;
 }
 
 export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
@@ -25,11 +29,12 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     name,
     language,
     framework,
-    readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
-    tree:          buildTree(root),
-    config:        readConfig(root),
-    recentCommits: readGitLog(root),
-    graphSummary:  loadGraphSummary(root),
+    readme:            readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
+    tree:              buildTree(root),
+    config:            readConfig(root),
+    recentCommits:     readGitLog(root),
+    graphSummary:      loadGraphSummary(root),
+    reconciledMemory:  loadReconciledMemory(root),
   };
 }
 
@@ -49,6 +54,41 @@ export function loadGraphSummary(root: string): string | undefined {
       return `  ${n.type ?? 'node'} ${n.label ?? n.id}${loc}${summary}`;
     });
     return `Top ${top.length} of ${graph.nodes.length} nodes:\n${lines.join('\n')}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Load the reconciled memory projection from `dreams/.reconciled.md`.
+ *
+ * This file is written by the dream reconciliation system (reconcile.ts)
+ * after ≥3 dreams exist. It contains the agent's current distilled beliefs
+ * about the project — lessons, patterns, open threads — with annotations
+ * showing where each belief came from and how it evolved.
+ *
+ * Returns undefined if the file doesn't exist (no dreams yet, or <3 dreams).
+ * Truncates at 2000 chars to keep the system prompt within token budget.
+ */
+function loadReconciledMemory(root: string): string | undefined {
+  const reconciledPath = path.join(root, 'dreams', '.reconciled.md');
+  if (!fs.existsSync(reconciledPath)) return undefined;
+  try {
+    const raw = fs.readFileSync(reconciledPath, 'utf8');
+    if (!raw.trim()) return undefined;
+    // Strip YAML frontmatter for the prompt (metadata is useful for :rem
+    // display but wastes tokens in the system prompt).
+    let content = raw;
+    if (content.startsWith('---')) {
+      const endIdx = content.indexOf('---', 3);
+      if (endIdx > 0) {
+        content = content.slice(endIdx + 3).trim();
+      }
+    }
+    if (content.length > 2000) {
+      content = content.slice(0, 2000) + '\n\n[...truncated]';
+    }
+    return content;
   } catch {
     return undefined;
   }
