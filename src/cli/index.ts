@@ -1319,6 +1319,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :context                Show loaded project context',
       '  :graph                  Show codebase knowledge graph summary',
       '  :graph refresh          Extract + persist codebase graph',
+      '  :stats                  Show episode-level stats (completion rate, models, tokens)',
       '  :plans                  List saved execution plans',
       '  :viz, :dashboard        Generate and open the memory dashboard',
       '  :dream                  [experimental] Consolidate today\'s episodes into a dated dream (dreams/*.md)',
@@ -1330,7 +1331,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  ⚠ :machina               The Abstract Agent Machine — formal model, verified against this source tree',
       '  ⚠ :machina --html        Also write the full writeup + diagram to docs/machina.html',
       '  :design [slug|list|off] Set/list the design system auto-applied to UI builds',
-      '  /stats, /usage          Show token + cost usage this session',
+      '  /stats, /usage, :usage  Show token + cost usage this session',
       '  /clear, /reset          Reset cumulative usage stats',
       '',
       '  ── General ──────────────────────────────────────',
@@ -1777,7 +1778,26 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === '/stats' || input === '/usage') {
+  if (input === ':stats') {
+    // Episode-level stats (same as --stats CLI flag)
+    const episodes = await loadEpisodes(c.chatState.projectRoot);
+    const output = formatStats(episodes);
+    for (const line of output.split('\n')) {
+      if (line.trim() === 'Aura Stats') {
+        console.log(chalk.hex('#cc785c').bold(line));
+      } else if (line.includes(':')) {
+        const colonIdx = line.indexOf(':');
+        const label = line.slice(0, colonIdx + 1);
+        const value = line.slice(colonIdx + 1);
+        console.log(chalk.hex('#8a7768')(label) + chalk.hex('#ede0cc')(value));
+      } else {
+        console.log(line);
+      }
+    }
+    return { handled: true };
+  }
+
+  if (input === '/stats' || input === '/usage' || input === ':usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
     console.log(chalk.hex('#8a7768')([
