@@ -1585,16 +1585,27 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const dir = path.join(c.ctx.root, 'dreams');
     let files: string[] = [];
     try {
-      files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort().reverse();
+      files = fs.readdirSync(dir).filter(f => f.endsWith('.md') && !f.startsWith('.')).sort().reverse();
     } catch { /* no dreams dir */ }
     if (files.length === 0) {
       console.log(chalk.hex('#8a7768')('\n  No dreams yet. Run :dream after some work.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Dreams\n'));
       for (const f of files.slice(0, 20)) console.log(chalk.hex('#ede0cc')(`  ${f}`));
-      const latest = path.join(dir, files[0]);
-      console.log(chalk.hex('#8a7768')(`\n  Most recent: ${latest}\n`));
-      console.log(chalk.hex('#4e3d30')(fs.readFileSync(latest, 'utf8')));
+      // Prefer reconciled view if it exists
+      const reconciledPath = path.join(dir, '.reconciled.md');
+      const hasReconciled = fs.existsSync(reconciledPath);
+      if (hasReconciled) {
+        console.log(chalk.hex('#5a9e6e')(`\n  ✓ Reconciled memory (${files.length} dreams → projection):\n`));
+        console.log(chalk.hex('#ede0cc')(fs.readFileSync(reconciledPath, 'utf8')));
+      } else {
+        const latest = path.join(dir, files[0]);
+        console.log(chalk.hex('#8a7768')(`\n  Most recent: ${latest}\n`));
+        console.log(chalk.hex('#4e3d30')(fs.readFileSync(latest, 'utf8')));
+        if (files.length >= 3) {
+          console.log(chalk.hex('#8a7768')('  💡 Run :dream to trigger memory reconciliation (≥3 dreams).\n'));
+        }
+      }
     }
     return { handled: true };
   }
