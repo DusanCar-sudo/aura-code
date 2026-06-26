@@ -33,3 +33,17 @@ aura-ad-hyperframes/
 
 *.mp3
 *.vtt
+.vercel
+.env*
+
+# Generated output (per-user, not source)
+council/
+research/
+dreams/
+mail/
+docs/test-write.txt
+
+# Personal files
+*.pdf
+proforma-*.html
+aura-windows-manual.html

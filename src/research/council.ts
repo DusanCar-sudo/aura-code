@@ -17,18 +17,29 @@ import type { Display } from '../cli/display.js';
  *
  * Cost design, deliberately conservative (see compaction/dream incidents):
  *   - The N panel agents run SEQUENTIALLY, each a short findings-only pass
- *     (not a full polished report) on a free LOCAL model (Ollama by default)
- *     — so a 5-agent council costs roughly one :research pass, not five.
- *   - Only the final synthesis step uses the caller's active provider
- *     (better reasoning for reconciling disagreement), and it's one call.
+ *     (not a full polished report). Local models produce catastrophic factual
+ *     errors (e.g. hallucinated Djokovic stats), so Ollama is not a
+ *     supported default.
+ *   - Only the final synthesis step is reasoning-heavy; it runs as a single
+ *     call on the caller's active provider.
  *   - Per-agent turns are capped well below :research's full budget.
+ *
+ * Panel model resolution (in priority order):
+ *   1. `opts.panelModel` — explicit caller override (CLI: `--panel <model>`).
+ *   2. `AURA_PANEL_MODEL` env var — global default for cheap-panel setups.
+ *   3. The synthesis provider's own model — the user's already-configured
+ *      and authenticated model, whatever it is. This works for every user
+ *      without assuming Xiaomi / OpenAI / any specific provider.
+ *
+ * Cost note: option 3 means a 5-agent council costs ~5× a single :research
+ * pass on whatever the user is paying for. Users who want cheaper runs can
+ * set AURA_PANEL_MODEL globally, or pass `--panel <fast-model>` per call.
  *
  * Output: dated `.md` + `.html` under `<projectRoot>/council/`.
  */
 
 const COUNCIL_DIRNAME = 'council';
 const DEFAULT_PANEL_SIZE = 5;
-const DEFAULT_PANEL_MODEL = 'ollama/qwen2.5-coder:3b';
 const FOOTER = '\n---\n\n*Ecclesia — five voices, one verdict. Inspired by DeerFlow.*\n';
 
 function councilDir(projectRoot: string): string {
@@ -148,13 +159,44 @@ export interface CouncilResult {
   htmlPath: string;
   topic: string;
   panelSize: number;
+  panelModel: string;
   agentFailures: number;
 }
 
 /**
+ * Pick which model the panel agents run on.
+ *
+ * Priority:
+ *   1. `override` — explicit `opts.panelModel` (set by `--panel <model>`)
+ *   2. `AURA_PANEL_MODEL` env var — global default for cheap-panel setups
+ *   3. The synthesis provider's `.model` — the user's authenticated, working
+ *      model. Means the council just works for whoever ran `:provider`,
+ *      without assuming any specific vendor.
+ *
+ * If none of these yield a model, throw with a clear message rather than
+ * passing `undefined` to `createProvider` (which historically produced
+ * opaque "400 Not supported model" errors).
+ */
+function resolvePanelModel(synthesisProvider: LLMProvider, override?: string): string {
+  if (override && override.trim()) return override.trim();
+
+  const env = process.env.AURA_PANEL_MODEL;
+  if (env && env.trim()) return env.trim();
+
+  // LLMProvider.model — the configured model id for that provider instance.
+  const fromProvider = (synthesisProvider as unknown as { model?: string }).model;
+  if (fromProvider && fromProvider.trim()) return fromProvider.trim();
+
+  throw new Error(
+    'Could not resolve a panel model. Pass --panel <model>, ' +
+    'set AURA_PANEL_MODEL, or configure a provider via :provider first.',
+  );
+}
+
+/**
  * Run an Ecclesia: `panelSize` independent agents research the topic
- * (sequentially, on a free local model), then one synthesis call on the
- * caller's active provider reconciles their findings into a verdict.
+ * sequentially, then one synthesis call on the caller's active provider
+ * reconciles their findings into a verdict.
  */
 export async function runCouncil(opts: {
   projectRoot: string;
@@ -170,7 +212,7 @@ export async function runCouncil(opts: {
     projectRoot, topic, synthesisProvider, context, permissions, display,
   } = opts;
   const panelSize = Math.max(1, opts.panelSize ?? DEFAULT_PANEL_SIZE);
-  const panelModel = opts.panelModel ?? DEFAULT_PANEL_MODEL;
+  const panelModel = resolvePanelModel(synthesisProvider, opts.panelModel);
 
   const findings: string[] = [];
   let agentFailures = 0;
@@ -228,5 +270,5 @@ export async function runCouncil(opts: {
   const htmlPath = path.join(dir, `${date}-${slug}.html`);
   fs.writeFileSync(htmlPath, htmlOut);
 
-  return { path: mdPath, htmlPath, topic, panelSize, agentFailures };
+  return { path: mdPath, htmlPath, topic, panelSize, panelModel, agentFailures };
 }

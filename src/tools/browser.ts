@@ -86,21 +86,19 @@ async function ensurePage(): Promise<import('puppeteer-core').Page> {
 }
 
 function findChrome(): string | null {
-  const { execSync } = require('child_process');
-  const candidates = [
-    'google-chrome',
-    'google-chrome-stable',
-    'chromium-browser',
-    'chromium',
+  const knownPaths = [
     '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
     '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
+    '/snap/bin/google-chrome',
   ];
-  for (const cmd of candidates) {
+  for (const p of knownPaths) {
     try {
-      execSync(`which ${cmd}`, { stdio: 'pipe' });
-      return cmd;
+      require('fs').accessSync(p, require('fs').constants.X_OK);
+      return p;
     } catch {
-      // not found, try next
+      // not executable, try next
     }
   }
   return null;

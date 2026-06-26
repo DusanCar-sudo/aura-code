@@ -1535,9 +1535,17 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input.startsWith(':council ')) {
-    const topic = input.slice(':council '.length).trim();
+    let rest = input.slice(':council '.length).trim();
+    const wantsReader = /(^|\s)--reader(\s|$)/.test(rest);
+    rest = rest.replace(/(^|\s)--reader(\s|$)/g, ' ').trim();
+    const stray = rest.match(/(^|\s)(--\S+)/);
+    if (stray) {
+      console.log(chalk.hex('#b15439')(`\n  ✗ Unknown flag: ${stray[2]}. Did you mean --reader?\n`));
+      return { handled: true };
+    }
+    const topic = rest;
     if (!topic) {
-      console.log(chalk.hex('#b15439')('\n  Usage: :council <topic>\n'));
+      console.log(chalk.hex('#b15439')('\n  Usage: :council <topic> [--reader]\n'));
       return { handled: true };
     }
     console.log(chalk.hex('#8a7768')(`\n  Convening Ecclesia on "${topic}" — 5 independent agents…\n`));
@@ -1559,6 +1567,13 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict: ${res.path}`));
       console.log(chalk.hex('#8a7768')(`  ${res.panelSize} agents` + (res.agentFailures > 0 ? `, ${res.agentFailures} failed` : '') + `.\n`));
+      if (wantsReader) {
+        const { renderReaderFromMarkdown } = await import('../viz/reader.js');
+        const readerPath = renderReaderFromMarkdown(res.path);
+        console.log(chalk.hex('#5a9e6e')(`  ✓ Reader: ${readerPath}`));
+        console.log(chalk.hex('#8a7768')('  Opening in browser…\n'));
+        openDashboard(readerPath);
+      }
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
