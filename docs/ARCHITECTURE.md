@@ -1,208 +1,157 @@
 # Aura Code — Architecture
 
-```mermaid
-graph TB
-    subgraph CLI["CLI Layer"]
-        CLI_INDEX["src/cli/index.ts<br/>Entry point — arg parsing, REPL, task dispatch"]
-        DISPLAY["src/cli/display.ts<br/>Terminal output"]
-        DIAMOND["src/cli/diamond.ts<br/>ASCII art"]
-    end
+> "I don't try. I verify."
 
-    subgraph AGENT["Agent Loop"]
-        LOOP["src/agent/loop.ts<br/>runAgentLoop — LLM stream loop<br/>tool execution & confirmation"]
-        CONTEXT["src/agent/context.ts<br/>Project context loading"]
-        SYSTEM_PROMPT["src/agent/system-prompt.ts<br/>System prompt builder"]
-        SPAWNER["src/agent/spawner.ts<br/>Sub-agent spawning"]
-        SESSION["src/agent/session-store.ts<br/>Chat persistence"]
-        COMPACTOR["src/agent/compactor.ts<br/>History compaction at ~70% context"]
-    end
+## The loop
 
-    subgraph PROVIDERS["Provider Layer"]
-        FACTORY["src/providers/factory.ts<br/>Provider registry"]
-        RESILIENT["src/providers/resilient.ts<br/>Provider with retries"]
-        RESILIENT_FACTORY["src/providers/resilient-factory.ts<br/>Resilient provider factory"]
-        FALLBACK["src/providers/fallback.ts<br/>Model fallback chain"]
-        TYPES["src/providers/types.ts<br/>LLMProvider interface"]
-        ANTHROPIC["src/providers/anthropic.ts"]
-        GOOGLE["src/providers/google.ts"]
-        OPENAI["src/providers/openai-compatible.ts"]
-    end
-
-    subgraph ORCHESTRATION["Orchestration"]
-        ROUTER["src/orchestration/router.ts<br/>Task routing"]
-        ORCHESTRATOR["src/orchestration/orchestrator.ts<br/>Task decomposition"]
-        EXECUTOR["src/orchestration/executor.ts<br/>Specialist execution"]
-        SPECIALISTS["src/orchestration/specialists.ts<br/>Specialist agents"]
-        PLAN_STORE["src/orchestration/plan-store.ts<br/>Plan persistence"]
-        ORCH_COMPETENCE["src/orchestration/competence.ts<br/>Specialist-role scoring<br/>distinct from Ruby's competence below"]
-        RUBY_DETECT["src/orchestration/ruby-detect.ts<br/>Ruby trait detection"]
-    end
-
-    subgraph RUBY["Self-Improvement (Ruby)"]
-        ALTERNATOR["src/ruby/alternator.ts<br/>RubyAlternator — tries a free local<br/>Ollama model before the configured<br/>large model, based on competence"]
-        RUBY_COMPETENCE["src/ruby/competence.ts<br/>assessCompetence — Ruby-vs-large-model<br/>decision, separate from orchestration's"]
-        EPISODE_CAPTURE["src/ruby/episode-capture.ts<br/>episodeStore — records every<br/>task outcome as an Episode"]
-        MODEL_SELECTOR["src/ruby/model-selector.ts<br/>selectModel — picks the best same-family<br/>model from episode history"]
-        STATS["src/ruby/stats.ts<br/>formatStats — pure function used by<br/>--stats; caller loads episodes"]
-        TRAINING_DATA["src/ruby/training-data.ts<br/>Builds fine-tuning examples from episodes —<br/>exported but not wired into any CLI command"]
-        FINE_TUNE["src/ruby/fine-tune.ts<br/>Fine-tunes via OpenAI API or Ollama —<br/>also exported but unwired, like the above"]
-    end
-
-    subgraph PERCEPTION["Codebase Perception"]
-        EXTRACTOR["src/perception/extractor.ts<br/>Codebase parsing & indexing"]
-        GRAPH_STORE["src/perception/graph-store.ts<br/>Dependency graph storage +<br/>saveGraphForViz for the dashboard"]
-        QUERIES["src/perception/queries.ts<br/>Graph queries"]
-    end
-
-    subgraph DASHBOARD["Dashboard"]
-        VIZ["src/viz/index.ts<br/>generateDashboard — HTML dashboard:<br/>codebase graph, memory growth,<br/>learning/episode charts"]
-    end
-
-    subgraph HARNESS["Self-Analysis (Harness)"]
-        WEAKNESS_MINER["src/harness/weakness-miner.ts<br/>--analyze: mines session history<br/>for recurring failure patterns"]
-        PROPOSER["src/harness/proposer.ts<br/>--propose-harness: generates<br/>system-prompt patches"]
-    end
-
-    subgraph HIGHER_MODES["Higher-Level Modes"]
-        WORKFLOWS["src/workflows/engine.ts<br/>--workflow: multi-step pipelines"]
-        ARCHITECT["src/architect/engine.ts<br/>--architect: blueprint-based planning"]
-    end
-
-    subgraph TOOLS["Tool System"]
-        TOOLS_INDEX["src/tools/index.ts<br/>Tool registry & dispatch"]
-        READ_FILE["src/tools/read-file.ts"]
-        WRITE_FILE["src/tools/write-file.ts"]
-        EDIT_FILE["src/tools/edit-file.ts"]
-        SEARCH_CODE["src/tools/search-code.ts"]
-        RUN_SHELL["src/tools/run-shell.ts"]
-        RUN_TESTS["src/tools/run-tests.ts"]
-        BROWSER["src/tools/browser.ts"]
-        WEB_FETCH["src/tools/web-fetch.ts"]
-        WEB_SEARCH["src/tools/web-search.ts"]
-        MCP["src/tools/mcp.ts<br/>MCP client"]
-        MEMORY["src/tools/memory.ts"]
-    end
-
-    subgraph SAFETY["Safety Layer"]
-        PERMISSIONS["src/safety/permissions.ts<br/>PermissionSystem & confirm()"]
-    end
-
-    subgraph VERIFY["Verification Layer"]
-        CHECKS["src/verify/checks.ts<br/>Verification checks"]
-        INDEX["src/verify/index.ts<br/>runWithVerification"]
-    end
-
-    subgraph CONFIG["Configuration"]
-        PROJECT_CONFIG["src/config/project-config.ts<br/>Project .aura.json<br/>includes ruby.enabled override"]
-        DEFAULTS["src/config/defaults.ts<br/>Default values & safety lists"]
-        GLOBAL_CONFIG["src/setup/global-config.ts"]
-        FIRST_RUN["src/setup/first-run.ts<br/>Setup wizard"]
-    end
-
-    CLI_INDEX --> LOOP
-    CLI_INDEX --> DISPLAY
-    CLI_INDEX --> ROUTER
-    CLI_INDEX --> ORCHESTRATOR
-    CLI_INDEX --> FIRST_RUN
-    CLI_INDEX --> ALTERNATOR
-    CLI_INDEX --> MODEL_SELECTOR
-    CLI_INDEX --> STATS
-    CLI_INDEX --> VIZ
-    CLI_INDEX --> WEAKNESS_MINER
-    CLI_INDEX --> PROPOSER
-    CLI_INDEX --> WORKFLOWS
-    CLI_INDEX --> ARCHITECT
-
-    LOOP --> PROVIDERS
-    LOOP --> TOOLS_INDEX
-    LOOP --> PERMISSIONS
-    LOOP --> SYSTEM_PROMPT
-    LOOP --> CONTEXT
-    LOOP --> SPAWNER
-    LOOP --> COMPACTOR
-
-    ROUTER --> PERCEPTION
-    ROUTER --> ORCHESTRATOR
-
-    ORCHESTRATOR --> EXECUTOR
-    ORCHESTRATOR --> PLAN_STORE
-    EXECUTOR --> SPECIALISTS
-    SPECIALISTS --> LOOP
-    EXECUTOR --> ORCH_COMPETENCE
-
-    ALTERNATOR --> LOOP
-    ALTERNATOR --> RUBY_COMPETENCE
-    ALTERNATOR --> EPISODE_CAPTURE
-    MODEL_SELECTOR --> EPISODE_CAPTURE
-
-    VIZ --> EPISODE_CAPTURE
-
-    PROPOSER --> WEAKNESS_MINER
-
-    RESILIENT_FACTORY --> RESILIENT
-    RESILIENT --> FALLBACK
-    FALLBACK --> ANTHROPIC
-    FALLBACK --> GOOGLE
-    FALLBACK --> OPENAI
-
-    TOOLS_INDEX --> READ_FILE
-    TOOLS_INDEX --> WRITE_FILE
-    TOOLS_INDEX --> EDIT_FILE
-    TOOLS_INDEX --> SEARCH_CODE
-    TOOLS_INDEX --> RUN_SHELL
-    TOOLS_INDEX --> RUN_TESTS
-    TOOLS_INDEX --> BROWSER
-    TOOLS_INDEX --> WEB_FETCH
-    TOOLS_INDEX --> WEB_SEARCH
-    TOOLS_INDEX --> MCP
-    TOOLS_INDEX --> MEMORY
-
-    PERCEPTION --> EXTRACTOR
-    PERCEPTION --> GRAPH_STORE
-    PERCEPTION --> QUERIES
-
-    VERIFY --> LOOP
-
-    classDef entryClass fill:#fde4d0,stroke:#f0883e,stroke-width:2px,color:#1a1a1a
-    classDef coreClass fill:#d6e8fc,stroke:#1f6feb,stroke-width:2px,color:#1a1a1a
-    classDef routingClass fill:#ecdcfc,stroke:#8957e5,stroke-width:2px,color:#1a1a1a
-    classDef knowledgeClass fill:#d7f5dd,stroke:#2ea043,stroke-width:2px,color:#1a1a1a
-    classDef toolsClass fill:#fbe7b8,stroke:#bf8700,stroke-width:2px,color:#1a1a1a
-    classDef safetyClass fill:#fbdada,stroke:#cf222e,stroke-width:2px,color:#1a1a1a
-    classDef configClass fill:#e8e8e8,stroke:#6e7681,stroke-width:2px,color:#1a1a1a
-
-    class CLI_INDEX,DISPLAY,DIAMOND entryClass
-    class LOOP,CONTEXT,SYSTEM_PROMPT,SPAWNER,SESSION,COMPACTOR,FACTORY,RESILIENT,RESILIENT_FACTORY,FALLBACK,TYPES,ANTHROPIC,GOOGLE,OPENAI coreClass
-    class ROUTER,ORCHESTRATOR,EXECUTOR,SPECIALISTS,PLAN_STORE,ORCH_COMPETENCE,RUBY_DETECT,ALTERNATOR,RUBY_COMPETENCE,EPISODE_CAPTURE,MODEL_SELECTOR,STATS,TRAINING_DATA,FINE_TUNE routingClass
-    class EXTRACTOR,GRAPH_STORE,QUERIES,VIZ,WEAKNESS_MINER,PROPOSER,WORKFLOWS,ARCHITECT knowledgeClass
-    class TOOLS_INDEX,READ_FILE,WRITE_FILE,EDIT_FILE,SEARCH_CODE,RUN_SHELL,RUN_TESTS,BROWSER,WEB_FETCH,WEB_SEARCH,MCP,MEMORY toolsClass
-    class PERMISSIONS,CHECKS,INDEX safetyClass
-    class PROJECT_CONFIG,DEFAULTS,GLOBAL_CONFIG,FIRST_RUN configClass
+```
+task → system prompt (context + memory + tools) → agent loop → tool calls → verify → respond
 ```
 
-## Flow
+## Core subsystems
 
-1. **CLI entry** (`src/cli/index.ts`) parses args, loads config (including `.aura.json`), runs the setup wizard if needed.
-2. **Single task mode**: the task is dispatched to the router, which decides between direct agent execution and orchestrated decomposition.
-   - **Direct execution** first runs competence-based model selection (`selectModel`) among your already-configured models, then — if Ruby-alternation is enabled (`ruby.enabled` in `.aura.json`, on by default) — `RubyAlternator` decides whether to try a free local Ollama model first, based on past competence for similar tasks, only escalating to the configured large model if Ruby doesn't produce a usable result or isn't reachable.
-   - **Orchestrated decomposition** breaks the task into sub-tasks routed to specialist agents, using a *separate* competence-scoring module (`src/orchestration/competence.ts`) that scores specialist roles, not Ruby-vs-large-model choices.
-3. **REPL mode**: an interactive readline loop accepts tasks, runs the same direct-execution path (model selection → optional Ruby-alternation → agent loop) per turn, and persists chat history for multi-turn continuation.
-4. **Agent loop** (`src/agent/loop.ts`): streams LLM responses, executes tool calls via the tool registry, handles permission confirmations, and compacts history once usage crosses ~70% of the model's context window.
-5. **Provider layer**: abstracts LLM backends — Anthropic, Google, OpenAI-compatible (including DeepSeek, MiMo, OpenRouter, Ollama). Supports retries, rate limiting, and fallback chains.
-6. **Tool system**: each tool (`read_file`, `write_file`, `run_shell`, etc.) is a standalone module registered in the tool index.
-7. **Safety**: `PermissionSystem` enforces read-only/normal/auto modes. The `confirm()` function prompts the user before destructive operations — including during a Ruby-alternation attempt, which respects the same permission mode as the rest of the session.
-8. **Verification**: optional post-task verification runs tests and retries on failure. Verification always runs directly against the selected model — it does not currently support Ruby-alternation.
-9. **Episode feedback loop**: every task outcome — whether it ran through plain execution, RubyAlternator, or orchestration — is captured as an `Episode` (`src/ruby/episode-capture.ts`). Episodes feed `selectModel`'s history-based suggestions, `RubyAlternator`'s competence decisions, `--stats`, and the dashboard's Learning tab. `training-data.ts` and `fine-tune.ts` can turn that same episode history into actual model fine-tuning, but neither is currently called from any CLI command — the capability exists, nothing in the CLI invokes it yet.
-10. **Dashboard** (`:viz` / `--viz`): generates an HTML dashboard from session history, the memory store, episode data, and the codebase knowledge graph — including a force/radial 2D graph view and 3D exploration modes.
-11. **Self-analysis**: `--analyze` mines session history for recurring failure patterns; `--propose-harness` turns those patterns into system-prompt patch proposals.
+| System | Path | What it does |
+|---|---|---|
+| Agent loop | `src/agent/loop.ts` | The execution engine. Read → plan → tool → verify → repeat. |
+| Context | `src/agent/context.ts` | Builds project awareness: language, framework, tree, config, git history, reconciled memory. |
+| Compactor | `src/agent/compactor.ts` | Compresses conversation history when context window fills. |
+| System prompt | `src/agent/system-prompt.ts` | Assembles the system prompt from context + memory + design system. |
+| Spawner | `src/agent/spawner.ts` | Spins up sub-agents for parallel work. |
+| Permissions | `src/safety/permissions.ts` | Three levels: `auto`, `normal`, `read-only`. Controls which tool calls need confirmation. |
 
-## Key design decisions
+## Memory
 
-- **Single stdin reader**: Only one readline interface is active at any time. The `confirm()` function saves and removes any existing stdin `data` listeners (e.g. from the REPL readline), creates a temporary readline to read one answer, then restores the original listeners — preventing keystroke doubling.
-- **Provider-agnostic**: All providers implement the same `LLMProvider` interface. New backends require only a new provider module.
-- **Session persistence**: Chat history is saved per-project in `~/.aura/sessions/` and can be resumed with `--resume`.
-- **Orchestration**: Complex tasks are decomposed into sub-tasks executed by specialist agents, with competence scoring to route sub-tasks to the best-suited model.
-- **Two separate competence systems, by design**: `src/orchestration/competence.ts` scores which *specialist role* should handle a sub-task within orchestration; `src/ruby/competence.ts` scores whether the *free local model* is trusted enough to attempt a task before escalating to the configured large model. They share a name but not a purpose — don't conflate them when reading the code.
-- **Ruby-alternation is opt-out, not opt-in**: `RubyAlternator` is enabled by default (`DEFAULT_RUBY_CONFIG.enabled = true`). Set `"ruby": { "enabled": false }` in `.aura.json` to disable it entirely and always go straight to your configured model — useful if the Ollama-availability check's latency, or the quality tradeoff of accepting a smaller model's output, isn't worth it for your workflow.
-- **Episodes are the single source of truth for "learning"**: nothing in this codebase trains a model in real time. The self-improvement machinery that's actually wired in — model selection, Ruby-alternation, `--stats`, the dashboard — all reads from the same on-disk episode history. `training-data.ts` and `fine-tune.ts` can build training examples and run an actual fine-tuning job from that same history, but as of this writing neither is called from any CLI command — they're available capability, not a live pipeline. Don't assume episode data is "training a model" anywhere right now; it isn't, unless someone calls these functions directly.
-- **Several modules talk through shared files, not shared functions**: the dashboard generator (`src/viz/index.ts`) reads the codebase graph and the memory store directly via `fs`, and `--analyze`'s weakness miner reads `~/.aura/sessions/` the same way — neither imports the module that *writes* that data (`src/perception/graph-store.ts`'s `saveGraphForViz()`, or `src/tools/memory.ts`, or `src/agent/session-store.ts`). The on-disk JSON format is the real contract between them, not a function signature. This keeps the dashboard generator synchronous (episode loading is the one place it *does* import and reuse a real module, since `episodeStore`'s path-resolution helpers are synchronous) and avoids tightly coupling the harness to the session store's internals — but it also means a change to one module's file format can silently break a reader that has no import-level link to flag it.
+```
+work sessions
+  → episodes (src/ruby/episode-capture.ts)
+    → :dream (src/dream/dream.ts) — nightly consolidation
+      → parser (src/dream/parser.ts) — structured bullets per section
+        → reconciler (src/dream/reconcile.ts) — dedup, conflict, strengthen
+          → dreams/.reconciled.md — the projection (materialized view)
+            → context.ts reads it → system prompt → agent uses memory in next task
+```
+
+Dreams are **append-only**. Each day's dream is an immutable record (`dreams/YYYY-MM-DD.md`).
+
+`.reconciled.md` is a **projection** — a materialized view of current beliefs with annotations showing lineage. Old dreams are never modified.
+
+Reconciliation runs after ≥3 dreams exist. Six verdicts:
+
+| Verdict | Meaning |
+|---|---|
+| KEEP | Unique claim, no overlap, retained. |
+| STRENGTHEN | Same claim across multiple dreams. Confidence increases. |
+| MERGE | Two related claims combined into one. |
+| SUPERSEDE | Newer claim replaces older one. |
+| CONFLICT | Two claims contradict. Both surfaced, not resolved. |
+| DROP | Exact duplicate removed from projection. |
+
+Confidence is **mechanical**: `sourceDates.length / totalDreams`. Not model-generated.
+
+## Research and Council
+
+| Command | What happens |
+|---|---|
+| `:research <topic>` | Single agent, multi-turn web research → markdown report in `research/`. |
+| `:council <topic>` | 5 independent agents research separately → synthesis reconciles into verdict in `council/`. |
+| `:council --reader` | Also generates a narrated HTML reading view (words light up as spoken, emphasis pops in color). |
+
+### Council design
+
+Panel agents are **sequential and independent** — no agent sees another's findings, so agreement is genuine. The synthesis step runs on the user's configured provider (stronger reasoning for reconciliation). Panel model resolution:
+
+1. `--panel <model>` CLI flag (explicit override)
+2. `AURA_PANEL_MODEL` env var (global default for cheap runs)
+3. User's configured provider model (works for everyone)
+
+## Verification
+
+| System | Purpose |
+|---|---|
+| `:machina` | Formal model of the codebase. Verifies line-number claims against real source. Catches drift. |
+| `council-verify.ts` | Checks panel agents' cited sources against their `toolCallLog`. Flags ungrounded citations. |
+| `--verify` flag | Post-task verification with automatic retries (up to `--max-verify-retries`). |
+
+## Provider chain
+
+```
+request
+  → rate limiter (RPM/TPM)
+    → primary model
+      → on 429/5xx: exponential backoff + jitter (capped 60s)
+        → circuit breaker (trips after 5 consecutive failures)
+          → fallback model chain (--fallback)
+```
+
+Web search follows a similar fallback pattern:
+
+```
+Tavily (API, best snippets)
+  → Serper (Google passthrough)
+    → DuckDuckGo (HTML scrape, no key)
+      → loud error (not silent "no results")
+```
+
+## The Ruby Principle
+
+Experimental cost-saving layer. A small/cheap model attempts the task first; only if it fails does the large model run. Episode data tracks which tasks succeed on which tier.
+
+```
+task → small model attempt → reviewer checks → if bad → large model → save episode
+```
+
+Disabled by default (`:ruby on` to enable).
+
+## Key invariants
+
+1. **Episodes are never burned on provider failure.** The `.last.json` cutoff only advances when consolidation succeeds.
+2. **Dreams are append-only.** `.reconciled.md` is a projection, not a replacement.
+3. **`:machina` line numbers must match real source.** Insertions that shift lines will break machina tests — and that's by design.
+4. **The agent always reads before editing.** Never guesses at file structure.
+5. **Search failures are loud.** "No results found" from a broken scraper caused 15-query retry loops. Now all three providers must fail before the error string is returned, and it says "Error:" not "No results."
+
+## Directory layout
+
+```
+src/
+  agent/          — core loop, context, compactor, spawner, system prompt
+  architect/      — blueprint planning (--architect mode)
+  cli/            — REPL, display, setup wizard, diamond animation
+  config/         — project config (.aura.json), defaults
+  dream/          — dream consolidation, parser, reconciliation
+  harness/        — weakness mining, proposal generation
+  integrations/   — Gmail OAuth, calendar
+  kanban/         — kanban board pipeline
+  learnlight/     — lesson prep automation
+  machina/        — formal self-model, verification
+  orchestration/  — multi-agent planning, routing, execution
+  perception/     — codebase graph extraction
+  providers/      — LLM provider abstraction (OpenAI, Anthropic, Google, DeepSeek, Xiaomi, Ollama, etc.)
+  rem/            — dream graph visualization
+  research/       — :research and :council commands
+  ruby/           — Ruby Principle (small-model-first), episode capture, stats
+  safety/         — permission system, safety gates
+  server/         — HTTP server mode
+  setup/          — first-run wizard, provider wizard
+  tools/          — all agent tools (file ops, web search, browser, etc.)
+  util/           — env loading, sanitization
+  verify/         — post-task verification
+  viz/            — dashboard, reader renderer
+  workflows/      — multi-step workflow engine
+```
+
+## Getting started
+
+```bash
+npm install -g aura-code
+aura                      # launches setup wizard on first run
+aura "fix the auth bug"   # one-shot task
+aura                      # interactive REPL
+:help                     # see all commands
+```
+
+## Stats
+
+- **1205+ tests**, 0 failures
+- **v0.6.2**
+- TypeScript (strict), MIT license
