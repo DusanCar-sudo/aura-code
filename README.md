@@ -164,7 +164,7 @@ opening a pull request.
 | Metric | Value |
 |--------|-------|
 | Tests | 1205+ passing, 0 failures |
-| Version | v0.6.2 |
+| Version | v0.6.3 |
 | Language | TypeScript (strict) |
 | License | MIT |
 
