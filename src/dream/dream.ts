@@ -6,6 +6,7 @@ import type { LLMProvider } from '../providers/types.js';
 import { createProvider, checkOllamaHealth } from '../providers/factory.js';
 import { loadExistingDreams } from './parser.js';
 import { reconcileDreams } from './reconcile.js';
+import { writeOkfBundle } from './okf.js';
 
 /**
  * Aura's "dream": an offline consolidation pass over recorded episodes.
@@ -16,8 +17,12 @@ import { reconcileDreams } from './reconcile.js';
  *   3. Prepare     — write a short brief of open threads for tomorrow.
  *   4. Reconcile   — if ≥3 existing dreams, run memory reconciliation
  *                    across all dreams and write `dreams/.reconciled.md`.
- *                    This step is BEST-EFFORT: if it fails, the dream
- *                    file is still written and the cutoff is advanced.
+ *   5. OKF bundle  — if reconciliation succeeded, write a portable
+ *                    Open Knowledge Format bundle to `knowledge/`.
+ *                    Any OKF-compatible agent can consume Aura's knowledge.
+ *
+ * Steps 4-5 are BEST-EFFORT: if they fail, the dream file is still
+ * written and the cutoff is advanced.
  *
  * Output is one dated Markdown file per night under `<projectRoot>/dreams/`.
  * The structure is deliberately stable and entity-tagged so a later pass
@@ -26,6 +31,8 @@ import { reconcileDreams } from './reconcile.js';
  *
  * Memory reconciliation produces `dreams/.reconciled.md` — a PROJECTION
  * (materialized view) of current beliefs with annotations showing lineage.
+ * The OKF bundle in `knowledge/` is the same data in a portable, vendor-
+ * neutral format readable by any agent or tool.
  * Old dream files stay untouched as an append-only audit trail.
  */
 
@@ -40,6 +47,8 @@ export interface DreamResult {
   providerError?: string;
   /** True if memory reconciliation ran successfully after the dream was written. */
   reconciled?: boolean;
+  /** Path to the OKF bundle if it was written. */
+  okfBundlePath?: string;
 }
 
 const DREAMS_DIRNAME = 'dreams';
@@ -117,10 +126,9 @@ function header(date: string, episodes: Episode[], since: number): string {
  * NEVER burned (cut off) when the provider is unreachable.
  *
  * After a successful dream write, memory reconciliation runs (if ≥3 dreams
- * exist). Reconciliation is best-effort — if it fails, the dream file and
- * cutoff are already committed. The reconciliation log is appended to today's
- * dream file for traceability, and `dreams/.reconciled.md` is updated as the
- * current memory projection.
+ * exist). If reconciliation succeeds, an OKF knowledge bundle is also
+ * written to `knowledge/`. Both are best-effort — if either fails, the
+ * dream file and cutoff are already committed.
  */
 export async function runDream(opts: {
   projectRoot: string;
@@ -168,7 +176,6 @@ export async function runDream(opts: {
     const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
 
     // ── Ollama fallback ───────────────────────────────────────────────────
-    // Attempt one retry on a local Ollama instance before giving up.
     if (ollamaFallbackModel) {
       const ollamaBaseUrl = 'http://localhost:11434/v1';
       const ollamaHealthy = await checkOllamaHealth('http://localhost:11434').catch(() => false);
@@ -177,12 +184,9 @@ export async function runDream(opts: {
           const ollamaProvider = createProvider({
             model: `ollama/${ollamaFallbackModel}`,
             baseUrl: ollamaBaseUrl,
-            // Dream consolidations are bounded by episode digest size, not raw
-            // context — keep max_tokens conservative for small local models.
             maxTokens: 2048,
           });
           body = await tryComplete(ollamaProvider);
-          // Ollama succeeded — note it but don't treat as an error.
           providerError = undefined;
         } catch (ollamaErr) {
           const ollamaMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
@@ -214,7 +218,6 @@ export async function runDream(opts: {
   const dir = dreamsDir(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
 
-  // One file per date; re-running the same day overwrites that day's dream.
   const outPath = path.join(dir, `${date}.md`);
   fs.writeFileSync(outPath, md);
 
@@ -223,9 +226,8 @@ export async function runDream(opts: {
   writeState(projectRoot, newest);
 
   // ── Reconciliation (best-effort) ──────────────────────────────────────────
-  // Gate: only runs when ≥3 dreams exist (handled inside reconcileDreams).
-  // If this fails, the dream file and cutoff are already committed — no harm.
   let reconciled = false;
+  let okfBundlePath: string | undefined;
   try {
     const allDreams = loadExistingDreams(projectRoot);
     const result = await reconcileDreams({
@@ -237,10 +239,18 @@ export async function runDream(opts: {
       // Append reconciliation log to today's dream file for traceability.
       fs.appendFileSync(outPath, result.logSection);
       reconciled = true;
+
+      // ── OKF bundle (best-effort) ────────────────────────────────────────
+      // Write the portable knowledge bundle from the same reconciled data.
+      try {
+        okfBundlePath = writeOkfBundle(result.bullets, result.totalDreams, projectRoot);
+      } catch {
+        // OKF write failure is silent — reconciled.md is already committed.
+      }
     }
   } catch {
     // Reconciliation failure is silent — dream is already saved.
   }
 
-  return { path: outPath, date, episodeCount: episodes.length, recalledSince: since, skipped: false, reconciled };
+  return { path: outPath, date, episodeCount: episodes.length, recalledSince: since, skipped: false, reconciled, okfBundlePath };
 }
