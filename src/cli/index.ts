@@ -1325,6 +1325,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :dream                  [experimental] Consolidate today\'s episodes into a dated dream (dreams/*.md)',
       '  :dream full             [experimental] Consolidate ALL episodes, ignoring the last-dream cutoff',
       '  :rem                    [experimental] List dream files and open the most recent one',
+      '  :mine                   [experimental] Mine episodes for patterns (Baby Ruby — no LLM, pure statistics)',
+      '  :mine --refine          Also judge mined patterns with a local model, writing training-data/*.jsonl (Papa Ruby)',
       '  :research <topic>       Multi-step research pass, saved to research/*.md (inspired by DeerFlow)',
       '  :council <topic>        Ecclesia — 5 independent agents research the topic, synthesized into one verdict (council/*.md)',
       '  :ruby [on|off]          Toggle the Ruby Principle (default: off)',
@@ -1497,6 +1499,44 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       } else {
         console.log(chalk.hex('#5a9e6e')(`  ✓ Dream written: ${res.path}`));
         console.log(chalk.hex('#8a7768')(`  Consolidated ${res.episodeCount} episode(s).\n`));
+      }
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+  if (input === ':mine' || input === ':mine --refine') {
+    const wantsRefine = input === ':mine --refine';
+    console.log(chalk.hex('#8a7768')('\n  Mining episodes for patterns (Baby Ruby — no LLM, pure statistics)…\n'));
+    try {
+      const { mineExperience } = await import('../mining/extract.js');
+      const result = await mineExperience(c.ctx.root);
+      if (result.concepts.length === 0) {
+        console.log(chalk.hex('#cc9e5c')(`  ⤳ No patterns found yet — ${result.episodeCount} episode(s) on record, none clustered (need ≥3 similar episodes per pattern).\n`));
+        return { handled: true };
+      }
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Found ${result.concepts.length} pattern(s) from ${result.episodeCount} episode(s) (${result.unclustered} unclustered).\n`));
+      for (const concept of result.concepts.slice(0, 15)) {
+        console.log(`  ${chalk.hex('#cc785c')(concept.concept)} ${chalk.hex('#4e3d30')(`[${concept.category}] freq=${concept.frequency} conf=${concept.confidence}`)}`);
+        console.log(`    ${chalk.hex('#8a7768')(concept.examples[0]?.slice(0, 90) ?? '')}`);
+      }
+      if (result.concepts.length > 15) {
+        console.log(chalk.hex('#4e3d30')(`  … and ${result.concepts.length - 15} more.`));
+      }
+      console.log();
+      if (wantsRefine) {
+        console.log(chalk.hex('#8a7768')('\n  Refining with Papa Ruby (local model judging which patterns are real)…\n'));
+        const { refineConcepts } = await import('../mining/refine.js');
+        const rubyConfig: RubyConfig = { ...DEFAULT_RUBY_CONFIG, ...fileConfig.ruby };
+        const refined = await refineConcepts({ projectRoot: c.ctx.root, concepts: result.concepts, rubyConfig });
+        if (refined.accepted.length > 0) {
+          console.log(chalk.hex('#5a9e6e')(`  ✓ Accepted ${refined.accepted.length} training example(s), rejected ${refined.rejected}, skipped ${refined.skipped} (below confidence/frequency threshold).`));
+          console.log(chalk.hex('#8a7768')(`  Written to: ${refined.outputPath}\n`));
+        } else {
+          console.log(chalk.hex('#cc9e5c')(`  ⤳ No patterns judged actionable this run (rejected ${refined.rejected}, skipped ${refined.skipped}). This is fine — Papa Ruby is conservative by design.\n`));
+        }
+      } else {
+        console.log(chalk.hex('#4e3d30')('  Run :mine --refine to judge these with a local model and write training data.\n'));
       }
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
