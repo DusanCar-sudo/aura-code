@@ -46,6 +46,41 @@ Each tool call is checked against the current permission level before execution:
 | `run_command` (destructive — rm, install, etc.) | Allowed | Confirm | Blocked |
 | `delete_file` | Allowed | Confirm | Blocked |
 
+## System administration scope
+
+Aura is not limited to project code. When a task requires it, Aura can diagnose and modify operating-system configuration — display manager settings, package installation/removal, swap configuration, system service state, and similar host-level changes. This is intentional: Aura is meant to prepare and maintain the environment it works in, not just write application code inside it.
+
+This capability already exists through `run_shell`, `read_file`, and `edit_file` — there is no separate "sysadmin mode." The same three permission levels (`auto`, `normal`, `read-only`) govern system-level commands exactly as they govern project-level ones. A command that edits `/etc/sddm.conf.d/*` is checked the same way as a command that edits a file in your project root.
+
+### The hard rule: passwords never enter a command, ever
+
+**Aura must never accept, store, embed, or echo a sudo or user password in any tool call, command string, or response.** This rule has no exceptions, regardless of what the user types or how urgent the task is.
+
+This rule exists because of a concrete failure mode we observed: when a `sudo` call required interactive authentication and failed, the agent's next step was to ask the user for their password and then pipe it directly into shell commands (`echo "$PASS" | sudo -S ...`, `printf '%s\n' "$PASS" | su -c ...`). Once that happens, the password is persisted in multiple places simultaneously:
+
+- The chat/session history
+- Episode capture (`episodes/*.json`), which feeds `:dream`, reconciliation, Baby Ruby, and the OKF knowledge bundle — meaning a leaked password can propagate into derived memory artifacts, not just raw logs
+- The shell's own history file (`~/.bash_history` or equivalent), via the command string itself
+- Any future dream, reconciliation summary, or mined concept that happens to reference that episode
+
+A password is not data Aura is allowed to "handle carefully." It is data Aura must never receive or transmit at all.
+
+### The correct pattern: pre-authenticated sudo, not passwords-in-chat
+
+Instead of asking for or accepting a password, Aura should rely on one of:
+
+1. **A pre-validated sudo timestamp.** The user runs `sudo -v` themselves, directly in their own terminal, before starting a session that needs elevated commands. Sudo caches that authentication (typically 15 minutes, configurable via `timestamp_timeout` in `/etc/sudoers`). Aura's subsequent `sudo` calls within that window succeed without any password ever touching the agent, the chat, or any log.
+
+2. **A scoped NOPASSWD sudoers entry**, configured by the user in advance, for specific safe commands only — e.g. restarting a known-safe service, not blanket root access:
+   ```
+   dusan ALL=(root) NOPASSWD: /usr/bin/systemctl restart sddm
+   ```
+   This is the user's deliberate choice to pre-authorize a narrow, named action — not something Aura sets up for itself.
+
+3. **Asking the user to run the privileged step themselves**, with Aura providing the exact command, when neither of the above is set up. This is slower but has zero credential-exposure risk — which is exactly what Aura did *before* being asked for a password in the transcript that prompted this section, and is the correct fallback whenever pre-authentication isn't available.
+
+If a `sudo` command fails with `a terminal is required` or `interactive authentication is required`, the correct response is to report that back to the user and offer option 1, 2, or 3 above — never to ask for or accept a password as a workaround.
+
 ## What leaves your machine
 
 ### To the LLM provider
@@ -137,6 +172,7 @@ This is a safety mechanism against hallucination, not a security boundary. It ca
 - **Token waste from broken tools** — loud errors instead of silent retry loops.
 - **Hallucinated claims about the codebase** — machina verifier, council-verify for research.
 - **API key leakage into the repo** — `.gitignore` rules, keys stored outside project root.
+- **Password exposure during privileged operations** — Aura never accepts or embeds a password in a command; see "System administration scope" above.
 
 ### What Aura does NOT protect against
 
