@@ -581,6 +581,8 @@ function initGraph() {
     .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#484f58');
 
   const nodes = DATA.graph.nodes.map(n => ({...n}));
+  const TYPE_ORDER = { file: 0, concept: 1, function: 2, class: 2, interface: 2, const: 2, type: 2, enum: 2, node: 2, decision: 3, constraint: 4 };
+  nodes.sort((a, b) => (TYPE_ORDER[a.type||"node"] ?? 2) - (TYPE_ORDER[b.type||"node"] ?? 2));
   const edges = DATA.graph.edges.map(e => ({...e}));
   const tooltip = document.getElementById('tooltip');
 
