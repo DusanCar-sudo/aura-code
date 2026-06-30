@@ -1,0 +1,59 @@
+{
+  "name": "aura-code",
+  "version": "0.3.0",
+  "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
+  "bin": {
+    "aura": "dist/cli/index.js"
+  },
+  "main": "./dist/cli/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli/index.ts",
+    "start": "node dist/cli/index.js",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@google/generative-ai": "^0.21.0",
+    "chalk": "^4.1.2",
+    "express": "^5.2.1",
+    "glob": "^10.4.5",
+    "minimist": "^1.2.8",
+    "openai": "^4.68.4",
+    "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^25.1.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/minimist": "^1.2.5",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^2.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "coding",
+    "cli",
+    "model-agnostic",
+    "aura",
+    "praktess"
+  ],
+  "license": "MIT",
+  "directories": {
+    "test": "tests"
+  },
+  "author": "",
+  "type": "commonjs",
+  "types": "./dist/cli/index.d.ts"
+}

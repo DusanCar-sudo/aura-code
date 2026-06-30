@@ -1,0 +1,49 @@
+# bash completion for ruby-code
+
+_ruby_code() {
+    local cur prev words cword
+    _init_completion || return
+
+    case $prev in
+        -m|--model)
+            local models=$(ruby-code --models 2>/dev/null | awk '/^[[:space:]]+[a-zA-Z]/ {print $1}')
+            COMPREPLY=($(compgen -W "$models" -- "$cur"))
+            return
+            ;;
+        --api-key|--base-url|--cwd|--rate-limit-rpm|--rate-limit-tpm|--max-retries|--fallback)
+            COMPREPLY=($(compgen -f -- "$cur"))
+            return
+            ;;
+        --mode)
+            COMPREPLY=($(compgen -W "normal readonly auto" -- "$cur"))
+            return
+            ;;
+    esac
+
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W '
+            --help -h
+            --version -v
+            --model -m
+            --api-key
+            --base-url
+            --mode
+            --cwd
+            --auto
+            --readonly
+            --models
+            --no-session
+            --no-setup
+            --reset-setup
+            --rate-limit-rpm
+            --rate-limit-tpm
+            --max-retries
+            --fallback
+            --interactive
+        ' -- "$cur"))
+        return
+    fi
+
+    COMPREPLY=($(compgen -f -d -- "$cur"))
+} &&
+complete -F _ruby_code ruby-code

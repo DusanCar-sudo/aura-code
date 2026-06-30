@@ -1,0 +1,30 @@
+specfile_path: packaging/fedora/ruby-code.spec
+files_to_sync:
+  - packaging/fedora/ruby-code.spec
+  - .packit.yaml
+
+upstream_package_name: ruby-code
+downstream_package_name: ruby-code
+
+srpm_build_deps:
+  - npm
+
+jobs:
+  - job: copr_build
+    trigger: pull_request
+    targets:
+      - fedora-44-x86_64
+      - fedora-rawhide-x86_64
+
+  - job: copr_build
+    trigger: commit
+    branch: main
+    targets:
+      - fedora-44-x86_64
+      - fedora-rawhide-x86_64
+
+  - job: copr_build
+    trigger: release
+    targets:
+      - fedora-44-x86_64
+      - fedora-rawhide-x86_64

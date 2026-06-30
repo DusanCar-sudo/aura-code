@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Ruby Code
+Comment=Model-agnostic AI coding agent web interface
+Exec=ruby-code serve --open
+Icon=utilities-terminal
+Terminal=true
+Type=Application
+Categories=Development;IDE;
+Keywords=ai;code;llm;agent;coding;
