@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the off-by-one error in src/utils/pagination.js — the test suite in src/utils/pagination.test.js documents the expected behavior",
+  "verify": "node --test src/utils/pagination.test.js"
+}
