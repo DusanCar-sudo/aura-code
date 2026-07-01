@@ -52,6 +52,22 @@ export XIAOMI_API_KEY="tp-..."          # MiMo
 
 ---
 
+### The Memory Loop
+
+Every task feeds forward:
+
+```
+TASK → EXECUTE → VERIFY → EPISODE → DREAM → LESSON → next TASK
+```
+
+- **EPISODE** — task result recorded automatically in `episodes/*.json`
+- **DREAM** — run `:dream` to distill episodes into lessons (`dreams/YYYY-MM-DD.md`)
+- **LESSON** — reconciled beliefs injected into every future agent system prompt
+
+See [docs/MEMORY.md](docs/MEMORY.md) and [examples/](examples/) for the full picture.
+
+---
+
 ## Modes
 
 | Mode | What it does |
