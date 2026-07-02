@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as dns from 'dns';
 import { webFetch, WEB_FETCH_DEFINITION } from '../src/tools/web-fetch.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -10,6 +11,10 @@ const mockFetch = vi.fn();
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch);
   mockFetch.mockReset();
+  // The SSRF guard resolves DNS before fetching; these tests use non-routable
+  // example hostnames, so stub resolution to a public IP. SSRF *blocking* is
+  // covered hermetically by ssrf.test.ts using IP literals.
+  vi.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as any);
 });
 
 afterEach(() => {

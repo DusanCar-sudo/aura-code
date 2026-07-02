@@ -35,3 +35,4 @@ gen-pdf.js
 
 # Test-run artifact (generated during vitest runs)
 /Aura.mp3
+.vercel

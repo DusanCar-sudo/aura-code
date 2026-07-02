@@ -68,8 +68,19 @@ export class PermissionSystem {
   }
 
   private isSafe(cmd: string): boolean {
-    const lower = cmd.toLowerCase().trim();
-    return SAFE_SHELL_COMMANDS.some(s => lower.startsWith(s));
+    const trimmed = cmd.trim();
+
+    // A command containing shell control operators can't be judged safe from
+    // its prefix alone — `cat x; python3 -c '…'` starts with a safe command
+    // but chains an interpreter. Force confirmation for anything with
+    // chaining (`;` `&` `|`), redirection (`>` `<`), or command substitution
+    // (`$(…)`, backticks). This is the structural fix for prefix-smuggling.
+    if (/[;&|<>`]/.test(trimmed) || trimmed.includes('$(')) return false;
+
+    const lower = trimmed.toLowerCase();
+    // Anchor to a whole-command match so `curlx …` doesn't match `curl` and
+    // `lscpu` doesn't match `ls`.
+    return SAFE_SHELL_COMMANDS.some(s => lower === s || lower.startsWith(s + ' '));
   }
 }
 

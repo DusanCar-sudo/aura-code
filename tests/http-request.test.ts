@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as dns from 'dns';
 import { httpRequest, HTTP_REQUEST_DEFINITION } from '../src/tools/http-request.js';
 
 const mockFetch = vi.fn();
-beforeEach(() => { vi.stubGlobal('fetch', mockFetch); mockFetch.mockReset(); });
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
+  mockFetch.mockReset();
+  // SSRF guard resolves DNS first; stub example hosts to a public IP.
+  // SSRF blocking is covered by ssrf.test.ts with IP literals.
+  vi.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as any);
+});
 afterEach(() => { vi.restoreAllMocks(); });
 
 function mockResponse(body: string, init?: ResponseInit & { contentType?: string }) {

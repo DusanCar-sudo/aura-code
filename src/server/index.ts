@@ -1,4 +1,5 @@
 import * as http from 'http';
+import * as crypto from 'crypto';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createProvider, KNOWN_MODELS } from '../providers/factory.js';
@@ -18,19 +19,61 @@ export interface ServeOptions {
 export async function startServer(opts: ServeOptions): Promise<void> {
   const app = express();
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
+
+  // The web client drives the agent with the invoking user's full privileges.
+  // Without auth it would be reachable by anyone on the LAN (Node binds
+  // 0.0.0.0 by default) and drivable cross-origin from any website the user
+  // visits (WebSocket hijack). Defenses: bind loopback only, require a
+  // per-run bearer token on every route + the WS handshake, and validate the
+  // WS Origin so a browser tab on another site can't connect.
+  const token = process.env.AURA_SERVER_TOKEN || crypto.randomBytes(24).toString('hex');
+  const host = '127.0.0.1';
+  const allowedOrigins = new Set([
+    `http://localhost:${opts.port}`,
+    `http://127.0.0.1:${opts.port}`,
+  ]);
+  const tokenizedUrl = `http://${host}:${opts.port}/?token=${token}`;
+
+  const wss = new WebSocketServer({
+    server,
+    verifyClient: (info: { origin: string; req: http.IncomingMessage; secure: boolean }) => {
+      // Reject the handshake unless the token matches and (for browser
+      // clients that send one) the Origin is our own page.
+      try {
+        const reqUrl = new URL(info.req.url ?? '/', `http://${host}:${opts.port}`);
+        if (reqUrl.searchParams.get('token') !== token) return false;
+      } catch { return false; }
+      const origin = info.origin;
+      if (origin && !allowedOrigins.has(origin)) return false;
+      return true;
+    },
+  });
+
   app.use(express.json());
+
+  // Auth gate for all HTTP routes \u2014 token via ?token= (initial navigation)
+  // or the X-Aura-Token header (API calls from the page).
+  app.use((req, res, next) => {
+    const provided = (req.query.token as string | undefined) ?? req.header('x-aura-token');
+    if (provided !== token) {
+      res.status(401).send('Unauthorized: missing or invalid token.');
+      return;
+    }
+    next();
+  });
+
   const ctx = await loadProjectContext(opts.cwd);
   const session = new Session();
 
   console.log('\n  Aura \u2014 web client');
   console.log('  Project : ' + ctx.name + ' \u00b7 ' + ctx.language);
   console.log('  Model   : ' + opts.model);
-  console.log('  URL     : http://localhost:' + opts.port + '\n');
+  console.log('  URL     : ' + tokenizedUrl);
+  console.log('  (bound to 127.0.0.1; the URL includes a single-session access token)\n');
 
   app.get('/', (_req, res) => {
     res.setHeader('Content-Type', 'text/html');
-    res.send(buildUI(ctx.name, opts.model));
+    res.send(buildUI(ctx.name, opts.model, token));
   });
   app.get('/api/history', (_req, res) => res.json(session.getDisplay()));
   app.get('/api/project', (_req, res) => res.json({
@@ -100,9 +143,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     send(ws, { type: 'done', success: result.success, text: result.summary, turns: result.turns, toolCount: result.toolCallCount });
   }
 
-  server.listen(opts.port, () => {
-    if (opts.open) { try { require('child_process').exec('xdg-open http://localhost:' + opts.port); } catch {} }
-    console.log('  Ready \u2192 http://localhost:' + opts.port + '  (Ctrl+C to stop)\n');
+  server.listen(opts.port, host, () => {
+    if (opts.open) { try { require('child_process').exec('xdg-open ' + JSON.stringify(tokenizedUrl)); } catch {} }
+    console.log('  Ready \u2192 ' + tokenizedUrl + '  (Ctrl+C to stop)\n');
   });
 }
 
@@ -110,7 +153,7 @@ function send(ws: WebSocket, data: object): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
 }
 
-function buildUI(project: string, defaultModel: string): string {
+function buildUI(project: string, defaultModel: string, token: string): string {
   const modelOpts = KNOWN_MODELS
     .map(m => `<option value="${m.id}">${m.provider} \u2014 ${m.name}</option>`)
     .join('');
@@ -207,10 +250,12 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
   ms.value = '${defaultModel}';
   if (!ms.value) ms.selectedIndex = 0;
 
+  var TOKEN = ${JSON.stringify(token)};
+
   var ws, busy = false, sEl = null, sText = '', tEl = null, pEl = null;
 
   function conn() {
-    ws = new WebSocket('ws://' + location.host);
+    ws = new WebSocket('ws://' + location.host + '/?token=' + encodeURIComponent(TOKEN));
     ws.onopen = function() { dot.className = 'dot on'; lh(); };
     ws.onclose = function() { dot.className = 'dot'; setTimeout(conn, 2000); };
     ws.onmessage = function(e) { hv(JSON.parse(e.data)); };
@@ -279,8 +324,14 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
 
   function ar() { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 130) + 'px'; }
 
+  function authFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers, { 'X-Aura-Token': TOKEN });
+    return fetch(url, opts);
+  }
+
   async function lh() {
-    var msgs = await fetch('/api/history').then(function(r) { return r.json(); });
+    var msgs = await authFetch('/api/history').then(function(r) { return r.json(); });
     msgs.forEach(function(m) {
       if (m.role === 'user') { var e = mk('div','mu'); e.innerHTML = '<div class="b">' + ex(m.content) + '</div>'; ch.appendChild(e); }
       else if (m.role === 'assistant' && m.content) { var e = mk('div','ma'); e.innerHTML = '<div class="b">' + ex(m.content) + '</div>'; ch.appendChild(e); }
@@ -291,7 +342,7 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
   sb.addEventListener('click', go);
   inp.addEventListener('keydown', function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } });
   inp.addEventListener('input', ar);
-  btnR.addEventListener('click', function() { fetch('/api/reset', { method: 'POST' }); ws.send(JSON.stringify({ type: 'reset' })); });
+  btnR.addEventListener('click', function() { authFetch('/api/reset', { method: 'POST' }); ws.send(JSON.stringify({ type: 'reset' })); });
 
   conn();
 })();
