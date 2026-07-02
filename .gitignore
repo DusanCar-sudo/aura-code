@@ -22,3 +22,13 @@ coverage/
 
 # Build artifacts
 *.tsbuildinfo
+
+# Runtime state
+.aura/
+
+# Unrelated local projects & scratch files (kept on disk, not in this repo)
+deploy/
+hong-thuan-videos/
+*.zip
+write-part1b.py
+gen-pdf.js
