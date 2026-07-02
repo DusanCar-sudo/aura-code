@@ -1,6 +1,9 @@
 import type { ProjectContext } from './context.js';
+import { getDomainPromptBlock } from './domain-expertise.js';
 
-export function buildSystemPrompt(ctx: ProjectContext, providerName: string): string {
+export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
+  const domainBlock = getDomainPromptBlock(task);
+
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
 
@@ -28,7 +31,7 @@ You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framewo
 - Do not introduce new dependencies unless explicitly asked.
 - Prefer targeted, minimal changes over rewrites.
 - Add or update tests when you modify logic.
-
+${domainBlock}
 ## Safety
 - Never delete files unless explicitly instructed.
 - Never commit to git unless explicitly instructed.
