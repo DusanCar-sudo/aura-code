@@ -10,6 +10,7 @@ import { DEFAULTS } from '../config/defaults.js';
 import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
+import { getLoopProfile } from './loop-profile.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -72,10 +73,12 @@ function costFor(model: string, input: number, output: number): number {
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const { provider, task, context, permissions, display } = opts;
-  const maxTurns = opts.maxTurns ?? DEFAULTS.maxTurns;
+
+  const profile = getLoopProfile(task, opts.maxTurns);
+  const maxTurns = opts.maxTurns ?? DEFAULTS.maxTurns; // ISOLATION TEST: bypass profile sizing
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = buildSystemPrompt(context, provider.name);
+  const system = buildSystemPrompt(context, provider.name, task);
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
     { role: 'user', content: task },
@@ -92,7 +95,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   display.agentThinking();
 
   try {
-    return await runLoopBody({ opts, provider, system, history, maxTurns, pricingModel, display, permissions, turns, toolCallCount, usage });
+    return await runLoopBody({ opts, provider, system, history, maxTurns, pricingModel, display, permissions, turns, toolCallCount, usage, stallThreshold: profile.stallThreshold });
   } finally {
     clearSpawner();
   }
@@ -110,12 +113,20 @@ interface BodyArgs {
   turns: number;
   toolCallCount: number;
   usage: TokenUsage;
+  stallThreshold: number;
 }
 
 async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
-  const { opts, provider, system, history, maxTurns, pricingModel, display, permissions } = args;
+  const { opts, provider, system, history, maxTurns, pricingModel, display, permissions, stallThreshold } = args;
   let { turns, toolCallCount, usage } = args;
   const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+  // Stall detection: if the last N turns each issued the exact same
+  // tool call(s), the agent is stuck retrying rather than progressing.
+  // Stopping early here saves turns/cost on a run that would otherwise
+  // burn out to maxTurns without ever changing course.
+  const turnSignatures: string[] = [];
+  let stalled = false;
 
   while (turns < maxTurns) {
     turns++;
@@ -192,6 +203,19 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       toolCalls: responseToolCalls,
     });
 
+    // Record this turn's tool-call signature before executing, so a
+    // stall is detected even if every call in the streak errors out.
+    if (responseToolCalls.length > 0) {
+      const signature = JSON.stringify(
+        responseToolCalls.map((c) => ({ name: c.name, input: c.input })),
+      );
+      turnSignatures.push(signature);
+      const recent = turnSignatures.slice(-stallThreshold);
+      if (recent.length === stallThreshold && recent.every((s) => s === recent[0])) {
+        stalled = true;
+      }
+    }
+
     const toolResults: ToolResult[] = [];
 
     for (const call of responseToolCalls) {
@@ -233,15 +257,22 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     history.push({ role: 'tool_result', results: toolResults });
+
+    if (stalled) {
+      display.warning(`Repeated identical tool call ${stallThreshold}x in a row — stopping loop (stall detected)`);
+      break;
+    }
+
     display.agentThinking();
   }
 
   await persist(opts.sessionPath, history);
   const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
   const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
+  const reason = stalled ? 'stalled (repeated identical tool calls)' : `ended after ${turns} turns`;
   return {
     success: false,
-    summary: `Loop ended after ${turns} turns.${resumeHint}`,
+    summary: `Loop ${reason}.${resumeHint}`,
     turns, toolCallCount, usage, history, toolCallLog,
     costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
   };
