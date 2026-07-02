@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the XSS vulnerability in the HTML sanitizer component at src/ui/sanitize-html.js — it must escape all dangerous characters and strip event handler attributes for safe DOM rendering. The test suite in src/ui/sanitize-html.test.js documents the expected {safe, html} return shape.",
+  "verify": "node --test src/ui/sanitize-html.test.js"
+}

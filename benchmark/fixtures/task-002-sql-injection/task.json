@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the SQL injection vulnerability in src/db/build-user-query.js — parameterize the query instead of concatenating user input directly into the SQL string. The test suite in src/db/build-user-query.test.js documents the expected {sql, params} return shape.",
+  "verify": "node --test src/db/build-user-query.test.js"
+}

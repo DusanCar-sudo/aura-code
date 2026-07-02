@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the mock fetch test helper in src/testing/mock-fetch.js — it leaks global state between tests, silently ignores unexpected URLs instead of throwing, and does not track call history. The test suite in src/testing/mock-fetch.test.js documents the expected behavior.",
+  "verify": "node --test src/testing/mock-fetch.test.js"
+}
