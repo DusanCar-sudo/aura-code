@@ -49,7 +49,9 @@ export async function extractPerception(projectRoot: string): Promise<ProjectPer
         edges.push(buildEdge(rel, depId, 'depends_on', 0.9));
       } else {
         const resolved = resolveRelativeImport(root, rel, imp.name);
-        if (resolved) {
+        // Only .ts/.js targets become file nodes (see walkFiles), so an
+        // import of e.g. ../package.json must not produce a dangling edge.
+        if (resolved && (resolved.endsWith('.ts') || resolved.endsWith('.js'))) {
           edges.push(buildEdge(rel, resolved, 'depends_on', 0.95));
           importCounts.set(resolved, (importCounts.get(resolved) ?? 0) + 1);
         }
