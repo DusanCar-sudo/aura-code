@@ -15,6 +15,8 @@ import { createTerminalDisplay } from './display.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
+import pkg from '../../package.json';
+
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
@@ -29,6 +31,7 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderDiamond } from './diamond.js';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
@@ -551,7 +554,7 @@ async function main() {
 
   display.header(
     `Aura — ${ctx.name}`,
-    `${provider.name} · ${runtimeConfig.model} · ${ctx.language} · ${permissionLevel} mode` +
+    `v${pkg.version} · ${provider.name} · ${runtimeConfig.model} · ${ctx.language} · ${permissionLevel} mode` +
     (fileConfig.model ? ` · .aura.json loaded` : '') +
     (activeChatId ? ` · chat ${activeChatId}` : ''),
   );
@@ -1720,6 +1723,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
 
   ${chalk.hex('#4e3d30')('Usage:')}
     aura ${chalk.hex('#8a7768')('"<task>"')}                           Run a single task
+    aura ${chalk.hex('#8a7768')('serve')}                              Start the HTTP API server
     aura ${chalk.hex('#8a7768')('--interactive')}                      Start interactive REPL
     aura ${chalk.hex('#8a7768')('--models')}                           List available models
 
