@@ -19,6 +19,9 @@ function runCliWithCleanEnv(input: string, configDir: string): Promise<{ stdout:
         XDG_CONFIG_HOME: configDir,
         TERM: 'dumb',
       },
+      // Isolate cwd too: from the repo root the CLI would load the repo's
+      // own .aura.json project config and think a model is configured.
+      cwd: configDir,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -89,6 +92,7 @@ describe('CLI integration: first-run wizard', () => {
   it('bypasses the wizard when --no-setup is given (then errors about no model)', async () => {
     const proc = spawn('node', [CLI, '--no-setup'], {
       env: { PATH: '/usr/bin:/bin', HOME: tmpConfigDir, XDG_CONFIG_HOME: tmpConfigDir, TERM: 'dumb' },
+      cwd: tmpConfigDir, // see runCliWithCleanEnv — avoid the repo's .aura.json
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stderr = '';
