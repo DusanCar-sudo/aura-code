@@ -1,4 +1,4 @@
-# Mixture of Agents — Phase 1: Domain Expertise
+# Mixture of Agents — Phase 1: Domain Expertise · Phase 2: Parallel Perspectives
 
 `src/agent/domain-expertise.ts` + one added param on `buildSystemPrompt`
 
@@ -54,29 +54,40 @@ domain block forced to `''`, duration didn't change — confirming this
 addition isn't what caused the latency observed elsewhere in the session
 (see `ADAPTIVE_LOOP.md`).
 
-## Phase 2 — not built yet
+## Phase 2 — live in v0.7.1 (opt-in via `--moa`)
 
-For `exploratory`-shaped tasks specifically (per `loop-profile.ts`'s
-classification — that's where ambiguity actually benefits from multiple
-angles), spawn 2-3 domain-relevant sub-agents in parallel via the existing
-`spawn_task` / `makeDefaultSpawner` path, each in read-only mode with a
-different domain framing, then synthesize.
+`src/agent/mixture.ts` (`runMixtureOfAgents`) + a gate in `src/cli/index.ts`.
 
-Design constraints already decided, not yet implemented:
-- **Read-only only** — parallel sub-agents writing files simultaneously is
-  a race condition waiting to happen. Phase 2 sub-agents propose/diagnose;
-  they don't edit.
-- **Gated by task shape, not always-on** — only `exploratory` tasks pay the
-  N-call cost. `single-file` and `multi-file` tasks stay on the Phase 1
-  (single-agent, prompt-only) path.
-- **Synthesis needs a real model call** — unlike classification, reconciling
-  N expert opinions into one answer is actual judgment, not pattern
-  matching, so this step isn't free. Worth benchmarking whether the
-  quality gain justifies it before wiring it in by default.
+For `exploratory`-shaped tasks (per `loop-profile.ts`'s classification —
+that's where ambiguity actually benefits from multiple angles):
 
-Next step when picked back up: extend `spawner.ts`'s spawn path (or add a
-new `runMixtureOfAgents()` in a new file) to fan out via `Promise.all`
-instead of the current sequential single-spawn model, then benchmark
-against a genuinely ambiguous fixture task (something `task-001` isn't —
-that one has one right answer, which is exactly why it's a bad test for
-whether multiple perspectives help).
+1. `classifyDomains(task)` picks up to 2 domain lenses; a `generalist`
+   lens is always added (fallback pair `architecture` + `generalist` when
+   nothing matches). Net: 2-3 perspectives.
+2. Each lens runs a full agent loop in parallel (`Promise.all`) with
+   `PermissionSystem('read-only')`, `disableSpawn: true` (one level of
+   parallelism only), and a muted display (warnings/errors still surface,
+   prefixed with the lens name).
+3. One real `provider.complete()` synthesis call reconciles the reports —
+   agreement stated plainly, conflicts weighed by confidence/evidence.
+4. Returns a normal `LoopResult` (aggregated turns/usage/cost, including
+   the synthesis call) so the CLI treats it like any single-agent run.
+
+All the design constraints from the original plan held:
+- **Read-only only** — perspectives diagnose; they never edit.
+- **Gated by task shape AND `--moa`** — the N-call cost stays off the
+  default path until benchmarks justify it. Passing `--moa` on a
+  non-exploratory task warns and runs the normal single-agent path.
+- **Synthesis is a real model call**, and its tokens/cost are counted in
+  the returned result.
+
+Covered by `tests/mixture.test.ts` (fan-out counts, synthesis input,
+all-perspectives-failed short-circuit).
+
+## Not done here
+
+- No benchmark yet against a genuinely ambiguous fixture task (something
+  `task-001` isn't — it has one right answer, which is exactly why it's a
+  bad test for whether multiple perspectives help). Until that exists,
+  `--moa` stays opt-in.
+- The REPL path doesn't offer MoA; only single-shot `aura --moa '<task>'`.

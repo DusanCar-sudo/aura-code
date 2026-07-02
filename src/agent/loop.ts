@@ -65,7 +65,7 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
   'mimo-v2-flash':              { in: 0.1, out: 0.4 },
 };
 
-function costFor(model: string, input: number, output: number): number {
+export function costFor(model: string, input: number, output: number): number {
   const p = PRICING_USD_PER_MTOK[model] ?? PRICING_USD_PER_MTOK[Object.keys(PRICING_USD_PER_MTOK).find(k => model.includes(k.split('-')[1] ?? '') && k.startsWith(model.split('-')[0] ?? '')) ?? ''] ?? { in: 0, out: 0 };
   return (input / 1_000_000) * p.in + (output / 1_000_000) * p.out;
 }
