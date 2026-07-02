@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the LRU cache implementation in src/data-structures/lru-cache.js — it does not correctly evict the least-recently-used entry, and get() does not update access order. The cache must have O(1) get and put operations. The test suite in src/data-structures/lru-cache.test.js documents the expected behavior.",
+  "verify": "node --test src/data-structures/lru-cache.test.js"
+}

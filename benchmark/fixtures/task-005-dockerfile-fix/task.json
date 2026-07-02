@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the Dockerfile validator in src/ci/validate-dockerfile.js — it misses critical checks for pinned base-image versions, secret leakage via COPY/ADD, and running as root. The test suite in src/ci/validate-dockerfile.test.js documents the expected validation results.",
+  "verify": "node --test src/ci/validate-dockerfile.test.js"
+}

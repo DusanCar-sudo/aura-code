@@ -1,0 +1,4 @@
+{
+  "prompt": "fix the rate limiter middleware in src/middleware/rate-limiter.js — it allows more requests through than maxRequests during a window, and it leaks memory by never cleaning up expired entries. The test suite in src/middleware/rate-limiter.test.js documents the expected behavior.",
+  "verify": "node --test src/middleware/rate-limiter.test.js"
+}

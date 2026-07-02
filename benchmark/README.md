@@ -25,6 +25,16 @@ benchmark/
   results/                         # timestamped JSON output (gitignored)
 ```
 
+## Fixtures
+
+1. `task-001-off-by-one` — General JS/Algorithms
+2. `task-002-sql-injection` — Security + Database
+3. `task-003-xss-sanitize` — Frontend + Security
+4. `task-004-rate-limiter` — Backend API
+5. `task-005-dockerfile-fix` — DevOps
+6. `task-006-mock-leak` — Testing
+7. `task-007-lru-cache` — Algorithms
+
 ## Usage
 
 ```bash
