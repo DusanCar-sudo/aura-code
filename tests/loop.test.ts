@@ -133,4 +133,59 @@ describe('runAgentLoop', () => {
     expect(result.success).toBe(false);
     expect(result.turns).toBe(3);
   });
+
+  it('stops on a two-call cycle stall (A B A B A B)', async () => {
+    const a = { id: 'c', name: 'read_file', input: { path: 'package.json' } };
+    const b = { id: 'c', name: 'read_file', input: { path: 'other.json' } };
+    const responses = Array.from({ length: 20 }, (_, i) => ({
+      text: '',
+      toolCalls: [i % 2 === 0 ? a : b],
+      stopReason: 'tools' as const,
+    }));
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx, // single-file: stallThreshold 3
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+    expect(result.success).toBe(false);
+    expect(result.turns).toBe(6); // 3 full A-B cycles
+    expect(result.summary).toMatch(/cycling/);
+  });
+
+  it('widens the single-file budget once instead of dying at the ceiling', async () => {
+    // 33 productive (non-repeating) tool turns, then done. A single-file
+    // profile caps at 30, so without widening this would fail at turn 30.
+    const responses: LLMResponse[] = Array.from({ length: 33 }, (_, i) => ({
+      text: '',
+      toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+    expect(result.success).toBe(true);
+    expect(result.summary).toBe('made it');
+    expect(result.turns).toBe(34);
+  });
+
+  it('never widens past an explicit maxTurns override', async () => {
+    const responses = Array.from({ length: 20 }, (_, i) => ({
+      text: '',
+      toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
+      stopReason: 'tools' as const,
+    }));
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay, maxTurns: 5,
+    });
+    expect(result.success).toBe(false);
+    expect(result.turns).toBe(5);
+  });
 });
