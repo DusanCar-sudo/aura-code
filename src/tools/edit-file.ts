@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
 
 export interface EditFileInput {
   path: string;
@@ -8,7 +9,9 @@ export interface EditFileInput {
 }
 
 export function editFile(input: EditFileInput, cwd: string): string {
-  const filePath = path.resolve(cwd, input.path);
+  let filePath: string;
+  try { filePath = resolveInRoot(cwd, input.path); }
+  catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
 
   if (!fs.existsSync(filePath)) {
     return `Error: File not found: ${input.path}`;

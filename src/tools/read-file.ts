@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { BINARY_EXTENSIONS } from '../config/defaults.js';
+import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
 
 export interface ReadFileInput {
   path: string;
@@ -9,7 +10,9 @@ export interface ReadFileInput {
 }
 
 export function readFile(input: ReadFileInput, cwd: string): string {
-  const filePath = path.resolve(cwd, input.path);
+  let filePath: string;
+  try { filePath = resolveInRoot(cwd, input.path); }
+  catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
 
   if (!fs.existsSync(filePath)) {
     return `Error: File not found: ${input.path}`;

@@ -1,4 +1,6 @@
 import type { ToolDefinition } from '../providers/types.js';
+import { safeFetch, SsrfError } from '../safety/ssrf.js';
+import pkg from '../../package.json';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HTTP Request — generic HTTP client for API calls
@@ -39,15 +41,15 @@ export async function httpRequest(input: HttpRequestInput): Promise<string> {
   const maxChars = input.max_chars ?? 50_000;
   const timeoutMs = input.timeout_ms ?? 30_000;
 
-  let parsed: URL;
   try {
-    parsed = new URL(input.url);
+    // eslint-disable-next-line no-new
+    new URL(input.url);
   } catch {
     return `Error: Invalid URL: ${input.url}`;
   }
 
   const headers: Record<string, string> = {
-    'User-Agent': 'Aura/0.2.4',
+    'User-Agent': `Aura/${pkg.version}`,
     ...input.headers,
   };
 
@@ -65,7 +67,9 @@ export async function httpRequest(input: HttpRequestInput): Promise<string> {
   }
 
   try {
-    const response = await fetch(input.url, {
+    // safeFetch enforces the SSRF guard (http/https only, no private/
+    // loopback/link-local targets) before the request and on each redirect.
+    const response = await safeFetch(input.url, {
       method,
       headers,
       body,
@@ -103,6 +107,9 @@ export async function httpRequest(input: HttpRequestInput): Promise<string> {
       truncated,
     ].join('\n');
   } catch (e: any) {
+    if (e instanceof SsrfError) {
+      return `Error: Blocked for security (SSRF guard): ${e.message}`;
+    }
     if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
       return `Error: Request timed out after ${timeoutMs}ms`;
     }

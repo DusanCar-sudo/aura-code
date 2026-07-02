@@ -1,4 +1,6 @@
 import type { ToolDefinition } from '../providers/types.js';
+import { safeFetch, SsrfError } from '../safety/ssrf.js';
+import pkg from '../../package.json';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Web Fetch — retrieves content from any URL
@@ -72,14 +74,11 @@ export async function webFetch(input: WebFetchInput): Promise<string> {
   const maxChars = input.max_chars ?? MAX_CHARS_DEFAULT;
   const timeoutMs = input.timeout_ms ?? TIMEOUT_MS_DEFAULT;
 
-  // Validate URL
+  // Cheap local validation first — clear errors, no network round-trip.
+  // safeFetch re-validates (and adds the SSRF/DNS/redirect guard) below.
   let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return `Error: Invalid URL: ${url}`;
-  }
-
+  try { parsed = new URL(url); }
+  catch { return `Error: Invalid URL: ${url}`; }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return `Error: Unsupported protocol: ${parsed.protocol} (only http/https supported)`;
   }
@@ -89,7 +88,7 @@ export async function webFetch(input: WebFetchInput): Promise<string> {
 
   try {
     const headers: Record<string, string> = {
-      'User-Agent': 'Aura/0.2.4 (AI Agent)',
+      'User-Agent': `Aura/${pkg.version} (AI Agent)`,
       'Accept': 'text/html,application/xhtml+xml,application/json,text/plain,*/*',
       ...input.headers,
     };
@@ -98,13 +97,14 @@ export async function webFetch(input: WebFetchInput): Promise<string> {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(url, {
+    // safeFetch validates the URL (http/https only, no private/loopback/
+    // link-local hosts) and re-validates every redirect hop against SSRF.
+    const response = await safeFetch(url, {
       method,
       headers,
       body: input.body,
       signal: controller.signal,
-      redirect: 'follow',
-    });
+    }, { maxRedirects: MAX_REDIRECTS });
 
     clearTimeout(timer);
 
@@ -159,6 +159,9 @@ export async function webFetch(input: WebFetchInput): Promise<string> {
     return `${headerBlock}${truncate(processed, maxChars)}`;
   } catch (e: any) {
     clearTimeout(timer);
+    if (e instanceof SsrfError) {
+      return `Error: Blocked for security (SSRF guard): ${e.message}`;
+    }
     if (e?.name === 'AbortError') {
       return `Error: Request timed out after ${timeoutMs}ms — ${url}`;
     }

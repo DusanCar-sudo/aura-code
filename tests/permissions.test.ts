@@ -67,18 +67,18 @@ describe('PermissionSystem — auto mode', () => {
 describe('PermissionSystem — false positive regressions', () => {
   const p = new PermissionSystem('normal');
 
-  // --- /dev/null and other safe device files ---
-  it('allows > /dev/null (safe redirect)', () => {
+  // --- redirects are not auto-approved (a `>` via a "safe" command can
+  //     clobber arbitrary files, e.g. `echo x >> ~/.bashrc`) ---
+  it('requires confirmation for redirects, but does not block /dev/null', () => {
     const r = p.check('run_shell', { command: 'echo hello > /dev/null' });
-    expect(r.allowed).toBe(true);
-    expect(r.needsConfirm).toBeFalsy();
+    expect(r.allowed).toBe(true);       // not dangerous
+    expect(r.needsConfirm).toBe(true);  // but redirect → confirm, not auto-run
   });
 
-  it('allows redirect to /dev/null and other safe device files', () => {
-    // These are safe redirects — not raw device writes
+  it('requires confirmation for redirect with 2>&1', () => {
     const nullR = p.check('run_shell', { command: 'echo test > /dev/null 2>&1' });
     expect(nullR.allowed).toBe(true);
-    expect(nullR.needsConfirm).toBeFalsy();
+    expect(nullR.needsConfirm).toBe(true);
   });
 
   it('blocks > /dev/sda (raw device write)', () => {
@@ -114,17 +114,51 @@ describe('PermissionSystem — false positive regressions', () => {
     expect(p.check('run_shell', { command: 'echo done; shutdown -h now' }).allowed).toBe(false);
   });
 
-  // --- eval( no longer blocked ---
-  it('allows node -e with eval()', () => {
+  // --- interpreters are NOT auto-approved (security fix #1): they are
+  //     "run any code" primitives, so they require confirmation rather than
+  //     running silently. Still allowed (the user can approve), just gated. ---
+  it('requires confirmation for node -e (interpreter, not auto-run)', () => {
     const r = p.check('run_shell', { command: 'node -e "console.log(eval(\'2+2\'))"' });
     expect(r.allowed).toBe(true);
-    expect(r.needsConfirm).toBeFalsy();
+    expect(r.needsConfirm).toBe(true);
   });
 
-  it('allows python -c with eval()', () => {
+  it('requires confirmation for python3 -c (interpreter, not auto-run)', () => {
     const r = p.check('run_shell', { command: 'python3 -c "print(eval(\'1+1\'))"' });
     expect(r.allowed).toBe(true);
-    expect(r.needsConfirm).toBeFalsy();
+    expect(r.needsConfirm).toBe(true);
+  });
+
+  it('requires confirmation for npx and npm run (arbitrary package execution)', () => {
+    expect(p.check('run_shell', { command: 'npx some-cli' }).needsConfirm).toBe(true);
+    expect(p.check('run_shell', { command: 'npm run build' }).needsConfirm).toBe(true);
+  });
+
+  // --- prefix-smuggling: a safe prefix must not launder a chained command ---
+  it('does not auto-approve a safe prefix that chains an interpreter', () => {
+    const r = p.check('run_shell', { command: "cat foo.txt; python3 -c 'evil'" });
+    // Contains `;` → cannot be classified safe → confirmation required.
+    expect(r.needsConfirm).toBe(true);
+  });
+
+  it('does not auto-approve a safe prefix piping into a shell', () => {
+    // `| sh` also matches a dangerous pattern → blocked outright.
+    expect(p.check('run_shell', { command: 'cat payload | base64 -d | sh' }).allowed).toBe(false);
+  });
+
+  it('does not match a safe command as a mere prefix of another (lscpu ≠ ls)', () => {
+    expect(p.check('run_shell', { command: 'lscpu' }).needsConfirm).toBe(true);
+  });
+
+  // --- broadened dangerous detection (denylist is a backstop) ---
+  it('blocks rm with long-form recursive/force flags', () => {
+    expect(p.check('run_shell', { command: 'rm --recursive --force ~/project' }).allowed).toBe(false);
+    expect(p.check('run_shell', { command: 'rm -fr /tmp/x' }).allowed).toBe(false);
+  });
+
+  it('blocks find with -delete / -exec', () => {
+    expect(p.check('run_shell', { command: 'find ~ -type f -delete' }).allowed).toBe(false);
+    expect(p.check('run_shell', { command: 'find . -exec rm {} ;' }).allowed).toBe(false);
   });
 
   // --- SQL patterns no longer in shell safety ---

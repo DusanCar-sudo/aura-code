@@ -31,8 +31,12 @@ export const DANGEROUS_COMMANDS = [
   'shutdown', 'reboot',
 ];
 
+// NOTE: a regex denylist over a shell *string* is best-effort only — shell
+// quoting, flag variants, and interpreters defeat it (see permissions.ts for
+// the structural mitigations). It is a backstop, never the primary boundary.
 export const DANGEROUS_PATTERNS: RegExp[] = [
-  /\b(sudo\s+)?rm\s+-rf?\b/i,          // rm -r / rm -rf (with or without sudo)
+  // rm with any recursive/force flag: -rf, -fr, -r, -f, --recursive, --force
+  /\brm\s+(?:-[a-z]*[rf][a-z]*|--(?:recursive|force|no-preserve-root))\b/i,
   /\bmkfs\b/,
   /\bdd\s+if=/i,
   /\bfdisk\b/,
@@ -41,19 +45,24 @@ export const DANGEROUS_PATTERNS: RegExp[] = [
   /\|\s*(ba)?sh\b/,
   /\bwget\b.*\|\s*(ba)?sh/i,
   /\bcurl\b.*\|\s*(ba)?sh/i,
-  /\bchmod\s+777\b/,
+  /\bfind\b.*\s-(?:delete|exec|execdir)\b/i,   // find … -delete / -exec is a deletion/exec vector
+  /\bchmod\s+(?:-R\s+)?[0-7]*7[0-7]{2}\b/,      // world-writable/executable (…7xx, e.g. 777, 757)
   /\bchown\s+root\b/,
   /(?:^|[;&|]+\s*)(?:sudo\s+)?\bshutdown\b/,   // shutdown as actual command, not substring
   /(?:^|[;&|]+\s*)(?:sudo\s+)?\breboot\b/,     // reboot as actual command, not substring
   /\bsource\s+\/dev\//,
 ];
 
+// Commands whose output is inspection-only and safe to auto-approve in normal
+// mode. Interpreters and package-runners (node, python, npx, npm run, …) are
+// deliberately NOT here: whitelisting an interpreter is equivalent to
+// whitelisting "run any code" (e.g. `node -e '…'`, `python3 -c '…'`), which
+// turns prompt injection into silent RCE. Those now require confirmation.
 export const SAFE_SHELL_COMMANDS = [
   'ls', 'cat', 'echo', 'pwd', 'which', 'find', 'grep', 'rg',
-  'curl', 'jq', 'head', 'tail', 'wc',
-  'npm test', 'npm run', 'npx', 'yarn test', 'yarn run',
-  'python', 'python3', 'pytest', 'go test', 'cargo test',
-  'tsc', 'node', 'ts-node',
+  'jq', 'head', 'tail', 'wc',
+  // Test/build runners are scoped tools, not eval-a-string interpreters.
+  'npm test', 'yarn test', 'pytest', 'go test', 'cargo test', 'tsc',
   'git status', 'git log', 'git diff', 'git show',
   'git add', 'git commit', 'git branch',
   'mkdir', 'cp', 'mv', 'touch',

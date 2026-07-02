@@ -5,11 +5,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { IGNORE_PATTERNS } from '../config/defaults.js';
+import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
 
 export interface ListDirInput { path: string; recursive: boolean; depth: number }
 
 export function listDir(input: ListDirInput, cwd: string): string {
-  const dirPath = path.resolve(cwd, input.path ?? '.');
+  let dirPath: string;
+  try { dirPath = resolveInRoot(cwd, input.path ?? '.'); }
+  catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
   if (!fs.existsSync(dirPath)) return `Error: Directory not found: ${input.path}`;
 
   const lines: string[] = [];
@@ -53,7 +56,9 @@ export function listDir(input: ListDirInput, cwd: string): string {
 export interface WriteFileInput { path: string; content: string }
 
 export function writeFile(input: WriteFileInput, cwd: string): string {
-  const filePath = path.resolve(cwd, input.path);
+  let filePath: string;
+  try { filePath = resolveInRoot(cwd, input.path); }
+  catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const existed = fs.existsSync(filePath);
@@ -76,7 +81,9 @@ export interface SearchCodeInput {
 }
 
 export function searchCode(input: SearchCodeInput, cwd: string): string {
-  const searchDir = path.resolve(cwd, input.path ?? '.');
+  let searchDir: string;
+  try { searchDir = resolveInRoot(cwd, input.path ?? '.'); }
+  catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
 
   // Try ripgrep first (much faster), fall back to grep
   const hasRg = (() => { try { execSync('which rg', { stdio: 'pipe' }); return true; } catch { return false; } })();
@@ -119,7 +126,9 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
 export interface RunShellInput { command: string; cwd?: string; timeout?: number }
 
 export function runShell(input: RunShellInput, projectCwd: string): string {
-  const workDir = input.cwd ? path.resolve(projectCwd, input.cwd) : projectCwd;
+  let workDir: string;
+  try { workDir = input.cwd ? resolveInRoot(projectCwd, input.cwd) : projectCwd; }
+  catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
   const timeout = input.timeout ?? 30_000;
 
   try {
