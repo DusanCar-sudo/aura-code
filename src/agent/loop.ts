@@ -6,11 +6,10 @@ import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import type { ProjectContext } from './context.js';
 import type { Display } from '../cli/display.js';
-import { DEFAULTS } from '../config/defaults.js';
 import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
-import { getLoopProfile } from './loop-profile.js';
+import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -75,7 +74,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const { provider, task, context, permissions, display } = opts;
 
   const profile = getLoopProfile(task, opts.maxTurns);
-  const maxTurns = opts.maxTurns ?? DEFAULTS.maxTurns; // ISOLATION TEST: bypass profile sizing
   const pricingModel = opts.pricingModel ?? provider.model;
 
   const system = buildSystemPrompt(context, provider.name, task);
@@ -95,7 +93,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   display.agentThinking();
 
   try {
-    return await runLoopBody({ opts, provider, system, history, maxTurns, pricingModel, display, permissions, turns, toolCallCount, usage, stallThreshold: profile.stallThreshold });
+    return await runLoopBody({ opts, provider, system, history, profile, pricingModel, display, permissions, turns, toolCallCount, usage });
   } finally {
     clearSpawner();
   }
@@ -106,29 +104,45 @@ interface BodyArgs {
   provider: LLMProvider;
   system: string;
   history: HistoryMessage[];
-  maxTurns: number;
+  profile: LoopProfile;
   pricingModel: string;
   display: Display;
   permissions: PermissionSystem;
   turns: number;
   toolCallCount: number;
   usage: TokenUsage;
-  stallThreshold: number;
 }
 
 async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
-  const { opts, provider, system, history, maxTurns, pricingModel, display, permissions, stallThreshold } = args;
+  const { opts, provider, system, history, profile, pricingModel, display, permissions } = args;
   let { turns, toolCallCount, usage } = args;
   const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
 
-  // Stall detection: if the last N turns each issued the exact same
-  // tool call(s), the agent is stuck retrying rather than progressing.
-  // Stopping early here saves turns/cost on a run that would otherwise
-  // burn out to maxTurns without ever changing course.
+  // Stall detection: if the recent turns repeat the exact same tool call(s)
+  // (or alternate between the same two), the agent is stuck rather than
+  // progressing. Stopping early here saves turns/cost on a run that would
+  // otherwise burn out to maxTurns without ever changing course.
   const turnSignatures: string[] = [];
-  let stalled = false;
+  let stall: StallKind | null = null;
 
-  while (turns < maxTurns) {
+  // Adaptive widening: a run that hits its profile ceiling while still
+  // making progress gets ONE upgrade to profile.widenTo instead of dying
+  // with a resume hint. Explicit --max-turns never widens.
+  let maxTurns = profile.maxTurns;
+  let widened = false;
+
+  while (true) {
+    if (turns >= maxTurns) {
+      if (profile.widenTo !== undefined && !widened) {
+        widened = true;
+        maxTurns = profile.widenTo;
+        display.warning(
+          `Turn budget (${profile.maxTurns}) reached with work in progress — widening once to ${maxTurns}.`,
+        );
+      } else {
+        break;
+      }
+    }
     turns++;
 
     let responseText = '';
@@ -210,10 +224,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         responseToolCalls.map((c) => ({ name: c.name, input: c.input })),
       );
       turnSignatures.push(signature);
-      const recent = turnSignatures.slice(-stallThreshold);
-      if (recent.length === stallThreshold && recent.every((s) => s === recent[0])) {
-        stalled = true;
-      }
+      stall = detectStall(turnSignatures, profile.stallThreshold);
     }
 
     const toolResults: ToolResult[] = [];
@@ -258,8 +269,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
     history.push({ role: 'tool_result', results: toolResults });
 
-    if (stalled) {
-      display.warning(`Repeated identical tool call ${stallThreshold}x in a row — stopping loop (stall detected)`);
+    if (stall) {
+      display.warning(stall === 'repeat'
+        ? `Repeated identical tool call ${profile.stallThreshold}x in a row — stopping loop (stall detected)`
+        : `Alternating between the same two tool calls ${profile.stallThreshold}x — stopping loop (cycle stall detected)`);
       break;
     }
 
@@ -269,7 +282,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   await persist(opts.sessionPath, history);
   const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
   const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
-  const reason = stalled ? 'stalled (repeated identical tool calls)' : `ended after ${turns} turns`;
+  const reason = stall === 'repeat' ? 'stalled (repeated identical tool calls)'
+    : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
+    : `ended after ${turns} turns${widened ? `, after widening once from ${profile.maxTurns}` : ''}`;
   return {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,

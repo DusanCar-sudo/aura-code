@@ -3,7 +3,6 @@ import type { LLMProvider, HistoryMessage, StreamChunk, LLMResponse } from '../p
 import { createProvider } from '../providers/factory.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import type { ProjectContext } from './context.js';
-import { DEFAULTS } from '../config/defaults.js';
 import type { Display } from '../cli/display.js';
 
 export interface SpawnOptions {
@@ -62,7 +61,8 @@ export function makeDefaultSpawner(
         context: ctx,
         permissions: new PermissionSystem(level),
         display,
-        maxTurns: DEFAULTS.maxTurns,
+        // No explicit maxTurns: let loop-profile size the sub-agent's
+        // budget from its task shape, same as the top-level loop.
       });
       const cost = result.costUsd.toFixed(4);
       return `[subagent ${model}]\n${result.summary}\n[cost: $${cost} · ${result.turns} turns · ${result.toolCallCount} tools]`;
