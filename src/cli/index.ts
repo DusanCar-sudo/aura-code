@@ -39,7 +39,7 @@ import { renderDiamond } from './diamond.js';
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -785,6 +785,29 @@ async function main() {
     }
 
     const doVerify = cliVerify || !!fileConfig.verify;
+
+    // --moa: mixture-of-agents Phase 2 — only pays off for exploratory-shaped
+    // tasks (see docs/MIXTURE_OF_AGENTS.md), so it's gated on both the flag
+    // and the task shape. Other shapes fall through to the single-agent path.
+    if (argv.moa === true) {
+      const { classifyTask } = await import('../agent/loop-profile.js');
+      if (classifyTask(task) === 'exploratory') {
+        const { runMixtureOfAgents } = await import('../agent/mixture.js');
+        const moaResult = await runMixtureOfAgents({ provider, task, context: ctx, display });
+        if (activeChatId && !noSession) {
+          await sessionStore.upsertSession(projectRoot, activeChatId, moaResult.history, activeChatTitle);
+        }
+        if (moaResult.success) {
+          display.summary(moaResult.summary, moaResult.turns, moaResult.toolCallCount);
+          printUsageFooter(display, moaResult.usage, moaResult.costUsd);
+        } else {
+          display.error(moaResult.summary);
+          process.exit(1);
+        }
+        return;
+      }
+      display.warning('--moa only applies to exploratory tasks (explain/analyze/investigate…) — running the normal single-agent path.');
+    }
 
     let result;
     if (doVerify) {
@@ -1751,7 +1774,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
-    --max-turns <n>          Max agent loop turns before stopping (default: 150)
+    --max-turns <n>          Max agent loop turns before stopping (default: sized by task shape)
+    --moa                    Mixture of agents: parallel read-only domain perspectives + synthesis (exploratory tasks only)
     --analyze                Mine session history for weakness patterns; save report
     --propose-harness        Generate system-prompt patches from weakness report
     --apply-harness <id>     Apply a proposal patch; reverts if tests fail
