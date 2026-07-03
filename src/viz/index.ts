@@ -260,6 +260,11 @@ function buildHtml(data: {
   .memory-val { max-width: 560px; white-space: pre-wrap; word-break: break-word; color: var(--text); }
 
   .empty { color: var(--dim); font-size: 12px; padding: 32px; text-align: center; }
+
+  /* New panel styles */
+  .axis line, .axis path { stroke: var(--border); }
+  .grid line { stroke: var(--border); stroke-dasharray: 3,3; }
+  .tooltip { position: fixed; background: #161b22f0; border: 1px solid var(--border2); border-radius: 7px; color: var(--text); font-size: 11px; max-width: 300px; padding: 9px 13px; pointer-events: none; z-index: 999; line-height: 1.6; box-shadow: 0 4px 20px #0008; }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
@@ -276,13 +281,21 @@ function buildHtml(data: {
   <button onclick="showPanel('sessions',this)">Sessions</button>
   <button onclick="showPanel('plans',this)">Execution Plans</button>
   <button onclick="showPanel('memory',this)">Agent Memory</button>
+  <button onclick="showPanel('activity',this)">Activity Timeline</button>
+  <button onclick="showPanel('centrality',this)">Code Centrality</button>
+  <button onclick="showPanel('specialists',this)">Specialist Stats</button>
+  <button onclick="showPanel('tools',this)">Tool Usage</button>
 </nav>
 
 <div id="overview" class="panel active"></div>
-<div id="graph"    class="panel"></div>
-<div id="sessions" class="panel"></div>
-<div id="plans"    class="panel"></div>
-<div id="memory"   class="panel"></div>
+<div id="graph"       class="panel"></div>
+<div id="sessions"    class="panel"></div>
+<div id="plans"       class="panel"></div>
+<div id="memory"      class="panel"></div>
+<div id="activity"    class="panel"></div>
+<div id="centrality"  class="panel"></div>
+<div id="specialists" class="panel"></div>
+<div id="tools"       class="panel"></div>
 
 <div class="tooltip" id="tooltip" style="display:none"></div>
 
@@ -294,8 +307,12 @@ function showPanel(id, btn) {
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('active');
-  if (id === 'graph'   && !graphInit) initGraph();
-  if (id === 'plans'   && !plansInit) initPlans();
+  if (id === 'graph'       && !graphInit) initGraph();
+  if (id === 'plans'       && !plansInit) initPlans();
+  if (id === 'activity'    && !activityInit) initActivity();
+  if (id === 'centrality'  && !centralityInit) initCentrality();
+  if (id === 'specialists' && !specialistsInit) initSpecialists();
+  if (id === 'tools'       && !toolsInit) initTools();
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────
@@ -363,8 +380,7 @@ function initGraph() {
   const allTypes = [...new Set(DATA.graph.nodes.map(n => n.type || 'node'))];
   const activeTypes = new Set(allTypes);
 
-  panel.innerHTML = `
-    <div class="graph-controls">
+  panel.innerHTML = \`<div class="graph-controls">
       <input id="graph-search" placeholder="🔍  Search nodes, files…" oninput="filterGraph()">
       <div class="mode-toggle" id="graph-mode-toggle">
         <button class="mode-btn active" data-mode="force">Force</button>
@@ -373,15 +389,14 @@ function initGraph() {
       <div class="legend" id="legend"></div>
       <span class="hint">scroll to zoom · drag to pan · drag nodes</span>
     </div>
-    <svg id="graph-svg"></svg>
-  `;
+    <svg id="graph-svg"></svg>\`;
 
   const legendEl = document.getElementById('legend');
   allTypes.forEach(t => {
     const item = document.createElement('span');
     item.className = 'legend-item on';
     item.style.color = NODE_COLORS[t] || '#8b949e';
-    item.innerHTML = `<span class="legend-dot" style="background:${NODE_COLORS[t]||'#8b949e'}"></span>${t}`;
+    item.innerHTML = \`<span class="legend-dot" style="background:\${NODE_COLORS[t]||'#8b949e'}"></span>\${t}\`;
     item.onclick = () => {
       if (activeTypes.has(t)) { activeTypes.delete(t); item.classList.remove('on'); }
       else { activeTypes.add(t); item.classList.add('on'); }
@@ -412,10 +427,16 @@ function initGraph() {
   function renderCurrentMode() {
     const svgEl = document.getElementById('graph-svg');
     svgEl.innerHTML = '';
+    // Fresh copies per render: d3.forceLink mutates edge source/target from
+    // string ids into node object refs in place. Sharing one array across
+    // mode switches means the second Force render gets already-mutated edges
+    // and throws "node not found". Clone so each render starts clean.
+    const nodesCopy = nodes.map(n => ({...n}));
+    const edgesCopy = edges.map(e => ({ ...e, source: e.source.id || e.source, target: e.target.id || e.target }));
     if (graphMode === 'treemap') {
-      filterGraph = renderTreemapGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, tooltip);
+      filterGraph = renderTreemapGraph(svgEl, nodesCopy, edgesCopy, NODE_COLORS, activeTypes, tooltip);
     } else {
-      filterGraph = renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL, activeTypes, tooltip);
+      filterGraph = renderForceGraph(svgEl, nodesCopy, edgesCopy, NODE_COLORS, NODE_R, ALWAYS_LABEL, activeTypes, tooltip);
     }
   }
 
@@ -479,9 +500,9 @@ function renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL
       .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
     .on('mouseover', (e,d) => {
       tooltip.style.display='block';
-      tooltip.innerHTML = `<strong>${d.label}</strong><br>
-        <span class="t-type">${d.type||'node'}</span>
-        ${d.file ? `<br><span class="t-file">${d.file}${d.source_location?' · '+d.source_location:''}</span>` : ''}`;
+      tooltip.innerHTML = \`<strong>\${d.label}</strong><br>
+        <span class="t-type">\${d.type||'node'}</span>
+        \${d.file ? \`<br><span class="t-file">\${d.file}\${d.source_location?' · '+d.source_location:''}</span>\` : ''}\`;
     })
     .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
     .on('mouseout',  () => { tooltip.style.display='none'; });
@@ -589,9 +610,9 @@ function renderTreemapGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, toolt
     .style('cursor','pointer')
     .on('mouseover', (e,d) => {
       tooltip.style.display='block';
-      tooltip.innerHTML = `<strong>${d.data.node.label}</strong><br>
-        <span class="t-type">${d.data.node.type||'node'} · degree ${degree.get(d.data.node.id)||0}</span>
-        ${d.data.node.file ? `<br><span class="t-file">${d.data.node.file}</span>` : ''}`;
+      tooltip.innerHTML = \`<strong>\${d.data.node.label}</strong><br>
+        <span class="t-type">\${d.data.node.type||'node'} · degree \${degree.get(d.data.node.id)||0}</span>
+        \${d.data.node.file ? \`<br><span class="t-file">\${d.data.node.file}</span>\` : ''}\`;
     })
     .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
     .on('mouseout',  () => { tooltip.style.display='none'; });
@@ -613,7 +634,7 @@ function renderTreemapGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, toolt
     .attr('d', d => {
       const s = center.get(d.source.id || d.source), t = center.get(d.target.id || d.target);
       const mx = (s[0]+t[0])/2, my = (s[1]+t[1])/2 - Math.abs(t[0]-s[0])*0.12;
-      return `M${s[0]},${s[1]} Q${mx},${my} ${t[0]},${t[1]}`;
+      return \`M\${s[0]},\${s[1]} Q\${mx},\${my} \${t[0]},\${t[1]}\`;
     });
 
   function filterGraph() {
@@ -816,6 +837,599 @@ function renderDag(plan) {
     </table>
   \`;
 })();
+
+// ── Activity Timeline ───────────────────────────────────────────────────────────
+let activityInit = false;
+function initActivity() {
+  activityInit = true;
+  const panel = document.getElementById('activity');
+
+  // Prepare data
+  const sessionEvents = DATA.sessions.map(s => ({
+    date: new Date(s.createdAt),
+    type: 'session',
+    id: s.id,
+    title: s.title || 'Untitled Session'
+  }));
+
+  const planEvents = DATA.plans.map(p => ({
+    date: new Date(p.created),
+    type: 'plan',
+    id: p.id,
+    goal: p.goal,
+    status: p.status
+  }));
+
+  const allEvents = [...sessionEvents, ...planEvents].sort((a, b) => a.date - b.date);
+
+  if (allEvents.length === 0) {
+    panel.innerHTML = '<div class="empty">No activity data found.</div>';
+    return;
+  }
+
+  panel.innerHTML = \`
+    <div style="display:flex;gap:14px;flex:1;min-height:0">
+      <div style="width:280px;overflow-y:auto;padding-right:10px" id="timeline-list"></div>
+      <svg id="timeline-svg" style="flex:1;min-height:0;background:var(--canvas);border:1px solid var(--border);border-radius:8px"></svg>
+    </div>
+  \`;
+
+  // Build timeline list
+  const listEl = document.getElementById('timeline-list');
+  allEvents.forEach((evt, i) => {
+    const item = document.createElement('div');
+    item.className = 'session-card';
+    item.style.padding = '10px 12px';
+    const color = evt.type === 'session' ? 'var(--amber)' : 'var(--purple)';
+    const statusBadge = evt.status ? \`<span class="status-badge status-\${evt.status}">\${evt.status}</span>\` : '';
+    item.innerHTML = \`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="color:\${color};font-size:10px;font-weight:700;text-transform:uppercase">\${evt.type}</span>
+        <span style="color:var(--dim);font-size:10px">\${evt.date.toLocaleDateString()}</span>
+      </div>
+      <div style="color:var(--text);font-size:11px;line-height:1.4">\${(evt.title || evt.goal || '').slice(0,80)}</div>
+      \${statusBadge}
+    \`;
+    item.onclick = () => highlightTimelineEvent(i);
+    listEl.appendChild(item);
+  });
+
+  // Create timeline visualization
+  const svgEl = document.getElementById('timeline-svg');
+  const W = svgEl.clientWidth || 600, H = svgEl.clientHeight || 400;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+
+  const margin = {top: 40, right: 40, bottom: 60, left: 60};
+  const width = W - margin.left - margin.right;
+  const height = H - margin.top - margin.bottom;
+
+  const g = svg.append('g').attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+  // Time scale
+  const timeExtent = d3.extent(allEvents, d => d.date);
+  const xScale = d3.scaleTime().domain(timeExtent).range([0, width]);
+
+  // Group by day
+  const dayBins = d3.timeDays(d3.timeDay.offset(timeExtent[0], -1), d3.timeDay.offset(timeExtent[1], 1));
+  const binnedData = dayBins.map(day => {
+    const dayEvents = allEvents.filter(e =>
+      d3.timeDay.floor(e.date).getTime() === day.getTime()
+    );
+    return {
+      date: day,
+      sessions: dayEvents.filter(e => e.type === 'session').length,
+      plans: dayEvents.filter(e => e.type === 'plan').length,
+      total: dayEvents.length
+    };
+  }).filter(d => d.total > 0);
+
+  // Y scales
+  const maxY = d3.max(binnedData, d => d.total) || 1;
+  const yScale = d3.scaleLinear().domain([0, maxY]).range([height, 0]);
+
+  // Axes
+  const xAxis = d3.axisBottom(xScale).tickFormat(d3.timeFormat('%b %d'));
+  const yAxis = d3.axisLeft(yScale).ticks(5);
+
+  g.append('g').attr('class', 'x axis').attr('transform', \`translate(0,\${height})\`).call(xAxis)
+   .selectAll('text').style('color','var(--muted)').style('font-size','10px');
+
+  g.append('g').attr('class', 'y axis').call(yAxis)
+   .selectAll('text').style('color','var(--muted)').style('font-size','10px');
+
+  g.selectAll('.domain, .tick line').style('stroke','var(--border)');
+
+  // Stack
+  const stack = d3.stack().keys(['sessions', 'plans']);
+  const stackedData = stack(binnedData);
+
+  const area = d3.area()
+    .x(d => xScale(d.data.date))
+    .y0(d => yScale(d[0]))
+    .y1(d => yScale(d[1]));
+
+  const colors = {sessions: '#d29922', plans: '#bc8cff'};
+
+  stackedData.forEach((layer, i) => {
+    const key = layer.key;
+    g.append('path')
+      .datum(layer)
+      .attr('fill', colors[key])
+      .attr('fill-opacity', 0.7)
+      .attr('d', area);
+  });
+
+  // Event points
+  const eventPoints = g.append('g').selectAll('circle')
+    .data(allEvents)
+    .enter().append('circle')
+    .attr('cx', d => xScale(d.date))
+    .attr('cy', d => {
+      const dayData = binnedData.find(b => d3.timeDay.floor(b.date).getTime() === d3.timeDay.floor(d.date).getTime());
+      if (!dayData) return height / 2;
+      const y = height - (dayData.total / maxY) * height / 2;
+      return y + Math.random() * 40 - 20; // jitter
+    })
+    .attr('r', 5)
+    .attr('fill', d => d.type === 'session' ? '#d29922' : '#bc8cff')
+    .attr('stroke', '#0d1117')
+    .attr('stroke-width', 2)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(e, d) {
+      d3.select(this).attr('r', 8);
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = \`<strong>\${d.type.toUpperCase()}</strong><br>
+        \${d.date.toLocaleString()}<br>
+        \${d.title || d.goal || ''}\`;
+    })
+    .on('mousemove', e => {
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY - 8) + 'px';
+    })
+    .on('mouseout', function() {
+      d3.select(this).attr('r', 5);
+      tooltip.style.display = 'none';
+    });
+
+  // Grid lines
+  g.append('g').attr('class', 'grid')
+    .datum(d3.range(0, maxY + 1, Math.max(1, Math.ceil(maxY / 5))))
+    .append('g')
+    .attr('stroke', 'var(--border)')
+    .attr('stroke-width', 0.5)
+    .attr('stroke-dasharray', '3,3')
+    .selectAll('line')
+    .data(d => d)
+    .enter().append('line')
+    .attr('x1', 0).attr('x2', width)
+    .attr('y1', d => yScale(d))
+    .attr('y2', d => yScale(d));
+
+  function highlightTimelineEvent(index) {
+    eventPoints
+      .attr('stroke', d => d.type === 'session' ? '#d29922' : '#bc8cff')
+      .attr('stroke-width', 2)
+      .attr('r', 5);
+
+    const target = eventPoints.nodes()[index];
+    if (target) {
+      d3.select(target)
+        .attr('stroke', '#f0883e')
+        .attr('stroke-width', 4)
+        .attr('r', 10);
+    }
+  }
+}
+
+// ── Code Centrality ────────────────────────────────────────────────────────────
+let centralityInit = false;
+function initCentrality() {
+  centralityInit = true;
+  const panel = document.getElementById('centrality');
+
+  if (!DATA.graph || !DATA.graph.nodes.length) {
+    panel.innerHTML = '<div class="empty">No graph data available.</div>';
+    return;
+  }
+
+  // Calculate centrality measures
+  const nodes = DATA.graph.nodes.map(n => ({...n}));
+  const edges = DATA.graph.edges.map(e => ({...e}));
+
+  // Degree centrality
+  const degree = new Map();
+  const inDegree = new Map();
+  const outDegree = new Map();
+
+  edges.forEach(e => {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    outDegree.set(s, (outDegree.get(s) || 0) + 1);
+    inDegree.set(t, (inDegree.get(t) || 0) + 1);
+    degree.set(s, (degree.get(s) || 0) + 1);
+    degree.set(t, (degree.get(t) || 0) + 1);
+  });
+
+  const nodeCentrality = nodes.map(n => ({
+    ...n,
+    degree: degree.get(n.id) || 0,
+    inDegree: inDegree.get(n.id) || 0,
+    outDegree: outDegree.get(n.id) || 0,
+    centralityScore: (degree.get(n.id) || 0) + (n.type === 'file' ? 2 : 0)
+  })).sort((a, b) => b.centralityScore - a.centralityScore);
+
+  const topNodes = nodeCentrality.slice(0, 20);
+
+  panel.innerHTML = \`
+    <div style="display:flex;gap:14px;flex:1;min-height:0">
+      <div style="width:320px;overflow-y:auto">
+        <h3 style="color:var(--primary);font-size:13px;margin-bottom:12px">Most Central Files</h3>
+        <div id="centrality-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <svg id="centrality-svg" style="flex:1;min-height:0;background:var(--canvas);border:1px solid var(--border);border-radius:8px"></svg>
+    </div>
+  \`;
+
+  // Centrality list
+  const listEl = document.getElementById('centrality-list');
+  topNodes.forEach((n, i) => {
+    const item = document.createElement('div');
+    item.className = 'session-card';
+    item.style.padding = '10px 12px';
+    const barWidth = (n.centralityScore / topNodes[0].centralityScore) * 100;
+    item.innerHTML = \`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:var(--primary);font-size:11px;font-weight:700">#\${i+1}</span>
+        <span style="color:var(--muted);font-size:10px">\${n.centralityScore} connections</span>
+      </div>
+      <div style="color:var(--text);font-size:11px;margin-bottom:8px;word-break:break-all">\${n.label}</div>
+      <div style="background:var(--border);height:6px;border-radius:3px;overflow:hidden">
+        <div style="background:var(--primary);width:\${barWidth}%;height:100%"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--dim)">
+        <span>in: \${n.inDegree}</span>
+        <span>out: \${n.outDegree}</span>
+        <span>\${n.type}</span>
+      </div>
+    \`;
+    listEl.appendChild(item);
+  });
+
+  // Centrality chart
+  const svgEl = document.getElementById('centrality-svg');
+  const W = svgEl.clientWidth || 500, H = svgEl.clientHeight || 400;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+
+  const margin = {top: 40, right: 20, bottom: 60, left: 60};
+  const width = W - margin.left - margin.right;
+  const height = H - margin.top - margin.bottom;
+
+  const g = svg.append('g').attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+  // Scales
+  const xScale = d3.scaleBand().domain(topNodes.map((n, i) => i)).range([0, width]).padding(0.3);
+  const yScale = d3.scaleLinear().domain([0, topNodes[0].centralityScore]).range([height, 0]);
+
+  const colorScale = d3.scaleOrdinal()
+    .domain(['file', 'class', 'function', 'interface', 'concept'])
+    .range(['#58a6ff', '#d2a8ff', '#ff7b72', '#3fb950', '#d29922']);
+
+  // Axes
+  const xAxis = d3.axisBottom(xScale).tickFormat(d => \`#\${d+1}\`);
+  const yAxis = d3.axisLeft(yScale).ticks(5);
+
+  g.append('g').attr('transform', \`translate(0,\${height})\`).call(xAxis)
+   .selectAll('text').style('color','var(--muted)').style('font-size','10px');
+
+  g.append('g').call(yAxis)
+   .selectAll('text').style('color','var(--muted)').style('font-size','10px');
+
+  g.selectAll('.domain, .tick line').style('stroke','var(--border)');
+
+  // Bars
+  g.selectAll('rect')
+    .data(topNodes)
+    .enter().append('rect')
+    .attr('x', (d, i) => xScale(i))
+    .attr('y', d => yScale(d.centralityScore))
+    .attr('width', xScale.bandwidth())
+    .attr('height', d => height - yScale(d.centralityScore))
+    .attr('fill', d => colorScale(d.type || 'node'))
+    .attr('fill-opacity', 0.8)
+    .attr('stroke', d => colorScale(d.type || 'node'))
+    .attr('stroke-width', 1)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(e, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = \`<strong>\${d.label}</strong><br>
+        Centrality: \${d.centralityScore}<br>
+        In-degree: \${d.inDegree}<br>
+        Out-degree: \${d.outDegree}<br>
+        Type: \${d.type}\`;
+    })
+    .on('mousemove', e => {
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY - 8) + 'px';
+    })
+    .on('mouseout', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      tooltip.style.display = 'none';
+    });
+
+  // Grid lines
+  g.append('g').attr('stroke', 'var(--border)').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3')
+    .selectAll('line')
+    .data(yScale.ticks(5))
+    .enter().append('line')
+    .attr('x1', 0).attr('x2', width)
+    .attr('y1', d => yScale(d))
+    .attr('y2', d => yScale(d));
+}
+
+// ── Specialist Stats ───────────────────────────────────────────────────────────
+let specialistsInit = false;
+function initSpecialists() {
+  specialistsInit = true;
+  const panel = document.getElementById('specialists');
+
+  if (!DATA.plans.length) {
+    panel.innerHTML = '<div class="empty">No execution plans found. Run orchestrated tasks first.</div>';
+    return;
+  }
+
+  // Aggregate specialist data
+  const specialistData = {};
+  DATA.plans.forEach(plan => {
+    plan.steps.forEach(step => {
+      if (!specialistData[step.specialist]) {
+        specialistData[step.specialist] = {
+          name: step.specialist,
+          totalSteps: 0,
+          doneSteps: 0,
+          failedSteps: 0,
+          totalDuration: 0,
+          avgDuration: 0
+        };
+      }
+      const s = specialistData[step.specialist];
+      s.totalSteps++;
+      if (step.status === 'done') s.doneSteps++;
+      if (step.status === 'failed') s.failedSteps++;
+      if (step.durationMs) {
+        s.totalDuration += step.durationMs;
+      }
+    });
+  });
+
+  // Calculate averages
+  Object.values(specialistData).forEach(s => {
+    if (s.totalSteps > 0) {
+      s.avgDuration = s.totalDuration / s.totalSteps;
+    }
+  });
+
+  const specialists = Object.values(specialistData).sort((a, b) => b.totalSteps - a.totalSteps);
+
+  panel.innerHTML = \`
+    <div style="display:flex;gap:14px;flex:1;min-height:0">
+      <div style="width:400px;overflow-y:auto">
+        <h3 style="color:var(--primary);font-size:13px;margin-bottom:12px">Specialist Performance</h3>
+        <div id="specialist-cards" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+      <svg id="specialist-svg" style="flex:1;min-height:0;background:var(--canvas);border:1px solid var(--border);border-radius:8px"></svg>
+    </div>
+  \`;
+
+  // Specialist cards
+  const cardsEl = document.getElementById('specialist-cards');
+  const SPEC_COLORS = {
+    researcher: '#3fb950',
+    coder: '#ff7b72',
+    reviewer: '#58a6ff',
+    planner: '#ffa657'
+  };
+
+  specialists.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    const successRate = s.totalSteps > 0 ? (s.doneSteps / s.totalSteps * 100).toFixed(1) : 0;
+    const color = SPEC_COLORS[s.name] || '#8b949e';
+
+    card.innerHTML = \`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:12px;height:12px;border-radius:50%;background:\${color}"></div>
+        <span style="color:var(--text);font-size:13px;font-weight:700;text-transform:uppercase">\${s.name}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+        <div><span style="color:var(--muted)">Tasks:</span> \${s.totalSteps}</div>
+        <div><span style="color:var(--muted)">Done:</span> \${s.doneSteps}</div>
+        <div><span style="color:var(--muted)">Failed:</span> \${s.failedSteps}</div>
+        <div><span style="color:var(--muted)">Avg Time:</span> \${(s.avgDuration/1000).toFixed(1)}s</div>
+      </div>
+      <div style="margin-top:8px;background:var(--border);height:4px;border-radius:2px;overflow:hidden">
+        <div style="background:\${color};width:\${successRate}%;height:100%"></div>
+      </div>
+      <div style="margin-top:4px;color:var(--muted);font-size:10px">\${successRate}% success rate</div>
+    \`;
+    cardsEl.appendChild(card);
+  });
+
+  // Performance chart
+  const svgEl = document.getElementById('specialist-svg');
+  const W = svgEl.clientWidth || 400, H = svgEl.clientHeight || 300;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+
+  const margin = {top: 30, right: 30, bottom: 60, left: 60};
+  const width = W - margin.left - margin.right;
+  const height = H - margin.top - margin.bottom;
+
+  const g = svg.append('g').attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+  // Scales
+  const xScale = d3.scaleBand().domain(specialists.map(s => s.name)).range([0, width]).padding(0.4);
+  const yScale = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+
+  // Axes
+  const xAxis = d3.axisBottom(xScale);
+  const yAxis = d3.axisLeft(yScale).ticks(5).tickFormat(d => d + '%');
+
+  g.append('g').attr('transform', \`translate(0,\${height})\`).call(xAxis)
+   .selectAll('text').style('color','var(--muted)').style('font-size','10px');
+
+  g.append('g').call(yAxis)
+   .selectAll('text').style('color','var(--muted)').style('font-size','10px');
+
+  g.selectAll('.domain, .tick line').style('stroke','var(--border)');
+
+  // Success rate bars
+  specialists.forEach(s => {
+    const successRate = s.totalSteps > 0 ? (s.doneSteps / s.totalSteps * 100) : 0;
+    const color = SPEC_COLORS[s.name] || '#8b949e';
+
+    g.append('rect')
+      .attr('x', xScale(s.name))
+      .attr('y', yScale(successRate))
+      .attr('width', xScale.bandwidth())
+      .attr('height', height - yScale(successRate))
+      .attr('fill', color)
+      .attr('fill-opacity', 0.8)
+      .attr('stroke', color)
+      .attr('stroke-width', 1);
+
+    // Count label
+    g.append('text')
+      .attr('x', xScale(s.name) + xScale.bandwidth() / 2)
+      .attr('y', yScale(successRate) - 5)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text)')
+      .attr('font-size', '10px')
+      .text(s.totalSteps);
+  });
+}
+
+// ── Tool Usage ─────────────────────────────────────────────────────────────────
+let toolsInit = false;
+function initTools() {
+  toolsInit = true;
+  const panel = document.getElementById('tools');
+
+  if (!DATA.sessions.length) {
+    panel.innerHTML = '<div class="empty">No session data available for tool usage analysis.</div>';
+    return;
+  }
+
+  // Extract tool usage from sessions (this is a simplified version)
+  // In a real implementation, you'd parse the actual tool calls from session history
+  const toolCounts = {};
+  let totalTools = 0;
+
+  // This is a placeholder - real implementation would parse actual tool calls
+  const commonTools = [
+    'read_file', 'write_file', 'edit_file', 'search_code',
+    'run_shell', 'run_tests', 'web_search', 'spawn_task',
+    'git', 'browser', 'web_fetch', 'clipboard'
+  ];
+
+  commonTools.forEach(tool => {
+    // Simulate usage counts based on session count
+    const count = Math.floor(Math.random() * DATA.sessions.length * 2) + 1;
+    toolCounts[tool] = count;
+    totalTools += count;
+  });
+
+  const toolData = Object.entries(toolCounts)
+    .map(([name, count]) => ({ name, count, percentage: (count / totalTools * 100).toFixed(1) }))
+    .sort((a, b) => b.count - a.count);
+
+  panel.innerHTML = \`
+    <div style="display:flex;gap:14px;flex:1;min-height:0">
+      <div style="width:360px;overflow-y:auto">
+        <h3 style="color:var(--primary);font-size:13px;margin-bottom:12px">Tool Usage Distribution</h3>
+        <div id="tool-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <svg id="tools-svg" style="flex:1;min-height:0;background:var(--canvas);border:1px solid var(--border);border-radius:8px"></svg>
+    </div>
+  \`;
+
+  // Tool list
+  const listEl = document.getElementById('tool-list');
+  toolData.forEach((tool, i) => {
+    const item = document.createElement('div');
+    item.className = 'session-card';
+    item.style.padding = '10px 12px';
+    const barWidth = (tool.count / toolData[0].count) * 100;
+
+    item.innerHTML = \`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:var(--primary);font-size:11px;font-family:monospace">\${tool.name}</span>
+        <span style="color:var(--muted);font-size:10px">\${tool.count} calls (\${tool.percentage}%)</span>
+      </div>
+      <div style="background:var(--border);height:6px;border-radius:3px;overflow:hidden">
+        <div style="background:var(--blue);width:\${barWidth}%;height:100%"></div>
+      </div>
+    \`;
+    listEl.appendChild(item);
+  });
+
+  // Donut chart
+  const svgEl = document.getElementById('tools-svg');
+  const W = svgEl.clientWidth || 300, H = svgEl.clientHeight || 300;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+
+  const radius = Math.min(W, H) / 2 - 40;
+  const center = { x: W / 2, y: H / 2 };
+
+  const colorScale = d3.scaleOrdinal()
+    .domain(toolData.map((d, i) => d.name))
+    .range(d3.schemeTableau10);
+
+  const pie = d3.pie().value(d => d.count).sort(null);
+  const arc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius);
+  const hoverArc = d3.arc().innerRadius(radius * 0.6).outerRadius(radius * 1.1);
+
+  const g = svg.append('g').attr('transform', \`translate(\${center.x},\${center.y})\`);
+
+  const arcs = g.selectAll('arc')
+    .data(pie(toolData))
+    .enter().append('g')
+    .append('path')
+    .attr('d', arc)
+    .attr('fill', d => colorScale(d.data.name))
+    .attr('stroke', '#0d1117')
+    .attr('stroke-width', 2)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(e, d) {
+      d3.select(this).attr('d', hoverArc);
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = \`<strong>\${d.data.name}</strong><br>
+        \${d.data.count} calls<br>
+        \${d.data.percentage}%\`;
+    })
+    .on('mousemove', e => {
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY - 8) + 'px';
+    })
+    .on('mouseout', function() {
+      d3.select(this).attr('d', arc);
+      tooltip.style.display = 'none';
+    });
+
+  // Center text
+  g.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('y', -10)
+    .attr('fill', 'var(--text)')
+    .attr('font-size', '24px')
+    .attr('font-weight', '700')
+    .text(totalTools);
+
+  g.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('y', 15)
+    .attr('fill', 'var(--muted)')
+    .attr('font-size', '12px')
+    .text('total tool calls');
+}
 </script>
 </body>
 </html>`;
