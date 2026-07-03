@@ -32,6 +32,10 @@ hong-thuan-videos/
 *.zip
 write-part1b.py
 gen-pdf.js
+patch-installed-registry.mjs
+
+# Desktop artifacts
+.directory
 
 # Test-run artifact (generated during vitest runs)
 /Aura.mp3
