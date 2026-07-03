@@ -67,6 +67,13 @@ export const PROVIDER_CHOICES: ProviderChoice[] = [
     models: ['mimo-v2.5-pro', 'mimo-v2.5', 'mimo-v2-flash'],
   },
   {
+    id: 'zhipu', name: 'Zhipu (Z.ai)',
+    apiKeyEnv: 'ZHIPU_API_KEY', needsKey: true,
+    defaultBaseUrl: 'https://api.z.ai/api/paas/v4',
+    description: 'GLM-5.2 / 5.1 / 5 — frontier open-weight coding models',
+    models: ['glm-5.2', 'glm-5.1', 'glm-5'],
+  },
+  {
     id: 'xai', name: 'xAI Grok',
     apiKeyEnv: 'XAI_API_KEY', needsKey: true,
     defaultBaseUrl: 'https://api.x.ai/v1',

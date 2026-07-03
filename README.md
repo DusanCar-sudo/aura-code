@@ -36,6 +36,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."   # Claude
 export OPENAI_API_KEY="sk-..."          # GPT
 export GOOGLE_API_KEY="..."             # Gemini
 export XIAOMI_API_KEY="tp-..."          # MiMo
+export ZHIPU_API_KEY="..."              # GLM (Z.ai)
 # Local — no API key needed:
 # ollama pull qwen2.5-coder:1.5b
 ```
@@ -96,6 +97,7 @@ aura --analyze                                           # analyze
 | **GPT** (OpenAI) | gpt-4o, gpt-4o-mini |
 | **Gemini** (Google) | gemini-2.5-pro, gemini-2.5-flash |
 | **MiMo** (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 |
+| **GLM** (Zhipu / Z.ai) | glm-5.2, glm-5.1, glm-5 — `zhipu-coding/<model>` routes via the Coding Plan endpoint |
 | **Ollama** (Local) | Any local model — no API key needed |
 
 Any OpenAI-compatible endpoint also works via `openrouter/<model>`.

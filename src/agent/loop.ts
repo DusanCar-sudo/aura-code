@@ -10,6 +10,8 @@ import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
 import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
+import { createCheckpoint, pruneCheckpoints } from '../checkpoints/engine.js';
+import { DEFAULTS } from '../config/defaults.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -30,6 +32,10 @@ export interface LoopOptions {
   disableSpawn?: boolean;
   /** Internal: skip post-task verification (used by runWithVerification wrapper). */
   verify?: boolean;
+  /** Shadow-git checkpoints before mutating tool calls (default: true; no-op outside a git repo). */
+  checkpoints?: boolean;
+  /** Plugin hooks fired around tool execution (PreToolUse can block). */
+  hooks?: import('../plugins/types.js').HookEntry[];
 }
 
 export interface LoopResult {
@@ -51,6 +57,9 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+/** Tools that can change the working tree — the checkpoint trigger set. */
+const MUTATING_TOOLS = new Set(['write_file', 'edit_file', 'run_shell']);
+
 const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
   'claude-opus-4-5-20251001':   { in: 15,  out: 75  },
   'claude-sonnet-4-5-20251001': { in: 3,   out: 15  },
@@ -60,6 +69,10 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
   'gemini-2.5-pro':             { in: 1.25,out: 10  },
   'gemini-2.5-flash':           { in: 0.075,out: 0.3},
   'grok-beta':                  { in: 5,   out: 15  },
+  // Zhipu publishes GLM-5 rates only; 5.1/5.2 assumed equal until announced.
+  'glm-5.2':                    { in: 1,   out: 3.2 },
+  'glm-5.1':                    { in: 1,   out: 3.2 },
+  'glm-5':                      { in: 1,   out: 3.2 },
   'mimo-v2.5-pro':              { in: 1,   out: 4   },
   'mimo-v2.5':                  { in: 0.5, out: 2   },
   'mimo-v2-flash':              { in: 0.1, out: 0.4 },
@@ -228,6 +241,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     const toolResults: ToolResult[] = [];
+    // One checkpoint per turn, taken lazily before the first mutating call —
+    // a turn's writes form one burst, and the engine dedupes identical trees.
+    let checkpointedThisTurn = false;
 
     for (const call of responseToolCalls) {
       toolCallCount++;
@@ -253,12 +269,36 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           }
         }
 
+        if (opts.checkpoints !== false && !checkpointedThisTurn && MUTATING_TOOLS.has(call.name)) {
+          checkpointedThisTurn = true;
+          try {
+            const cp = await createCheckpoint(opts.context.root, `turn ${turns}: ${opts.task}`);
+            if (cp) await pruneCheckpoints(opts.context.root, DEFAULTS.maxCheckpoints);
+          } catch { /* checkpointing must never block the tool call */ }
+        }
+
+        if (opts.hooks && opts.hooks.length > 0) {
+          const { runHooks } = await import('../plugins/hooks.js');
+          const pre = await runHooks('PreToolUse', call.name, call.input, opts.hooks, opts.context.root);
+          if (pre.block) {
+            const why = pre.messages.join('; ') || 'blocked by plugin hook';
+            display.toolBlocked(call.name, why);
+            toolResults.push({ id: call.id, name: call.name, content: `Blocked by plugin hook: ${why}`, isError: true });
+            continue;
+          }
+        }
+
         const startMs = Date.now();
         result = await executeTool(call.name, call.input, opts.context.root);
         const elapsed = Date.now() - startMs;
         display.toolResult(call.name, result, elapsed);
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
         toolCallLog.push({ name: call.name, input: call.input });
+
+        if (opts.hooks && opts.hooks.length > 0) {
+          const { runHooks } = await import('../plugins/hooks.js');
+          await runHooks('PostToolUse', call.name, call.input, opts.hooks, opts.context.root, result);
+        }
       } catch (e) {
         result = `Tool error (${call.name}): ${String(e)}`;
         isError = true;

@@ -26,7 +26,8 @@ aura 'your task here'
 ```
 
 At least one provider API key must be set (e.g. `ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `XIAOMI_API_KEY`), or a local Ollama model.
+`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `XIAOMI_API_KEY`, `ZHIPU_API_KEY`), or a
+local Ollama model.
 
 ---
 
@@ -69,6 +70,7 @@ circuit breaker, and rate limiting.
 | GPT (OpenAI) | gpt-4o, gpt-4o-mini |
 | Gemini (Google) | gemini-2.5-pro, gemini-2.5-flash |
 | MiMo (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 |
+| GLM (Zhipu / Z.ai) | glm-5.2, glm-5.1, glm-5 — general endpoint by default, `zhipu-coding/<model>` for the Coding Plan endpoint |
 | Ollama (local) | any local model, no API key |
 | Any OpenAI-compatible endpoint | via `openrouter/<model>` or custom `.aura.json` providers |
 

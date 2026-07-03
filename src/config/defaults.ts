@@ -14,6 +14,8 @@ export const DEFAULTS = {
   maxVerifyRetries: 3,      // retries when verification fails
   testCommand: undefined as string | undefined, // custom test command for verification
   profile: 'default' as 'default' | 'local',    // 'default' or 'local' (Ollama)
+  checkpoints: true,        // shadow-git snapshots before mutating tool calls
+  maxCheckpoints: 30,       // retention per repo — older refs pruned automatically
   // Local profile (--profile local / profile: "local" in .aura.json)
   localProfile: {
     model: 'qwen2.5-coder:7b',

@@ -4,11 +4,17 @@ import { OpenAICompatibleProvider } from './openai-compatible.js';
 import { GoogleProvider } from './google.js';
 import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
+import { getLiveModels } from './live-models.js';
 import * as http from 'http';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom provider registry  (populated from .aura.json or programmatically)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Zhipu (Z.ai) General/International endpoint — pay-as-you-go API keys. */
+export const ZHIPU_GENERAL_BASE_URL = 'https://api.z.ai/api/paas/v4';
+/** Zhipu (Z.ai) Coding Plan endpoint — GLM Coding Plan subscription quota. */
+export const ZHIPU_CODING_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
 
 let customProviders: ProviderDef[] = [];
 
@@ -101,6 +107,23 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     }, 'Xiaomi MiMo');
   }
 
+  // ── Zhipu (Z.ai GLM) — two endpoints ───────────────────────────────────────
+  //   glm-* / zhipu/*   → General/International  https://api.z.ai/api/paas/v4
+  //   zhipu-coding/*    → Coding Plan            https://api.z.ai/api/coding/paas/v4
+  // ZHIPU_BASE_URL overrides either.
+  if (model.startsWith('glm-') || model.startsWith('zhipu/') || model.startsWith('zhipu-coding/')) {
+    const coding = model.startsWith('zhipu-coding/');
+    const glmModel = model.replace(/^zhipu(-coding)?\//, '');
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: glmModel,
+      baseUrl: config.baseUrl
+        ?? getEnv('ZHIPU_BASE_URL')
+        ?? (coding ? ZHIPU_CODING_BASE_URL : ZHIPU_GENERAL_BASE_URL),
+      apiKey: config.apiKey ?? getApiKey('ZHIPU_API_KEY'),
+    }, 'Zhipu');
+  }
+
   // ── xAI / Grok ─────────────────────────────────────────────────────────────
   if (model.startsWith('grok-') || model.startsWith('xai/')) {
     return new OpenAICompatibleProvider({
@@ -151,6 +174,15 @@ export function createProvider(config: ProviderConfig): LLMProvider {
 /**
  * List of well-known model shortcuts for quick selection.
  * Used by `:models` in the REPL and by `--models` on the CLI.
+ *
+ * NOTE: Anthropic, OpenAI, Google, and OpenRouter entries here are a
+ * fallback only — getAllModels() prefers live-fetched lists for these
+ * four providers when available (see live-models.ts), since this static
+ * list goes stale fast. As of Feb 2026, OpenAI retired gpt-4o, gpt-4.1,
+ * gpt-4.1-mini, and o4-mini from the API. The Anthropic list below is
+ * also behind the current lineup — Claude Sonnet 5, Claude Opus 4.8, and
+ * Claude Fable 5 are the current generation as of this writing and are
+ * not listed statically; live fetch is what surfaces them.
  */
 export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: string }[] = [
   // ── Anthropic Claude ─────────────────────────────────────────────────────
@@ -161,7 +193,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'claude-3-5-haiku-20241022',  name: 'Claude 3.5 Haiku',  provider: 'Anthropic', speed: 'Fastest · legacy' },
   { id: 'claude-3-opus-20240229',     name: 'Claude 3 Opus',     provider: 'Anthropic', speed: 'Powerful · legacy' },
 
-  // ── OpenAI ──────────────────────────────────────────────────────────────
+  // ── OpenAI (offline fallback — prefer live fetch, see note above) ───────
   { id: 'gpt-4o',          name: 'GPT-4o',          provider: 'OpenAI', speed: 'Powerful · multimodal' },
   { id: 'gpt-4o-mini',     name: 'GPT-4o mini',     provider: 'OpenAI', speed: 'Fast · cheap' },
   { id: 'gpt-4-turbo',     name: 'GPT-4 Turbo',     provider: 'OpenAI', speed: 'Powerful · legacy' },
@@ -173,7 +205,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'o3-mini',         name: 'o3-mini',         provider: 'OpenAI', speed: 'Reasoning · fast' },
   { id: 'o4-mini',         name: 'o4-mini',         provider: 'OpenAI', speed: 'Reasoning · fastest' },
 
-  // ── Google Gemini ───────────────────────────────────────────────────────
+  // ── Google Gemini (offline fallback — prefer live fetch, see note above) ─
   { id: 'gemini-2.5-pro',            name: 'Gemini 2.5 Pro',     provider: 'Google', speed: 'Powerful · long context' },
   { id: 'gemini-2.5-flash',          name: 'Gemini 2.5 Flash',   provider: 'Google', speed: 'Fast · cheap' },
   { id: 'gemini-2.0-pro',            name: 'Gemini 2.0 Pro',     provider: 'Google', speed: 'Powerful' },
@@ -188,13 +220,18 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'mimo-v2-flash',   name: 'MiMo V2 Flash',   provider: 'Xiaomi MiMo', speed: 'Fastest · efficient' },
   { id: 'mimo-v1',         name: 'MiMo V1',         provider: 'Xiaomi MiMo', speed: 'Legacy' },
 
+  // ── Zhipu (Z.ai GLM) — use zhipu-coding/<id> to route via the Coding Plan ─
+  { id: 'glm-5.2',         name: 'GLM-5.2',         provider: 'Zhipu', speed: 'Powerful · 1M context' },
+  { id: 'glm-5.1',         name: 'GLM-5.1',         provider: 'Zhipu', speed: 'Powerful · agentic' },
+  { id: 'glm-5',           name: 'GLM-5',           provider: 'Zhipu', speed: 'Powerful · 744B MoE' },
+
   // ── xAI Grok ────────────────────────────────────────────────────────────
   { id: 'grok-2',            name: 'Grok 2',            provider: 'xAI', speed: 'Powerful' },
   { id: 'grok-2-mini',       name: 'Grok 2 mini',       provider: 'xAI', speed: 'Fast · cheap' },
   { id: 'grok-beta',         name: 'Grok Beta',         provider: 'xAI', speed: 'Fast' },
   { id: 'grok-vision-beta',  name: 'Grok Vision Beta',  provider: 'xAI', speed: 'Multimodal' },
 
-  // ── OpenRouter (any model from any provider, pay-as-you-go) ──────────────
+  // ── OpenRouter (offline fallback — prefer live fetch, see note above) ────
   { id: 'openrouter/anthropic/claude-3.5-sonnet',            name: 'Claude 3.5 Sonnet (OR)',   provider: 'OpenRouter', speed: 'Fast' },
   { id: 'openrouter/anthropic/claude-3-opus',                name: 'Claude 3 Opus (OR)',       provider: 'OpenRouter', speed: 'Powerful' },
   { id: 'openrouter/openai/gpt-4o',                           name: 'GPT-4o (OR)',              provider: 'OpenRouter', speed: 'Powerful' },
@@ -233,11 +270,31 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'local/mistral-large',               name: 'Mistral Large (local)',      provider: 'Local', speed: 'Local · powerful' },
 ];
 
+const LIVE_PREFERRED_PROVIDERS = new Set(['Anthropic', 'OpenAI', 'Google', 'OpenRouter']);
+
 /**
- * Get all available models — built-in + custom providers from .aura.json.
+ * Get all available models — live-fetched (OpenAI/Google/OpenRouter, when
+ * an API key is configured and refreshLiveModels() has run) + static
+ * KNOWN_MODELS fallback + custom providers from .aura.json.
+ *
+ * When a live list exists for a provider, its static KNOWN_MODELS entries
+ * are dropped entirely rather than merged — the static list can contain
+ * retired model IDs (see the note on KNOWN_MODELS above), and a partial
+ * merge would leave dead entries mixed in with real ones with no way to
+ * tell them apart in the picker.
  */
 export function getAllModels(): { id: string; name: string; provider: string; speed: string }[] {
-  const all = [...KNOWN_MODELS];
+  const live = getLiveModels();
+  const liveProviders = new Set(live.map((m) => m.provider));
+
+  const staticFallback = KNOWN_MODELS.filter((m) => {
+    if (LIVE_PREFERRED_PROVIDERS.has(m.provider) && liveProviders.has(m.provider)) {
+      return false;
+    }
+    return true;
+  });
+
+  const all = [...staticFallback, ...live];
   for (const def of customProviders) {
     if (def.models) {
       for (const m of def.models) {
