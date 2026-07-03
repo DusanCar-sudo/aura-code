@@ -202,6 +202,7 @@ function deriveProviderName(config: ProviderConfig): string {
   const m = config.model.toLowerCase();
   if (config.baseUrl?.includes('openrouter')) return 'OpenRouter';
   if (config.baseUrl?.includes('x.ai') || m.includes('grok')) return 'xAI';
+  if (config.baseUrl?.includes('api.z.ai') || m.startsWith('glm-')) return 'Zhipu';
   if (config.baseUrl?.includes('localhost') || config.baseUrl?.includes('127.0.0.1')) {
     return config.baseUrl?.includes('11434') ? 'Ollama' : 'Local';
   }
@@ -214,6 +215,7 @@ function resolveApiKey(config: ProviderConfig): string {
   if (config.baseUrl?.includes('openrouter')) return getApiKey('OPENROUTER_API_KEY') ?? '';
   if (config.baseUrl?.includes('x.ai') || m.includes('grok')) return getApiKey('XAI_API_KEY') ?? '';
   if (config.baseUrl?.includes('xiaomimimo') || m.startsWith('mimo-')) return getApiKey('XIAOMI_API_KEY') ?? '';
+  if (config.baseUrl?.includes('api.z.ai') || m.startsWith('glm-')) return getApiKey('ZHIPU_API_KEY') ?? '';
   if (config.baseUrl?.includes('localhost') || config.baseUrl?.includes('127.0.0.1')) return 'local';
   return getApiKey('OPENAI_API_KEY') ?? '';
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
-import { dictate, speakText, listVoices, listDevices } from '../tools/dictate.js';
+import { dictate, speakText, listVoices, listDevices, dictationLoop } from '../tools/dictate.js';
 import minimist from 'minimist';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +42,9 @@ if (sub === 'devices' || sub === 'device') {
 
   ${chalk.hex('#4e3d30')('Usage:')}
     ${chalk.hex('#8a7768')('dic')}                               Record mic → transcribe (Ctrl+C to stop)
+    ${chalk.hex('#8a7768')('dic --inject')}                      Record → transcribe → paste into focused window
+    ${chalk.hex('#8a7768')('dic loop')}                          Continuous: speak → type → repeat (Ctrl+C to stop)
+    ${chalk.hex('#8a7768')('dic loop --silence 2000')}           Continuous with custom silence threshold (ms)
     ${chalk.hex('#8a7768')('dic --device <name>')}               Record with a specific audio device
     ${chalk.hex('#8a7768')('dic devices')}                       List available audio input devices
     ${chalk.hex('#8a7768')('dic speak <text>')}                  Speak text aloud via MiMo TTS
@@ -58,13 +61,25 @@ if (sub === 'devices' || sub === 'device') {
     - STT prioritizes PARAKEET_BASE_URL > XIAOMI_API_KEY > OPENAI_API_KEY > GROQ_API_KEY
     - TTS requires XIAOMI_API_KEY (limited-time free)
     - Transcriptions are automatically copied to clipboard
+    - Use --inject (or -i) to paste directly into focused window
+    - 'dic loop' runs continuous dictation with auto-injection
     - Press Ctrl+C to stop recording
 \n`);
 
-} else {
-  // Default: dictate, optionally with --device
+} else if (sub === 'loop' || parsed.loop || parsed.l) {
+  // Continuous dictation loop
   const deviceId = parsed.device || undefined;
-  dictate(deviceId).catch(e => {
+  const silenceMs = parsed.silence ? Number(parsed.silence) : 1500;
+  dictationLoop({ deviceId, silenceMs }).catch(e => {
+    console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
+    process.exit(1);
+  });
+
+} else {
+  // Default: dictate, optionally with --device and --inject
+  const deviceId = parsed.device || undefined;
+  const inject = !!(parsed.inject || parsed.i);
+  dictate({ deviceId, inject }).catch(e => {
     console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
     process.exit(1);
   });

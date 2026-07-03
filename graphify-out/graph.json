@@ -33,6 +33,132 @@
       "summary": "External npm package: node:assert/strict"
     },
     {
+      "id": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.js",
+      "label": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.js",
+      "summary": "Source file: benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-002-sql-injection/before/src/db",
+      "label": "benchmark/fixtures/task-002-sql-injection/before/src/db/",
+      "type": "file",
+      "summary": "Module directory: benchmark/fixtures/task-002-sql-injection/before/src/db/"
+    },
+    {
+      "id": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js",
+      "label": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js",
+      "summary": "Source file: benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.js",
+      "label": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.js",
+      "summary": "Source file: benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui",
+      "label": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/",
+      "type": "file",
+      "summary": "Module directory: benchmark/fixtures/task-003-xss-sanitize/before/src/ui/"
+    },
+    {
+      "id": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js",
+      "label": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js",
+      "summary": "Source file: benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.js",
+      "label": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.js",
+      "summary": "Source file: benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware",
+      "label": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/",
+      "type": "file",
+      "summary": "Module directory: benchmark/fixtures/task-004-rate-limiter/before/src/middleware/"
+    },
+    {
+      "id": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "label": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "summary": "Source file: benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js"
+    },
+    {
+      "id": "npm:node:timers/promises",
+      "label": "node:timers/promises",
+      "type": "concept",
+      "summary": "External npm package: node:timers/promises"
+    },
+    {
+      "id": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.js",
+      "label": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.js",
+      "summary": "Source file: benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci",
+      "label": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/",
+      "type": "file",
+      "summary": "Module directory: benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/"
+    },
+    {
+      "id": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js",
+      "label": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js",
+      "summary": "Source file: benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.js",
+      "label": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.js",
+      "summary": "Source file: benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-006-mock-leak/before/src/testing",
+      "label": "benchmark/fixtures/task-006-mock-leak/before/src/testing/",
+      "type": "file",
+      "summary": "Module directory: benchmark/fixtures/task-006-mock-leak/before/src/testing/"
+    },
+    {
+      "id": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js",
+      "label": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js",
+      "summary": "Source file: benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.js",
+      "label": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.js",
+      "summary": "Source file: benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.js"
+    },
+    {
+      "id": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures",
+      "label": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/",
+      "type": "file",
+      "summary": "Module directory: benchmark/fixtures/task-007-lru-cache/before/src/data-structures/"
+    },
+    {
+      "id": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js",
+      "label": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js",
+      "type": "file",
+      "file": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js",
+      "summary": "Source file: benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js"
+    },
+    {
       "id": "create-pptx.js",
       "label": "create-pptx.js",
       "type": "file",
@@ -136,6 +262,13 @@
       "summary": "Source file: src/agent/loop.ts"
     },
     {
+      "id": "src/agent/mixture.ts",
+      "label": "src/agent/mixture.ts",
+      "type": "file",
+      "file": "src/agent/mixture.ts",
+      "summary": "Source file: src/agent/mixture.ts"
+    },
+    {
       "id": "src/agent/session-store.ts",
       "label": "src/agent/session-store.ts",
       "type": "file",
@@ -181,6 +314,19 @@
       "type": "file",
       "file": "src/architect/types.ts",
       "summary": "Source file: src/architect/types.ts"
+    },
+    {
+      "id": "src/checkpoints/engine.ts",
+      "label": "src/checkpoints/engine.ts",
+      "type": "file",
+      "file": "src/checkpoints/engine.ts",
+      "summary": "Source file: src/checkpoints/engine.ts"
+    },
+    {
+      "id": "src/checkpoints",
+      "label": "src/checkpoints/",
+      "type": "file",
+      "summary": "Module directory: src/checkpoints/"
     },
     {
       "id": "src/cli/diamond.ts",
@@ -286,6 +432,26 @@
       "label": "src/integrations/",
       "type": "file",
       "summary": "Module directory: src/integrations/"
+    },
+    {
+      "id": "src/kanban/engine.ts",
+      "label": "src/kanban/engine.ts",
+      "type": "file",
+      "file": "src/kanban/engine.ts",
+      "summary": "Source file: src/kanban/engine.ts"
+    },
+    {
+      "id": "src/kanban",
+      "label": "src/kanban/",
+      "type": "file",
+      "summary": "Module directory: src/kanban/"
+    },
+    {
+      "id": "src/kanban/types.ts",
+      "label": "src/kanban/types.ts",
+      "type": "file",
+      "file": "src/kanban/types.ts",
+      "summary": "Source file: src/kanban/types.ts"
     },
     {
       "id": "src/orchestration/competence.ts",
@@ -439,6 +605,54 @@
       "summary": "Source file: src/perception/types.ts"
     },
     {
+      "id": "src/plugins/commands.ts",
+      "label": "src/plugins/commands.ts",
+      "type": "file",
+      "file": "src/plugins/commands.ts",
+      "summary": "Source file: src/plugins/commands.ts"
+    },
+    {
+      "id": "src/plugins",
+      "label": "src/plugins/",
+      "type": "file",
+      "summary": "Module directory: src/plugins/"
+    },
+    {
+      "id": "src/plugins/frontmatter.ts",
+      "label": "src/plugins/frontmatter.ts",
+      "type": "file",
+      "file": "src/plugins/frontmatter.ts",
+      "summary": "Source file: src/plugins/frontmatter.ts"
+    },
+    {
+      "id": "src/plugins/hooks.ts",
+      "label": "src/plugins/hooks.ts",
+      "type": "file",
+      "file": "src/plugins/hooks.ts",
+      "summary": "Source file: src/plugins/hooks.ts"
+    },
+    {
+      "id": "src/plugins/loader.ts",
+      "label": "src/plugins/loader.ts",
+      "type": "file",
+      "file": "src/plugins/loader.ts",
+      "summary": "Source file: src/plugins/loader.ts"
+    },
+    {
+      "id": "src/plugins/market.ts",
+      "label": "src/plugins/market.ts",
+      "type": "file",
+      "file": "src/plugins/market.ts",
+      "summary": "Source file: src/plugins/market.ts"
+    },
+    {
+      "id": "src/plugins/types.ts",
+      "label": "src/plugins/types.ts",
+      "type": "file",
+      "file": "src/plugins/types.ts",
+      "summary": "Source file: src/plugins/types.ts"
+    },
+    {
       "id": "src/providers/anthropic-oauth-draft.ts",
       "label": "src/providers/anthropic-oauth-draft.ts",
       "type": "file",
@@ -502,6 +716,13 @@
       "label": "@google/generative-ai",
       "type": "concept",
       "summary": "External npm package: @google/generative-ai"
+    },
+    {
+      "id": "src/providers/live-models.ts",
+      "label": "src/providers/live-models.ts",
+      "type": "file",
+      "file": "src/providers/live-models.ts",
+      "summary": "Source file: src/providers/live-models.ts"
     },
     {
       "id": "src/providers/openai-compatible.ts",
@@ -606,6 +827,19 @@
       "summary": "Source file: src/ruby/types.ts"
     },
     {
+      "id": "src/safety/path-jail.ts",
+      "label": "src/safety/path-jail.ts",
+      "type": "file",
+      "file": "src/safety/path-jail.ts",
+      "summary": "Source file: src/safety/path-jail.ts"
+    },
+    {
+      "id": "src/safety",
+      "label": "src/safety/",
+      "type": "file",
+      "summary": "Module directory: src/safety/"
+    },
+    {
       "id": "src/safety/permissions.ts",
       "label": "src/safety/permissions.ts",
       "type": "file",
@@ -613,10 +847,23 @@
       "summary": "Source file: src/safety/permissions.ts"
     },
     {
-      "id": "src/safety",
-      "label": "src/safety/",
+      "id": "src/safety/ssrf.ts",
+      "label": "src/safety/ssrf.ts",
       "type": "file",
-      "summary": "Module directory: src/safety/"
+      "file": "src/safety/ssrf.ts",
+      "summary": "Source file: src/safety/ssrf.ts"
+    },
+    {
+      "id": "npm:dns",
+      "label": "dns",
+      "type": "concept",
+      "summary": "External npm package: dns"
+    },
+    {
+      "id": "npm:net",
+      "label": "net",
+      "type": "concept",
+      "summary": "External npm package: net"
     },
     {
       "id": "src/server/index.ts",
@@ -669,6 +916,46 @@
       "type": "file",
       "file": "src/setup/global-config.ts",
       "summary": "Source file: src/setup/global-config.ts"
+    },
+    {
+      "id": "src/setup/provider-registry.ts",
+      "label": "src/setup/provider-registry.ts",
+      "type": "file",
+      "file": "src/setup/provider-registry.ts",
+      "summary": "Source file: src/setup/provider-registry.ts"
+    },
+    {
+      "id": "src/setup/provider-test.ts",
+      "label": "src/setup/provider-test.ts",
+      "type": "file",
+      "file": "src/setup/provider-test.ts",
+      "summary": "Source file: src/setup/provider-test.ts"
+    },
+    {
+      "id": "npm:https",
+      "label": "https",
+      "type": "concept",
+      "summary": "External npm package: https"
+    },
+    {
+      "id": "npm:url",
+      "label": "url",
+      "type": "concept",
+      "summary": "External npm package: url"
+    },
+    {
+      "id": "src/setup/provider-wizard.ts",
+      "label": "src/setup/provider-wizard.ts",
+      "type": "file",
+      "file": "src/setup/provider-wizard.ts",
+      "summary": "Source file: src/setup/provider-wizard.ts"
+    },
+    {
+      "id": "src/setup/xiaomi.ts",
+      "label": "src/setup/xiaomi.ts",
+      "type": "file",
+      "file": "src/setup/xiaomi.ts",
+      "summary": "Source file: src/setup/xiaomi.ts"
     },
     {
       "id": "src/tools/browser.ts",
@@ -808,12 +1095,6 @@
       "type": "file",
       "file": "src/tools/telegram-bot.ts",
       "summary": "Source file: src/tools/telegram-bot.ts"
-    },
-    {
-      "id": "npm:https",
-      "label": "https",
-      "type": "concept",
-      "summary": "External npm package: https"
     },
     {
       "id": "src/tools/telegram.ts",
@@ -1029,6 +1310,13 @@
       "summary": "Source file: tests/calendar.test.ts"
     },
     {
+      "id": "tests/checkpoints.test.ts",
+      "label": "tests/checkpoints.test.ts",
+      "type": "file",
+      "file": "tests/checkpoints.test.ts",
+      "summary": "Source file: tests/checkpoints.test.ts"
+    },
+    {
       "id": "tests/circuit-breaker.test.ts",
       "label": "tests/circuit-breaker.test.ts",
       "type": "file",
@@ -1140,6 +1428,13 @@
       "summary": "Source file: tests/known-models.test.ts"
     },
     {
+      "id": "tests/loop-profile.test.ts",
+      "label": "tests/loop-profile.test.ts",
+      "type": "file",
+      "file": "tests/loop-profile.test.ts",
+      "summary": "Source file: tests/loop-profile.test.ts"
+    },
+    {
       "id": "tests/loop.test.ts",
       "label": "tests/loop.test.ts",
       "type": "file",
@@ -1152,6 +1447,13 @@
       "type": "file",
       "file": "tests/memory.test.ts",
       "summary": "Source file: tests/memory.test.ts"
+    },
+    {
+      "id": "tests/mixture.test.ts",
+      "label": "tests/mixture.test.ts",
+      "type": "file",
+      "file": "tests/mixture.test.ts",
+      "summary": "Source file: tests/mixture.test.ts"
     },
     {
       "id": "tests/notify.test.ts",
@@ -1237,6 +1539,13 @@
       "summary": "Source file: tests/orchestration/types.test.ts"
     },
     {
+      "id": "tests/path-jail.test.ts",
+      "label": "tests/path-jail.test.ts",
+      "type": "file",
+      "file": "tests/path-jail.test.ts",
+      "summary": "Source file: tests/path-jail.test.ts"
+    },
+    {
       "id": "tests/perception/extractor.test.ts",
       "label": "tests/perception/extractor.test.ts",
       "type": "file",
@@ -1275,6 +1584,34 @@
       "type": "file",
       "file": "tests/permissions.test.ts",
       "summary": "Source file: tests/permissions.test.ts"
+    },
+    {
+      "id": "tests/plugin-commands.test.ts",
+      "label": "tests/plugin-commands.test.ts",
+      "type": "file",
+      "file": "tests/plugin-commands.test.ts",
+      "summary": "Source file: tests/plugin-commands.test.ts"
+    },
+    {
+      "id": "tests/plugin-hooks.test.ts",
+      "label": "tests/plugin-hooks.test.ts",
+      "type": "file",
+      "file": "tests/plugin-hooks.test.ts",
+      "summary": "Source file: tests/plugin-hooks.test.ts"
+    },
+    {
+      "id": "tests/plugin-market.test.ts",
+      "label": "tests/plugin-market.test.ts",
+      "type": "file",
+      "file": "tests/plugin-market.test.ts",
+      "summary": "Source file: tests/plugin-market.test.ts"
+    },
+    {
+      "id": "tests/plugins-loader.test.ts",
+      "label": "tests/plugins-loader.test.ts",
+      "type": "file",
+      "file": "tests/plugins-loader.test.ts",
+      "summary": "Source file: tests/plugins-loader.test.ts"
     },
     {
       "id": "tests/project-config.test.ts",
@@ -1351,6 +1688,13 @@
       "type": "file",
       "file": "tests/spawner.test.ts",
       "summary": "Source file: tests/spawner.test.ts"
+    },
+    {
+      "id": "tests/ssrf.test.ts",
+      "label": "tests/ssrf.test.ts",
+      "type": "file",
+      "file": "tests/ssrf.test.ts",
+      "summary": "Source file: tests/ssrf.test.ts"
     },
     {
       "id": "tests/telegram.test.ts",
@@ -1505,6 +1849,101 @@
       "relation": "depends_on"
     },
     {
+      "source": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js",
+      "target": "npm:node:test",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js",
+      "target": "npm:node:assert/strict",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.test.js",
+      "target": "benchmark/fixtures/task-002-sql-injection/before/src/db/build-user-query.js",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js",
+      "target": "npm:node:test",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js",
+      "target": "npm:node:assert/strict",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.test.js",
+      "target": "benchmark/fixtures/task-003-xss-sanitize/before/src/ui/sanitize-html.js",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "target": "npm:node:test",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "target": "npm:node:assert/strict",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "target": "npm:node:timers/promises",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.test.js",
+      "target": "benchmark/fixtures/task-004-rate-limiter/before/src/middleware/rate-limiter.js",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js",
+      "target": "npm:node:test",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js",
+      "target": "npm:node:assert/strict",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.test.js",
+      "target": "benchmark/fixtures/task-005-dockerfile-fix/before/src/ci/validate-dockerfile.js",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js",
+      "target": "npm:node:test",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js",
+      "target": "npm:node:assert/strict",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.test.js",
+      "target": "benchmark/fixtures/task-006-mock-leak/before/src/testing/mock-fetch.js",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js",
+      "target": "npm:node:test",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js",
+      "target": "npm:node:assert/strict",
+      "relation": "depends_on"
+    },
+    {
+      "source": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.test.js",
+      "target": "benchmark/fixtures/task-007-lru-cache/before/src/data-structures/lru-cache.js",
+      "relation": "depends_on"
+    },
+    {
       "source": "create-pptx.js",
       "target": "npm:pptxgenjs",
       "relation": "depends_on"
@@ -1597,6 +2036,21 @@
     {
       "source": "src/architect/engine.ts",
       "target": "npm:crypto",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/checkpoints/engine.ts",
+      "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/checkpoints/engine.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/checkpoints/engine.ts",
+      "target": "npm:path",
       "relation": "depends_on"
     },
     {
@@ -1705,6 +2159,21 @@
       "relation": "depends_on"
     },
     {
+      "source": "src/kanban/engine.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/kanban/engine.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/kanban/engine.ts",
+      "target": "npm:crypto",
+      "relation": "depends_on"
+    },
+    {
       "source": "src/orchestration/competence.ts",
       "target": "npm:fs",
       "relation": "depends_on"
@@ -1771,6 +2240,51 @@
     },
     {
       "source": "src/perception/graph-store.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/commands.ts",
+      "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/hooks.ts",
+      "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/loader.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/loader.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/loader.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/market.ts",
+      "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/market.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/market.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/plugins/market.ts",
       "target": "npm:path",
       "relation": "depends_on"
     },
@@ -1880,13 +2394,38 @@
       "relation": "depends_on"
     },
     {
+      "source": "src/safety/path-jail.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/safety/path-jail.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
       "source": "src/safety/permissions.ts",
       "target": "npm:readline",
       "relation": "depends_on"
     },
     {
+      "source": "src/safety/ssrf.ts",
+      "target": "npm:dns",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/safety/ssrf.ts",
+      "target": "npm:net",
+      "relation": "depends_on"
+    },
+    {
       "source": "src/server/index.ts",
       "target": "npm:http",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/server/index.ts",
+      "target": "npm:crypto",
       "relation": "depends_on"
     },
     {
@@ -1927,6 +2466,51 @@
     {
       "source": "src/setup/global-config.ts",
       "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-test.ts",
+      "target": "npm:https",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-test.ts",
+      "target": "npm:http",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-test.ts",
+      "target": "npm:url",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "npm:readline",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "npm:http",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "npm:chalk",
       "relation": "depends_on"
     },
     {
@@ -2055,6 +2639,11 @@
       "relation": "depends_on"
     },
     {
+      "source": "src/tools/http-request.ts",
+      "target": "package.json",
+      "relation": "depends_on"
+    },
+    {
       "source": "src/tools/image-read.ts",
       "target": "npm:fs",
       "relation": "depends_on"
@@ -2157,6 +2746,11 @@
     {
       "source": "src/tools/tools.ts",
       "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/tools/web-fetch.ts",
+      "target": "package.json",
       "relation": "depends_on"
     },
     {
@@ -2282,6 +2876,31 @@
     {
       "source": "tests/calendar.test.ts",
       "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/checkpoints.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/checkpoints.test.ts",
+      "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/checkpoints.test.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/checkpoints.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/checkpoints.test.ts",
+      "target": "npm:path",
       "relation": "depends_on"
     },
     {
@@ -2445,6 +3064,11 @@
       "relation": "depends_on"
     },
     {
+      "source": "tests/http-request.test.ts",
+      "target": "npm:dns",
+      "relation": "depends_on"
+    },
+    {
       "source": "tests/image-read.test.ts",
       "target": "npm:vitest",
       "relation": "depends_on"
@@ -2470,6 +3094,11 @@
       "relation": "depends_on"
     },
     {
+      "source": "tests/loop-profile.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
       "source": "tests/loop.test.ts",
       "target": "npm:vitest",
       "relation": "depends_on"
@@ -2507,6 +3136,26 @@
     {
       "source": "tests/memory.test.ts",
       "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/mixture.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/mixture.test.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/mixture.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/mixture.test.ts",
+      "target": "npm:path",
       "relation": "depends_on"
     },
     {
@@ -2610,6 +3259,26 @@
       "relation": "depends_on"
     },
     {
+      "source": "tests/path-jail.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/path-jail.test.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/path-jail.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/path-jail.test.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
       "source": "tests/perception/extractor.test.ts",
       "target": "npm:vitest",
       "relation": "depends_on"
@@ -2662,6 +3331,71 @@
     {
       "source": "tests/permissions.test.ts",
       "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-commands.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-commands.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-hooks.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-hooks.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-market.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-market.test.ts",
+      "target": "npm:child_process",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-market.test.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-market.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugin-market.test.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugins-loader.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugins-loader.test.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugins-loader.test.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/plugins-loader.test.ts",
+      "target": "npm:path",
       "relation": "depends_on"
     },
     {
@@ -2775,6 +3509,11 @@
       "relation": "depends_on"
     },
     {
+      "source": "tests/ssrf.test.ts",
+      "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
       "source": "tests/telegram.test.ts",
       "target": "npm:vitest",
       "relation": "depends_on"
@@ -2857,6 +3596,11 @@
     {
       "source": "tests/web-fetch.test.ts",
       "target": "npm:vitest",
+      "relation": "depends_on"
+    },
+    {
+      "source": "tests/web-fetch.test.ts",
+      "target": "npm:dns",
       "relation": "depends_on"
     },
     {

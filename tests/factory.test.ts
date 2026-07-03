@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerCustomProviders, getCustomProviders, getAllModels, createProvider } from '../src/providers/factory.js';
+import {
+  registerCustomProviders, getCustomProviders, getAllModels, createProvider,
+  ZHIPU_GENERAL_BASE_URL, ZHIPU_CODING_BASE_URL,
+} from '../src/providers/factory.js';
 import type { ProviderDef } from '../src/config/project-config.js';
 
 // We need to reset custom providers between tests
@@ -130,6 +133,32 @@ describe('createProvider with custom providers', () => {
     // The provider should use the config baseUrl
     // We can verify by checking the model name is correct
     expect(provider.model).toBe('test');
+  });
+
+  it('routes glm-* to Zhipu on the general endpoint', () => {
+    const provider = createProvider({ model: 'glm-5.2', apiKey: 'test-key' });
+    expect(provider.name).toBe('Zhipu');
+    expect(provider.model).toBe('glm-5.2');
+    expect((provider as any).client.baseURL).toBe(ZHIPU_GENERAL_BASE_URL);
+  });
+
+  it('strips the zhipu/ prefix and uses the general endpoint', () => {
+    const provider = createProvider({ model: 'zhipu/glm-5', apiKey: 'test-key' });
+    expect(provider.name).toBe('Zhipu');
+    expect(provider.model).toBe('glm-5');
+    expect((provider as any).client.baseURL).toBe(ZHIPU_GENERAL_BASE_URL);
+  });
+
+  it('routes zhipu-coding/* to the Coding Plan endpoint', () => {
+    const provider = createProvider({ model: 'zhipu-coding/glm-5.1', apiKey: 'test-key' });
+    expect(provider.name).toBe('Zhipu');
+    expect(provider.model).toBe('glm-5.1');
+    expect((provider as any).client.baseURL).toBe(ZHIPU_CODING_BASE_URL);
+  });
+
+  it('lists the three Zhipu GLM models in getAllModels', () => {
+    const ids = getAllModels().filter(m => m.provider === 'Zhipu').map(m => m.id);
+    expect(ids).toEqual(['glm-5.2', 'glm-5.1', 'glm-5']);
   });
 
   it('handles model with no prefix remainder', () => {

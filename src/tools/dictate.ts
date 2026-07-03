@@ -54,6 +54,68 @@ function cleanup(tmpDir: string): void {
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
 }
 
+// ─── Clipboard injection ──────────────────────────────────────────────────
+
+/**
+ * Copy text to clipboard AND simulate paste keystroke into focused window.
+ * Wayland: wl-copy + wtype (Ctrl+V); X11: xclip + xdotool (Ctrl+V)
+ */
+export async function injectText(text: string): Promise<void> {
+  const isWayland = !!process.env.WAYLAND_DISPLAY;
+
+  if (isWayland) {
+    try {
+      execSync('which wl-copy', { stdio: 'pipe' });
+      execSync('which wtype', { stdio: 'pipe' });
+      const proc = spawn('wl-copy', [], { stdio: ['pipe', 'pipe', 'pipe'] });
+      proc.stdin.write(text);
+      proc.stdin.end();
+      await new Promise<void>((resolve) => proc.on('close', () => resolve()));
+      await new Promise(r => setTimeout(r, 150));
+      execSync('wtype -M ctrl v -m ctrl', { stdio: 'pipe', timeout: 3000 });
+      return;
+    } catch { /* fall through */ }
+  }
+
+  // X11 / XWayland fallback
+  try {
+    execSync('which xdotool', { stdio: 'pipe' });
+    let clipboardCmd = '';
+    try {
+      execSync('which xclip', { stdio: 'pipe' });
+      clipboardCmd = 'xclip -selection clipboard';
+    } catch {
+      try {
+        execSync('which xsel', { stdio: 'pipe' });
+        clipboardCmd = 'xsel --clipboard --input';
+      } catch {
+        throw new Error('No clipboard tool');
+      }
+    }
+    const child = spawn('sh', ['-c', clipboardCmd], { stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdin.write(text);
+    child.stdin.end();
+    await new Promise<void>((resolve) => child.on('close', () => resolve()));
+    await new Promise(r => setTimeout(r, 150));
+    execSync('xdotool key ctrl+v', { stdio: 'pipe', timeout: 3000 });
+  } catch {
+    throw new Error('Cannot inject text: install wtype (Wayland) or xdotool+xclip (X11)');
+  }
+}
+
+// ─── Audio level helper ────────────────────────────────────────────────────
+
+function rmsLevel(pcmBuffer: Buffer): number {
+  if (pcmBuffer.length < 2) return 0;
+  let sum = 0;
+  const samples = pcmBuffer.length / 2;
+  for (let i = 0; i < pcmBuffer.length; i += 2) {
+    const val = pcmBuffer.readInt16LE(i);
+    sum += val * val;
+  }
+  return Math.sqrt(sum / samples);
+}
+
 function pickPlayer(): string {
   for (const p of ['aplay', 'paplay', 'ffplay']) {
     try { execSync('which ' + p, { stdio: 'pipe' }); return p; } catch {}
@@ -186,7 +248,14 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
 
 // ─── STT: record mic + transcribe ────────────────────────────────────────
 
-export async function dictate(deviceId?: string): Promise<void> {
+export interface DictateOptions {
+  deviceId?: string;
+  inject?: boolean;
+}
+
+export async function dictate(opts: DictateOptions = {}): Promise<void> {
+  const deviceId = opts.deviceId;
+  const inject = opts.inject ?? false;
   const providers = listProviders();
   if (providers.length === 0) {
     console.error(chalk.hex('#b15439')(
@@ -303,7 +372,12 @@ export async function dictate(deviceId?: string): Promise<void> {
     try {
       const clipboardModule = await import('./clipboard.js');
       await clipboardModule.clipboardTool({ action: 'copy', text: cleaned });
-      console.log(chalk.hex('#8a7768')('  \uD83D\uDCCB  Copied to clipboard.\n'));
+      if (inject) {
+        await injectText(cleaned);
+        console.log(chalk.hex('#8a7768')('  ⌨️  Injected into focused window.\n'));
+      } else {
+        console.log(chalk.hex('#8a7768')('  \uD83D\uDCCB  Copied to clipboard.\n'));
+      }
     } catch {}
   } else {
     // Save failed recording for debugging
@@ -391,4 +465,177 @@ export function listVoices(): void {
   }
   console.log(chalk.hex('#4e3d30')('\n  Usage:  dic speak <text> --voice <id>'));
   console.log(chalk.hex('#4e3d30')('  Default: dic speak <text>\n'));
+}
+
+// ─── Continuous dictation loop ─────────────────────────────────────────────
+
+export interface LoopOptions {
+  deviceId?: string;
+  silenceMs?: number;
+  maxDurationMs?: number;
+}
+
+/**
+ * Continuous dictation: record → transcribe → inject → repeat.
+ * Stops on Ctrl+C. Uses arecord/parec with raw PCM for real-time silence detection.
+ */
+export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
+  const providers = listProviders();
+  if (providers.length === 0) {
+    console.error(chalk.hex('#b15439')(
+      '\n  No API key found. Set GROQ_API_KEY, OPENAI_API_KEY, or XIAOMI_API_KEY.\n',
+    ));
+    process.exit(1);
+  }
+
+  const deviceId = opts.deviceId;
+  const silenceMs = opts.silenceMs ?? 1500;
+  const maxDurationMs = opts.maxDurationMs ?? 60000;
+  const devName = deviceId || getDefaultDevice();
+
+  console.log(chalk.hex('#5a9e6e').bold('\n  🎙️  Dictation Loop — Continuous voice-to-text'));
+  if (devName) console.log(chalk.hex('#8a7768')('     Device: ' + devName));
+  console.log(chalk.hex('#8a7768')('     Silence threshold: ' + silenceMs + 'ms'));
+  console.log(chalk.hex('#8a7768')('     Transcriptions will be injected into focused window.'));
+  console.log(chalk.hex('#cc9e5c')('     Press Ctrl+C to stop.\n'));
+
+  let running = true;
+  let roundNum = 0;
+  const onSigint = () => {
+    running = false;
+    console.log(chalk.hex('#cc9e5c')('\n  Stopping dictation loop...\n'));
+  };
+  process.on('SIGINT', onSigint);
+
+  while (running) {
+    roundNum++;
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dic-loop-'));
+    const rawPath = path.join(tmpDir, 'recording.raw');
+    const wavPath = path.join(tmpDir, 'recording.wav');
+
+    try {
+      // ── Record with silence detection ──────────────────────────────
+      console.log(chalk.hex('#5a9e6e')('  ── Round ' + roundNum + ' ── Listening...\n'));
+
+      const recArgs = ['-r', String(SAMPLE_RATE), '-f', 'S16_LE', '-c', '1', '-t', 'raw',
+        ...(deviceId ? ['-D', deviceId] : []), rawPath];
+      const recorder = spawn('arecord', recArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+      let stopped = false;
+      const silenceThreshold = 400;
+      let lastSoundTime = Date.now();
+      const startTime = Date.now();
+
+      // Monitor the raw file for audio levels
+      const monitor = setInterval(() => {
+        if (!running || stopped) return;
+        try {
+          if (!fs.existsSync(rawPath)) return;
+          const stat = fs.statSync(rawPath);
+          if (stat.size < SAMPLE_RATE * 2) return; // need at least 1 second
+
+          // Read last 100ms of audio for level check
+          const chunkSize = SAMPLE_RATE * 2 * 0.1; // 100ms of s16le
+          const readStart = Math.max(0, stat.size - chunkSize);
+          const fd = fs.openSync(rawPath, 'r');
+          const buf = Buffer.alloc(Math.min(chunkSize, stat.size));
+          fs.readSync(fd, buf, 0, buf.length, readStart);
+          fs.closeSync(fd);
+
+          const level = rmsLevel(buf);
+          if (level > silenceThreshold) {
+            lastSoundTime = Date.now();
+          }
+
+          const elapsed = Date.now() - startTime;
+          const silenceElapsed = Date.now() - lastSoundTime;
+
+          if (silenceElapsed >= silenceMs && elapsed > 1000) {
+            // Silence detected — stop recording
+            stopped = true;
+            recorder.kill('SIGTERM');
+          } else if (elapsed >= maxDurationMs) {
+            stopped = true;
+            recorder.kill('SIGTERM');
+          }
+        } catch {}
+      }, 200);
+
+      await new Promise<void>((resolve) => {
+        recorder.on('close', () => resolve());
+        if (!running) { recorder.kill('SIGTERM'); }
+      });
+      clearInterval(monitor);
+
+      if (!running) break;
+
+      // ── Convert raw to WAV ─────────────────────────────────────────
+      if (!fs.existsSync(rawPath) || fs.statSync(rawPath).size < SAMPLE_RATE) {
+        console.log(chalk.hex('#cc9e5c')('  Too short, skipping...\n'));
+        cleanup(tmpDir);
+        continue;
+      }
+
+      try {
+        execSync(
+          `ffmpeg -y -f s16le -ar ${SAMPLE_RATE} -ac 1 -i "${rawPath}" -af "dynaudnorm=p=0.9:r=0.5" "${wavPath}"`,
+          { stdio: 'pipe', timeout: 10000 },
+        );
+      } catch {
+        // Try without normalization
+        try {
+          execSync(
+            `ffmpeg -y -f s16le -ar ${SAMPLE_RATE} -ac 1 -i "${rawPath}" "${wavPath}"`,
+            { stdio: 'pipe', timeout: 10000 },
+          );
+        } catch {
+          console.log(chalk.hex('#cc9e5c')('  Conversion failed, skipping...\n'));
+          cleanup(tmpDir);
+          continue;
+        }
+      }
+
+      // ── Transcribe ─────────────────────────────────────────────────
+      let text = '';
+      for (let i = 0; i < providers.length && running; i++) {
+        try {
+          text = await transcribeWith(providers[i], wavPath, false);
+          break;
+        } catch (err: any) {
+          const isAuth = err?.status === 401
+            || (err?.message && (err.message.includes('401') || err.message.includes('Invalid API Key')));
+          if (isAuth && i < providers.length - 1) continue;
+          console.error(chalk.hex('#b15439')('  Transcribe error: ' + String(err)));
+          break;
+        }
+      }
+
+      const cleaned = text.trim();
+      if (cleaned) {
+        console.log(chalk.hex('#ede0cc')('  ' + cleaned));
+        try {
+          await injectText(cleaned);
+          console.log(chalk.hex('#5a9e6e')('  ✓ Injected\n'));
+        } catch (err) {
+          // Fallback to clipboard
+          try {
+            const clipboardModule = await import('./clipboard.js');
+            await clipboardModule.clipboardTool({ action: 'copy', text: cleaned });
+            console.log(chalk.hex('#cc9e5c')('  📋 Copied to clipboard (inject failed)\n'));
+          } catch {}
+        }
+      } else {
+        console.log(chalk.hex('#cc9e5c')('  (no speech detected)\n'));
+      }
+    } catch (err: any) {
+      if (!running) break;
+      console.error(chalk.hex('#b15439')('  Error: ' + String(err)));
+    }
+
+    cleanup(tmpDir);
+    if (running) await new Promise(r => setTimeout(r, 300)); // brief pause between rounds
+  }
+
+  process.removeListener('SIGINT', onSigint);
+  console.log(chalk.hex('#5a9e6e').bold('  Dictation loop ended.\n'));
 }

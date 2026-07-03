@@ -45,6 +45,8 @@ export interface ProjectConfig {
   testCommand?: string;
   /** Preset profile — "local" routes to Ollama with compact prompts. */
   profile?: 'local';
+  /** Shadow-git checkpoints before mutating tool calls (default: true). */
+  checkpoints?: boolean;
 }
 
 /**
@@ -90,6 +92,7 @@ function normalise(raw: unknown): ProjectConfig {
   if (typeof r.maxVerifyRetries === 'number' && r.maxVerifyRetries > 0) out.maxVerifyRetries = Math.floor(r.maxVerifyRetries as number);
   if (typeof r.testCommand === 'string') out.testCommand = r.testCommand as string;
   if (r.profile === 'local') out.profile = 'local';
+  if (r.checkpoints === true || r.checkpoints === false) out.checkpoints = r.checkpoints as boolean;
   if (Array.isArray(r.providers)) {
     out.providers = r.providers
       .filter((p: unknown): p is Record<string, unknown> =>

@@ -6,6 +6,9 @@ import minimist from 'minimist';
 import chalk from 'chalk';
 
 import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
+import { refreshLiveModels } from '../providers/live-models.js';
+
+void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
@@ -22,6 +25,7 @@ import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
 import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
+import { runProviderWizard } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
@@ -30,7 +34,7 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderDiamond } from './diamond.js';
+import { renderBanner } from './diamond.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -402,9 +406,6 @@ function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMPr
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function main() {
-  renderDiamond();
-  await new Promise(r => setTimeout(r, 1500));
-  process.stdout.write('\x1b[2J\x1b[H');
   const display = createTerminalDisplay();
 
   // ── First-run wizard ───────────────────────────────────────────────────────
@@ -536,28 +537,20 @@ async function main() {
   const sessionPath = noSession ? undefined : path.join(sessionStore.defaultDir(),
     projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
 
-  // ── ASCII art banner ────────────────────────────────────────────────────────
-  const red    = chalk.hex('#CC2936');
-  const orange = chalk.hex('#E8771A');
-  const pink   = chalk.hex('#FF6B9D');
-  console.log('');
-  console.log(red   ('    _                 '));
-  console.log(red   ('   / \\   _   _ _ __  '));
-  console.log(orange('  / _ \\ | | | | \'__| '));
-  console.log(orange(' / ___ \\| |_| | |    '));
-  console.log(pink  ('_/ /   \\_\\__,_|_|    '));
-  console.log('');
-  console.log(chalk.hex('#4e3d30')('  "I don\'t try. I verify."'));
-  console.log('');
-
-  await new Promise(r => setTimeout(r, 50));
-
-  display.header(
-    `Aura — ${ctx.name}`,
-    `v${pkg.version} · ${provider.name} · ${runtimeConfig.model} · ${ctx.language} · ${permissionLevel} mode` +
-    (fileConfig.model ? ` · .aura.json loaded` : '') +
-    (activeChatId ? ` · chat ${activeChatId}` : ''),
-  );
+  // ── Startup banner ──────────────────────────────────────────────────────────
+  renderBanner({
+    version: pkg.version,
+    title: ctx.name,
+    provider: provider.name,
+    model: runtimeConfig.model,
+    language: ctx.language,
+    mode: permissionLevel,
+    cwd: projectRoot,
+    extras: [
+      ...(fileConfig.model ? ['.aura.json loaded'] : []),
+      ...(activeChatId ? [`chat ${activeChatId}`] : []),
+    ],
+  });
 
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
@@ -1102,6 +1095,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :model                  Interactive model selector',
       '  :model <id>             Switch to a specific model',
       '  :models                 List all available models',
+      '  :provider               Provider setup wizard (pick provider, model, key)',
       '  :apikey <key>           Set API key for current session',
       '',
       '  ── Workflows ─────────────────────────────────────',
@@ -1301,6 +1295,25 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
     } else {
       console.log(chalk.hex('#8a7768')('  No graph.json found after refresh. Run graphify extract first.\n'));
+    }
+    return { handled: true };
+  }
+
+  // ── Provider wizard command ────────────────────────────────────────────────
+  if (input === ':provider' || input === '/provider') {
+    const cfg = await runProviderWizard();
+    if (cfg) {
+      // Update current session's provider without restart
+      runtimeConfig.model = cfg.model;
+      runtimeConfig.baseUrl = cfg.baseUrl;
+      runtimeConfig.apiKey = cfg.apiKey;
+      c.providerConfig.model = cfg.model;
+      c.providerConfig.baseUrl = cfg.baseUrl;
+      c.providerConfig.apiKey = cfg.apiKey;
+      // Keep resolved in sync
+      resolved.model = cfg.model;
+      resolved.baseUrl = cfg.baseUrl;
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
     }
     return { handled: true };
   }
@@ -1837,6 +1850,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     XAI_API_KEY          Grok models
     OPENROUTER_API_KEY   OpenRouter (access to all models)
     XIAOMI_API_KEY       Xiaomi MiMo
+    ZHIPU_API_KEY        Zhipu GLM (Z.ai) — glm-* general endpoint, zhipu-coding/<model> Coding Plan
+    ZHIPU_BASE_URL       Override Zhipu endpoint (default https://api.z.ai/api/paas/v4)
     AURA_MODEL           Default model (overridden by --model)
     AURA_API_RPM         Default request rate limit
     AURA_API_TPM         Default token rate limit (Gemini)
