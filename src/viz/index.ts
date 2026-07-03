@@ -188,6 +188,10 @@ function buildHtml(data: {
   #graph-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; cursor: grab; }
   #graph-svg:active { cursor: grabbing; }
   .graph-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .mode-toggle { display: flex; gap: 4px; }
+  .mode-btn { background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); cursor: pointer; font: inherit; font-size: 11px; padding: 5px 11px; transition: all .12s; }
+  .mode-btn:hover { border-color: var(--border2); color: var(--text); }
+  .mode-btn.active { background: var(--primary); border-color: var(--primary); color: #1c1108; font-weight: 700; }
   .graph-controls input {
     background: var(--card); border: 1px solid var(--border2); border-radius: 6px;
     color: var(--text); font: inherit; font-size: 12px; padding: 6px 12px; width: 220px; outline: none;
@@ -344,6 +348,8 @@ function initGraph() {
 
   const NODE_COLORS = {
     file:      '#58a6ff',
+    concept:   '#d29922',
+    decision:  '#bc8cff',
     function:  '#ff7b72',
     class:     '#d2a8ff',
     interface: '#3fb950',
@@ -352,26 +358,30 @@ function initGraph() {
     enum:      '#f85149',
     node:      '#8b949e',
   };
-  const NODE_R = { file: 13, class: 11, interface: 10, function: 8, const: 7, type: 7, enum: 8, node: 7 };
+  const NODE_R = { file: 13, concept: 8, decision: 9, class: 11, interface: 10, function: 8, const: 7, type: 7, enum: 8, node: 7 };
 
   const allTypes = [...new Set(DATA.graph.nodes.map(n => n.type || 'node'))];
   const activeTypes = new Set(allTypes);
 
-  panel.innerHTML = \`
+  panel.innerHTML = `
     <div class="graph-controls">
       <input id="graph-search" placeholder="🔍  Search nodes, files…" oninput="filterGraph()">
+      <div class="mode-toggle" id="graph-mode-toggle">
+        <button class="mode-btn active" data-mode="force">Force</button>
+        <button class="mode-btn" data-mode="treemap">Treemap</button>
+      </div>
       <div class="legend" id="legend"></div>
       <span class="hint">scroll to zoom · drag to pan · drag nodes</span>
     </div>
     <svg id="graph-svg"></svg>
-  \`;
+  `;
 
   const legendEl = document.getElementById('legend');
   allTypes.forEach(t => {
     const item = document.createElement('span');
     item.className = 'legend-item on';
     item.style.color = NODE_COLORS[t] || '#8b949e';
-    item.innerHTML = \`<span class="legend-dot" style="background:\${NODE_COLORS[t]||'#8b949e'}"></span>\${t}\`;
+    item.innerHTML = `<span class="legend-dot" style="background:${NODE_COLORS[t]||'#8b949e'}"></span>${t}`;
     item.onclick = () => {
       if (activeTypes.has(t)) { activeTypes.delete(t); item.classList.remove('on'); }
       else { activeTypes.add(t); item.classList.add('on'); }
@@ -380,28 +390,52 @@ function initGraph() {
     legendEl.appendChild(item);
   });
 
-  const svgEl = document.getElementById('graph-svg');
+  const nodes = DATA.graph.nodes.map(n => ({...n}));
+  const edges = DATA.graph.edges.map(e => ({...e}));
+  const tooltip = document.getElementById('tooltip');
+  const ALWAYS_LABEL = new Set(['file','class','interface']);
+
+  let graphMode = 'force';
+  let filterGraph = () => {};
+  window.filterGraph = () => filterGraph();
+
+  document.querySelectorAll('#graph-mode-toggle .mode-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (btn.dataset.mode === graphMode) return;
+      document.querySelectorAll('#graph-mode-toggle .mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      graphMode = btn.dataset.mode;
+      renderCurrentMode();
+    };
+  });
+
+  function renderCurrentMode() {
+    const svgEl = document.getElementById('graph-svg');
+    svgEl.innerHTML = '';
+    if (graphMode === 'treemap') {
+      filterGraph = renderTreemapGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, tooltip);
+    } else {
+      filterGraph = renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL, activeTypes, tooltip);
+    }
+  }
+
+  renderCurrentMode();
+}
+
+function renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL, activeTypes, tooltip) {
   const W = svgEl.clientWidth || 900, H = svgEl.clientHeight || 580;
-  const svg = d3.select('#graph-svg').attr('width', W).attr('height', H);
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
   const g = svg.append('g');
 
   svg.call(d3.zoom().scaleExtent([0.05, 6]).on('zoom', e => g.attr('transform', e.transform)));
 
-  // Arrow marker — bright color
   svg.append('defs').append('marker')
     .attr('id','arr').attr('viewBox','0 -5 10 10').attr('refX',2).attr('refY',0)
     .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
     .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#484f58');
 
-  const nodes = DATA.graph.nodes.map(n => ({...n}));
-  const edges = DATA.graph.edges.map(e => ({...e}));
-  const tooltip = document.getElementById('tooltip');
-
-  // Show labels for important node types always; others on hover
-  const ALWAYS_LABEL = new Set(['file','class','interface']);
-
   function filterGraph() {
-    const term = document.getElementById('graph-search').value.toLowerCase();
+    const term = (document.getElementById('graph-search').value || '').toLowerCase();
     const vis = new Set(
       nodes.filter(n =>
         activeTypes.has(n.type || 'node') &&
@@ -415,7 +449,6 @@ function initGraph() {
     });
     gLabels.style('opacity', d => vis.has(d.id) ? 1 : 0.06);
   }
-  window.filterGraph = filterGraph;
 
   const sim = d3.forceSimulation(nodes)
     .force('link',      d3.forceLink(edges).id(d=>d.id).distance(d => {
@@ -446,9 +479,9 @@ function initGraph() {
       .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
     .on('mouseover', (e,d) => {
       tooltip.style.display='block';
-      tooltip.innerHTML = \`<strong>\${d.label}</strong><br>
-        <span class="t-type">\${d.type||'node'}</span>
-        \${d.file ? \`<br><span class="t-file">\${d.file}\${d.source_location?' · '+d.source_location:''}</span>\` : ''}\`;
+      tooltip.innerHTML = `<strong>${d.label}</strong><br>
+        <span class="t-type">${d.type||'node'}</span>
+        ${d.file ? `<br><span class="t-file">${d.file}${d.source_location?' · '+d.source_location:''}</span>` : ''}`;
     })
     .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
     .on('mouseout',  () => { tooltip.style.display='none'; });
@@ -472,6 +505,134 @@ function initGraph() {
     gNodes.attr('cx',d=>d.x).attr('cy',d=>d.y);
     gLabels.attr('x',d=>d.x).attr('y',d=>d.y);
   });
+
+  return filterGraph;
+}
+
+function renderTreemapGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, tooltip) {
+  const W = svgEl.clientWidth || 900, H = svgEl.clientHeight || 580;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+  const g = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.3, 6]).on('zoom', e => g.attr('transform', e.transform)));
+
+  // Real metric, not a guess: size each leaf by its degree (in + out edges).
+  // No line-of-code data exists in graph.json, so degree is the most honest
+  // "importance" signal actually available.
+  const degree = new Map();
+  edges.forEach(e => {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    degree.set(s, (degree.get(s)||0) + 1);
+    degree.set(t, (degree.get(t)||0) + 1);
+  });
+
+  // Build a directory hierarchy from file-type node ids ("src/agent/loop.ts"
+  // -> src > agent > loop.ts). concept (npm dependency) nodes have no path,
+  // so they group under a synthetic "external dependencies" branch; decision
+  // nodes nest under their associated file's directory.
+  const root = { name: 'root', children: [] };
+  function getBranch(parts) {
+    let cur = root;
+    for (const part of parts) {
+      let next = cur.children.find(c => c.name === part && c.children);
+      if (!next) { next = { name: part, children: [] }; cur.children.push(next); }
+      cur = next;
+    }
+    return cur;
+  }
+
+  nodes.forEach(n => {
+    const t = n.type || 'node';
+    let parts;
+    if (t === 'concept') {
+      parts = ['external dependencies'];
+    } else if (t === 'decision') {
+      parts = (n.file || 'decisions').split('/').slice(0, -1);
+      if (!parts.length) parts = ['decisions'];
+    } else if (t === 'file') {
+      // Module-directory nodes end with '/' in the id and shouldn't become
+      // their own leaf — real files nest inside them via the path split.
+      if (n.id.endsWith('/')) return;
+      parts = n.id.split('/').slice(0, -1);
+    } else {
+      parts = (n.file || 'other').split('/').slice(0, -1);
+    }
+    const branch = getBranch(parts);
+    branch.children.push({ name: n.label, node: n, value: 1 + (degree.get(n.id)||0) });
+  });
+
+  const hierarchy = d3.hierarchy(root)
+    .sum(d => d.value || 0)
+    .sort((a,b) => (b.value||0) - (a.value||0));
+
+  d3.treemap().size([W, H]).paddingOuter(3).paddingTop(d => d.depth ? 16 : 0).paddingInner(2)(hierarchy);
+
+  const leaves = hierarchy.leaves().filter(l => l.data.node);
+  const dirNodes = hierarchy.descendants().filter(d => d.children && d.depth > 0);
+
+  g.append('g').selectAll('rect').data(dirNodes).enter().append('rect')
+    .attr('x', d=>d.x0).attr('y', d=>d.y0)
+    .attr('width', d=>d.x1-d.x0).attr('height', d=>d.y1-d.y0)
+    .attr('fill', 'none').attr('stroke', '#30363d').attr('stroke-width', 1);
+  g.append('g').selectAll('text').data(dirNodes).enter().append('text')
+    .text(d => d.data.name.length > 28 ? d.data.name.slice(0,26)+'…' : d.data.name)
+    .attr('x', d=>d.x0+4).attr('y', d=>d.y0+11)
+    .attr('fill', '#6e7681').attr('font-size','10px').attr('font-weight','700')
+    .attr('pointer-events','none');
+
+  const leafSel = g.append('g').selectAll('rect').data(leaves).enter().append('rect')
+    .attr('x', d=>d.x0).attr('y', d=>d.y0)
+    .attr('width', d=>Math.max(0,d.x1-d.x0)).attr('height', d=>Math.max(0,d.y1-d.y0))
+    .attr('fill', d => NODE_COLORS[d.data.node.type||'node'] || '#8b949e')
+    .attr('fill-opacity', 0.28)
+    .attr('stroke', d => NODE_COLORS[d.data.node.type||'node'] || '#8b949e')
+    .attr('stroke-width', 1)
+    .style('cursor','pointer')
+    .on('mouseover', (e,d) => {
+      tooltip.style.display='block';
+      tooltip.innerHTML = `<strong>${d.data.node.label}</strong><br>
+        <span class="t-type">${d.data.node.type||'node'} · degree ${degree.get(d.data.node.id)||0}</span>
+        ${d.data.node.file ? `<br><span class="t-file">${d.data.node.file}</span>` : ''}`;
+    })
+    .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
+    .on('mouseout',  () => { tooltip.style.display='none'; });
+
+  g.append('g').selectAll('text').data(leaves.filter(l => (l.x1-l.x0) > 40 && (l.y1-l.y0) > 18)).enter().append('text')
+    .text(d => { const w = d.x1-d.x0; const max = Math.floor(w/6.5); const lbl = d.data.node.label; return lbl.length > max ? lbl.slice(0,Math.max(1,max-1))+'…' : lbl; })
+    .attr('x', d=>d.x0+4).attr('y', d=>d.y0+13)
+    .attr('fill', d => NODE_COLORS[d.data.node.type||'node'] || '#c9d1d9')
+    .attr('font-size','10px').attr('pointer-events','none');
+
+  // Edge overlay: dependency arcs drawn over the treemap, connecting leaf
+  // centers. Curved so overlapping edges stay visually separable.
+  const center = new Map(leaves.map(l => [l.data.node.id, [(l.x0+l.x1)/2, (l.y0+l.y1)/2]]));
+  const edgeSel = g.append('g').selectAll('path').data(edges.filter(e => {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    return center.has(s) && center.has(t);
+  })).enter().append('path')
+    .attr('fill','none').attr('stroke','#e6edf3').attr('stroke-width',0.8).attr('opacity',0.35)
+    .attr('d', d => {
+      const s = center.get(d.source.id || d.source), t = center.get(d.target.id || d.target);
+      const mx = (s[0]+t[0])/2, my = (s[1]+t[1])/2 - Math.abs(t[0]-s[0])*0.12;
+      return `M${s[0]},${s[1]} Q${mx},${my} ${t[0]},${t[1]}`;
+    });
+
+  function filterGraph() {
+    const term = (document.getElementById('graph-search').value || '').toLowerCase();
+    leafSel.style('opacity', d => {
+      const n = d.data.node;
+      const match = activeTypes.has(n.type||'node') && (!term || n.label.toLowerCase().includes(term) || (n.file||'').toLowerCase().includes(term));
+      return match ? 1 : 0.06;
+    });
+    edgeSel.style('opacity', d => {
+      const s = d.source.id || d.source, t = d.target.id || d.target;
+      const sn = leaves.find(l=>l.data.node.id===s), tn = leaves.find(l=>l.data.node.id===t);
+      const svis = sn && activeTypes.has(sn.data.node.type||'node');
+      const tvis = tn && activeTypes.has(tn.data.node.type||'node');
+      return svis && tvis ? 0.35 : 0.02;
+    });
+  }
+
+  return filterGraph;
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
