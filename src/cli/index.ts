@@ -61,6 +61,9 @@ const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.AURA_MAX_
 const cliMaxVerifyRetries = num(argv['max-verify-retries']);
 const cliMaxTurns        = num(argv['max-turns']);
 const cliVerify          = argv.verify === true;
+// Voice output: speak task summaries aloud. Enabled by --speak or AURA_SPEAK=1;
+// toggled at runtime in the REPL with :speak. Mutable so :speak can flip it.
+let speakEnabled         = argv.speak === true || process.env.AURA_SPEAK === '1';
 const cliProfile         = typeof argv.profile === 'string' ? argv.profile : undefined;
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
 const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.AURA_API_RPM);
@@ -853,6 +856,7 @@ async function main() {
     if (result.success) {
       display.summary(result.summary, result.turns, result.toolCallCount);
       printUsageFooter(display, result.usage, result.costUsd);
+      if (speakEnabled) await speakSummary(result.summary);
     } else {
       display.error(result.summary);
       process.exit(1);
@@ -982,6 +986,7 @@ async function main() {
       if (result.success) {
         display.summary(result.summary, result.turns, result.toolCallCount);
         printUsageFooter(display, result.usage, result.costUsd);
+        if (speakEnabled) await speakSummary(result.summary);
       } else {
         display.error(result.summary);
       }
@@ -1123,6 +1128,14 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     process.exit(0);
   }
 
+  if (input === ':speak') {
+    speakEnabled = !speakEnabled;
+    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#8a7768')(
+      `  🔊 Voice replies ${speakEnabled ? 'ON — Aura will read its answers aloud' : 'OFF'}.\n`,
+    ));
+    return { handled: true };
+  }
+
   if (input === ':dream') {
     const { runDream } = await import('../dream/dream.js');
     c.display.agentThinking();
@@ -1230,6 +1243,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  ── Memory ───────────────────────────────────────',
       '  :dream                  Consolidate recent episodes into a dream entry',
       '  :rem                    Show reconciled memory (or latest dream)',
+      '',
+      '  ── Voice ─────────────────────────────────────────',
+      '  :speak                  Toggle reading replies aloud (or launch with --speak)',
       '',
       '  ── Context / Stats ──────────────────────────────',
       '  :context                Show loaded project context',
@@ -1889,6 +1905,30 @@ function printUsageFooter(
   console.log(chalk.hex('#4e3d30')(
     `  ↳ ${total.toLocaleString()} tokens (${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out) · est. $${costUsd.toFixed(4)}`,
   ));
+}
+
+/**
+ * Read a task summary aloud (the "Aura talks back" half of the voice loop).
+ * Best-effort: strips code/markdown, caps length so a long report doesn't
+ * monologue, and never throws into the caller (a TTS/network failure must
+ * not break a successful task).
+ */
+async function speakSummary(text: string): Promise<void> {
+  if (!text || !text.trim()) return;
+  // Strip fenced code blocks, inline code, markdown markers, and collapse
+  // whitespace — TTS should read the prose, not backticks and hashes.
+  const spoken = text
+    .replace(/```[\s\S]*?```/g, ' (code omitted) ')
+    .replace(/`[^`]*`/g, '')
+    .replace(/[#*_>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 600);
+  if (!spoken) return;
+  try {
+    const { speakText } = await import('../tools/dictate.js');
+    await speakText(spoken);
+  } catch { /* speech is best-effort — never break the task on TTS failure */ }
 }
 
 function printHelp() {

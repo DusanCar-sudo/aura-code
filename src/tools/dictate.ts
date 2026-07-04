@@ -30,6 +30,18 @@ function listProviders(): ApiProvider[] {
     const key = process.env.PARAKEET_API_KEY || 'sk-local';
     providers.push({ key, baseURL: process.env.PARAKEET_BASE_URL, name: 'Parakeet' });
   }
+  // GLM-ASR (Z.ai) — next-gen real-time ASR, OpenAI-compatible /audio/transcriptions.
+  // OPT-IN via DIC_USE_GLM_ASR=1: it currently needs a Z.ai audio balance
+  // package (err 1113) and the plain OpenAI SDK can hang against api.z.ai, so
+  // it's off the default path until the account is funded. When enabled it's
+  // tried first and falls through to MiMo on any failure.
+  if (process.env.ZHIPU_API_KEY && process.env.DIC_USE_GLM_ASR === '1') {
+    providers.push({
+      key: process.env.ZHIPU_API_KEY,
+      baseURL: process.env.ZHIPU_BASE_URL || 'https://api.z.ai/api/paas/v4',
+      name: 'GLM-ASR',
+    });
+  }
   if (process.env.XIAOMI_API_KEY) {
     const key = process.env.XIAOMI_API_KEY;
     const baseURL = key.startsWith('tp-')
@@ -47,7 +59,17 @@ function listProviders(): ApiProvider[] {
 }
 
 function buildClient(api: { key: string; baseURL: string }): OpenAI {
-  return new OpenAI({ apiKey: api.key, baseURL: api.baseURL });
+  return new OpenAI({
+    apiKey: api.key,
+    baseURL: api.baseURL,
+    // Fail fast so a hung/slow provider falls through instead of blocking the
+    // whole chain (GLM/api.z.ai can stall without a response).
+    timeout: 20_000,
+    maxRetries: 0,
+    // api.z.ai silently drops requests that arrive without a User-Agent
+    // (see the zai-edge memory) — always send one.
+    defaultHeaders: { 'User-Agent': 'aura-dic/1.0' },
+  });
 }
 
 function cleanup(tmpDir: string): void {
@@ -299,7 +321,14 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
 
   const model = api.name === 'Groq' ? 'whisper-large-v3-turbo'
     : api.name === 'Parakeet' ? 'parakeet-tdt-0.6b'
+    : api.name === 'GLM-ASR' ? 'glm-asr-2512'
     : 'whisper-1';
+  // GLM-ASR caps at 30s / 25 MB per Z.ai docs; guard so we fail fast (and
+  // fall through to MiMo) rather than sending an over-long clip.
+  if (api.name === 'GLM-ASR') {
+    const bytes = fs.statSync(wavPath).size;
+    if (bytes > 25_000_000) throw new Error('GLM-ASR: audio > 25 MB');
+  }
   const transcription = await client.audio.transcriptions.create({
     file: fs.createReadStream(wavPath),
     model,
@@ -309,6 +338,23 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
     ? transcription
     : (transcription as any).text ?? String(transcription);
   return text.trim();
+}
+
+/**
+ * Should we fall through to the next STT provider on this error?
+ *
+ * A fallback chain should be forgiving: auth failures (401), balance/resource
+ * errors (Z.ai 1113), rate limits (429), and network/connection blips all mean
+ * "this provider couldn't serve it — try the next one". The ONLY thing that
+ * should abort the whole chain is a fatal input problem (audio too large),
+ * which we mark explicitly so it isn't retried pointlessly against every
+ * provider.
+ */
+function shouldFallThrough(err: any): boolean {
+  const msg = String(err?.message ?? err ?? '');
+  if (/audio > 25 MB|too large/i.test(msg)) return false; // fatal input — don't retry
+  if (err?.status === 401 || err?.status === 403 || err?.status === 429) return true;
+  return /401|403|429|Invalid API Key|1113|Insufficient balance|no resource package|Connection error| ETIMEDOUT|ECONNRESET|ENOTFOUND|network|timeout|fetch failed/i.test(msg);
 }
 
 // ─── STT: record mic + transcribe ────────────────────────────────────────
@@ -415,13 +461,11 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
       text = await transcribeWith(api, wavPath, i === 0);
       break; // success
     } catch (err: any) {
-      const isAuth = err?.status === 401
-        || (err?.message && (err.message.includes('401') || err.message.includes('Invalid API Key')));
-      if (isAuth && i < providers.length - 1) {
-        console.log(chalk.hex('#cc9e5c')('  ' + api.name + ': key invalid, trying next provider...\n'));
+      if (shouldFallThrough(err) && i < providers.length - 1) {
+        console.log(chalk.hex('#cc9e5c')('  ' + api.name + ': unavailable (key/balance), trying next provider...\n'));
         continue;
       }
-      // Last provider failed or non-auth error — bail out
+      // Last provider failed or non-recoverable error — bail out
       console.error(chalk.hex('#b15439')('\n  Transcription failed (' + api.name + '):'), String(err), '\n');
       cleanup(tmpDir);
       process.exit(1);
@@ -507,9 +551,7 @@ async function normalizeAndTranscribe(wavPath: string, providers: ApiProvider[])
     try {
       return (await transcribeWith(providers[i], wavPath, false)).trim();
     } catch (err: any) {
-      const isAuth = err?.status === 401
-        || (err?.message && (err.message.includes('401') || err.message.includes('Invalid API Key')));
-      if (isAuth && i < providers.length - 1) continue;
+      if (shouldFallThrough(err) && i < providers.length - 1) continue;
       throw err;
     }
   }
@@ -842,9 +884,7 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
           text = await transcribeWith(providers[i], wavPath, false);
           break;
         } catch (err: any) {
-          const isAuth = err?.status === 401
-            || (err?.message && (err.message.includes('401') || err.message.includes('Invalid API Key')));
-          if (isAuth && i < providers.length - 1) continue;
+          if (shouldFallThrough(err) && i < providers.length - 1) continue;
           console.error(chalk.hex('#b15439')('  Transcribe error: ' + String(err)));
           break;
         }
