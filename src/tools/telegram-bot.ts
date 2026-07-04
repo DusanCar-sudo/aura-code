@@ -10,6 +10,7 @@ import * as https from 'https';
 import { exec, execSync } from 'child_process';
 import { createProvider, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
+import { transcribeFile, synthesizeSpeech } from './dictate.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
 
@@ -248,6 +249,81 @@ async function sendLocalFile(chatId: string | number, filePath: string, caption?
     });
   } catch (e: any) {
     await sendMessage(chatId, `❌ Error reading file: ${e.message}`);
+  }
+}
+
+// ─── Voice: download an incoming voice note, and send a voice reply ──────────
+
+/** Download a Telegram file (by file_id) to a local temp path. Returns the path. */
+async function downloadTelegramFile(fileId: string): Promise<string> {
+  const info = await apiPost('getFile', { file_id: fileId });
+  const remotePath: string = info.file_path;
+  const tmp = path.join(os.tmpdir(), `tg-voice-${Date.now()}-${path.basename(remotePath)}`);
+  await new Promise<void>((resolve, reject) => {
+    const options: https.RequestOptions = {
+      hostname: 'api.telegram.org', port: 443,
+      path: `/file/bot${TOKEN}/${remotePath}`, method: 'GET', family: 4, agent: httpsAgent,
+    };
+    const req = https.request(options, (res) => {
+      if (res.statusCode !== 200) { reject(new Error(`file download HTTP ${res.statusCode}`)); return; }
+      const out = fs.createWriteStream(tmp);
+      res.pipe(out);
+      out.on('finish', () => out.close(() => resolve()));
+      out.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, () => { req.destroy(); reject(new Error('file download timeout')); });
+    req.end();
+  });
+  return tmp;
+}
+
+/** Send a WAV buffer as a Telegram voice message (converts to OGG/Opus). */
+async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: string): Promise<void> {
+  // Telegram voice notes must be OGG/Opus. Convert the MiMo WAV with ffmpeg.
+  const tmpWav = path.join(os.tmpdir(), `tg-tts-${Date.now()}.wav`);
+  const tmpOgg = tmpWav.replace(/\.wav$/, '.ogg');
+  fs.writeFileSync(tmpWav, wavBuffer);
+  try {
+    execSync(`ffmpeg -y -i "${tmpWav}" -c:a libopus -b:a 32k "${tmpOgg}" 2>/dev/null`, { stdio: 'pipe', timeout: 20000 });
+  } catch {
+    // No opus encoder — fall back to sending the WAV as an audio file.
+    try { fs.unlinkSync(tmpOgg); } catch {}
+  }
+  const sendPath = fs.existsSync(tmpOgg) ? tmpOgg : tmpWav;
+  const fieldName = fs.existsSync(tmpOgg) ? 'voice' : 'audio';
+  const method = fs.existsSync(tmpOgg) ? 'sendVoice' : 'sendAudio';
+  const fileBuffer = fs.readFileSync(sendPath);
+  const boundary = '----TelegramVoiceBoundary' + Date.now().toString(16);
+  const parts = [`--${boundary}`, `Content-Disposition: form-data; name="chat_id"`, '', String(chatId)];
+  if (caption) parts.push(`--${boundary}`, `Content-Disposition: form-data; name="caption"`, '', caption);
+  parts.push(
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="${fieldName}"; filename="${path.basename(sendPath)}"`,
+    `Content-Type: application/octet-stream`, '',
+  );
+  const fullData = Buffer.concat([
+    Buffer.from(parts.join('\r\n') + '\r\n\r\n', 'utf8'),
+    fileBuffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
+  ]);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.telegram.org', port: 443, path: `/bot${TOKEN}/${method}`,
+        method: 'POST', family: 4, agent: httpsAgent,
+        headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': fullData.length },
+      }, (res) => {
+        let d = ''; res.on('data', c => d += c);
+        res.on('end', () => { try { JSON.parse(d).ok ? resolve() : reject(new Error(d.slice(0, 200))); } catch { reject(new Error(d.slice(0, 200))); } });
+      });
+      req.on('error', reject);
+      req.setTimeout(60000, () => { req.destroy(); reject(new Error('voice upload timeout')); });
+      req.write(fullData); req.end();
+    });
+  } finally {
+    try { fs.unlinkSync(tmpWav); } catch {}
+    try { fs.unlinkSync(tmpOgg); } catch {}
   }
 }
 
@@ -888,17 +964,46 @@ async function poll(): Promise<void> {
         saveOffset(offset);
 
         const msg = update.message;
-        if (!msg || !msg.text) continue;
+        if (!msg) continue;
 
         const chatId = msg.chat.id;
-        const text = msg.text;
         const from = msg.from?.first_name ?? msg.from?.username ?? 'unknown';
 
-        console.log(`[${ts()}] 📩 [${from}]: ${text}`);
+        // Voice message → transcribe it (STT) and treat as text. Replying by
+        // voice too, so the whole exchange can be hands-free.
+        let text: string = msg.text ?? '';
+        let cameFromVoice = false;
+        const voice = msg.voice || msg.audio;
+        if (!text && voice?.file_id) {
+          cameFromVoice = true;
+          try {
+            const audioPath = await downloadTelegramFile(voice.file_id);
+            text = await transcribeFile(audioPath);
+            try { fs.unlinkSync(audioPath); } catch {}
+            console.log(`[${ts()}] 🎤 [${from}] (voice): ${text}`);
+            if (text) await sendMessage(chatId, `🎤 “${text}”`);
+          } catch (e: any) {
+            console.error(`[${ts()}] ❌ Transcription error: ${e.message}`);
+            await sendMessage(chatId, `❌ Couldn't transcribe that: ${e.message}`);
+            continue;
+          }
+        }
+        if (!text) continue;
+
+        if (!cameFromVoice) console.log(`[${ts()}] 📩 [${from}]: ${text}`);
 
         try {
           const response = await handleCommand(chatId, text, from);
           await sendMessage(chatId, response);
+          // If the user spoke to us, reply with voice too (best-effort).
+          if (cameFromVoice) {
+            try {
+              const wav = await synthesizeSpeech(response.slice(0, 1000));
+              await sendVoice(chatId, wav);
+            } catch (e: any) {
+              console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
+            }
+          }
           console.log(`[${ts()}] 📤 Replied to ${from}`);
         } catch (e: any) {
           console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
