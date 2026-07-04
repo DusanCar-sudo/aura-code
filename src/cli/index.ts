@@ -13,7 +13,7 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { PermissionSystem } from '../safety/permissions.js';
+import { PermissionSystem, setSharedReadline, getSharedReadline } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
@@ -856,6 +856,9 @@ async function main() {
   }
   console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.\n'));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // Let mid-task prompts (tool confirmations, plan approval) reuse this
+  // interface instead of opening a second readline on the same stdin.
+  setSharedReadline(rl);
 
   const ask = () => {
     const idTag = activeChatId ? chalk.hex('#4e3d30')(` [${activeChatId}]`) : '';
@@ -1716,11 +1719,14 @@ async function runOrchestratedTask(
   if (argv.plan === true) {
     display.showPlan?.(plan);
 
-    // Use a simple readline prompt for confirmation
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    // Use a simple readline prompt for confirmation — reuse the REPL's
+    // readline when one is active (second interface double-echoes and
+    // pauses stdin on close).
+    const sharedRl = getSharedReadline();
+    const rl = sharedRl ?? readline.createInterface({ input: process.stdin, output: process.stdout });
     const approved = await new Promise<boolean>(resolve => {
       rl.question(chalk.hex('#cc785c')('\n  Run this plan? [y/N] '), answer => {
-        rl.close();
+        if (!sharedRl) rl.close();
         resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
       });
     });
