@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getApiKey } from '../util/env.js';
+import { safeParseToolArgs } from '../util/json-repair.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
   HistoryMessage, LLMResponse, StreamChunk, ToolCall,
@@ -13,6 +14,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private client: OpenAI;
   private maxTokens: number;
   private temperature: number;
+  private reasoningEffort?: string;
 
   constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
@@ -20,6 +22,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // internal reasoning BEFORE emitting visible content. A small cap suffocates
     // them: budget exhausted mid-think -> finish_reason "length" -> zero output.
     this.maxTokens = config.maxTokens ?? 16384;
+    this.reasoningEffort = deriveProviderName(config) === 'Zhipu' ? 'high' : undefined;
     this.temperature = config.temperature ?? 0.2;
     this.name = providerName ?? deriveProviderName(config);
 
@@ -41,7 +44,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
       temperature: this.temperature,
       tools: tools.length > 0 ? tools.map(toOpenAITool) : undefined,
       messages,
-    });
+      // GLM defaults to "max" thinking effort (~85k reasoning tokens per Z.ai's
+      // own benchmarks) before writing any visible content. "high" keeps useful
+      // reasoning for code quality while roughly halving that token burn.
+      ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
+    } as OpenAI.ChatCompletionCreateParamsNonStreaming);
     return fromOpenAIResponse(response);
   }
 
@@ -59,7 +66,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       messages,
       stream: true,
       stream_options: { include_usage: true },
-    });
+      ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
+    } as OpenAI.ChatCompletionCreateParamsStreaming);
 
     let textBuffer = '';
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
@@ -109,8 +117,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const calls: ToolCall[] = [];
     for (const [, b] of toolCallBuilders) {
-      let input: Record<string, unknown> = {};
-      try { input = JSON.parse(b.args); } catch { input = { _raw: b.args }; }
+      const input: Record<string, unknown> = safeParseToolArgs(b.args);
       const call: ToolCall = { id: b.id, name: b.name, input };
       calls.push(call);
       yield { type: 'tool_end', call };
@@ -182,8 +189,7 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
 
   const text = choice.message.content ?? '';
   const toolCalls: ToolCall[] = (choice.message.tool_calls ?? []).map(tc => {
-    let input: Record<string, unknown> = {};
-    try { input = JSON.parse(tc.function.arguments); } catch { input = { _raw: tc.function.arguments }; }
+    const input: Record<string, unknown> = safeParseToolArgs(tc.function.arguments);
     return { id: tc.id, name: tc.function.name, input };
   });
 
