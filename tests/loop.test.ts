@@ -75,8 +75,12 @@ describe('runAgentLoop', () => {
     expect(result.turns).toBe(1);
   });
 
-  it('treats empty response as done (no infinite loop)', async () => {
+  it('retries empty responses up to 3x before giving up', async () => {
+    // 4 empty responses — the loop retries the first 3, then accepts the 4th
     const provider = new FakeProvider([
+      { text: '', toolCalls: [], stopReason: 'done' },
+      { text: '', toolCalls: [], stopReason: 'done' },
+      { text: '', toolCalls: [], stopReason: 'done' },
       { text: '', toolCalls: [], stopReason: 'done' },
     ]);
     const ctx = await loadProjectContext(tmpDir);
@@ -84,8 +88,10 @@ describe('runAgentLoop', () => {
       provider, task: 'hi', context: ctx,
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
-    expect(result.success).toBe(true);
-    expect(result.turns).toBe(1);
+    // After 4 attempts the loop gives up — the provider clearly can't respond
+    expect(result.success).toBe(false);
+    expect(result.summary).toContain('empty response');
+    expect(result.turns).toBe(4);
   });
 
   it('executes a tool call and feeds the result back', async () => {

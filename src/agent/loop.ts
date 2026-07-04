@@ -144,6 +144,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   let maxTurns = profile.maxTurns;
   let widened = false;
 
+  // Mutable bag for per-loop state (empty-response retry counter, etc.).
+  const loopState: Record<string, number> = {};
+  
+
   while (true) {
     if (turns >= maxTurns) {
       if (profile.widenTo !== undefined && !widened) {
@@ -207,13 +211,38 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
     if (responseText) display.streamEnd();
 
+    // Guard: an empty response with no tools and stop reason "done"
+    // usually means the provider returned a silent error / rate-limit /
+    // content filter. Retry up to 3 times before accepting it as "done"
+    // so sessions don't silently die with no output.
     const noProgress = !responseText && responseToolCalls.length === 0;
-    if (noProgress || finalResponse?.stopReason === 'done') {
+    if (finalResponse?.stopReason === 'done' && noProgress) {
+      if (!('_emptyRetries' in loopState)) loopState._emptyRetries = 0;
+      loopState._emptyRetries++;
+      if (loopState._emptyRetries <= 3) {
+        display.warning(
+          `Empty response from provider (attempt ${loopState._emptyRetries}/3) — retrying…`,
+        );
+        display.agentThinking();
+        continue;
+      }
+      // Exhausted retries — provider can't produce output
+      history.push({ role: 'assistant', content: '' });
+      await persist(opts.sessionPath, history);
+      return {
+        success: false,
+        summary: 'Provider returned empty response after 4 attempts — likely rate-limited or filtered',
+        turns, toolCallCount, usage, history, toolCallLog,
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
+      };
+    }
+
+    if (finalResponse?.stopReason === 'done') {
       history.push({ role: 'assistant', content: responseText });
       await persist(opts.sessionPath, history);
       return {
         success: true,
-        summary: responseText || '(Task completed with no output)',
+        summary: responseText,
         turns, toolCallCount, usage, history, toolCallLog,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };

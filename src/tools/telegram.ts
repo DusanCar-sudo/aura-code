@@ -8,10 +8,11 @@ import type { ToolDefinition } from '../providers/types.js';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface TelegramInput {
-  action: 'send' | 'send_photo' | 'send_document' | 'get_updates' | 'get_chat' | 'set_webhook' | 'info';
+  action: 'send' | 'send_photo' | 'send_video' | 'send_document' | 'get_updates' | 'get_chat' | 'set_webhook' | 'info';
   chat_id?: string;
   text?: string;
   photo?: string;      // file path or URL
+  video?: string;      // file_id or URL (for send_video)
   document?: string;   // file path or URL
   caption?: string;
   parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2';
@@ -19,31 +20,40 @@ export interface TelegramInput {
   offset?: number;     // for get_updates — offset from last update
   limit?: number;      // for get_updates — max updates to fetch
   webhook_url?: string;
+  duration?: number;          // video duration in seconds (for send_video)
+  width?: number;             // video width in pixels (for send_video)
+  height?: number;            // video height in pixels (for send_video)
+  supports_streaming?: boolean; // whether the video supports streaming (for send_video)
 }
 
 export const TELEGRAM_DEFINITION: ToolDefinition = {
   name: 'telegram',
   description:
-    'Communicate via Telegram Bot. Send text messages, photos, documents. Read incoming messages. ' +
-    'Configure ~/.aura/telegram.json with { "bot_token": "...", "default_chat_id": "..." }. ' +
-    'Create a bot via @BotFather on Telegram.',
-  parameters: {
-    type: 'object',
-    properties: {
-      action:       { type: 'string', description: 'Action: send, send_photo, send_document, get_updates, get_chat, set_webhook, info' },
-      chat_id:      { type: 'string', description: 'Chat ID (uses default from config if omitted)' },
-      text:         { type: 'string', description: 'Message text (for send)' },
-      photo:        { type: 'string', description: 'Photo path or URL (for send_photo)' },
-      document:     { type: 'string', description: 'Document path or URL (for send_document)' },
-      caption:      { type: 'string', description: 'Caption for photo/document' },
-      parse_mode:   { type: 'string', description: 'Parse mode: HTML, Markdown, MarkdownV2' },
-      reply_to:     { type: 'number', description: 'Message ID to reply to' },
-      offset:       { type: 'number', description: 'Update offset for get_updates (to acknowledge processed updates)' },
-      limit:        { type: 'number', description: 'Max updates to fetch (default: 10)' },
-      webhook_url:  { type: 'string', description: 'Webhook URL for set_webhook' },
+      'Communicate via Telegram Bot. Send text messages, photos, videos, documents. Read incoming messages. ' +
+      'Configure ~/.aura/telegram.json with { "bot_token": "...", "default_chat_id": "..." }. ' +
+      'Create a bot via @BotFather on Telegram.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action:       { type: 'string', description: 'Action: send, send_photo, send_video, send_document, get_updates, get_chat, set_webhook, info' },
+        chat_id:      { type: 'string', description: 'Chat ID (uses default from config if omitted)' },
+        text:         { type: 'string', description: 'Message text (for send)' },
+        photo:        { type: 'string', description: 'Photo path or URL (for send_photo)' },
+        video:        { type: 'string', description: 'Video URL or file_id (for send_video). Local files not yet supported — use a hosted URL.' },
+        document:     { type: 'string', description: 'Document path or URL (for send_document)' },
+        caption:      { type: 'string', description: 'Caption for photo/video/document' },
+        parse_mode:   { type: 'string', description: 'Parse mode: HTML, Markdown, MarkdownV2' },
+        reply_to:     { type: 'number', description: 'Message ID to reply to' },
+        offset:       { type: 'number', description: 'Update offset for get_updates (to acknowledge processed updates)' },
+        limit:        { type: 'number', description: 'Max updates to fetch (default: 10)' },
+        webhook_url:  { type: 'string', description: 'Webhook URL for set_webhook' },
+        duration:     { type: 'number', description: 'Video duration in seconds (for send_video)' },
+        width:        { type: 'number', description: 'Video width in pixels (for send_video)' },
+        height:       { type: 'number', description: 'Video height in pixels (for send_video)' },
+        supports_streaming: { type: 'boolean', description: 'Pass True if the video supports streaming (for send_video)' },
+      },
+      required: ['action'],
     },
-    required: ['action'],
-  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +153,26 @@ async function doSendPhoto(config: TelegramConfig, input: TelegramInput): Promis
   return `Photo sent to ${chatId} (msg_id: ${result.message_id})`;
 }
 
+async function doSendVideo(config: TelegramConfig, input: TelegramInput): Promise<string> {
+  const chatId = input.chat_id ?? config.default_chat_id;
+  if (!chatId) return 'Error: chat_id required';
+  if (!input.video) return 'Error: video required (URL or file_id)';
+
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    video: input.video,
+  };
+  if (input.caption) body.caption = input.caption;
+  if (input.parse_mode) body.parse_mode = input.parse_mode;
+  if (input.duration !== undefined) body.duration = input.duration;
+  if (input.width !== undefined) body.width = input.width;
+  if (input.height !== undefined) body.height = input.height;
+  if (input.supports_streaming !== undefined) body.supports_streaming = input.supports_streaming;
+
+  const result = await api(config.bot_token, 'sendVideo', body);
+  return `Video sent to ${chatId} (msg_id: ${result.message_id})`;
+}
+
 async function doSendDocument(config: TelegramConfig, input: TelegramInput): Promise<string> {
   const chatId = input.chat_id ?? config.default_chat_id;
   if (!chatId) return 'Error: chat_id required';
@@ -215,6 +245,7 @@ export async function telegramTool(input: TelegramInput): Promise<string> {
     switch (input.action) {
       case 'send':           return await doSend(config, input);
       case 'send_photo':     return await doSendPhoto(config, input);
+      case 'send_video':     return await doSendVideo(config, input);
       case 'send_document':  return await doSendDocument(config, input);
       case 'get_updates':    return await doGetUpdates(config, input);
       case 'get_chat':       return await doGetChat(config, input);
