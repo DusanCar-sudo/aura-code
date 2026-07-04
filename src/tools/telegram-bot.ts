@@ -516,25 +516,76 @@ function getChatProvider(): LLMProvider {
   return _chatProvider;
 }
 
+/** Block only truly catastrophic commands; everything else is allowed. Shared
+ *  by /run and the agentic chat loop so both enforce the same floor. */
+function isCatastrophic(cmd: string): boolean {
+  const banned = [
+    'rm -rf /', 'rm -rf /*', 'rm -rf ~', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
+    ':(){ :|:& };:', 'fork bomb', 'shutdown', 'poweroff', 'init 0', 'halt', 'reboot',
+    '> /dev/sda', 'chmod -R 000 /', 'chown -R',
+  ];
+  const c = cmd.toLowerCase();
+  return banned.some(d => c.includes(d.toLowerCase()));
+}
+
+const AGENT_MAX_STEPS = 4;
+
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
   const provider = getChatProvider();
-  const systemPrompt = buildSystemPrompt();
+  // Agentic system prompt: the model may run real shell commands on Dušan's PC
+  // by emitting a line `RUN: <command>`. The bot executes it and feeds the
+  // output back so the model can answer from real data (processes, files, etc).
+  const systemPrompt = buildSystemPrompt() + [
+    '',
+    '## PC access (you CAN act on this computer)',
+    'You are running on Dušan\'s Linux PC and CAN inspect it. When answering needs',
+    'live system data (running processes, memory, disk, files, git, etc.), emit a',
+    'single line starting with `RUN: ` followed by ONE shell command, and nothing',
+    'else in that reply. The system will run it and send you the output; then give',
+    'your natural answer. Prefer safe read-only commands (ps, top -bn1, free -h,',
+    'df -h, ls, cat, grep, git status). Never claim you lack PC access — you have it.',
+    'Only use RUN when actually needed; for normal conversation just reply directly.',
+  ].join('\n');
 
-  // Build history: recent context + the new message
   const recent = getChatHistory(chatId).slice(-(CHAT_HISTORY_MAX - 1));
   const history: HistoryMessage[] = [...recent, { role: 'user', content: userMessage }];
-
   await pushToHistory(String(chatId), { role: 'user', content: userMessage });
 
-  console.error(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}] LLM: sending to ${provider.name}/${provider.model} (history: ${history.length} msgs)`);
+  const ts0 = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
   try {
-    const response = await provider.complete(systemPrompt, history, []);
-    const reply = response.text || '(no response from model)';
-    await pushToHistory(String(chatId), { role: 'assistant', content: reply });
-    return reply;
+    let finalReply = '';
+    for (let step = 0; step < AGENT_MAX_STEPS; step++) {
+      const response = await provider.complete(systemPrompt, history, []);
+      const text = (response.text || '').trim();
+
+      // Does the model want to run a command?
+      const m = text.match(/^RUN:\s*([\s\S]+)$/m);
+      const runCmd = m ? m[1].trim().split('\n')[0].trim() : '';
+      if (!runCmd) { finalReply = text || '(no response from model)'; break; }
+
+      console.error(`[${ts0()}] agent RUN: ${runCmd}`);
+      let toolOut: string;
+      if (isCatastrophic(runCmd)) {
+        toolOut = 'BLOCKED: refused as catastrophic. Do not retry this command.';
+      } else {
+        const r = await execShell(runCmd);
+        const out = (r.stdout || r.stderr || '(no output)').slice(0, 3000);
+        toolOut = `exit ${r.code}\n${out}`;
+      }
+      // Feed the command + its output back and let the model continue.
+      history.push({ role: 'assistant', content: `RUN: ${runCmd}` });
+      history.push({ role: 'user', content: `[command output]\n${toolOut}` });
+
+      if (step === AGENT_MAX_STEPS - 1) {
+        // Out of steps — ask once more for a plain answer.
+        const wrap = await provider.complete(systemPrompt, history, []);
+        finalReply = (wrap.text || '').replace(/^RUN:.*$/m, '').trim() || '(done)';
+      }
+    }
+    await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });
+    return finalReply;
   } catch (e: any) {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    console.error(`[${now}] LLM error: ${e?.message || String(e)}`);
+    console.error(`[${ts0()}] LLM error: ${e?.message || String(e)}`);
     return `❌ AI greška: ${e?.message || 'Nepoznata greška'}. Probaj /help.`;
   }
 }
@@ -706,13 +757,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     const cmd = text.slice(4).trim();
     if (!cmd) return '❌ Usage: /run <command>';
 
-    // Safety: allow most commands but block truly dangerous ones
-    const extremelyDangerous = [
-      'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
-      ':(){ :|:& };:', 'fork bomb', 'shutdown -h', 'poweroff', 'init 0', 'halt',
-    ];
-    const isDangerous = extremelyDangerous.some(d => cmd.toLowerCase().includes(d.toLowerCase()));
-    if (isDangerous) {
+    if (isCatastrophic(cmd)) {
       return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
     }
 
