@@ -67,7 +67,23 @@ function doOcr(filePath: string): string {
   }
 }
 
+/** Max raw file size (bytes) allowed for base64 — larger images would flood context. */
+const MAX_BASE64_BYTES = 500_000;  // ~670 KB base64 output
+
 function doBase64(filePath: string): string {
+  const stat = fs.statSync(filePath);
+  if (stat.size > MAX_BASE64_BYTES) {
+    const kb = (stat.size / 1024).toFixed(1);
+    const limit = (MAX_BASE64_BYTES / 1024).toFixed(0);
+    return [
+      `Error: image too large for base64 (${kb} KB > ${limit} KB limit).`,
+      `To use this image for vision:`,
+      `  1. Resize:   convert "${filePath}" -resize 50% /tmp/smaller.png`,
+      `  2. Then:     image_read path=/tmp/smaller.png action=base64`,
+      `Or use action=info to inspect it without encoding.`,
+    ].join('\n');
+  }
+
   const buffer = fs.readFileSync(filePath);
   const ext = path.extname(filePath).toLowerCase().slice(1);
   const mimeMap: Record<string, string> = {

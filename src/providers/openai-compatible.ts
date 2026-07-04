@@ -5,18 +5,6 @@ import type {
   HistoryMessage, LLMResponse, StreamChunk, ToolCall,
 } from './types.js';
 
-/**
- * OpenAI-compatible provider.
- * Works with: OpenAI, OpenRouter, xAI (Grok), Ollama, LM Studio,
- * Together AI, Groq, Perplexity, and any server that speaks the OpenAI API spec.
- *
- * How to target each:
- *   OpenAI:      model="gpt-4o"              apiKey=OPENAI_API_KEY
- *   OpenRouter:  model="anthropic/claude-3.5" baseUrl="https://openrouter.ai/api/v1"  apiKey=OPENROUTER_API_KEY
- *   xAI/Grok:   model="grok-beta"            baseUrl="https://api.x.ai/v1"           apiKey=XAI_API_KEY
- *   Ollama:      model="llama3.2"             baseUrl="http://localhost:11434/v1"      apiKey="ollama"
- *   LM Studio:   model="local-model"          baseUrl="http://localhost:1234/v1"       apiKey="lm-studio"
- */
 export class OpenAICompatibleProvider implements LLMProvider {
   name: string;
   supportsTools = true;
@@ -28,7 +16,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
   constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 8096;
+    // Reasoning models (GLM-5.x, MiMo, DeepSeek-R, o-series) spend tokens on
+    // internal reasoning BEFORE emitting visible content. A small cap suffocates
+    // them: budget exhausted mid-think -> finish_reason "length" -> zero output.
+    this.maxTokens = config.maxTokens ?? 16384;
     this.temperature = config.temperature ?? 0.2;
     this.name = providerName ?? deriveProviderName(config);
 
@@ -73,22 +64,34 @@ export class OpenAICompatibleProvider implements LLMProvider {
     let textBuffer = '';
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
+    let finishReason: string | undefined;
 
+    // CRITICAL: do NOT return early when finish_reason arrives.
+    // With stream_options.include_usage, OpenAI sends a trailing usage-only
+    // chunk AFTER the finish_reason chunk. Returning early drops it -- usage
+    // stays undefined, token/cost accounting reads 0, and compaction never
+    // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
-      // OpenAI sends a final usage-only chunk when stream_options.include_usage is set
       if (chunk.usage) {
-        usage = { inputTokens: chunk.usage.prompt_tokens ?? 0, outputTokens: chunk.usage.completion_tokens ?? 0 };
+        usage = {
+          inputTokens: chunk.usage.prompt_tokens ?? 0,
+          outputTokens: chunk.usage.completion_tokens ?? 0,
+        };
       }
-      const delta = chunk.choices[0]?.delta;
+
+      const choice = chunk.choices[0];
+      if (choice?.finish_reason) {
+        finishReason = choice.finish_reason;
+      }
+
+      const delta = choice?.delta;
       if (!delta) continue;
 
-      // Text content
       if (delta.content) {
         textBuffer += delta.content;
         yield { type: 'text', text: delta.content };
       }
 
-      // Tool calls (streamed in pieces)
       for (const tc of delta.tool_calls ?? []) {
         if (!toolCallBuilders.has(tc.index)) {
           const id = tc.id ?? `tc_${tc.index}`;
@@ -102,37 +105,36 @@ export class OpenAICompatibleProvider implements LLMProvider {
           yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
         }
       }
-
-      // Finish
-      const finishReason = chunk.choices[0]?.finish_reason;
-      if (finishReason === 'tool_calls' || finishReason === 'stop') {
-        // Finalise all tool calls
-        const calls: ToolCall[] = [];
-        for (const [, b] of toolCallBuilders) {
-          let input: Record<string, unknown> = {};
-          try { input = JSON.parse(b.args); } catch { input = { _raw: b.args }; }
-          const call: ToolCall = { id: b.id, name: b.name, input };
-          calls.push(call);
-          yield { type: 'tool_end', call };
-        }
-        yield {
-          type: 'done',
-          response: {
-            text: textBuffer,
-            toolCalls: calls,
-            stopReason: finishReason === 'tool_calls' ? 'tools' : 'done',
-            usage,
-          },
-        };
-        return;
-      }
     }
 
-    yield { type: 'done', response: { text: textBuffer, toolCalls: [], stopReason: 'done', usage } };
+    const calls: ToolCall[] = [];
+    for (const [, b] of toolCallBuilders) {
+      let input: Record<string, unknown> = {};
+      try { input = JSON.parse(b.args); } catch { input = { _raw: b.args }; }
+      const call: ToolCall = { id: b.id, name: b.name, input };
+      calls.push(call);
+      yield { type: 'tool_end', call };
+    }
+
+    // Map finish_reason -> stopReason. "length" means the response was
+    // TRUNCATED by max_tokens -- it must never be mislabeled as a clean "done".
+    const stopReason =
+      finishReason === 'tool_calls' ? 'tools' :
+      finishReason === 'length' ? 'limit' : 'done';
+
+    yield {
+      type: 'done',
+      response: {
+        text: textBuffer,
+        toolCalls: calls,
+        stopReason,
+        usage,
+      },
+    };
   }
 }
 
-// ── Conversion helpers ──────────────────────────────────────────────────────
+// -- Conversion helpers ------------------------------------------------------
 
 function toOpenAITool(t: ToolDefinition): OpenAI.ChatCompletionTool {
   return {
@@ -196,7 +198,7 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
   };
 }
 
-// ── Auto-resolution helpers ─────────────────────────────────────────────────
+// -- Auto-resolution helpers --------------------------------------------------
 
 function deriveProviderName(config: ProviderConfig): string {
   const m = config.model.toLowerCase();

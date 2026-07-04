@@ -138,3 +138,38 @@ describe('telegramTool — send_photo', () => {
     expect(r).toContain('Photo sent');
   });
 });
+
+describe('telegramTool — send_video', () => {
+  it('requires video', async () => {
+    writeConfig({ bot_token: 'fake:token', default_chat_id: '12345' });
+    const r = await telegramTool({ action: 'send_video' });
+    expect(r).toContain('Error: video');
+  });
+
+  it('sends video successfully', async () => {
+    writeConfig({ bot_token: 'fake:token', default_chat_id: '12345' });
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true, result: { message_id: 100 } }));
+    const r = await telegramTool({ action: 'send_video', video: 'https://example.com/video.mp4', caption: 'Watch!' });
+    expect(r).toContain('Video sent');
+    expect(r).toContain('100');
+  });
+
+  it('includes optional video params', async () => {
+    writeConfig({ bot_token: 'fake:token', default_chat_id: '12345' });
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true, result: { message_id: 101 } }));
+    const r = await telegramTool({
+      action: 'send_video',
+      video: 'https://example.com/video.mp4',
+      duration: 30,
+      width: 640,
+      height: 480,
+      supports_streaming: true,
+    });
+    expect(r).toContain('Video sent');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.duration).toBe(30);
+    expect(body.width).toBe(640);
+    expect(body.height).toBe(480);
+    expect(body.supports_streaming).toBe(true);
+  });
+});

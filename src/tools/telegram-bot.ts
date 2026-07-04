@@ -7,6 +7,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
+import { exec, execSync } from 'child_process';
+import { createProvider, registerCustomProviders } from '../providers/factory.js';
+import { loadProjectConfig } from '../config/project-config.js';
+import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -15,6 +19,8 @@ import * as https from 'https';
 interface TelegramConfig {
   bot_token: string;
   default_chat_id?: string;
+  model?: string;          // LLM model for chat (default: gemini-2.0-flash)
+  system_prompt?: string;  // system prompt override
 }
 
 function loadConfig(): TelegramConfig {
@@ -34,6 +40,16 @@ const config = loadConfig();
 const TOKEN = config.bot_token;
 const OFFSET_FILE = path.join(os.homedir(), '.aura', 'telegram.offset');
 
+// Register custom providers from project's .aura.json (needed for deepseek/ etc.)
+const projectCfg = loadProjectConfig(process.cwd());
+if (projectCfg.providers && projectCfg.providers.length > 0) {
+  registerCustomProviders(projectCfg.providers);
+}
+
+// Disable connection pooling — each long-poll needs a fresh TCP connection
+// to avoid "409 Conflict: terminated by other getUpdates request"
+const httpsAgent = new https.Agent({ keepAlive: false, maxSockets: 1 });
+
 function loadOffset(): number {
   try {
     return parseInt(fs.readFileSync(OFFSET_FILE, 'utf8').trim(), 10) || 0;
@@ -49,11 +65,13 @@ function saveOffset(offset: number): void {
 function apiPost(method: string, body?: Record<string, unknown>): Promise<any> {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : '';
-    const options = {
+    const options: https.RequestOptions = {
       hostname: 'api.telegram.org',
       port: 443,
       path: `/bot${TOKEN}/${method}`,
       method: 'POST',
+      family: 4, // force IPv4 — IPv6 may not be routable
+      agent: httpsAgent,
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(data),
@@ -71,16 +89,16 @@ function apiPost(method: string, body?: Record<string, unknown>): Promise<any> {
           } else {
             resolve(parsed.result);
           }
-        } catch (e) {
-          reject(new Error(`Parse error: ${responseData.slice(0, 100)}`));
+        } catch (e: any) {
+          reject(new Error(`Parse error: ${responseData.slice(0, 200)}`));
         }
       });
     });
 
-    req.on('error', (e) => reject(e));
+    req.on('error', (e: any) => reject(new Error(`HTTPS error: ${e?.message || e?.code || JSON.stringify(e)}`)));
     req.setTimeout(35000, () => {
       req.destroy();
-      reject(new Error('Request timeout'));
+      reject(new Error('Request timeout (35s)'));
     });
 
     if (data) req.write(data);
@@ -91,11 +109,13 @@ function apiPost(method: string, body?: Record<string, unknown>): Promise<any> {
 function apiGet(method: string, params?: Record<string, string>): Promise<any> {
   return new Promise((resolve, reject) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    const options = {
+    const options: https.RequestOptions = {
       hostname: 'api.telegram.org',
       port: 443,
       path: `/bot${TOKEN}/${method}${qs}`,
       method: 'GET',
+      family: 4, // force IPv4 — IPv6 may not be routable
+      agent: httpsAgent,
     };
 
     const req = https.request(options, (res) => {
@@ -105,20 +125,20 @@ function apiGet(method: string, params?: Record<string, string>): Promise<any> {
         try {
           const parsed = JSON.parse(responseData);
           if (!parsed.ok) {
-            reject(new Error(`Telegram: ${parsed.description} (${parsed.error_code})`));
+            reject(new Error(`Telegram: ${parsed.description || '(no description)'} (${parsed.error_code})`));
           } else {
             resolve(parsed.result);
           }
-        } catch (e) {
-          reject(new Error(`Parse error: ${responseData.slice(0, 100)}`));
+        } catch (e: any) {
+          reject(new Error(`Parse error: ${responseData.slice(0, 200)}`));
         }
       });
     });
 
-    req.on('error', (e) => reject(e));
+    req.on('error', (e: any) => reject(new Error(`HTTPS error: ${e?.message || e?.code || JSON.stringify(e)}`)));
     req.setTimeout(35000, () => {
       req.destroy();
-      reject(new Error('Request timeout'));
+      reject(new Error('Request timeout (35s)'));
     });
 
     req.end();
@@ -144,6 +164,100 @@ function splitMessage(text: string, maxLen: number): string[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LLM chat — answers free-form questions
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
+const CHAT_HISTORY_MAX = 20; // keep last N messages per chat for context
+
+let _chatProvider: LLMProvider | null = null;
+let _identityBlock = ''; // loaded from memory on startup
+
+function loadIdentityFromMemory(): string {
+  const memDir = path.join(os.homedir(), '.aura', 'memory');
+  const lines: string[] = [];
+  
+  // Load key identity namespaces
+  for (const ns of ['user', 'default']) {
+    const file = path.join(memDir, `${ns}.json`);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const identityKeys = ['creator', 'creator-full', 'user-name', 'user-id', 'user-role'];
+      for (const key of identityKeys) {
+        if (data[key]?.value) {
+          lines.push(`${key}: ${data[key].value}`);
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (lines.length === 0) return '';
+  return '\n## O korisniku (iz memorije)\n' + lines.join('\n');
+}
+
+// Build system prompt once on first use — includes user identity from memory
+function buildSystemPrompt(): string {
+  if (!_identityBlock) {
+    _identityBlock = loadIdentityFromMemory();
+  }
+  const base = config.system_prompt || [
+    'Ti si Aura — AI asistent. Odgovaraš kratko, precizno, na srpskom.',
+    'Korisnik je Dušan — tvoj kreator. Zovi ga po imenu kad je prirodno.',
+    'Poznaješ ga dobro — on te napravio. Budi topla ali profesionalna.',
+    'Ako pitaš za pomoć reci "/help za komande".',
+    'Ne izmišljaj — budi iskrena ako ne znaš.',
+  ].join(' ');
+  return base + _identityBlock;
+}
+
+// Per-chat conversation history
+const chatHistory = new Map<string, HistoryMessage[]>();
+
+function getChatHistory(chatId: string): HistoryMessage[] {
+  if (!chatHistory.has(chatId)) chatHistory.set(chatId, []);
+  return chatHistory.get(chatId)!;
+}
+
+function pushToHistory(chatId: string, msg: HistoryMessage) {
+  const h = getChatHistory(chatId);
+  h.push(msg);
+  // Trim to keep last N messages
+  while (h.length > CHAT_HISTORY_MAX) h.shift();
+}
+
+function getChatProvider(): LLMProvider {
+  if (!_chatProvider) {
+    _chatProvider = createProvider({ model: DEFAULT_CHAT_MODEL, temperature: 0.7, maxTokens: 4096 });
+    console.log(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]   Chat model: ${DEFAULT_CHAT_MODEL} (${_chatProvider.name})`);
+  }
+  return _chatProvider;
+}
+
+async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
+  const provider = getChatProvider();
+  const systemPrompt = buildSystemPrompt();
+  
+  // Build history: recent context + the new message
+  const recent = getChatHistory(chatId).slice(-(CHAT_HISTORY_MAX - 1));
+  const history: HistoryMessage[] = [...recent, { role: 'user', content: userMessage }];
+  
+  pushToHistory(chatId, { role: 'user', content: userMessage });
+  
+  console.error(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}] LLM: sending to ${provider.name}/${provider.model} (history: ${history.length} msgs)`);
+  try {
+    const response = await provider.complete(systemPrompt, history, []);
+    const reply = response.text || '(no response from model)';
+    pushToHistory(chatId, { role: 'assistant', content: reply });
+    return reply;
+  } catch (e: any) {
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    console.error(`[${now}] LLM error: ${e?.message || String(e)}`);
+    return `❌ AI greška: ${e?.message || 'Nepoznata greška'}. Probaj /help.`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Command handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -153,7 +267,6 @@ const DEFAULT_CWD = process.env.HOME ?? '/tmp';
 
 function execShell(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const { exec } = require('child_process');
     exec(command, { cwd: cwd ?? DEFAULT_CWD, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err: any, stdout: string, stderr: string) => {
       resolve({
         stdout: stdout?.toString() ?? '',
@@ -197,7 +310,7 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
     ? (path.isAbsolute(searchPath) ? searchPath : path.join(DEFAULT_CWD, searchPath))
     : DEFAULT_CWD;
   try {
-    const result = require('child_process').execSync(
+    const result = execSync(
       `rg -n --no-heading -i "${pattern.replace(/"/g, '\\"')}" "${resolved}" 2>/dev/null | head -30`,
       { timeout: 10_000, encoding: 'utf8' }
     );
@@ -245,7 +358,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Builder: Dušan Milosavljević`,
       `Alati: 22`,
       `Testovi: 838+ passing`,
-      `Verzija: v0.3.0 (Aura rebrand)`,
+      `Verzija: v0.7.2 (Aura)`,
     ].join('\n');
   }
 
@@ -261,7 +374,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Node: ${process.version}`,
       `Bot: @Aura_Code_bot`,
       `Status: ✅ Active`,
-      `Version: v0.3.0`,
+      `Version: v0.7.2`,
     ].join('\n');
   }
 
@@ -341,29 +454,34 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return `⚡ ${text}\n${truncated}`;
   }
 
-  // Default: acknowledge and echo
-  return [
-    `💬 Primljeno od ${from}:`,
-    `"${text}"`,
-    ``,
-    `Vreme: ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`,
-    ``,
-    `Probaj /help za liste komandi.`,
-  ].join('\n');
+  // Default: ask the LLM
+  return await chatWithLLM(String(chatId), text, from);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main polling loop
 // ─────────────────────────────────────────────────────────────────────────────
 
+function ts(): string {
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
 async function poll(): Promise<void> {
   let offset = loadOffset();
 
-  console.log('💎 Aura Telegram Bot started');
+  console.log(`[${ts()}] 💎 Aura Telegram Bot started`);
   console.log(`   Bot: @Aura_Code_bot`);
   console.log(`   Offset: ${offset}`);
-  console.log(`   Polling every 3 seconds...`);
+  console.log(`   Long-polling Telegram (30s)…`);
   console.log('');
+
+  // Delete any webhook on startup — webhooks and getUpdates conflict (409)
+  try {
+    await apiPost('deleteWebhook', { drop_pending_updates: false });
+    console.log(`[${ts()}]   Webhook cleared (polling mode)`);
+  } catch (e: any) {
+    console.error(`[${ts()}]   ⚠️ Webhook clear error: ${e.message}`);
+  }
 
   // Clear old updates on first run
   if (offset === 0) {
@@ -372,21 +490,23 @@ async function poll(): Promise<void> {
       if (updates.length > 0) {
         offset = updates[updates.length - 1].update_id + 1;
         saveOffset(offset);
-        console.log(`   Cleared ${updates.length} old update(s), offset: ${offset}`);
+        console.log(`[${ts()}]   Cleared ${updates.length} old update(s), offset: ${offset}`);
       }
     } catch (e: any) {
-      console.error(`   ⚠️ Clear error: ${e.message}`);
+      console.error(`[${ts()}]   ⚠️ Clear error: ${e.message}`);
     }
   }
 
   let consecutiveErrors = 0;
+  let lastHeartbeat = Date.now();
+  const HEARTBEAT_MS = 5 * 60_000; // log "alive" every 5 min
 
   while (true) {
     try {
       const updates = await apiGet('getUpdates', {
         offset: String(offset),
-        limit: '100',
-        timeout: '3',
+        limit: '1',
+        timeout: '30', // long-poll up to 30s — reduces API calls
       });
 
       consecutiveErrors = 0;
@@ -402,28 +522,46 @@ async function poll(): Promise<void> {
         const text = msg.text;
         const from = msg.from?.first_name ?? msg.from?.username ?? 'unknown';
 
-        console.log(`📩 [${from}]: ${text}`);
+        console.log(`[${ts()}] 📩 [${from}]: ${text}`);
 
         try {
           const response = await handleCommand(chatId, text, from);
           await sendMessage(chatId, response);
-          console.log(`📤 Replied to ${from}`);
+          console.log(`[${ts()}] 📤 Replied to ${from}`);
         } catch (e: any) {
-          console.error(`❌ Reply error: ${e.message}`);
+          console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
           try {
             await sendMessage(chatId, `❌ Greška: ${e.message}`);
           } catch { /* give up */ }
         }
       }
+
+      // Periodic heartbeat
+      if (Date.now() - lastHeartbeat > HEARTBEAT_MS) {
+        const uptime = process.uptime();
+        const h = Math.floor(uptime / 3600);
+        const m = Math.floor((uptime % 3600) / 60);
+        const mem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        console.log(`[${ts()}] ❤️ Alive (uptime ${h}h${m}m, heap ${mem}MB)`);
+        lastHeartbeat = Date.now();
+      }
     } catch (e: any) {
       consecutiveErrors++;
-      console.error(`⚠️ Poll error (${consecutiveErrors}): ${e.message}`);
+      const msg = e?.message || String(e);
+      const isConflict = msg.includes('409') || msg.includes('Conflict');
+      const kind = msg.includes('timeout') ? 'timeout' : isConflict ? 'conflict' : 'api';
+      console.error(`[${ts()}] ⚠️ Poll error (${consecutiveErrors}, ${kind}): ${msg}`);
       if (consecutiveErrors > 10) {
-        console.error('💀 Too many errors, waiting 30s...');
+        console.error(`[${ts()}] 💀 Too many errors, waiting 30s…`);
         await new Promise(r => setTimeout(r, 30000));
         consecutiveErrors = 0;
+      } else if (isConflict) {
+        // 409 Conflict: another poll is active — wait 5s for it to settle
+        await new Promise(r => setTimeout(r, 5000));
       } else {
-        await new Promise(r => setTimeout(r, 3000));
+        // Backoff: 2s → 4s → 8s … capped at 30s
+        const delay = Math.min(2000 * Math.pow(2, consecutiveErrors - 1), 30000);
+        await new Promise(r => setTimeout(r, delay));
       }
     }
   }
@@ -433,7 +571,16 @@ async function poll(): Promise<void> {
 // Entry
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Survive unexpected crashes — log and keep polling
+process.on('uncaughtException', (e) => {
+  console.error(`[${ts()}] 💥 Uncaught exception:`, e.message ?? e);
+  // Don't exit — the polling loop handles errors internally
+});
+process.on('unhandledRejection', (reason: any) => {
+  console.error(`[${ts()}] 💥 Unhandled rejection:`, reason?.message ?? String(reason));
+});
+
 poll().catch(e => {
-  console.error('Fatal:', e);
+  console.error(`[${ts()}] Fatal:`, e);
   process.exit(1);
 });
