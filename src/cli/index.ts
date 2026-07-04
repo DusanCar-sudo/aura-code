@@ -865,7 +865,7 @@ async function main() {
 
       // Slash / colon commands
       const replCtx: ReplCtx = {
-        ctx, display,
+        rl, ctx, display,
         providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
         permissions, cumulative,
         chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
@@ -985,6 +985,11 @@ interface ChatState {
 }
 
 interface ReplCtx {
+  // Shared REPL readline. Interactive commands must reuse this instead of
+  // creating their own interface — two readlines on one stdin both echo
+  // every keypress (doubled characters), and closing the second one pauses
+  // stdin, which drains the event loop and kills the REPL.
+  rl: readline.Interface;
   ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   display: ReturnType<typeof createTerminalDisplay>;
   providerConfig: { model: string; apiKey?: string; baseUrl?: string };
@@ -1002,7 +1007,9 @@ interface ReplCommandResult {
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
   const prevModel = runtimeConfig.model;
+  const prevResolved = resolved.model;
   runtimeConfig.model = newModel;
+  resolved.model = newModel; // buildProvider reads resolved.model — keep in sync
   try {
     const test = buildProvider(c.display);
     c.providerConfig.model = newModel;
@@ -1010,6 +1017,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
     return { ok: true };
   } catch (e) {
     runtimeConfig.model = prevModel;  // rollback on error
+    resolved.model = prevResolved;
     return { ok: false, err: String(e) };
   }
 }
@@ -1018,7 +1026,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
  * Interactive model selector — shows all models grouped by provider,
  * lets the user pick by number or type a custom model ID.
  */
-function showModelSelector(c: ReplCtx): void {
+async function showModelSelector(c: ReplCtx): Promise<void> {
   const allModels = getAllModels();
 
   // Build flat numbered list grouped by provider
@@ -1043,31 +1051,30 @@ function showModelSelector(c: ReplCtx): void {
   console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
   console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.question(chalk.hex('#cc785c')('  ▸ '), (answer) => {
-    const choice = answer.trim();
-    rl.close();
-
-    if (!choice) {
-      console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
-      return;
-    }
-
-    // Try as a number
-    const num = parseInt(choice, 10);
-    if (!isNaN(num) && num >= 1 && num <= entries.length) {
-      const selected = entries[num - 1];
-      if (selected.id) {
-        trySetModel(c, selected.id);
-      } else {
-        console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
-      }
-      return;
-    }
-
-    // Treat as a raw model ID
-    trySetModel(c, choice);
+  const answer = await new Promise<string>(resolve => {
+    c.rl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
   });
+  const choice = answer.trim();
+
+  if (!choice) {
+    console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
+    return;
+  }
+
+  // Try as a number
+  const num = parseInt(choice, 10);
+  if (!isNaN(num) && num >= 1 && num <= entries.length) {
+    const selected = entries[num - 1];
+    if (selected.id) {
+      trySetModel(c, selected.id);
+    } else {
+      console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
+    }
+    return;
+  }
+
+  // Treat as a raw model ID
+  trySetModel(c, choice);
 }
 
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
@@ -1301,7 +1308,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   // ── Provider wizard command ────────────────────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    const cfg = await runProviderWizard();
+    const cfg = await runProviderWizard(c.rl);
     if (cfg) {
       // Update current session's provider without restart
       runtimeConfig.model = cfg.model;
@@ -1314,6 +1321,14 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       resolved.model = cfg.model;
       resolved.baseUrl = cfg.baseUrl;
       console.log(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
+      // The wizard saves to the global config, but a project .aura.json model
+      // outranks it on the next startup — warn so the switch doesn't appear lost.
+      if (fileConfig.model && fileConfig.model !== cfg.model) {
+        console.log(chalk.hex('#8a7768')(
+          `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
+          `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
+        ));
+      }
     }
     return { handled: true };
   }
@@ -1335,7 +1350,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':model' || input === '/model') {
-    showModelSelector(c);
+    await showModelSelector(c);
     return { handled: true };
   }
 
