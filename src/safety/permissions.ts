@@ -84,12 +84,27 @@ export class PermissionSystem {
   }
 }
 
+// Shared readline from the interactive REPL. confirm() must reuse it when
+// set: a second interface on the same stdin echoes every keypress twice, and
+// closing it pauses stdin without the REPL's interface knowing — its next
+// prompt never resumes the stream, the event loop drains, and the process
+// exits right after printing the prompt.
+let sharedRl: readline.Interface | null = null;
+
+export function setSharedReadline(rl: readline.Interface | null): void {
+  sharedRl = rl;
+}
+
+export function getSharedReadline(): readline.Interface | null {
+  return sharedRl;
+}
+
 /** Ask user to confirm in the terminal. Returns true if approved. */
 export async function confirm(message: string): Promise<boolean> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = sharedRl ?? readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => {
     rl.question(`\n⚠️  ${message} [y/N] `, answer => {
-      rl.close();
+      if (rl !== sharedRl) rl.close();
       resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
     });
   });
