@@ -839,6 +839,16 @@ async function main() {
     if (activeChatId && !noSession) {
       await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
     }
+    {
+      const { recordEpisode } = await import('../dream/episode.js');
+      recordEpisode(ctx.root, {
+        task,
+        model: provider.model,
+        success: result.success,
+        tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+        durationMs: 0,
+      });
+    }
 
     if (result.success) {
       display.summary(result.summary, result.turns, result.toolCallCount);
@@ -854,15 +864,28 @@ async function main() {
   if (activeChatHistory.length > 0) {
     console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
   }
-  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.\n'));
+  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.'));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   // Let mid-task prompts (tool confirmations, plan approval) reuse this
   // interface instead of opening a second readline on the same stdin.
   setSharedReadline(rl);
 
+  // The input "field": a framed prompt pinned just under the header. Output
+  // from each run flows below it. Width caps at 100 cols so it stays tidy on
+  // wide terminals.
+  const fieldWidth = () => Math.min(process.stdout.columns ?? 80, 100) - 4;
+  const renderField = () => {
+    const w = fieldWidth();
+    const idTag = activeChatId ? ` ${activeChatId}` : '';
+    const label = ` ask aura${idTag} `;
+    const dashes = Math.max(0, w - label.length - 1);
+    console.log('');
+    console.log('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
+  };
+
   const ask = () => {
-    const idTag = activeChatId ? chalk.hex('#4e3d30')(` [${activeChatId}]`) : '';
-    rl.question(chalk.hex('#cc785c')('  ▸ ') + idTag + (idTag ? ' ' : ''), async (line) => {
+    renderField();
+    rl.question(chalk.hex('#9b1b30')('  ╰ ') + chalk.hex('#cc785c').bold('❯ '), async (line) => {
       const input = line.trim();
       if (!input) { ask(); return; }
 
@@ -872,6 +895,7 @@ async function main() {
         providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
         permissions, cumulative,
         chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+        sessionPath,
       };
       const cmdResult = await handleReplCommand(input, replCtx);
       if (cmdResult.handled) {
@@ -938,6 +962,17 @@ async function main() {
         await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
       }
 
+      {
+        const { recordEpisode } = await import('../dream/episode.js');
+        recordEpisode(ctx.root, {
+          task: input,
+          model: runtimeConfig.model ?? resolved.model ?? 'unknown',
+          success: result.success,
+          tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+          durationMs: 0,
+        });
+      }
+
       cumulative.turns += result.turns;
       cumulative.toolCalls += result.toolCallCount;
       cumulative.inputTokens += result.usage.inputTokens;
@@ -999,6 +1034,7 @@ interface ReplCtx {
   permissions: PermissionSystem;
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
+  sessionPath: string | undefined;
 }
 
 interface ReplCommandResult {
@@ -1087,6 +1123,81 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     process.exit(0);
   }
 
+  if (input === ':dream') {
+    const { runDream } = await import('../dream/dream.js');
+    c.display.agentThinking();
+    const res = await runDream(c.ctx.root, buildProvider(c.display));
+    if (res.episodeCount === 0) {
+      c.display.warning('No new episodes since the last dream.');
+    } else {
+      c.display.success(`Dream written: ${res.dreamPath} (${res.episodeCount} episodes)`);
+      if (res.reconciled) c.display.success('Reconciliation also ran (>=3 dreams exist) -> dreams/.reconciled.md');
+    }
+    return { handled: true };
+  }
+  if (input === ':rem') {
+    const { getReconciledOrLatest } = await import('../dream/dream.js');
+    const res = getReconciledOrLatest(c.ctx.root);
+    if (!res) {
+      c.display.warning('No dreams yet. Run :dream first.');
+    } else {
+      console.log(chalk.hex('#8a7768')(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
+      console.log(res.content);
+    }
+    return { handled: true };
+  }
+  if (input.startsWith(':machina ') || input === ':machina') {
+    const machinaTask = input.slice(':machina '.length).trim();
+    if (!machinaTask) {
+      c.display.warning('Usage: :machina <task> -- runs the task with self-verification (file/test checks + auto-retry).');
+      return { handled: true };
+    }
+    const { runWithVerification } = await import('../verify/index.js');
+    const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+    const testCommand = cliTestCommand ?? fileConfig.testCommand;
+    const wrapperResult = await runWithVerification({
+      loopOpts: {
+        provider: buildProvider(c.display), task: machinaTask,
+        context: c.ctx, permissions: c.permissions, display: c.display,
+        initialHistory: c.chatState.activeChatHistory,
+        maxTurns: resolved.maxTurns,
+        spawnConfig: {
+          apiKey: c.providerConfig.apiKey,
+          baseUrl: c.providerConfig.baseUrl,
+        },
+        sessionPath: c.sessionPath,
+      },
+      config: { enabled: true, maxRetries, testCommand },
+      projectRoot: c.ctx.root,
+      display: c.display,
+    });
+    const mResult = wrapperResult.loopResult;
+    if (mResult.success) {
+      c.display.summary(mResult.summary, mResult.turns, mResult.toolCallCount);
+      printUsageFooter(c.display, mResult.usage, mResult.costUsd);
+    } else {
+      c.display.error(mResult.summary);
+    }
+    return { handled: true, newHistory: mResult.history };
+  }
+  if (input.startsWith(':council ') || input === ':council') {
+    const councilTask = input.slice(':council '.length).trim();
+    if (!councilTask) {
+      c.display.warning('Usage: :council <task> -- runs 2-3 read-only domain specialists in parallel, then synthesizes their reports.');
+      return { handled: true };
+    }
+    const { runMixtureOfAgents } = await import('../agent/mixture.js');
+    const councilResult = await runMixtureOfAgents({
+      provider: buildProvider(c.display), task: councilTask, context: c.ctx, display: c.display,
+    });
+    if (councilResult.success) {
+      c.display.summary(councilResult.summary, councilResult.turns, councilResult.toolCallCount);
+      printUsageFooter(c.display, councilResult.usage, councilResult.costUsd);
+    } else {
+      c.display.error(councilResult.summary);
+    }
+    return { handled: true };
+  }
   if (input === ':help' || input === '/help') {
     console.log(chalk.hex('#8a7768')([
       '',
@@ -1113,6 +1224,12 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :workflow               Create & run a multi-step workflow',
       '    <name> "step1" "step2" ...',
       '  :resume-workflow <id>   Resume a paused/failed workflow',
+      '  :machina <task>         Run task with self-verification + auto-retry',
+      '  :council <task>         2-3 parallel read-only specialists, then synthesis',
+      '',
+      '  ── Memory ───────────────────────────────────────',
+      '  :dream                  Consolidate recent episodes into a dream entry',
+      '  :rem                    Show reconciled memory (or latest dream)',
       '',
       '  ── Context / Stats ──────────────────────────────',
       '  :context                Show loaded project context',

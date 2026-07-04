@@ -56,50 +56,105 @@ function cleanup(tmpDir: string): void {
 
 // ─── Clipboard injection ──────────────────────────────────────────────────
 
-/**
- * Copy text to clipboard AND simulate paste keystroke into focused window.
- * Wayland: wl-copy + wtype (Ctrl+V); X11: xclip + xdotool (Ctrl+V)
- */
-export async function injectText(text: string): Promise<void> {
-  const isWayland = !!process.env.WAYLAND_DISPLAY;
-
-  if (isWayland) {
+/** Best-effort clipboard copy (wl-copy on Wayland, xclip/xsel on X11). */
+async function copyToClipboard(text: string): Promise<void> {
+  const candidates: string[][] = process.env.WAYLAND_DISPLAY
+    ? [['wl-copy'], ['xclip', '-selection', 'clipboard'], ['xsel', '--clipboard', '--input']]
+    : [['xclip', '-selection', 'clipboard'], ['xsel', '--clipboard', '--input'], ['wl-copy']];
+  for (const [cmd, ...args] of candidates) {
     try {
-      execSync('which wl-copy', { stdio: 'pipe' });
-      execSync('which wtype', { stdio: 'pipe' });
-      const proc = spawn('wl-copy', [], { stdio: ['pipe', 'pipe', 'pipe'] });
+      execSync('which ' + cmd, { stdio: 'pipe' });
+      // stdout/stderr must be 'ignore': wl-copy (and xclip) fork a daemon to
+      // serve the clipboard, which inherits the pipes — 'close' then never
+      // fires. Wait on 'exit' (the parent's) instead.
+      const proc = spawn(cmd, args, { stdio: ['pipe', 'ignore', 'ignore'] });
       proc.stdin.write(text);
       proc.stdin.end();
-      await new Promise<void>((resolve) => proc.on('close', () => resolve()));
-      await new Promise(r => setTimeout(r, 150));
-      execSync('wtype -M ctrl v -m ctrl', { stdio: 'pipe', timeout: 3000 });
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error(cmd + ' timed out')), 5000);
+        proc.on('exit', () => { clearTimeout(t); resolve(); });
+        proc.on('error', (e) => { clearTimeout(t); reject(e); });
+      });
+      return;
+    } catch { /* try next */ }
+  }
+  throw new Error('No clipboard tool found (install wl-clipboard, xclip, or xsel)');
+}
+
+export interface InjectOptions {
+  /** After typing the text, press Enter (submit the prompt / line). */
+  submit?: boolean;
+}
+
+/** Press the Enter key in the focused window (Wayland: ydotool; X11: xdotool). */
+function pressEnter(isWayland: boolean): void {
+  if (isWayland) {
+    try {
+      execSync('which ydotool', { stdio: 'pipe' });
+      // ydotool key: <keycode>:<1=down|0=up>. 28 = KEY_ENTER (Linux evdev).
+      execSync('ydotool key 28:1 28:0', { stdio: ['ignore', 'ignore', 'ignore'], timeout: 5000 });
       return;
     } catch { /* fall through */ }
   }
-
-  // X11 / XWayland fallback
   try {
     execSync('which xdotool', { stdio: 'pipe' });
-    let clipboardCmd = '';
+    execSync('xdotool key --clearmodifiers Return', { stdio: ['ignore', 'ignore', 'ignore'], timeout: 5000 });
+  } catch { /* Enter is best-effort — the text is already typed */ }
+}
+
+/**
+ * Copy text to clipboard AND type it into the focused window.
+ * Types the characters directly (wtype on Wayland, xdotool type on X11)
+ * instead of simulating Ctrl+V — terminals treat Ctrl+V as a literal
+ * character, not paste, so a paste keystroke never lands in a CLI prompt.
+ * With { submit: true }, presses Enter afterward to send the prompt.
+ */
+export async function injectText(text: string, opts: InjectOptions = {}): Promise<void> {
+  try { await copyToClipboard(text); } catch { /* typing is the main path */ }
+
+  // Newlines would submit a prompt / run a shell line mid-text — flatten them.
+  const typed = text.replace(/\s*\n\s*/g, ' ').trim();
+  if (!typed) return;
+
+  const isWayland = !!process.env.WAYLAND_DISPLAY;
+  if (isWayland) {
+    let injected = false;
     try {
-      execSync('which xclip', { stdio: 'pipe' });
-      clipboardCmd = 'xclip -selection clipboard';
-    } catch {
+      execSync('which wtype', { stdio: 'pipe' });
+      await new Promise(r => setTimeout(r, 150));
+      // "wtype -" reads the text from stdin — no shell-quoting pitfalls.
+      execSync('wtype -', { input: typed, stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000 });
+      injected = true;
+    } catch { /* KWin rejects the virtual-keyboard protocol — try ydotool */ }
+
+    // ydotool types via kernel uinput — works on any Wayland compositor,
+    // but needs the ydotoold daemon and /dev/uinput access.
+    if (!injected) {
       try {
-        execSync('which xsel', { stdio: 'pipe' });
-        clipboardCmd = 'xsel --clipboard --input';
-      } catch {
-        throw new Error('No clipboard tool');
-      }
+        execSync('which ydotool', { stdio: 'pipe' });
+        await new Promise(r => setTimeout(r, 150));
+        execSync('ydotool type --file -', { input: typed, stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000 });
+        injected = true;
+      } catch { /* fall through to error below */ }
     }
-    const child = spawn('sh', ['-c', clipboardCmd], { stdio: ['pipe', 'pipe', 'pipe'] });
-    child.stdin.write(text);
-    child.stdin.end();
-    await new Promise<void>((resolve) => child.on('close', () => resolve()));
+
+    if (!injected) {
+      // Don't fall back to xdotool here: on Wayland it "types" only into
+      // XWayland windows, so it reports success while a native terminal
+      // (Konsole, kitty…) receives nothing — a silent failure.
+      throw new Error('no working Wayland injector — this compositor rejects wtype; install ydotool + ydotoold');
+    }
+    if (opts.submit) pressEnter(true);
+    return;
+  }
+
+  try {
+    execSync('which xdotool', { stdio: 'pipe' });
     await new Promise(r => setTimeout(r, 150));
-    execSync('xdotool key ctrl+v', { stdio: 'pipe', timeout: 3000 });
+    execSync('xdotool type --clearmodifiers --file -', { input: typed, stdio: ['pipe', 'pipe', 'pipe'], timeout: 20000 });
+    if (opts.submit) pressEnter(false);
   } catch {
-    throw new Error('Cannot inject text: install wtype (Wayland) or xdotool+xclip (X11)');
+    throw new Error('Cannot inject text: install xdotool (X11)');
   }
 }
 
@@ -217,6 +272,16 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
   }
 
   if (api.name === 'Xiaomi MiMo') {
+    // MiMo ASR takes inline base64 — cap it so a runaway recording doesn't
+    // blow the request (25 MB wav ≈ 13 min at 16 kHz mono, ~33 MB base64).
+    const audioBytes = fs.statSync(wavPath).size;
+    const MAX_AUDIO_BYTES = 25_000_000;
+    if (audioBytes > MAX_AUDIO_BYTES) {
+      throw new Error(
+        `Recording too large for inline ASR (${(audioBytes / 1e6).toFixed(1)} MB > ${MAX_AUDIO_BYTES / 1e6} MB). ` +
+        'Record shorter segments or use "dic loop" for continuous dictation.',
+      );
+    }
     const audioBase64 = fs.readFileSync(wavPath).toString('base64');
     const response = await (client.chat.completions.create as any)({
       model: 'mimo-v2.5-asr',
@@ -369,16 +434,28 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
     console.log(chalk.hex('#ede0cc')('  ' + cleaned));
     console.log(chalk.hex('#5a9e6e').bold('  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n'));
 
+    let onClipboard = false;
     try {
       const clipboardModule = await import('./clipboard.js');
       await clipboardModule.clipboardTool({ action: 'copy', text: cleaned });
-      if (inject) {
+      onClipboard = true;
+    } catch { /* injection below still works without clipboard */ }
+
+    if (inject) {
+      try {
         await injectText(cleaned);
-        console.log(chalk.hex('#8a7768')('  ⌨️  Injected into focused window.\n'));
-      } else {
-        console.log(chalk.hex('#8a7768')('  \uD83D\uDCCB  Copied to clipboard.\n'));
+        console.log(chalk.hex('#8a7768')('  ⌨️  Typed into focused window' + (onClipboard ? ' (also on clipboard).\n' : '.\n')));
+      } catch (err) {
+        console.log(chalk.hex('#cc9e5c')(
+          '  ⌨️  Injection failed (' + String(err) + ')' +
+          (onClipboard ? ' — text is on the clipboard, paste manually.\n' : '.\n'),
+        ));
       }
-    } catch {}
+    } else if (onClipboard) {
+      console.log(chalk.hex('#8a7768')('  📋  Copied to clipboard.\n'));
+    } else {
+      console.log(chalk.hex('#cc9e5c')('  Could not copy to clipboard — text shown above only.\n'));
+    }
   } else {
     // Save failed recording for debugging
     const saveDir = path.join(os.homedir(), '.aura', 'recordings');
@@ -399,6 +476,169 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
   }
 
   cleanup(tmpDir);
+}
+
+// ─── Toggle dictation (one hotkey: start → stop → transcribe → inject) ──────
+//
+// Designed for a global shortcut (e.g. KDE Super+Space). Press once to start
+// recording; press again to stop, transcribe, and type the result — with Enter
+// — into the focused window. State lives in a lock dir so the second, separate
+// process can find and stop the first.
+
+function toggleStateDir(): string {
+  const base = process.env.XDG_RUNTIME_DIR || os.tmpdir();
+  return path.join(base, 'dic-toggle');
+}
+
+/** Normalize a recorded wav in place and transcribe it with provider fallback. */
+async function normalizeAndTranscribe(wavPath: string, providers: ApiProvider[]): Promise<string> {
+  const normPath = wavPath.replace(/\.wav$/, '.norm.wav');
+  try {
+    execSync(
+      `ffmpeg -y -i "${wavPath}" -af "dynaudnorm=p=0.9:r=0.5" -ar ${SAMPLE_RATE} -ac 1 "${normPath}" 2>/dev/null`,
+      { stdio: 'pipe', timeout: 10000 },
+    );
+    fs.renameSync(normPath, wavPath);
+  } catch {
+    try { fs.unlinkSync(normPath); } catch {}
+  }
+
+  for (let i = 0; i < providers.length; i++) {
+    try {
+      return (await transcribeWith(providers[i], wavPath, false)).trim();
+    } catch (err: any) {
+      const isAuth = err?.status === 401
+        || (err?.message && (err.message.includes('401') || err.message.includes('Invalid API Key')));
+      if (isAuth && i < providers.length - 1) continue;
+      throw err;
+    }
+  }
+  return '';
+}
+
+function notify(title: string, body: string, replaceTag = 'dic-toggle'): void {
+  try {
+    execSync(
+      `notify-send -a dic -h string:x-canonical-private-synchronous:${replaceTag} ` +
+      `${JSON.stringify(title)} ${JSON.stringify(body)}`,
+      { stdio: 'ignore', timeout: 3000 },
+    );
+  } catch { /* notifications are optional */ }
+}
+
+export interface ToggleOptions {
+  deviceId?: string;
+  /** Press Enter after typing (submit the prompt). Default true. */
+  submit?: boolean;
+}
+
+/**
+ * Toggle: first call starts recording (detached recorder + state files),
+ * second call stops it and transcribes + injects. Returns when the whole
+ * cycle (or the start half) is done.
+ */
+export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
+  const stateDir = toggleStateDir();
+  const pidFile  = path.join(stateDir, 'recorder.pid');
+  const wavFile  = path.join(stateDir, 'recording.wav');
+  const rawFile  = path.join(stateDir, 'recording.raw');
+
+  // ── STOP branch: a recording is already in progress ──────────────────────
+  if (fs.existsSync(pidFile)) {
+    let pid = 0;
+    try { pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10); } catch {}
+    const isParec = fs.existsSync(path.join(stateDir, 'parec'));
+
+    // Stop the recorder; a stale pid (process already gone) is fine.
+    if (pid > 0) { try { process.kill(pid, 'SIGTERM'); } catch {} }
+    try { fs.unlinkSync(pidFile); } catch {}
+    await new Promise(r => setTimeout(r, 400)); // let the file flush/close
+
+    // parec path recorded raw PCM → wrap to wav.
+    const srcRaw = isParec ? rawFile : wavFile;
+    if (isParec && fs.existsSync(rawFile)) {
+      try {
+        execSync(
+          `ffmpeg -y -f s16le -ar ${SAMPLE_RATE} -ac 1 -i "${rawFile}" "${wavFile}" 2>/dev/null`,
+          { stdio: 'pipe', timeout: 10000 },
+        );
+      } catch {}
+    }
+    try { fs.unlinkSync(path.join(stateDir, 'parec')); } catch {}
+
+    if (!fs.existsSync(wavFile) || fs.statSync(wavFile).size < 512) {
+      notify('🎤 dic', 'Nothing recorded.');
+      console.log(chalk.hex('#cc9e5c')('  Nothing recorded.\n'));
+      try { fs.unlinkSync(rawFile); } catch {}
+      return;
+    }
+
+    notify('🎤 dic', 'Transcribing…');
+    const providers = listProviders();
+    if (providers.length === 0) {
+      notify('🎤 dic', 'No STT API key set.');
+      console.error(chalk.hex('#b15439')('  No STT API key set.\n'));
+      return;
+    }
+
+    let cleaned = '';
+    try {
+      cleaned = await normalizeAndTranscribe(wavFile, providers);
+    } catch (err) {
+      notify('🎤 dic', 'Transcription failed.');
+      console.error(chalk.hex('#b15439')('  Transcription failed: ' + String(err) + '\n'));
+      return;
+    } finally {
+      try { fs.unlinkSync(wavFile); } catch {}
+      try { fs.unlinkSync(rawFile); } catch {}
+    }
+
+    if (!cleaned) {
+      notify('🎤 dic', 'No speech detected.');
+      console.log(chalk.hex('#cc9e5c')('  No speech detected.\n'));
+      return;
+    }
+
+    console.log(chalk.hex('#ede0cc')('  ' + cleaned));
+    try {
+      await injectText(cleaned, { submit: opts.submit ?? true });
+      notify('🎤 dic', '✓ ' + cleaned.slice(0, 80));
+    } catch (err) {
+      // injectText already copied to clipboard on the way in.
+      notify('🎤 dic', 'Typed failed — on clipboard.');
+      console.log(chalk.hex('#cc9e5c')('  Injection failed (' + String(err) + ') — text is on the clipboard.\n'));
+    }
+    return;
+  }
+
+  // ── START branch: no recording yet → begin one ───────────────────────────
+  fs.mkdirSync(stateDir, { recursive: true });
+  const recorderInfo = pickRecorder(opts.deviceId);
+  if (!recorderInfo) {
+    notify('🎤 dic', 'No recorder (install pw-record/arecord).');
+    console.error(chalk.hex('#b15439')('  No audio recorder found.\n'));
+    return;
+  }
+
+  let child: import('child_process').ChildProcess;
+  if (recorderInfo.cmd === 'parec') {
+    // Mark this as the raw-PCM path so STOP knows to wrap it.
+    fs.writeFileSync(path.join(stateDir, 'parec'), '');
+    child = spawn(recorderInfo.cmd, [...recorderInfo.args], {
+      stdio: ['ignore', fs.openSync(rawFile, 'w'), 'ignore'],
+      detached: true,
+    });
+  } else {
+    child = spawn(recorderInfo.cmd, [...recorderInfo.args, wavFile], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      detached: true,
+    });
+  }
+  child.unref();
+  fs.writeFileSync(pidFile, String(child.pid));
+
+  notify('🎤 dic', 'Recording… (press again to send)');
+  console.log(chalk.hex('#5a9e6e')('  🎤  Recording — press the hotkey again to stop & send.\n'));
 }
 // ─── TTS: text-to-speech via MiMo TTS ─────────────────────────────────────
 
