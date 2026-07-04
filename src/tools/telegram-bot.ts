@@ -280,19 +280,27 @@ async function downloadTelegramFile(fileId: string): Promise<string> {
 
 /** Send a WAV buffer as a Telegram voice message (converts to OGG/Opus). */
 async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: string): Promise<void> {
-  // Telegram voice notes must be OGG/Opus. Convert the MiMo WAV with ffmpeg.
+  // Telegram voice notes must be OGG/Opus, mono. Encode exactly how Telegram
+  // expects (48 kHz mono Opus, voip application) — otherwise the note shows a
+  // 0:00 empty duration. Content-Type of the part MUST be audio/ogg, not
+  // octet-stream, or Telegram won't read it as a playable voice message.
   const tmpWav = path.join(os.tmpdir(), `tg-tts-${Date.now()}.wav`);
   const tmpOgg = tmpWav.replace(/\.wav$/, '.ogg');
   fs.writeFileSync(tmpWav, wavBuffer);
   try {
-    execSync(`ffmpeg -y -i "${tmpWav}" -c:a libopus -b:a 32k "${tmpOgg}" 2>/dev/null`, { stdio: 'pipe', timeout: 20000 });
+    execSync(
+      `ffmpeg -y -i "${tmpWav}" -ac 1 -ar 48000 -c:a libopus -b:a 24k -application voip "${tmpOgg}" 2>/dev/null`,
+      { stdio: 'pipe', timeout: 20000 },
+    );
   } catch {
     // No opus encoder — fall back to sending the WAV as an audio file.
     try { fs.unlinkSync(tmpOgg); } catch {}
   }
-  const sendPath = fs.existsSync(tmpOgg) ? tmpOgg : tmpWav;
-  const fieldName = fs.existsSync(tmpOgg) ? 'voice' : 'audio';
-  const method = fs.existsSync(tmpOgg) ? 'sendVoice' : 'sendAudio';
+  const haveOgg = fs.existsSync(tmpOgg) && fs.statSync(tmpOgg).size > 0;
+  const sendPath = haveOgg ? tmpOgg : tmpWav;
+  const fieldName = haveOgg ? 'voice' : 'audio';
+  const method = haveOgg ? 'sendVoice' : 'sendAudio';
+  const partMime = haveOgg ? 'audio/ogg' : 'audio/wav';
   const fileBuffer = fs.readFileSync(sendPath);
   const boundary = '----TelegramVoiceBoundary' + Date.now().toString(16);
   const parts = [`--${boundary}`, `Content-Disposition: form-data; name="chat_id"`, '', String(chatId)];
@@ -300,7 +308,7 @@ async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: s
   parts.push(
     `--${boundary}`,
     `Content-Disposition: form-data; name="${fieldName}"; filename="${path.basename(sendPath)}"`,
-    `Content-Type: application/octet-stream`, '',
+    `Content-Type: ${partMime}`, '',
   );
   const fullData = Buffer.concat([
     Buffer.from(parts.join('\r\n') + '\r\n\r\n', 'utf8'),
