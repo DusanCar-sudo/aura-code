@@ -153,6 +153,104 @@ async function sendMessage(chatId: string | number, text: string): Promise<void>
   }
 }
 
+// Send a local file as a document to Telegram
+async function sendLocalFile(chatId: string | number, filePath: string, caption?: string): Promise<void> {
+  if (!fs.existsSync(filePath)) {
+    await sendMessage(chatId, `❌ File not found: ${filePath}`);
+    return;
+  }
+
+  // For small files (<10MB), use sendDocument with base64 or multipart
+  const stats = fs.statSync(filePath);
+  const fileSize = stats.size;
+
+  if (fileSize > 50 * 1024 * 1024) {
+    await sendMessage(chatId, `❌ File too large: ${(fileSize / 1024 / 1024).toFixed(1)}MB (max 50MB)`);
+    return;
+  }
+
+  try {
+    const fileBuffer = fs.readFileSync(filePath);
+    const boundary = '----TelegramFormBoundary' + Date.now().toString(16);
+
+    const formData = [
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="chat_id"`,
+      '',
+      String(chatId),
+    ];
+
+    if (caption) {
+      formData.push(
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="caption"`,
+        '',
+        caption,
+      );
+    }
+
+    const fileName = path.basename(filePath);
+    formData.push(
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="document"; filename="${fileName}"`,
+      `Content-Type: application/octet-stream`,
+      '',
+    );
+
+    const formDataHeader = formData.join('\r\n') + '\r\n\r\n';
+    const formDataFooter = `\r\n--${boundary}--\r\n`;
+
+    const fullData = Buffer.concat([
+      Buffer.from(formDataHeader, 'utf8'),
+      fileBuffer,
+      Buffer.from(formDataFooter, 'utf8'),
+    ]);
+
+    return new Promise((resolve, reject) => {
+      const options: https.RequestOptions = {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${TOKEN}/sendDocument`,
+        method: 'POST',
+        family: 4,
+        agent: httpsAgent,
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': fullData.length,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let responseData = '';
+        res.on('data', (chunk) => { responseData += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(responseData);
+            if (!parsed.ok) {
+              reject(new Error(`Telegram: ${parsed.description} (${parsed.error_code})`));
+            } else {
+              resolve(parsed.result);
+            }
+          } catch (e: any) {
+            reject(new Error(`Parse error: ${responseData.slice(0, 200)}`));
+          }
+        });
+      });
+
+      req.on('error', (e: any) => reject(new Error(`HTTPS error: ${e?.message || e?.code || JSON.stringify(e)}`)));
+      req.setTimeout(60000, () => {
+        req.destroy();
+        reject(new Error('File upload timeout (60s)'));
+      });
+
+      req.write(fullData);
+      req.end();
+    });
+  } catch (e: any) {
+    await sendMessage(chatId, `❌ Error reading file: ${e.message}`);
+  }
+}
+
 function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
   const chunks: string[] = [];
@@ -364,6 +462,8 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
 // ── Tool execution helpers ──────────────────────────────────────────────────
 
 const DEFAULT_CWD = process.env.HOME ?? '/tmp';
+// Track pending file operations from natural language
+const pendingFileOps = new Map<string, { op: string; path: string }>();
 
 function execShell(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
@@ -436,13 +536,17 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/time — Trenutno vreme`,
       `/ping — Provera konekcije`,
       `/whoami — Ko sam ja`,
-      `/ls <dir> — Lista direktorijuma`,
-      `/read <file> — Čitanje fajla`,
-      `/search <pattern> — Pretraga koda`,
-      `/run <cmd> — Izvršavanje shell komande`,
+      ``,
+      `💻 PC Control:`,
+      `/ls <dir> — Lista direktorijuma na tvom PC-ju`,
+      `/read <file> — Čitanje fajla sa tvog PC-ja`,
+      `/sendfile <path> — Pošalji fajl sa tvog PC-ja na Telegram`,
+      `/find <pattern> — Pronađi fajlove na tvom PC-ju`,
+      `/run <cmd> — Izvrši shell komandu na tvom PC-ju`,
       `/git — Git status`,
       ``,
       `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
+      `💡 Možeš da tražiš fajlove sa tvog računara i šaljiš ih sebi!`,
       ``,
       `Ili mi piši bilo šta — odgovoriću!`,
     ].join('\n');
@@ -517,11 +621,17 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   if (lower.startsWith('/run')) {
     const cmd = text.slice(4).trim();
     if (!cmd) return '❌ Usage: /run <command>';
-    // Safety: block dangerous commands
-    const dangerous = ['rm -rf', 'mkfs', 'dd if=', 'fork bomb', 'shutdown', 'reboot'];
-    if (dangerous.some(d => cmd.toLowerCase().includes(d))) {
-      return '🚫 Blocked: dangerous command detected.';
+
+    // Safety: allow most commands but block truly dangerous ones
+    const extremelyDangerous = [
+      'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
+      ':(){ :|:& };:', 'fork bomb', 'shutdown -h', 'poweroff', 'init 0', 'halt',
+    ];
+    const isDangerous = extremelyDangerous.some(d => cmd.toLowerCase().includes(d.toLowerCase()));
+    if (isDangerous) {
+      return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
     }
+
     const result = await execShell(cmd);
     const output = result.stdout || result.stderr || '(no output)';
     const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
@@ -569,6 +679,70 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!';
   }
 
+  // ── File sending from PC ─────────────────────────────────────────────────────
+
+  if (lower.startsWith('/sendfile') || lower.startsWith('/send')) {
+    const filePath = text.startsWith('/sendfile ') ? text.slice(9).trim() : text.slice(5).trim();
+    if (!filePath) return '❌ Usage: /sendfile <path> or /send <path>';
+
+    const resolved = path.isAbsolute(filePath) ? filePath : path.join(DEFAULT_CWD, filePath);
+    if (!fs.existsSync(resolved)) {
+      return `❌ File not found: ${filePath}`;
+    }
+
+    try {
+      const stats = fs.statSync(resolved);
+      const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+      await sendMessage(chatId, `📤 Sending file: ${path.basename(resolved)} (${sizeMB}MB)`);
+      await sendLocalFile(chatId, resolved);
+      return `✅ File sent: ${path.basename(resolved)}`;
+    } catch (e: any) {
+      return `❌ Error sending file: ${e.message}`;
+    }
+  }
+
+  if (lower.startsWith('/find')) {
+    const pattern = text.slice(5).trim();
+    if (!pattern) return '❌ Usage: /find <pattern>';
+
+    try {
+      const searchDir = DEFAULT_CWD;
+      const cmd = `find "${searchDir}" -name "*${pattern}*" -type f 2>/dev/null | head -20`;
+      const result = await execShell(cmd);
+      const files = result.stdout.trim().split('\n').filter(f => f);
+
+      if (files.length === 0 || files[0] === '') {
+        return `🔍 No files found matching "${pattern}"`;
+      }
+
+      const lines = files.map(f => {
+        const name = path.basename(f);
+        const rel = path.relative(DEFAULT_CWD, f);
+        const stats = fs.statSync(f);
+        const size = (stats.size / 1024).toFixed(1) + 'KB';
+        return `📄 ${name} (${size})\n   ${rel}`;
+      });
+
+      return `🔍 Found ${files.length} file(s):\n${lines.join('\n')}\n\n💡 Use /sendfile <path> to get any file`;
+    } catch (e: any) {
+      return `❌ Search error: ${e.message}`;
+    }
+  }
+
+  if (lower.startsWith('/pwd')) {
+    return `📁 Current directory: ${DEFAULT_CWD}`;
+  }
+
+  if (lower === '/home' || lower.startsWith('/cd ')) {
+    if (lower === '/home') {
+      return `📁 Home directory: ${process.env.HOME}`;
+    }
+    const dir = text.slice(4).trim();
+    if (!fs.existsSync(dir)) return `❌ Directory not found: ${dir}`;
+    // Note: changing DEFAULT_CWD would require restarting, so just show info
+    return `💡 To change working directory, restart bot with HOME set or use absolute paths`;
+  }
+
   // Default: try to interpret as a shell command if it looks like one
   const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
   if (looksLikeCommand) {
@@ -576,6 +750,77 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     const output = result.stdout || result.stderr || '(no output)';
     const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
     return `⚡ ${text}\n${truncated}`;
+  }
+
+  // ── Natural language file operations ───────────────────────────────────────────
+
+  // "send me file X" or "get file X"
+  const sendFileMatch = text.match(/(?:send|get|pošalji|daj)\s+(?:me\s+)?(?:file\s+)?[\"']?([\w\-./\\\s]+)[\"']?/i);
+  if (sendFileMatch) {
+    const filePath = sendFileMatch[1].trim();
+    const resolved = path.isAbsolute(filePath) ? filePath : path.join(DEFAULT_CWD, filePath);
+
+    if (!fs.existsSync(resolved)) {
+      return `❌ File not found: ${filePath}\n💡 Try /find to search for files`;
+    }
+
+    try {
+      const stats = fs.statSync(resolved);
+      const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+      await sendMessage(chatId, `📤 Sending file: ${path.basename(resolved)} (${sizeMB}MB)`);
+      await sendLocalFile(chatId, resolved);
+      return `✅ File sent: ${path.basename(resolved)}`;
+    } catch (e: any) {
+      return `❌ Error sending file: ${e.message}`;
+    }
+  }
+
+  // "find file X" or "search for file X"
+  const findFileMatch = text.match(/(?:find|search|traži|pronadji)\s+(?:file\s+)?[\"']?([\w\-.\s]+)[\"']?/i);
+  if (findFileMatch) {
+    const pattern = findFileMatch[1].trim();
+    try {
+      const searchDir = DEFAULT_CWD;
+      const cmd = `find "${searchDir}" -name "*${pattern}*" -type f 2>/dev/null | head -20`;
+      const result = await execShell(cmd);
+      const files = result.stdout.trim().split('\n').filter(f => f);
+
+      if (files.length === 0 || files[0] === '') {
+        return `🔍 No files found matching "${pattern}"\n💡 Try searching in a specific directory with /find`;
+      }
+
+      const lines = files.map(f => {
+        const name = path.basename(f);
+        const rel = path.relative(DEFAULT_CWD, f);
+        const stats = fs.statSync(f);
+        const size = (stats.size / 1024).toFixed(1) + 'KB';
+        return `📄 ${name} (${size})\n   ${rel}`;
+      });
+
+      return `🔍 Found ${files.length} file(s):\n${lines.join('\n')}\n\n💡 Say "send me <path>" to get any file`;
+    } catch (e: any) {
+      return `❌ Search error: ${e.message}`;
+    }
+  }
+
+  // "run X" or "execute X" for natural language command execution
+  const runCmdMatch = text.match(/(?:run|execute|izvrši|pokreni)\s+(.+)/i);
+  if (runCmdMatch) {
+    const cmd = runCmdMatch[1].trim();
+
+    const extremelyDangerous = [
+      'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
+      ':(){ :|:& };:', 'fork bomb', 'shutdown -h', 'poweroff', 'init 0', 'halt',
+    ];
+    const isDangerous = extremelyDangerous.some(d => cmd.toLowerCase().includes(d.toLowerCase()));
+    if (isDangerous) {
+      return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
+    }
+
+    const result = await execShell(cmd);
+    const output = result.stdout || result.stderr || '(no output)';
+    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
+    return `⚡ ${cmd}\n${result.code === 0 ? '✅' : '❌'} exit ${result.code}\n${truncated}`;
   }
 
   // Default: ask the LLM
