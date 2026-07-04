@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
-import { exec, execSync } from 'child_process';
+import { exec, execSync, execFileSync } from 'child_process';
 import { createProvider, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
@@ -301,34 +301,22 @@ async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: s
   const fieldName = haveOgg ? 'voice' : 'audio';
   const method = haveOgg ? 'sendVoice' : 'sendAudio';
   const partMime = haveOgg ? 'audio/ogg' : 'audio/wav';
-  const fileBuffer = fs.readFileSync(sendPath);
-  const boundary = '----TelegramVoiceBoundary' + Date.now().toString(16);
-  const parts = [`--${boundary}`, `Content-Disposition: form-data; name="chat_id"`, '', String(chatId)];
-  if (caption) parts.push(`--${boundary}`, `Content-Disposition: form-data; name="caption"`, '', caption);
-  parts.push(
-    `--${boundary}`,
-    `Content-Disposition: form-data; name="${fieldName}"; filename="${path.basename(sendPath)}"`,
-    `Content-Type: ${partMime}`, '',
-  );
-  const fullData = Buffer.concat([
-    Buffer.from(parts.join('\r\n') + '\r\n\r\n', 'utf8'),
-    fileBuffer,
-    Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
-  ]);
+  // Upload via curl, NOT a hand-built Node multipart body: an identical OGG
+  // sent through Node's raw https multipart arrives at Telegram with
+  // duration:0 (empty voice note), while the exact same bytes via curl come
+  // through as a proper duration:N voice message. curl's multipart framing is
+  // what Telegram's Opus parser expects; ours subtly isn't. So shell out.
   try {
-    await new Promise<void>((resolve, reject) => {
-      const req = https.request({
-        hostname: 'api.telegram.org', port: 443, path: `/bot${TOKEN}/${method}`,
-        method: 'POST', family: 4, agent: httpsAgent,
-        headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': fullData.length },
-      }, (res) => {
-        let d = ''; res.on('data', c => d += c);
-        res.on('end', () => { try { JSON.parse(d).ok ? resolve() : reject(new Error(d.slice(0, 200))); } catch { reject(new Error(d.slice(0, 200))); } });
-      });
-      req.on('error', reject);
-      req.setTimeout(60000, () => { req.destroy(); reject(new Error('voice upload timeout')); });
-      req.write(fullData); req.end();
-    });
+    const args = [
+      '-s', '--max-time', '60',
+      '-F', `chat_id=${chatId}`,
+      '-F', `${fieldName}=@${sendPath};type=${partMime}`,
+    ];
+    if (caption) args.push('-F', `caption=${caption}`);
+    args.push(`https://api.telegram.org/bot${TOKEN}/${method}`);
+    const out = execFileSync('curl', args, { encoding: 'utf8', timeout: 65000 });
+    const parsed = JSON.parse(out);
+    if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
   } finally {
     try { fs.unlinkSync(tmpWav); } catch {}
     try { fs.unlinkSync(tmpOgg); } catch {}
