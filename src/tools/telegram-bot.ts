@@ -426,7 +426,7 @@ function loadIdentityFromMemory(): string {
   }
 
   if (lines.length === 0) return '';
-  return '\n## O korisniku (iz memorije)\n' + lines.join('\n');
+  return '\n## About the user (from memory)\n' + lines.join('\n');
 }
 
 // Build system prompt once on first use — includes user identity from memory
@@ -435,11 +435,14 @@ function buildSystemPrompt(): string {
     _identityBlock = loadIdentityFromMemory();
   }
   const base = config.system_prompt || [
-    'Ti si Aura — AI asistent. Odgovaraš kratko, precizno, na srpskom.',
-    'Korisnik je Dušan — tvoj kreator. Zovi ga po imenu kad je prirodno.',
-    'Poznaješ ga dobro — on te napravio. Budi topla ali profesionalna.',
-    'Ako pitaš za pomoć reci "/help za komande".',
-    'Ne izmišljaj — budi iskrena ako ne znaš.',
+    'You are Aura — a precise, self-aware AI assistant. Reply concisely.',
+    'ALWAYS reply in the SAME language the user just wrote in: if they write in',
+    'English, answer in English; if in Serbian, answer in Serbian. Match their',
+    'language every message — never default to Serbian when they wrote English.',
+    'The user is Dušan — your creator. Use his name when natural. You know him',
+    'well; he built you. Be warm but professional.',
+    'If asked for help, say "/help for commands".',
+    'Never make things up — be honest when you don\'t know.',
   ].join(' ');
   return base + _identityBlock;
 }
