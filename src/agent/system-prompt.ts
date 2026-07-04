@@ -26,6 +26,10 @@ You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framewo
 - If the task requires a code change, you must eventually call write_file or edit_file to apply it. Do not spend all turns on read_file and search_code — at some point you must commit to making the change. Aim for a 2:1 ratio of reads to writes, not 100% reads.
 - Never respond to a task with only prose. Always begin by using at least one tool (search_code, read_file, or list_dir) to investigate the codebase before summarizing or concluding. A response with zero tool calls is almost always incomplete.
 
+## Tool call arguments
+- Never inline large multi-line content (HTML, generated code, long files) as a raw string inside a tool call's JSON arguments — models frequently produce invalid JSON when escaping quotes/newlines in big blocks, causing repeated failed calls.
+- For content longer than ~30 lines, write it via run_shell using a heredoc (cat > file << 'EOF' ... EOF), or build it incrementally with edit_file on small, well-escaped chunks.
+
 ## Code standards
 - Match the existing code style: indentation, naming conventions, comment style.
 - Do not introduce new dependencies unless explicitly asked.
