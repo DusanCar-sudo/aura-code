@@ -11,6 +11,7 @@ import { exec, execSync } from 'child_process';
 import { createProvider, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
+import type { ChatSession } from '../agent/session-store.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -168,10 +169,60 @@ function splitMessage(text: string, maxLen: number): string[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
-const CHAT_HISTORY_MAX = 20; // keep last N messages per chat for context
+const CHAT_HISTORY_MAX = 50; // keep last N messages per chat for context
+const SESSION_DIR = path.join(os.homedir(), '.aura', 'sessions', 'telegram');
 
 let _chatProvider: LLMProvider | null = null;
 let _identityBlock = ''; // loaded from memory on startup
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session persistence — share conversations with PC CLI
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getSessionFile(chatId: string): string {
+  // Use chat ID as session ID — same as CLI uses for consistency
+  return path.join(SESSION_DIR, `${chatId}.json`);
+}
+
+async function loadSession(chatId: string): Promise<ChatSession | null> {
+  const filePath = getSessionFile(chatId);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  try {
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    return JSON.parse(raw) as ChatSession;
+  } catch (e) {
+    console.error(`[${ts()}] ⚠️ Failed to load session ${chatId}:`, e);
+    return null;
+  }
+}
+
+async function saveSession(chatId: string, history: HistoryMessage[]): Promise<void> {
+  const session = await loadSession(chatId);
+  const now = new Date().toISOString();
+
+  const newSession: ChatSession = session ? {
+    ...session,
+    history,
+    updatedAt: now,
+  } : {
+    id: chatId,
+    title: `Telegram ${chatId}`,
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+    history,
+  };
+
+  const filePath = getSessionFile(chatId);
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const tmp = filePath + '.tmp';
+  await fs.promises.writeFile(tmp, JSON.stringify(newSession, null, 2), 'utf8');
+  await fs.promises.rename(tmp, filePath);
+}
 
 function loadIdentityFromMemory(): string {
   const memDir = path.join(os.homedir(), '.aura', 'memory');
@@ -211,19 +262,68 @@ function buildSystemPrompt(): string {
   return base + _identityBlock;
 }
 
-// Per-chat conversation history
+// Per-chat conversation history — loaded from disk on startup, saved after each message
 const chatHistory = new Map<string, HistoryMessage[]>();
+// Track which sessions were modified since last save
+const dirtySessions = new Set<string>();
+
+async function initializeChatHistory(): Promise<void> {
+  const dir = SESSION_DIR;
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`[${ts()}]   Created telegram session directory`);
+    return;
+  }
+
+  try {
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    console.log(`[${ts()}]   Loading ${files.length} chat session(s) from disk…`);
+
+    for (const file of files) {
+      const chatId = file.replace('.json', '');
+      const session = await loadSession(chatId);
+      if (session && session.history.length > 0) {
+        chatHistory.set(chatId, session.history);
+        console.log(`[${ts()}]   ✓ Loaded ${chatId}: ${session.history.length} messages`);
+      }
+    }
+
+    if (files.length > 0) {
+      console.log(`[${ts()}]   Chat history restored: ${chatHistory.size} session(s)`);
+    }
+  } catch (e: any) {
+    console.error(`[${ts()}]   ⚠️ Failed to load chat history: ${e.message}`);
+  }
+}
 
 function getChatHistory(chatId: string): HistoryMessage[] {
-  if (!chatHistory.has(chatId)) chatHistory.set(chatId, []);
+  if (!chatHistory.has(chatId)) {
+    // Try loading from disk if not in memory
+    loadSession(chatId).then(session => {
+      if (session) {
+        chatHistory.set(chatId, session.history);
+      } else {
+        chatHistory.set(chatId, []);
+      }
+    }).catch(() => {
+      chatHistory.set(chatId, []);
+    });
+    return chatHistory.get(chatId) || [];
+  }
   return chatHistory.get(chatId)!;
 }
 
-function pushToHistory(chatId: string, msg: HistoryMessage) {
+async function pushToHistory(chatId: string, msg: HistoryMessage): Promise<void> {
   const h = getChatHistory(chatId);
   h.push(msg);
+
   // Trim to keep last N messages
   while (h.length > CHAT_HISTORY_MAX) h.shift();
+
+  // Mark as dirty and save to disk
+  dirtySessions.add(chatId);
+  await saveSession(chatId, h);
+  dirtySessions.delete(chatId);
 }
 
 function getChatProvider(): LLMProvider {
@@ -237,18 +337,18 @@ function getChatProvider(): LLMProvider {
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
   const provider = getChatProvider();
   const systemPrompt = buildSystemPrompt();
-  
+
   // Build history: recent context + the new message
   const recent = getChatHistory(chatId).slice(-(CHAT_HISTORY_MAX - 1));
   const history: HistoryMessage[] = [...recent, { role: 'user', content: userMessage }];
-  
-  pushToHistory(chatId, { role: 'user', content: userMessage });
-  
+
+  await pushToHistory(String(chatId), { role: 'user', content: userMessage });
+
   console.error(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}] LLM: sending to ${provider.name}/${provider.model} (history: ${history.length} msgs)`);
   try {
     const response = await provider.complete(systemPrompt, history, []);
     const reply = response.text || '(no response from model)';
-    pushToHistory(chatId, { role: 'assistant', content: reply });
+    await pushToHistory(String(chatId), { role: 'assistant', content: reply });
     return reply;
   } catch (e: any) {
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -331,6 +431,8 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/status — Status sistema`,
       `/tools — Lista dostupnih alata`,
       `/memory — Pregled memorije`,
+      `/history — Pregled istorije razgovora`,
+      `/clear — Obriši istoriju razgovora`,
       `/time — Trenutno vreme`,
       `/ping — Provera konekcije`,
       `/whoami — Ko sam ja`,
@@ -339,6 +441,8 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/search <pattern> — Pretraga koda`,
       `/run <cmd> — Izvršavanje shell komande`,
       `/git — Git status`,
+      ``,
+      `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
       ``,
       `Ili mi piši bilo šta — odgovoriću!`,
     ].join('\n');
@@ -445,6 +549,26 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     }
   }
 
+  if (lower === '/history' || lower.startsWith('/history')) {
+    const history = getChatHistory(String(chatId));
+    if (history.length === 0) return '📜 Nema istorije razgovora. Započni razgovor i ja ću ga pamtiti!';
+    const lines = history.slice(-10).map((m, i) => {
+      const role = m.role === 'user' ? '👤 Ti' : '🤖 Aura';
+      const content = (m.role === 'tool_result') ? '[alat]' : (typeof m.content === 'string' ? m.content.slice(0, 100) : '[non-text]');
+      return `${role}: ${content}${content.length >= 100 ? '...' : ''}`;
+    });
+    return `📜 Poslednjih 10 poruka (ukupno ${history.length}):\n${lines.join('\n')}\n\n💡 Svi razgovori se čuvaju trajno — pamtim šta si mi rekao čak i ako me resetuješ.`;
+  }
+
+  if (lower === '/clear') {
+    chatHistory.delete(String(chatId));
+    const filePath = getSessionFile(String(chatId));
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    return '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!';
+  }
+
   // Default: try to interpret as a shell command if it looks like one
   const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
   if (looksLikeCommand) {
@@ -475,6 +599,9 @@ async function poll(): Promise<void> {
   console.log(`   Long-polling Telegram (30s)…`);
   console.log('');
 
+
+  // Load chat history from disk on startup — enables conversation continuity across restarts
+  await initializeChatHistory();
   // Delete any webhook on startup — webhooks and getUpdates conflict (409)
   try {
     await apiPost('deleteWebhook', { drop_pending_updates: false });
