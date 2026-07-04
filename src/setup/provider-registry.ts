@@ -143,6 +143,17 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    name: 'GLM (Zhipu)',
+    baseUrl: '', // resolved in wizard based on Coding Plan vs pay-as-you-go choice
+    envKey: 'ZHIPU_API_KEY',
+    signupUrl: 'https://z.ai',
+    models: [
+      { id: 'glm-5.2', label: 'GLM-5.2', speed: 'Powerful · 1M context', contextWindow: 1_000_000 },
+      { id: 'glm-5.1', label: 'GLM-5.1', speed: 'Powerful · agentic', contextWindow: 200_000 },
+      { id: 'glm-5',   label: 'GLM-5',   speed: 'Powerful · 744B MoE', contextWindow: 128_000 },
+    ],
+  },
+  {
     name: 'Ollama (local, free)',
     baseUrl: 'http://localhost:11434/v1',
     envKey: null, // No API key needed

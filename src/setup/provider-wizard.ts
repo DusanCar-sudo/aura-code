@@ -23,6 +23,7 @@ import {
 import { testProviderConnection } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
 import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig } from './xiaomi.js';
+import { ZHIPU_CODING_BASE_URL, ZHIPU_GENERAL_BASE_URL } from '../providers/factory.js';
 
 export interface ProviderConfig {
   provider: string;
@@ -60,11 +61,23 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
 
     let effectiveModel = model;
 
+    if (provider.name === 'GLM (Zhipu)') {
+      console.log(chalk.hex('#cc785c')('\n  Which GLM plan are you using?\n'));
+      console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Coding Plan')} ${chalk.hex('#5a4a3a')('(subscription quota)')}`);
+      console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('Pay-as-you-go')} ${chalk.hex('#5a4a3a')('(general API key)')}`);
+      const planChoice = await askInput(rl, '  ▸ Choose (1 or 2): ');
+      if (planChoice.trim() === '1') {
+        effectiveModel = `zhipu-coding/${model}`;
+      }
+    }
+
     // Build baseUrl
     let baseUrlPrompt = '  ▸ Enter base URL: ';
     const defaultBase = provider.name === 'Xiaomi MiMo'
       ? defaultXiaomiBaseUrl(apiKey ?? undefined)
-      : (provider.baseUrl || '');
+      : provider.name === 'GLM (Zhipu)'
+        ? (effectiveModel.startsWith('zhipu-coding/') ? ZHIPU_CODING_BASE_URL : ZHIPU_GENERAL_BASE_URL)
+        : (provider.baseUrl || '');
     if (defaultBase) {
       baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(defaultBase)}]: `;
     }
@@ -214,7 +227,7 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry):
     console.log(chalk.hex('#8a7768')('   2. Replace with new key\n'));
     const choice = await askInput(rl, '  ▸ Choose (1 or 2): ');
     if (choice === '2') {
-      const newKey = await askInput(rl, '  ▸ Enter new API key: ');
+      const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
       if (!newKey) {
         console.log(chalk.hex('#b15439')('  ✗ No key provided.'));
         return null;
@@ -229,7 +242,7 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry):
   if (provider.signupUrl) {
     console.log(chalk.hex('#8a7768')(`  Get one at: ${chalk.hex('#cc785c')(provider.signupUrl)}\n`));
   }
-  const newKey = await askInput(rl, '  ▸ Enter API key: ');
+  const newKey = await askSecretInput(rl, '  ▸ Enter API key: ');
   if (!newKey) {
     console.log(chalk.hex('#b15439')('  ✗ No key provided.'));
     return null;
@@ -265,7 +278,7 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig): Prom
   console.log(chalk.hex('#8a7768')('   3. Cancel\n'));
   const choice = await askInput(rl, '  ▸ Choose (1, 2, or 3): ');
   if (choice === '1') {
-    const newKey = await askInput(rl, '  ▸ Enter new API key: ');
+    const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
     if (!newKey) return null;
     config.apiKey = newKey;
     return testAndSave(rl, config); // Recursive retry
@@ -282,13 +295,32 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig): Prom
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Prompts for a line of input. Disables terminal bracketed-paste mode for
+ * the duration of the prompt — on terminals where bracketed-paste escape
+ * sequences interact badly with Node's raw TTY read, pasted text (API
+ * keys, model IDs, anything multi-character) can arrive duplicated and
+ * case-mangled. A short settle delay on each side avoids dropping the
+ * first/last character right at the paste boundary. Well-behaved
+ * terminals are unaffected either way.
+ */
 function askInput(rl: readline.Interface, prompt: string): Promise<string> {
+  const canToggle = process.stdout.isTTY;
+  if (canToggle) process.stdout.write('\x1b[?2004l'); // disable bracketed paste
   return new Promise(resolve => {
-    rl.question(chalk.hex('#cc785c')(prompt), answer => {
-      resolve((answer ?? '').trim());
-    });
+    setTimeout(() => {
+      rl.question(chalk.hex('#cc785c')(prompt), answer => {
+        setTimeout(() => {
+          if (canToggle) process.stdout.write('\x1b[?2004h'); // re-enable
+          resolve((answer ?? '').trim());
+        }, 30);
+      });
+    }, 30);
   });
 }
+
+/** Alias kept for call sites that want to be explicit about reading a secret. */
+const askSecretInput = askInput;
 
 /**
  * Save the provider config to ~/.config/aura-code/config.json and export
