@@ -62,9 +62,9 @@ function buildClient(api: { key: string; baseURL: string }): OpenAI {
   return new OpenAI({
     apiKey: api.key,
     baseURL: api.baseURL,
-    // Fail fast so a hung/slow provider falls through instead of blocking the
-    // whole chain (GLM/api.z.ai can stall without a response).
-    timeout: 20_000,
+    // Bounded so a hung provider eventually falls through, but generous enough
+    // for TTS (audio generation is slower than a chat/transcription call).
+    timeout: 60_000,
     maxRetries: 0,
     // api.z.ai silently drops requests that arrive without a User-Agent
     // (see the zai-edge memory) — always send one.
@@ -730,6 +730,52 @@ export async function speakText(text: string, voice?: string): Promise<void> {
   } catch (err) {
     console.error(chalk.hex('#b15439')('\n  TTS failed:'), String(err), '\n');
     process.exit(1);
+  }
+}
+
+/**
+ * Synthesize speech and return the WAV bytes (no playback, no process.exit).
+ * For programmatic callers like the Telegram bot that need the audio buffer
+ * to send as a voice message. Throws on failure rather than exiting.
+ */
+export async function synthesizeSpeech(text: string, voice?: string): Promise<Buffer> {
+  const apiKey = process.env.XIAOMI_API_KEY;
+  if (!apiKey) throw new Error('XIAOMI_API_KEY required for MiMo TTS');
+  const baseURL = apiKey.startsWith('tp-')
+    ? (process.env.XIAOMI_BASE_URL || 'https://token-plan-sgp.xiaomimimo.com/v1')
+    : MIMO_BASE;
+  const client = buildClient({ key: apiKey, baseURL });
+  const response = await client.chat.completions.create({
+    model: 'mimo-v2.5-tts',
+    messages: [
+      { role: 'user', content: 'Read the following text clearly and naturally with appropriate expression.' },
+      { role: 'assistant', content: text },
+    ],
+    audio: { format: 'wav', voice: voice || 'mimo_default' } as any,
+  });
+  const audioData: string | undefined = (response.choices[0]?.message as any)?.audio?.data;
+  if (!audioData) throw new Error('No audio data in TTS response');
+  return Buffer.from(audioData, 'base64');
+}
+
+/**
+ * Transcribe an existing audio file to text using the provider fallback chain.
+ * For programmatic callers (e.g. the Telegram bot receiving a voice note).
+ * Accepts any format ffmpeg can read; normalizes to 16 kHz mono wav first.
+ */
+export async function transcribeFile(audioPath: string): Promise<string> {
+  const providers = listProviders();
+  if (providers.length === 0) throw new Error('No STT provider configured (set XIAOMI_API_KEY, GROQ_API_KEY, …)');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dic-tx-'));
+  const wavPath = path.join(tmpDir, 'in.wav');
+  try {
+    execSync(
+      `ffmpeg -y -i "${audioPath}" -ar ${SAMPLE_RATE} -ac 1 "${wavPath}" 2>/dev/null`,
+      { stdio: 'pipe', timeout: 15000 },
+    );
+    return await normalizeAndTranscribe(wavPath, providers);
+  } finally {
+    cleanup(tmpDir);
   }
 }
 
