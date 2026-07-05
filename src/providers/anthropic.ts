@@ -13,11 +13,13 @@ export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
   private maxTokens: number;
 
-  constructor(config: ProviderConfig) {
+  constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
     this.maxTokens = config.maxTokens ?? 8096;
+    if (providerName) this.name = providerName;
     this.client = new Anthropic({
       apiKey: config.apiKey ?? getApiKey('ANTHROPIC_API_KEY'),
+      ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
     });
   }
 
