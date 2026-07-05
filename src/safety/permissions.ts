@@ -63,6 +63,21 @@ export class PermissionSystem {
     this.sessionApprovals.add(key);
   }
 
+  /** Current enforcement level. */
+  getLevel(): PermissionLevel {
+    return this.level;
+  }
+
+  /**
+   * Change the level at runtime — used by the REPL `:approve` command to flip
+   * a session into auto-approve (no per-command confirm) and back. Dangerous
+   * commands are STILL blocked in 'auto'; this only removes the y/N prompt for
+   * ordinary destructive-but-safe operations.
+   */
+  setLevel(level: PermissionLevel): void {
+    this.level = level;
+  }
+
   private isDangerous(cmd: string): boolean {
     return DANGEROUS_PATTERNS.some(p => p.test(cmd));
   }

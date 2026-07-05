@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
-import { dictate, speakText, listVoices, listDevices, dictationLoop } from '../tools/dictate.js';
+import { dictate, speakText, listVoices, listDevices, dictationLoop, toggleDictation } from '../tools/dictate.js';
 import minimist from 'minimist';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,18 @@ const rawArgs = process.argv.slice(2);
 const parsed = minimist(rawArgs);
 const sub = parsed._[0];
 
-if (sub === 'devices' || sub === 'device') {
+if (sub === 'toggle') {
+  // One-hotkey dictation: 1st press starts recording, 2nd press stops +
+  // transcribes + types into the focused window (with Enter). Built for a
+  // global shortcut (e.g. KDE Super+Space bound to `dic toggle`).
+  const deviceId = parsed.device || undefined;
+  const submit = parsed.submit !== false && !parsed['no-submit'];
+  toggleDictation({ deviceId, submit }).catch(e => {
+    console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
+    process.exit(1);
+  });
+
+} else if (sub === 'devices' || sub === 'device') {
   listDevices();
 
 } else if (sub === 'speak') {
@@ -41,8 +52,10 @@ if (sub === 'devices' || sub === 'device') {
   ${chalk.hex('#cc785c').bold('dic')} ${chalk.hex('#8a7768')('— speech-to-text & text-to-speech')}
 
   ${chalk.hex('#4e3d30')('Usage:')}
-    ${chalk.hex('#8a7768')('dic')}                               Record mic → transcribe (Ctrl+C to stop)
-    ${chalk.hex('#8a7768')('dic --inject')}                      Record → transcribe → paste into focused window
+    ${chalk.hex('#8a7768')('dic')}                               Record → transcribe → copy + type into focused window
+    ${chalk.hex('#8a7768')('dic --no-inject')}                   Record → transcribe → clipboard only (no typing)
+    ${chalk.hex('#8a7768')('dic toggle')}                        Hotkey mode: 1st press records, 2nd press sends (types + Enter)
+    ${chalk.hex('#8a7768')('dic toggle --no-submit')}            Toggle, but don't press Enter after typing
     ${chalk.hex('#8a7768')('dic loop')}                          Continuous: speak → type → repeat (Ctrl+C to stop)
     ${chalk.hex('#8a7768')('dic loop --silence 2000')}           Continuous with custom silence threshold (ms)
     ${chalk.hex('#8a7768')('dic --device <name>')}               Record with a specific audio device
@@ -61,8 +74,10 @@ if (sub === 'devices' || sub === 'device') {
     - STT prioritizes PARAKEET_BASE_URL > XIAOMI_API_KEY > OPENAI_API_KEY > GROQ_API_KEY
     - TTS requires XIAOMI_API_KEY (limited-time free)
     - Transcriptions are automatically copied to clipboard
-    - Use --inject (or -i) to paste directly into focused window
+    - Injection (typing into the focused window) is ON by default; use --no-inject to disable
+    - KDE/KWin Wayland rejects wtype — install ydotool and enable ydotoold for typing there
     - 'dic loop' runs continuous dictation with auto-injection
+    - 'dic toggle' is meant for a global shortcut (e.g. KDE Super+Space → dic toggle)
     - Press Ctrl+C to stop recording
 \n`);
 
@@ -76,9 +91,10 @@ if (sub === 'devices' || sub === 'device') {
   });
 
 } else {
-  // Default: dictate, optionally with --device and --inject
+  // Default: dictate. Injection is ON by default (transcription is typed into
+  // the focused window when it finishes); --no-inject gives clipboard-only.
   const deviceId = parsed.device || undefined;
-  const inject = !!(parsed.inject || parsed.i);
+  const inject = parsed.inject !== false && !parsed['clip-only'];
   dictate({ deviceId, inject }).catch(e => {
     console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
     process.exit(1);

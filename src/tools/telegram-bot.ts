@@ -7,9 +7,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
-import { exec, execSync } from 'child_process';
+import { exec, execSync, execFileSync } from 'child_process';
 import { createProvider, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
+import { transcribeFile, synthesizeSpeech } from './dictate.js';
+import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
 
@@ -22,6 +24,9 @@ interface TelegramConfig {
   default_chat_id?: string;
   model?: string;          // LLM model for chat (default: gemini-2.0-flash)
   system_prompt?: string;  // system prompt override
+  /** Telegram user IDs allowed to use the bot. If set, everyone else is
+   *  refused (the bot can run shell commands, so this gate is mandatory). */
+  allowed_user_ids?: string | string[];
 }
 
 function loadConfig(): TelegramConfig {
@@ -40,6 +45,21 @@ function loadConfig(): TelegramConfig {
 const config = loadConfig();
 const TOKEN = config.bot_token;
 const OFFSET_FILE = path.join(os.homedir(), '.aura', 'telegram.offset');
+
+// ── Authorization: only allowed users may talk to the bot ────────────────────
+// The bot can run shell commands, send files, and take webcam photos, so an
+// open door means anyone who finds it controls the PC. If allowed_user_ids is
+// set, everyone else is silently refused.
+const ALLOWED_USER_IDS: string[] = (() => {
+  const raw = config.allowed_user_ids;
+  if (!raw) return [];
+  return (Array.isArray(raw) ? raw : [raw]).map(String);
+})();
+
+function isAuthorized(userId: string | number | undefined): boolean {
+  if (ALLOWED_USER_IDS.length === 0) return true; // no allowlist configured → open (logged as a warning at startup)
+  return userId != null && ALLOWED_USER_IDS.includes(String(userId));
+}
 
 // Register custom providers from project's .aura.json (needed for deepseek/ etc.)
 const projectCfg = loadProjectConfig(process.cwd());
@@ -251,6 +271,108 @@ async function sendLocalFile(chatId: string | number, filePath: string, caption?
   }
 }
 
+// ─── Voice: download an incoming voice note, and send a voice reply ──────────
+
+/** Download a Telegram file (by file_id) to a local temp path. Returns the path. */
+async function downloadTelegramFile(fileId: string): Promise<string> {
+  const info = await apiPost('getFile', { file_id: fileId });
+  const remotePath: string = info.file_path;
+  const tmp = path.join(os.tmpdir(), `tg-voice-${Date.now()}-${path.basename(remotePath)}`);
+  await new Promise<void>((resolve, reject) => {
+    const options: https.RequestOptions = {
+      hostname: 'api.telegram.org', port: 443,
+      path: `/file/bot${TOKEN}/${remotePath}`, method: 'GET', family: 4, agent: httpsAgent,
+    };
+    const req = https.request(options, (res) => {
+      if (res.statusCode !== 200) { reject(new Error(`file download HTTP ${res.statusCode}`)); return; }
+      const out = fs.createWriteStream(tmp);
+      res.pipe(out);
+      out.on('finish', () => out.close(() => resolve()));
+      out.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, () => { req.destroy(); reject(new Error('file download timeout')); });
+    req.end();
+  });
+  return tmp;
+}
+
+/** Send a WAV buffer as a Telegram voice message (converts to OGG/Opus). */
+async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: string): Promise<void> {
+  // Telegram voice notes must be OGG/Opus, mono. Encode exactly how Telegram
+  // expects (48 kHz mono Opus, voip application) — otherwise the note shows a
+  // 0:00 empty duration. Content-Type of the part MUST be audio/ogg, not
+  // octet-stream, or Telegram won't read it as a playable voice message.
+  const tmpWav = path.join(os.tmpdir(), `tg-tts-${Date.now()}.wav`);
+  const tmpOgg = tmpWav.replace(/\.wav$/, '.ogg');
+  fs.writeFileSync(tmpWav, wavBuffer);
+  try {
+    execSync(
+      `ffmpeg -y -i "${tmpWav}" -ac 1 -ar 48000 -c:a libopus -b:a 24k -application voip "${tmpOgg}" 2>/dev/null`,
+      { stdio: 'pipe', timeout: 20000 },
+    );
+  } catch {
+    // No opus encoder — fall back to sending the WAV as an audio file.
+    try { fs.unlinkSync(tmpOgg); } catch {}
+  }
+  const haveOgg = fs.existsSync(tmpOgg) && fs.statSync(tmpOgg).size > 0;
+  const sendPath = haveOgg ? tmpOgg : tmpWav;
+  const fieldName = haveOgg ? 'voice' : 'audio';
+  const method = haveOgg ? 'sendVoice' : 'sendAudio';
+  const partMime = haveOgg ? 'audio/ogg' : 'audio/wav';
+  // Upload via curl, NOT a hand-built Node multipart body: an identical OGG
+  // sent through Node's raw https multipart arrives at Telegram with
+  // duration:0 (empty voice note), while the exact same bytes via curl come
+  // through as a proper duration:N voice message. curl's multipart framing is
+  // what Telegram's Opus parser expects; ours subtly isn't. So shell out.
+  try {
+    const args = [
+      '-s', '--max-time', '60',
+      '-F', `chat_id=${chatId}`,
+      '-F', `${fieldName}=@${sendPath};type=${partMime}`,
+    ];
+    if (caption) args.push('-F', `caption=${caption}`);
+    args.push(`https://api.telegram.org/bot${TOKEN}/${method}`);
+    const out = execFileSync('curl', args, { encoding: 'utf8', timeout: 65000 });
+    const parsed = JSON.parse(out);
+    if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
+  } finally {
+    try { fs.unlinkSync(tmpWav); } catch {}
+    try { fs.unlinkSync(tmpOgg); } catch {}
+  }
+}
+
+// ─── Photo + camera ─────────────────────────────────────────────────────────
+
+/** Send an image file as a Telegram photo (via curl — same reliable path as voice). */
+async function sendPhoto(chatId: string | number, imagePath: string, caption?: string): Promise<void> {
+  if (!fs.existsSync(imagePath)) throw new Error(`image not found: ${imagePath}`);
+  const args = ['-s', '--max-time', '60', '-F', `chat_id=${chatId}`, '-F', `photo=@${imagePath}`];
+  if (caption) args.push('-F', `caption=${caption}`);
+  args.push(`https://api.telegram.org/bot${TOKEN}/sendPhoto`);
+  const out = execFileSync('curl', args, { encoding: 'utf8', timeout: 65000 });
+  const parsed = JSON.parse(out);
+  if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
+}
+
+/**
+ * Capture a single frame from a webcam and return the JPEG path (caller sends
+ * + cleans up). Uses ffmpeg v4l2 on Dušan's integrated camera (/dev/video0).
+ */
+function captureWebcam(device = '/dev/video0'): string {
+  const out = path.join(os.tmpdir(), `cam-${Date.now()}.jpg`);
+  // -update 1 lets a single-image output overwrite cleanly; small warmup helps
+  // the sensor auto-expose before the grab.
+  execSync(
+    `ffmpeg -y -f v4l2 -i "${device}" -frames:v 1 -update 1 "${out}" 2>/dev/null`,
+    { stdio: 'pipe', timeout: 20000 },
+  );
+  if (!fs.existsSync(out) || fs.statSync(out).size < 1000) {
+    throw new Error(`camera capture failed (${device})`);
+  }
+  return out;
+}
+
 function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
   const chunks: string[] = [];
@@ -323,26 +445,10 @@ async function saveSession(chatId: string, history: HistoryMessage[]): Promise<v
 }
 
 function loadIdentityFromMemory(): string {
-  const memDir = path.join(os.homedir(), '.aura', 'memory');
-  const lines: string[] = [];
-  
-  // Load key identity namespaces
-  for (const ns of ['user', 'default']) {
-    const file = path.join(memDir, `${ns}.json`);
-    if (!fs.existsSync(file)) continue;
-    try {
-      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-      const identityKeys = ['creator', 'creator-full', 'user-name', 'user-id', 'user-role'];
-      for (const key of identityKeys) {
-        if (data[key]?.value) {
-          lines.push(`${key}: ${data[key].value}`);
-        }
-      }
-    } catch { /* skip */ }
-  }
-
-  if (lines.length === 0) return '';
-  return '\n## O korisniku (iz memorije)\n' + lines.join('\n');
+  // Unified memory: full global identity/facts (shared with the CLI) plus the
+  // global episodic-lessons digest. No projectRoot → the bot isn't tied to one
+  // project, so it gets the cross-project lessons summary.
+  return loadUnifiedMemory({ maxChars: 3500 });
 }
 
 // Build system prompt once on first use — includes user identity from memory
@@ -351,11 +457,14 @@ function buildSystemPrompt(): string {
     _identityBlock = loadIdentityFromMemory();
   }
   const base = config.system_prompt || [
-    'Ti si Aura — AI asistent. Odgovaraš kratko, precizno, na srpskom.',
-    'Korisnik je Dušan — tvoj kreator. Zovi ga po imenu kad je prirodno.',
-    'Poznaješ ga dobro — on te napravio. Budi topla ali profesionalna.',
-    'Ako pitaš za pomoć reci "/help za komande".',
-    'Ne izmišljaj — budi iskrena ako ne znaš.',
+    'You are Aura — a precise, self-aware AI assistant. Reply concisely.',
+    'ALWAYS reply in the SAME language the user just wrote in: if they write in',
+    'English, answer in English; if in Serbian, answer in Serbian. Match their',
+    'language every message — never default to Serbian when they wrote English.',
+    'The user is Dušan — your creator. Use his name when natural. You know him',
+    'well; he built you. Be warm but professional.',
+    'If asked for help, say "/help for commands".',
+    'Never make things up — be honest when you don\'t know.',
   ].join(' ');
   return base + _identityBlock;
 }
@@ -432,25 +541,192 @@ function getChatProvider(): LLMProvider {
   return _chatProvider;
 }
 
+/** Block only truly catastrophic commands; everything else is allowed. Shared
+ *  by /run and the agentic chat loop so both enforce the same floor. */
+function isCatastrophic(cmd: string): boolean {
+  const banned = [
+    'rm -rf /', 'rm -rf /*', 'rm -rf ~', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
+    ':(){ :|:& };:', 'fork bomb', 'shutdown', 'poweroff', 'init 0', 'halt', 'reboot',
+    '> /dev/sda', 'chmod -R 000 /', 'chown -R',
+  ];
+  const c = cmd.toLowerCase();
+  return banned.some(d => c.includes(d.toLowerCase()));
+}
+
+/**
+ * A command is "read-only" (safe to run without approval) only if EVERY
+ * whitespace/pipe/;-separated segment starts with a known inspection command
+ * AND it contains no output redirection. Anything else (writes, installs,
+ * deletes, unknown binaries) requires explicit approval. Deny-by-default: if
+ * we're not sure it's read-only, we treat it as needing approval.
+ */
+const READ_ONLY_CMDS = new Set([
+  'ls', 'cat', 'pwd', 'whoami', 'date', 'df', 'du', 'ps', 'top', 'free', 'uname',
+  'which', 'find', 'grep', 'rg', 'head', 'tail', 'wc', 'echo', 'stat', 'file',
+  'git', 'uptime', 'hostname', 'id', 'env', 'printenv', 'lsblk', 'lscpu', 'sensors',
+  'nvidia-smi', 'systemctl', 'journalctl', 'sort', 'uniq', 'cut', 'awk', 'sed',
+]);
+function isReadOnlyCommand(cmd: string): boolean {
+  if (/[>]|>>|\btee\b|\bdd\b/.test(cmd)) return false;       // any redirection → mutating
+  // git/systemctl subcommands that mutate:
+  if (/\bgit\s+(push|commit|reset|checkout|clean|rm|merge|rebase|stash\s+drop)\b/.test(cmd)) return false;
+  if (/\bsystemctl\s+(start|stop|restart|enable|disable|mask)\b/.test(cmd)) return false;
+  // Split on shell separators; every segment's first token must be read-only.
+  const segments = cmd.split(/\||;|&&|\|\|/).map(s => s.trim()).filter(Boolean);
+  if (segments.length === 0) return false;
+  for (const seg of segments) {
+    const first = seg.split(/\s+/)[0].replace(/^sudo$/, '');
+    if (first === 'sudo') return false;                       // sudo always needs approval
+    if (!READ_ONLY_CMDS.has(first)) return false;
+  }
+  return true;
+}
+
+const AGENT_MAX_STEPS = 4;
+
+// ── Approval flow ─────────────────────────────────────────────────────────────
+// Mutating actions from the agent (or /run) don't execute immediately — they
+// send an inline ✅/❌ to Dušan and wait. The callback handler in the poll loop
+// resolves the matching promise. Keyed by a short callback id.
+interface PendingApproval {
+  resolve: (approved: boolean) => void;
+  command: string;
+  createdAt: number;
+}
+const pendingApprovals = new Map<string, PendingApproval>();
+const APPROVAL_TIMEOUT_MS = 5 * 60_000;
+
+/** Ask Dušan to approve a command; resolves true/false (false on timeout). */
+async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
+  const id = `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const keyboard = {
+    inline_keyboard: [[
+      { text: '✅ Approve', callback_data: `ok:${id}` },
+      { text: '❌ Deny', callback_data: `no:${id}` },
+    ]],
+  };
+  await apiPost('sendMessage', {
+    chat_id: chatId,
+    text: `⚠️ Approve ${label}?\n\n\`${command.slice(0, 300)}\``,
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+  return new Promise<boolean>((resolve) => {
+    pendingApprovals.set(id, { resolve, command, createdAt: Date.now() });
+    setTimeout(() => {
+      const p = pendingApprovals.get(id);
+      if (p) { pendingApprovals.delete(id); p.resolve(false); }
+    }, APPROVAL_TIMEOUT_MS);
+  });
+}
+
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
   const provider = getChatProvider();
-  const systemPrompt = buildSystemPrompt();
+  // Agentic system prompt: the model may run real shell commands on Dušan's PC
+  // by emitting a line `RUN: <command>`. The bot executes it and feeds the
+  // output back so the model can answer from real data (processes, files, etc).
+  const systemPrompt = buildSystemPrompt() + [
+    '',
+    '## You CAN act on this computer (actions)',
+    'You run on Dušan\'s Linux PC and have real abilities. To act, emit ONE line',
+    'that is JUST the action (nothing else in that reply); the system performs it,',
+    'sends you the result, and you then give your natural answer:',
+    '  • `RUN: <shell command>` — inspect the PC (ps, free -h, df -h, ls, cat,',
+    '    grep, git status…). Prefer read-only commands.',
+    '  • `SEND: <file path>` — send a file to Dušan on Telegram (images go as',
+    '    photos, everything else as a document). Use this whenever he asks you to',
+    '    send / share / give him a file. You DO have file-sending ability.',
+    '  • `CAM: [device]` — capture a webcam snapshot (default /dev/video0, the',
+    '    integrated camera) and send it. Use for surveillance / "show me the room"',
+    '    / "take a photo" requests.',
+    'NEVER claim you cannot send files or take photos — you can, via SEND and CAM.',
+    'Only use an action when needed; for normal conversation just reply directly.',
+  ].join('\n');
 
-  // Build history: recent context + the new message
   const recent = getChatHistory(chatId).slice(-(CHAT_HISTORY_MAX - 1));
   const history: HistoryMessage[] = [...recent, { role: 'user', content: userMessage }];
-
   await pushToHistory(String(chatId), { role: 'user', content: userMessage });
 
-  console.error(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}] LLM: sending to ${provider.name}/${provider.model} (history: ${history.length} msgs)`);
+  const ts0 = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
   try {
-    const response = await provider.complete(systemPrompt, history, []);
-    const reply = response.text || '(no response from model)';
-    await pushToHistory(String(chatId), { role: 'assistant', content: reply });
-    return reply;
+    let finalReply = '';
+    for (let step = 0; step < AGENT_MAX_STEPS; step++) {
+      const response = await provider.complete(systemPrompt, history, []);
+      const text = (response.text || '').trim();
+
+      // Which action does the model want? RUN (shell), SEND (a file), CAM (webcam).
+      // Models often wrap the directive in markdown — a leading backtick, bullet,
+      // or blockquote — so tolerate those and strip a trailing backtick from the
+      // argument. Without this the action leaks out as visible text.
+      const action = text.match(/(?:^|\n)[ \t`>*_-]*(RUN|SEND|CAM):[ \t]*`?([^\n`]+)/);
+      if (!action) {
+        // No action → this is the answer. Strip any stray directive fragments
+        // so raw "SEND:/RUN:" text never shows to the user.
+        finalReply = (text || '(no response from model)')
+          .replace(/[ \t`>*_-]*(RUN|SEND|CAM):[^\n]*/g, '').replace(/\n{3,}/g, '\n\n').trim()
+          || '(no response from model)';
+        break;
+      }
+      const verb = action[1];
+      const arg = (action[2] || '').trim().replace(/`+$/, '').trim();
+
+      let toolOut: string;
+      try {
+        if (verb === 'RUN') {
+          console.error(`[${ts0()}] agent RUN: ${arg}`);
+          if (isCatastrophic(arg)) {
+            toolOut = 'BLOCKED: refused as catastrophic. Do not retry this command.';
+          } else if (!isReadOnlyCommand(arg)) {
+            // Mutating / unknown command → require Dušan's explicit approval.
+            const approved = await requestApproval(chatId, 'this command', arg);
+            if (!approved) {
+              toolOut = 'DENIED by user (not approved). Do not retry; suggest an alternative or ask.';
+            } else {
+              const r = await execShell(arg);
+              toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
+            }
+          } else {
+            const r = await execShell(arg);
+            toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
+          }
+        } else if (verb === 'SEND') {
+          console.error(`[${ts0()}] agent SEND: ${arg}`);
+          const resolved = path.isAbsolute(arg) ? arg : path.join(DEFAULT_CWD, arg);
+          if (!fs.existsSync(resolved)) {
+            toolOut = `File not found: ${arg}`;
+          } else {
+            const ext = path.extname(resolved).toLowerCase();
+            if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+              await sendPhoto(chatId, resolved);
+            } else {
+              await sendLocalFile(chatId, resolved);
+            }
+            toolOut = `Sent ${path.basename(resolved)} to the user.`;
+          }
+        } else { // CAM
+          console.error(`[${ts0()}] agent CAM: ${arg || 'default'}`);
+          const shot = captureWebcam(arg || undefined);
+          await sendPhoto(chatId, shot, 'Camera snapshot');
+          try { fs.unlinkSync(shot); } catch {}
+          toolOut = 'Captured a webcam snapshot and sent it to the user.';
+        }
+      } catch (e: any) {
+        toolOut = `Action failed: ${e?.message || String(e)}`;
+      }
+
+      // Feed the action + its result back and let the model continue.
+      history.push({ role: 'assistant', content: `${verb}: ${arg}` });
+      history.push({ role: 'user', content: `[result]\n${toolOut}` });
+
+      if (step === AGENT_MAX_STEPS - 1) {
+        const wrap = await provider.complete(systemPrompt, history, []);
+        finalReply = (wrap.text || '').replace(/^(RUN|SEND|CAM):.*$/m, '').trim() || '(done)';
+      }
+    }
+    await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });
+    return finalReply;
   } catch (e: any) {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    console.error(`[${now}] LLM error: ${e?.message || String(e)}`);
+    console.error(`[${ts0()}] LLM error: ${e?.message || String(e)}`);
     return `❌ AI greška: ${e?.message || 'Nepoznata greška'}. Probaj /help.`;
   }
 }
@@ -543,6 +819,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/sendfile <path> — Pošalji fajl sa tvog PC-ja na Telegram`,
       `/find <pattern> — Pronađi fajlove na tvom PC-ju`,
       `/run <cmd> — Izvrši shell komandu na tvom PC-ju`,
+      `/cam — Snimi i pošalji sliku sa kamere (nadzor)`,
       `/git — Git status`,
       ``,
       `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
@@ -622,14 +899,13 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     const cmd = text.slice(4).trim();
     if (!cmd) return '❌ Usage: /run <command>';
 
-    // Safety: allow most commands but block truly dangerous ones
-    const extremelyDangerous = [
-      'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
-      ':(){ :|:& };:', 'fork bomb', 'shutdown -h', 'poweroff', 'init 0', 'halt',
-    ];
-    const isDangerous = extremelyDangerous.some(d => cmd.toLowerCase().includes(d.toLowerCase()));
-    if (isDangerous) {
+    if (isCatastrophic(cmd)) {
       return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
+    }
+    // Mutating commands need an explicit ✅ approval; read-only run immediately.
+    if (!isReadOnlyCommand(cmd)) {
+      const approved = await requestApproval(chatId, 'this command', cmd);
+      if (!approved) return '❌ Denied — command not run.';
     }
 
     const result = await execShell(cmd);
@@ -694,10 +970,29 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       const stats = fs.statSync(resolved);
       const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
       await sendMessage(chatId, `📤 Sending file: ${path.basename(resolved)} (${sizeMB}MB)`);
-      await sendLocalFile(chatId, resolved);
+      const ext = path.extname(resolved).toLowerCase();
+      if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+        await sendPhoto(chatId, resolved);
+      } else {
+        await sendLocalFile(chatId, resolved);
+      }
       return `✅ File sent: ${path.basename(resolved)}`;
     } catch (e: any) {
       return `❌ Error sending file: ${e.message}`;
+    }
+  }
+
+  // /cam or /photo — capture a webcam snapshot and send it (surveillance).
+  if (lower === '/cam' || lower === '/photo' || lower.startsWith('/cam ') || lower.startsWith('/photo ')) {
+    const device = text.split(/\s+/)[1] || '/dev/video0';
+    try {
+      await sendMessage(chatId, '📷 Capturing snapshot…');
+      const shot = captureWebcam(device);
+      await sendPhoto(chatId, shot, `Snapshot ${new Date().toLocaleString()}`);
+      try { fs.unlinkSync(shot); } catch {}
+      return '✅ Snapshot sent.';
+    } catch (e: any) {
+      return `❌ Camera error: ${e.message}`;
     }
   }
 
@@ -752,78 +1047,11 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return `⚡ ${text}\n${truncated}`;
   }
 
-  // ── Natural language file operations ───────────────────────────────────────────
-
-  // "send me file X" or "get file X"
-  const sendFileMatch = text.match(/(?:send|get|pošalji|daj)\s+(?:me\s+)?(?:file\s+)?[\"']?([\w\-./\\\s]+)[\"']?/i);
-  if (sendFileMatch) {
-    const filePath = sendFileMatch[1].trim();
-    const resolved = path.isAbsolute(filePath) ? filePath : path.join(DEFAULT_CWD, filePath);
-
-    if (!fs.existsSync(resolved)) {
-      return `❌ File not found: ${filePath}\n💡 Try /find to search for files`;
-    }
-
-    try {
-      const stats = fs.statSync(resolved);
-      const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
-      await sendMessage(chatId, `📤 Sending file: ${path.basename(resolved)} (${sizeMB}MB)`);
-      await sendLocalFile(chatId, resolved);
-      return `✅ File sent: ${path.basename(resolved)}`;
-    } catch (e: any) {
-      return `❌ Error sending file: ${e.message}`;
-    }
-  }
-
-  // "find file X" or "search for file X"
-  const findFileMatch = text.match(/(?:find|search|traži|pronadji)\s+(?:file\s+)?[\"']?([\w\-.\s]+)[\"']?/i);
-  if (findFileMatch) {
-    const pattern = findFileMatch[1].trim();
-    try {
-      const searchDir = DEFAULT_CWD;
-      const cmd = `find "${searchDir}" -name "*${pattern}*" -type f 2>/dev/null | head -20`;
-      const result = await execShell(cmd);
-      const files = result.stdout.trim().split('\n').filter(f => f);
-
-      if (files.length === 0 || files[0] === '') {
-        return `🔍 No files found matching "${pattern}"\n💡 Try searching in a specific directory with /find`;
-      }
-
-      const lines = files.map(f => {
-        const name = path.basename(f);
-        const rel = path.relative(DEFAULT_CWD, f);
-        const stats = fs.statSync(f);
-        const size = (stats.size / 1024).toFixed(1) + 'KB';
-        return `📄 ${name} (${size})\n   ${rel}`;
-      });
-
-      return `🔍 Found ${files.length} file(s):\n${lines.join('\n')}\n\n💡 Say "send me <path>" to get any file`;
-    } catch (e: any) {
-      return `❌ Search error: ${e.message}`;
-    }
-  }
-
-  // "run X" or "execute X" for natural language command execution
-  const runCmdMatch = text.match(/(?:run|execute|izvrši|pokreni)\s+(.+)/i);
-  if (runCmdMatch) {
-    const cmd = runCmdMatch[1].trim();
-
-    const extremelyDangerous = [
-      'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
-      ':(){ :|:& };:', 'fork bomb', 'shutdown -h', 'poweroff', 'init 0', 'halt',
-    ];
-    const isDangerous = extremelyDangerous.some(d => cmd.toLowerCase().includes(d.toLowerCase()));
-    if (isDangerous) {
-      return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
-    }
-
-    const result = await execShell(cmd);
-    const output = result.stdout || result.stderr || '(no output)';
-    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
-    return `⚡ ${cmd}\n${result.code === 0 ? '✅' : '❌'} exit ${result.code}\n${truncated}`;
-  }
-
-  // Default: ask the LLM
+  // Everything else → the agentic LLM. It decides for itself when to run a
+  // command (via `RUN:`), so we no longer keyword-match "send/find/run/search"
+  // in free text. Those greedy matchers hijacked normal conversation — e.g. a
+  // message that merely contained "find" or "search" got treated as a file
+  // search ("No files found matching …"). Explicit /-commands still work above.
   return await chatWithLLM(String(chatId), text, from);
 }
 
@@ -887,25 +1115,87 @@ async function poll(): Promise<void> {
         offset = update.update_id + 1;
         saveOffset(offset);
 
+        // Approval button taps (✅/❌) arrive as callback_query, not messages.
+        const cb = update.callback_query;
+        if (cb) {
+          const cbAuthorized = isAuthorized(cb.from?.id);
+          const data: string = cb.data ?? '';
+          const m = data.match(/^(ok|no):(.+)$/);
+          let note = 'Expired or already handled.';
+          if (cbAuthorized && m) {
+            const pending = pendingApprovals.get(m[2]);
+            if (pending) {
+              pendingApprovals.delete(m[2]);
+              const approved = m[1] === 'ok';
+              pending.resolve(approved);
+              note = approved ? '✅ Approved' : '❌ Denied';
+            }
+          } else if (!cbAuthorized) {
+            note = '🚫 Not authorized.';
+          }
+          // Acknowledge the tap (removes the spinner) and update the message.
+          try { await apiPost('answerCallbackQuery', { callback_query_id: cb.id, text: note }); } catch { /* ignore */ }
+          try {
+            await apiPost('editMessageText', {
+              chat_id: cb.message?.chat?.id,
+              message_id: cb.message?.message_id,
+              text: `${cb.message?.text ?? ''}\n\n${note}`,
+            });
+          } catch { /* ignore */ }
+          continue;
+        }
+
         const msg = update.message;
-        if (!msg || !msg.text) continue;
+        if (!msg) continue;
 
         const chatId = msg.chat.id;
-        const text = msg.text;
         const from = msg.from?.first_name ?? msg.from?.username ?? 'unknown';
 
-        console.log(`[${ts()}] 📩 [${from}]: ${text}`);
-
-        try {
-          const response = await handleCommand(chatId, text, from);
-          await sendMessage(chatId, response);
-          console.log(`[${ts()}] 📤 Replied to ${from}`);
-        } catch (e: any) {
-          console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
-          try {
-            await sendMessage(chatId, `❌ Greška: ${e.message}`);
-          } catch { /* give up */ }
+        // AUTH GATE — refuse anyone not on the allowlist. The bot controls the
+        // PC, so this is the primary security boundary.
+        if (!isAuthorized(msg.from?.id)) {
+          console.error(`[${ts()}] 🚫 Unauthorized ${from} (id ${msg.from?.id}) — refused: ${(msg.text ?? '(non-text)').slice(0, 60)}`);
+          try { await sendMessage(chatId, '🚫 Not authorized.'); } catch { /* ignore */ }
+          continue;
         }
+
+        // Handle the message WITHOUT blocking the poll loop. A command may wait
+        // on an approval tap (requestApproval), and that tap arrives as a later
+        // update — if we awaited the handler here, the loop couldn't fetch it
+        // (deadlock). So process each message as a detached task; the loop keeps
+        // polling and can deliver the callback that unblocks it.
+        void (async () => {
+          try {
+            let text: string = msg.text ?? '';
+            let cameFromVoice = false;
+            const voice = msg.voice || msg.audio;
+            if (!text && voice?.file_id) {
+              cameFromVoice = true;
+              const audioPath = await downloadTelegramFile(voice.file_id);
+              text = await transcribeFile(audioPath);
+              try { fs.unlinkSync(audioPath); } catch {}
+              console.log(`[${ts()}] 🎤 [${from}] (voice): ${text}`);
+              if (text) await sendMessage(chatId, `🎤 “${text}”`);
+            }
+            if (!text) return;
+            if (!cameFromVoice) console.log(`[${ts()}] 📩 [${from}]: ${text}`);
+
+            const response = await handleCommand(chatId, text, from);
+            await sendMessage(chatId, response);
+            if (cameFromVoice) {
+              try {
+                const wav = await synthesizeSpeech(response.slice(0, 1000));
+                await sendVoice(chatId, wav);
+              } catch (e: any) {
+                console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
+              }
+            }
+            console.log(`[${ts()}] 📤 Replied to ${from}`);
+          } catch (e: any) {
+            console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
+            try { await sendMessage(chatId, `❌ Greška: ${e.message}`); } catch { /* give up */ }
+          }
+        })();
       }
 
       // Periodic heartbeat
