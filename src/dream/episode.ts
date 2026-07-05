@@ -60,3 +60,24 @@ export function listEpisodes(root: string): Episode[] {
 export function listEpisodesSince(root: string, sinceMs: number): Episode[] {
   return listEpisodes(root).filter(e => e.timestamp > sinceMs);
 }
+
+/** All episodes across EVERY project (used for the global lessons digest). */
+export function listAllEpisodes(): Episode[] {
+  const base = path.join(os.homedir(), '.aura', 'episodes');
+  if (!fs.existsSync(base)) return [];
+  const episodes: Episode[] = [];
+  for (const proj of fs.readdirSync(base)) {
+    const dir = path.join(base, proj);
+    let files: string[];
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+      files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    } catch { continue; }
+    for (const f of files) {
+      try {
+        episodes.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+      } catch { /* skip corrupt entries */ }
+    }
+  }
+  return episodes.sort((a, b) => a.timestamp - b.timestamp);
+}

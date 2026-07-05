@@ -6,7 +6,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { LLMProvider } from '../providers/types.js';
-import { listEpisodes, listEpisodesSince, type Episode } from './episode.js';
+import * as os from 'os';
+import { listEpisodes, listEpisodesSince, listAllEpisodes, type Episode } from './episode.js';
 
 function dreamsDir(root: string): string {
   return path.join(root, 'dreams');
@@ -207,6 +208,60 @@ export function getReconciledOrLatest(root: string): { content: string; isReconc
   if (files.length === 0) return null;
   const latest = path.join(dreamsDir(root), files[files.length - 1]);
   return { content: fs.readFileSync(latest, 'utf8'), isReconciled: false };
+}
+
+/**
+ * Global lessons digest — pure statistics over EVERY project's episodes.
+ * Written to ~/.aura/memory/lessons-global.md for the Telegram bot (which
+ * isn't tied to one project). No LLM call: counts successes/failures per model
+ * and surfaces the most recent activity. Mirrors runReconciliation's "trust
+ * numbers, not a model's guess" philosophy.
+ */
+export function runGlobalReconciliation(): string {
+  const episodes = listAllEpisodes();
+  const outPath = path.join(os.homedir(), '.aura', 'memory', 'lessons-global.md');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+
+  if (episodes.length === 0) {
+    const empty = '# Global Lessons\n\n(no episodes recorded yet)\n';
+    fs.writeFileSync(outPath, empty);
+    return empty;
+  }
+
+  // Per-model success stats. Skip episodes with no model recorded (older
+  // entries predate model capture) — they'd show as a meaningless "undefined".
+  const byModel = new Map<string, { ok: number; fail: number }>();
+  for (const e of episodes) {
+    if (!e.model || e.model === 'undefined') continue;
+    const m = byModel.get(e.model) ?? { ok: 0, fail: 0 };
+    if (e.success) m.ok++; else m.fail++;
+    byModel.set(e.model, m);
+  }
+  const total = episodes.length;
+  const ok = episodes.filter(e => e.success).length;
+
+  const lines: string[] = [
+    '# Global Lessons (across all projects)',
+    '',
+    `Generated from ${total} episode(s) — ${ok} succeeded, ${total - ok} failed (${((ok / total) * 100).toFixed(0)}% success).`,
+    '',
+    '## Model reliability',
+  ];
+  for (const [model, s] of [...byModel.entries()].sort((a, b) => (b[1].ok + b[1].fail) - (a[1].ok + a[1].fail))) {
+    const n = s.ok + s.fail;
+    lines.push(`- **${model}**: ${s.ok}/${n} succeeded (${((s.ok / n) * 100).toFixed(0)}%)`);
+  }
+
+  // Most recent tasks (a quick "what has Aura been doing lately").
+  lines.push('', '## Recent activity');
+  for (const e of episodes.slice(-8).reverse()) {
+    const date = new Date(e.timestamp).toISOString().slice(0, 10);
+    lines.push(`- [${date}] ${e.success ? '✓' : '✗'} (${e.model}) ${e.task.slice(0, 120)}`);
+  }
+
+  const output = lines.join('\n') + '\n';
+  fs.writeFileSync(outPath, output);
+  return output;
 }
 
 /** For system-prompt injection — the reconciled memory, truncated, or empty string if none exists. */
