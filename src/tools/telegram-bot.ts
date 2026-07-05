@@ -324,6 +324,37 @@ async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: s
   }
 }
 
+// ─── Photo + camera ─────────────────────────────────────────────────────────
+
+/** Send an image file as a Telegram photo (via curl — same reliable path as voice). */
+async function sendPhoto(chatId: string | number, imagePath: string, caption?: string): Promise<void> {
+  if (!fs.existsSync(imagePath)) throw new Error(`image not found: ${imagePath}`);
+  const args = ['-s', '--max-time', '60', '-F', `chat_id=${chatId}`, '-F', `photo=@${imagePath}`];
+  if (caption) args.push('-F', `caption=${caption}`);
+  args.push(`https://api.telegram.org/bot${TOKEN}/sendPhoto`);
+  const out = execFileSync('curl', args, { encoding: 'utf8', timeout: 65000 });
+  const parsed = JSON.parse(out);
+  if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
+}
+
+/**
+ * Capture a single frame from a webcam and return the JPEG path (caller sends
+ * + cleans up). Uses ffmpeg v4l2 on Dušan's integrated camera (/dev/video0).
+ */
+function captureWebcam(device = '/dev/video0'): string {
+  const out = path.join(os.tmpdir(), `cam-${Date.now()}.jpg`);
+  // -update 1 lets a single-image output overwrite cleanly; small warmup helps
+  // the sensor auto-expose before the grab.
+  execSync(
+    `ffmpeg -y -f v4l2 -i "${device}" -frames:v 1 -update 1 "${out}" 2>/dev/null`,
+    { stdio: 'pipe', timeout: 20000 },
+  );
+  if (!fs.existsSync(out) || fs.statSync(out).size < 1000) {
+    throw new Error(`camera capture failed (${device})`);
+  }
+  return out;
+}
+
 function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
   const chunks: string[] = [];
@@ -513,14 +544,20 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
   // output back so the model can answer from real data (processes, files, etc).
   const systemPrompt = buildSystemPrompt() + [
     '',
-    '## PC access (you CAN act on this computer)',
-    'You are running on Dušan\'s Linux PC and CAN inspect it. When answering needs',
-    'live system data (running processes, memory, disk, files, git, etc.), emit a',
-    'single line starting with `RUN: ` followed by ONE shell command, and nothing',
-    'else in that reply. The system will run it and send you the output; then give',
-    'your natural answer. Prefer safe read-only commands (ps, top -bn1, free -h,',
-    'df -h, ls, cat, grep, git status). Never claim you lack PC access — you have it.',
-    'Only use RUN when actually needed; for normal conversation just reply directly.',
+    '## You CAN act on this computer (actions)',
+    'You run on Dušan\'s Linux PC and have real abilities. To act, emit ONE line',
+    'that is JUST the action (nothing else in that reply); the system performs it,',
+    'sends you the result, and you then give your natural answer:',
+    '  • `RUN: <shell command>` — inspect the PC (ps, free -h, df -h, ls, cat,',
+    '    grep, git status…). Prefer read-only commands.',
+    '  • `SEND: <file path>` — send a file to Dušan on Telegram (images go as',
+    '    photos, everything else as a document). Use this whenever he asks you to',
+    '    send / share / give him a file. You DO have file-sending ability.',
+    '  • `CAM: [device]` — capture a webcam snapshot (default /dev/video0, the',
+    '    integrated camera) and send it. Use for surveillance / "show me the room"',
+    '    / "take a photo" requests.',
+    'NEVER claim you cannot send files or take photos — you can, via SEND and CAM.',
+    'Only use an action when needed; for normal conversation just reply directly.',
   ].join('\n');
 
   const recent = getChatHistory(chatId).slice(-(CHAT_HISTORY_MAX - 1));
@@ -534,28 +571,54 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       const response = await provider.complete(systemPrompt, history, []);
       const text = (response.text || '').trim();
 
-      // Does the model want to run a command?
-      const m = text.match(/^RUN:\s*([\s\S]+)$/m);
-      const runCmd = m ? m[1].trim().split('\n')[0].trim() : '';
-      if (!runCmd) { finalReply = text || '(no response from model)'; break; }
+      // Which action does the model want? RUN (shell), SEND (a file), CAM (webcam).
+      const action = text.match(/^(RUN|SEND|CAM):\s*(.*)$/m);
+      if (!action) { finalReply = text || '(no response from model)'; break; }
+      const verb = action[1];
+      const arg = (action[2] || '').trim().split('\n')[0].trim();
 
-      console.error(`[${ts0()}] agent RUN: ${runCmd}`);
       let toolOut: string;
-      if (isCatastrophic(runCmd)) {
-        toolOut = 'BLOCKED: refused as catastrophic. Do not retry this command.';
-      } else {
-        const r = await execShell(runCmd);
-        const out = (r.stdout || r.stderr || '(no output)').slice(0, 3000);
-        toolOut = `exit ${r.code}\n${out}`;
+      try {
+        if (verb === 'RUN') {
+          console.error(`[${ts0()}] agent RUN: ${arg}`);
+          if (isCatastrophic(arg)) {
+            toolOut = 'BLOCKED: refused as catastrophic. Do not retry this command.';
+          } else {
+            const r = await execShell(arg);
+            toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
+          }
+        } else if (verb === 'SEND') {
+          console.error(`[${ts0()}] agent SEND: ${arg}`);
+          const resolved = path.isAbsolute(arg) ? arg : path.join(DEFAULT_CWD, arg);
+          if (!fs.existsSync(resolved)) {
+            toolOut = `File not found: ${arg}`;
+          } else {
+            const ext = path.extname(resolved).toLowerCase();
+            if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+              await sendPhoto(chatId, resolved);
+            } else {
+              await sendLocalFile(chatId, resolved);
+            }
+            toolOut = `Sent ${path.basename(resolved)} to the user.`;
+          }
+        } else { // CAM
+          console.error(`[${ts0()}] agent CAM: ${arg || 'default'}`);
+          const shot = captureWebcam(arg || undefined);
+          await sendPhoto(chatId, shot, 'Camera snapshot');
+          try { fs.unlinkSync(shot); } catch {}
+          toolOut = 'Captured a webcam snapshot and sent it to the user.';
+        }
+      } catch (e: any) {
+        toolOut = `Action failed: ${e?.message || String(e)}`;
       }
-      // Feed the command + its output back and let the model continue.
-      history.push({ role: 'assistant', content: `RUN: ${runCmd}` });
-      history.push({ role: 'user', content: `[command output]\n${toolOut}` });
+
+      // Feed the action + its result back and let the model continue.
+      history.push({ role: 'assistant', content: `${verb}: ${arg}` });
+      history.push({ role: 'user', content: `[result]\n${toolOut}` });
 
       if (step === AGENT_MAX_STEPS - 1) {
-        // Out of steps — ask once more for a plain answer.
         const wrap = await provider.complete(systemPrompt, history, []);
-        finalReply = (wrap.text || '').replace(/^RUN:.*$/m, '').trim() || '(done)';
+        finalReply = (wrap.text || '').replace(/^(RUN|SEND|CAM):.*$/m, '').trim() || '(done)';
       }
     }
     await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });
@@ -654,6 +717,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/sendfile <path> — Pošalji fajl sa tvog PC-ja na Telegram`,
       `/find <pattern> — Pronađi fajlove na tvom PC-ju`,
       `/run <cmd> — Izvrši shell komandu na tvom PC-ju`,
+      `/cam — Snimi i pošalji sliku sa kamere (nadzor)`,
       `/git — Git status`,
       ``,
       `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
@@ -799,10 +863,29 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       const stats = fs.statSync(resolved);
       const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
       await sendMessage(chatId, `📤 Sending file: ${path.basename(resolved)} (${sizeMB}MB)`);
-      await sendLocalFile(chatId, resolved);
+      const ext = path.extname(resolved).toLowerCase();
+      if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+        await sendPhoto(chatId, resolved);
+      } else {
+        await sendLocalFile(chatId, resolved);
+      }
       return `✅ File sent: ${path.basename(resolved)}`;
     } catch (e: any) {
       return `❌ Error sending file: ${e.message}`;
+    }
+  }
+
+  // /cam or /photo — capture a webcam snapshot and send it (surveillance).
+  if (lower === '/cam' || lower === '/photo' || lower.startsWith('/cam ') || lower.startsWith('/photo ')) {
+    const device = text.split(/\s+/)[1] || '/dev/video0';
+    try {
+      await sendMessage(chatId, '📷 Capturing snapshot…');
+      const shot = captureWebcam(device);
+      await sendPhoto(chatId, shot, `Snapshot ${new Date().toLocaleString()}`);
+      try { fs.unlinkSync(shot); } catch {}
+      return '✅ Snapshot sent.';
+    } catch (e: any) {
+      return `❌ Camera error: ${e.message}`;
     }
   }
 
