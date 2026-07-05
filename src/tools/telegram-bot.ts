@@ -655,10 +655,20 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       const text = (response.text || '').trim();
 
       // Which action does the model want? RUN (shell), SEND (a file), CAM (webcam).
-      const action = text.match(/^(RUN|SEND|CAM):\s*(.*)$/m);
-      if (!action) { finalReply = text || '(no response from model)'; break; }
+      // Models often wrap the directive in markdown — a leading backtick, bullet,
+      // or blockquote — so tolerate those and strip a trailing backtick from the
+      // argument. Without this the action leaks out as visible text.
+      const action = text.match(/(?:^|\n)[ \t`>*_-]*(RUN|SEND|CAM):[ \t]*`?([^\n`]+)/);
+      if (!action) {
+        // No action → this is the answer. Strip any stray directive fragments
+        // so raw "SEND:/RUN:" text never shows to the user.
+        finalReply = (text || '(no response from model)')
+          .replace(/[ \t`>*_-]*(RUN|SEND|CAM):[^\n]*/g, '').replace(/\n{3,}/g, '\n\n').trim()
+          || '(no response from model)';
+        break;
+      }
       const verb = action[1];
-      const arg = (action[2] || '').trim().split('\n')[0].trim();
+      const arg = (action[2] || '').trim().replace(/`+$/, '').trim();
 
       let toolOut: string;
       try {
