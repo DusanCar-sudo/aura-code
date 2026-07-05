@@ -24,6 +24,7 @@ import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
 import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
+import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { runProviderWizard } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
@@ -336,6 +337,12 @@ if (argv._.length === 0 && !argv.interactive && process.stdin.isTTY !== true && 
 
 const cwd = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
 const fileConfig = loadProjectConfig(cwd);
+
+// Load persisted API keys (~/.aura/keys.json) into process.env before any
+// provider is built — so keys set once with :apikey survive across sessions
+// and every provider sees them, without depending on shell rc files. Real
+// environment values are never overridden.
+loadKeysIntoEnv();
 
 // Pull global config (saved by the first-run wizard) so the user doesn't have
 // to re-set their provider on every run.
@@ -1059,6 +1066,26 @@ interface ReplCommandResult {
   newTitle?: string | undefined;
 }
 
+/** Best-effort map from a model id to the env-var name its key lives under. */
+function envNameForModel(model: string): string | undefined {
+  const m = model.toLowerCase();
+  // Custom providers from .aura.json declare their own apiKeyEnv + prefixes.
+  for (const p of fileConfig.providers ?? []) {
+    if (p.apiKeyEnv && (p.prefixes ?? []).some(pre => m.startsWith(pre.toLowerCase()))) {
+      return p.apiKeyEnv;
+    }
+  }
+  if (m.startsWith('deepseek/')) return 'DEEPSEEK_API_KEY';
+  if (m.startsWith('glm-') || m.startsWith('zhipu')) return 'ZHIPU_API_KEY';
+  if (m.startsWith('mimo-')) return 'XIAOMI_API_KEY';
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return 'OPENAI_API_KEY';
+  if (m.startsWith('claude') || m.startsWith('anthropic')) return 'ANTHROPIC_API_KEY';
+  if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
+  if (m.includes('grok')) return 'XAI_API_KEY';
+  if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
+  return undefined;
+}
+
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
   const prevModel = runtimeConfig.model;
   const prevResolved = resolved.model;
@@ -1540,7 +1567,20 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const newKey = input.slice(sep.length).trim();
     runtimeConfig.apiKey = newKey;
     c.providerConfig.apiKey = newKey;
-    console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session.'));
+    // Persist it so it survives across sessions (fixes "type the key every
+    // time"). Save under the env-var name for the current provider, and also
+    // set that env var live so getApiKey resolves it this session.
+    const envName = globalCfg?.apiKeyEnv || envNameForModel(resolved.model ?? '');
+    if (envName) {
+      try {
+        const p = saveKey(envName, newKey);
+        console.log(chalk.hex('#5a9e6e')(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).`));
+      } catch (e) {
+        console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session (could not persist: ' + String(e) + ').'));
+      }
+    } else {
+      console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session.'));
+    }
     return { handled: true };
   }
 
