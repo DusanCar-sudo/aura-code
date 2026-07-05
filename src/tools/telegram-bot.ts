@@ -857,78 +857,11 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return `⚡ ${text}\n${truncated}`;
   }
 
-  // ── Natural language file operations ───────────────────────────────────────────
-
-  // "send me file X" or "get file X"
-  const sendFileMatch = text.match(/(?:send|get|pošalji|daj)\s+(?:me\s+)?(?:file\s+)?[\"']?([\w\-./\\\s]+)[\"']?/i);
-  if (sendFileMatch) {
-    const filePath = sendFileMatch[1].trim();
-    const resolved = path.isAbsolute(filePath) ? filePath : path.join(DEFAULT_CWD, filePath);
-
-    if (!fs.existsSync(resolved)) {
-      return `❌ File not found: ${filePath}\n💡 Try /find to search for files`;
-    }
-
-    try {
-      const stats = fs.statSync(resolved);
-      const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
-      await sendMessage(chatId, `📤 Sending file: ${path.basename(resolved)} (${sizeMB}MB)`);
-      await sendLocalFile(chatId, resolved);
-      return `✅ File sent: ${path.basename(resolved)}`;
-    } catch (e: any) {
-      return `❌ Error sending file: ${e.message}`;
-    }
-  }
-
-  // "find file X" or "search for file X"
-  const findFileMatch = text.match(/(?:find|search|traži|pronadji)\s+(?:file\s+)?[\"']?([\w\-.\s]+)[\"']?/i);
-  if (findFileMatch) {
-    const pattern = findFileMatch[1].trim();
-    try {
-      const searchDir = DEFAULT_CWD;
-      const cmd = `find "${searchDir}" -name "*${pattern}*" -type f 2>/dev/null | head -20`;
-      const result = await execShell(cmd);
-      const files = result.stdout.trim().split('\n').filter(f => f);
-
-      if (files.length === 0 || files[0] === '') {
-        return `🔍 No files found matching "${pattern}"\n💡 Try searching in a specific directory with /find`;
-      }
-
-      const lines = files.map(f => {
-        const name = path.basename(f);
-        const rel = path.relative(DEFAULT_CWD, f);
-        const stats = fs.statSync(f);
-        const size = (stats.size / 1024).toFixed(1) + 'KB';
-        return `📄 ${name} (${size})\n   ${rel}`;
-      });
-
-      return `🔍 Found ${files.length} file(s):\n${lines.join('\n')}\n\n💡 Say "send me <path>" to get any file`;
-    } catch (e: any) {
-      return `❌ Search error: ${e.message}`;
-    }
-  }
-
-  // "run X" or "execute X" for natural language command execution
-  const runCmdMatch = text.match(/(?:run|execute|izvrši|pokreni)\s+(.+)/i);
-  if (runCmdMatch) {
-    const cmd = runCmdMatch[1].trim();
-
-    const extremelyDangerous = [
-      'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
-      ':(){ :|:& };:', 'fork bomb', 'shutdown -h', 'poweroff', 'init 0', 'halt',
-    ];
-    const isDangerous = extremelyDangerous.some(d => cmd.toLowerCase().includes(d.toLowerCase()));
-    if (isDangerous) {
-      return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
-    }
-
-    const result = await execShell(cmd);
-    const output = result.stdout || result.stderr || '(no output)';
-    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
-    return `⚡ ${cmd}\n${result.code === 0 ? '✅' : '❌'} exit ${result.code}\n${truncated}`;
-  }
-
-  // Default: ask the LLM
+  // Everything else → the agentic LLM. It decides for itself when to run a
+  // command (via `RUN:`), so we no longer keyword-match "send/find/run/search"
+  // in free text. Those greedy matchers hijacked normal conversation — e.g. a
+  // message that merely contained "find" or "search" got treated as a file
+  // search ("No files found matching …"). Explicit /-commands still work above.
   return await chatWithLLM(String(chatId), text, from);
 }
 
