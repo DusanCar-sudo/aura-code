@@ -1,10 +1,12 @@
 import type { ProjectContext } from './context.js';
 import { getDomainPromptBlock } from './domain-expertise.js';
-import { loadReconciledMemorySection } from '../dream/dream.js';
+import { loadUnifiedMemory } from './unified-memory.js';
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
-  const memoryBlock = loadReconciledMemorySection(ctx.root);
+  // Unified memory: global identity/facts (shared with the Telegram bot) plus
+  // this project's reconciled lessons. Replaces the old dreams-only block.
+  const memoryBlock = loadUnifiedMemory({ projectRoot: ctx.root });
 
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).

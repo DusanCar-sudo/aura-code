@@ -11,6 +11,7 @@ import { exec, execSync, execFileSync } from 'child_process';
 import { createProvider, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
+import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
 
@@ -395,26 +396,10 @@ async function saveSession(chatId: string, history: HistoryMessage[]): Promise<v
 }
 
 function loadIdentityFromMemory(): string {
-  const memDir = path.join(os.homedir(), '.aura', 'memory');
-  const lines: string[] = [];
-  
-  // Load key identity namespaces
-  for (const ns of ['user', 'default']) {
-    const file = path.join(memDir, `${ns}.json`);
-    if (!fs.existsSync(file)) continue;
-    try {
-      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-      const identityKeys = ['creator', 'creator-full', 'user-name', 'user-id', 'user-role'];
-      for (const key of identityKeys) {
-        if (data[key]?.value) {
-          lines.push(`${key}: ${data[key].value}`);
-        }
-      }
-    } catch { /* skip */ }
-  }
-
-  if (lines.length === 0) return '';
-  return '\n## About the user (from memory)\n' + lines.join('\n');
+  // Unified memory: full global identity/facts (shared with the CLI) plus the
+  // global episodic-lessons digest. No projectRoot → the bot isn't tied to one
+  // project, so it gets the cross-project lessons summary.
+  return loadUnifiedMemory({ maxChars: 3500 });
 }
 
 // Build system prompt once on first use — includes user identity from memory
