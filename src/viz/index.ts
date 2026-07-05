@@ -1464,6 +1464,17 @@ export function generateDashboard(projectRoot: string): string {
   const outPath = path.join(projectRoot, 'graphify-out', 'dashboard.html');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, html, 'utf8');
+
+  // Post-process: enrich DATA (code metrics, git churn/co-change, agent session
+  // mining) and splice in the extra relation-graph panels, when those scripts
+  // exist alongside the output. Best-effort — the plain dashboard still works.
+  for (const script of ['enrich-data.mjs', 'add-panels.mjs']) {
+    const scriptPath = path.join(projectRoot, 'graphify-out', script);
+    if (!fs.existsSync(scriptPath)) continue;
+    try {
+      execSync(`node "${scriptPath}" "${projectRoot}"`, { stdio: 'ignore', timeout: 60_000 });
+    } catch { /* keep the un-enriched dashboard */ }
+  }
   return outPath;
 }
 
