@@ -2,6 +2,22 @@
   "model": "deepseek/deepseek-v4-flash",
   "providers": [
     {
+      "name": "OpenCode Go",
+      "baseUrl": "https://opencode.ai/zen/go/v1",
+      "apiKeyEnv": "OPENCODE_GO_API_KEY",
+      "prefixes": ["go/"],
+      "models": [
+        { "id": "go/glm-5.2", "name": "GLM-5.2 (Go)", "speed": "Powerful · 1M context" },
+        { "id": "go/glm-5.1", "name": "GLM-5.1 (Go)", "speed": "Powerful · agentic" },
+        { "id": "go/kimi-k2.7-code", "name": "Kimi K2.7 Code (Go)", "speed": "Powerful · coding" },
+        { "id": "go/kimi-k2.6", "name": "Kimi K2.6 (Go)", "speed": "Powerful · 256K context" },
+        { "id": "go/deepseek-v4-pro", "name": "DeepSeek V4 Pro (Go)", "speed": "Powerful · reasoning" },
+        { "id": "go/deepseek-v4-flash", "name": "DeepSeek V4 Flash (Go)", "speed": "Fast · cheapest" },
+        { "id": "go/mimo-v2.5-pro", "name": "MiMo V2.5 Pro (Go)", "speed": "Powerful · 1T params" },
+        { "id": "go/mimo-v2.5", "name": "MiMo V2.5 (Go)", "speed": "Fast · 310B · cheapest" }
+      ]
+    },
+    {
       "name": "Zhipu (Z.ai)",
       "baseUrl": "https://api.z.ai/api/paas/v4",
       "apiKeyEnv": "ZHIPU_API_KEY",

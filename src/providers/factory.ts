@@ -58,6 +58,17 @@ export function detectProviderKind(model: string): 'anthropic' | 'google' | 'ope
 export function createProvider(config: ProviderConfig): LLMProvider {
   const model = config.model.toLowerCase();
 
+  // ── OpenCode Go (Anthropic-style models at /v1/messages) ───────────────
+  if (model.startsWith('go-anthropic/')) {
+    const goModel = model.replace('go-anthropic/', '');
+    return new AnthropicProvider({
+      ...config,
+      model: goModel,
+      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/go/v1',
+      apiKey: config.apiKey ?? getApiKey('OPENCODE_GO_API_KEY'),
+    }, 'OpenCode Go');
+  }
+
   // ── Custom providers (from .aura.json) ─────────────────────────────────
   for (const def of customProviders) {
     const matched = def.prefixes.some(p => model.startsWith(p.toLowerCase()));
@@ -230,6 +241,14 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'grok-2-mini',       name: 'Grok 2 mini',       provider: 'xAI', speed: 'Fast · cheap' },
   { id: 'grok-beta',         name: 'Grok Beta',         provider: 'xAI', speed: 'Fast' },
   { id: 'grok-vision-beta',  name: 'Grok Vision Beta',  provider: 'xAI', speed: 'Multimodal' },
+
+  // ── OpenCode Go (Anthropic-style models — use go-anthropic/ prefix) ──────
+  { id: 'go-anthropic/minimax-m3',   name: 'MiniMax M3 (Go)',    provider: 'OpenCode Go', speed: 'Anthropic API · agentic' },
+  { id: 'go-anthropic/minimax-m2.7', name: 'MiniMax M2.7 (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · fast' },
+  { id: 'go-anthropic/minimax-m2.5', name: 'MiniMax M2.5 (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · budget' },
+  { id: 'go-anthropic/qwen3.7-max',  name: 'Qwen3.7 Max (Go)',   provider: 'OpenCode Go', speed: 'Anthropic API · powerful' },
+  { id: 'go-anthropic/qwen3.7-plus', name: 'Qwen3.7 Plus (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
+  { id: 'go-anthropic/qwen3.6-plus', name: 'Qwen3.6 Plus (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
 
   // ── OpenRouter (offline fallback — prefer live fetch, see note above) ────
   { id: 'openrouter/anthropic/claude-3.5-sonnet',            name: 'Claude 3.5 Sonnet (OR)',   provider: 'OpenRouter', speed: 'Fast' },
