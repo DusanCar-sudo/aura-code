@@ -12,7 +12,7 @@ import { join, relative, dirname, basename, extname, resolve } from 'path';
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'coverage', '.cache', '.openclaude',
   '.qwen', '.aura', 'graphify-out', 'hong-thuan-videos', 'my-project',
-  'packaging', 'deploy', 'assets',
+  'packaging', 'deploy', 'assets', 'google-cloud-sdk',
 ]);
 const SKIP_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.svg', '.mp3', '.mp4', '.pdf', '.pptx', '.zip', '.lock']);
 const SCAN_EXTS = new Set(['.ts', '.js', '.mjs', '.json', '.md']);
