@@ -1,0 +1,51 @@
+# Source (only dist/ ships)
+src/
+tests/
+
+# Build config
+tsconfig.json
+vitest.config.ts
+
+# Dev/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Session/cache
+.rubycode/
+.rubycode-cache/
+.aura.json
+coverage/
+*.lcov
+*.tsbuildinfo
+
+# Non-essential files
+assets/
+docs/
+graphify-out/
+my-project/
+packaging/
+.openclaude/
+.qwen/
+.agents/
+
+# Scripts not needed at runtime
+*.py
+*.sh
+*.pptx
+*.pdf
+*.mp4
+*.html
+*.md
+!README.md
+
+# Other
+.env*
+.DS_Store
+*.log
+.git*
+.packit.yaml
+ruby-code@0.1.0
+rez
+skills-lock.json

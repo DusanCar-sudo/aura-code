@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Code — Autonomous Coding Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:#0c1322;font-family:'Space Grotesk',system-ui,sans-serif;color:#eaf1f7;line-height:1.65;overflow-x:hidden}
+  ::selection{background:#c2674c;color:#f3e8df}
+  a{color:inherit}
+  @keyframes auraBob{0%,100%{opacity:.35;transform:translateY(0)}50%{opacity:.8;transform:translateY(6px)}}
+  @keyframes auraGlow{0%,100%{opacity:.55}50%{opacity:.9}}
+
+  /* Top nav with visible segment links */
+  .topnav{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:1.6rem;align-items:center;justify-content:center;
+    padding:.9rem 2rem;background:rgba(12,19,34,.92);backdrop-filter:blur(12px);border-bottom:1px solid rgba(110,208,234,.18);
+    font-family:'IBM Plex Mono',monospace;font-size:.78rem;letter-spacing:.06em;}
+  .topnav a{text-decoration:none;color:#aebccd;padding:.4rem .2rem;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
+  .topnav a:hover{color:#6ed0ea;border-color:#6ed0ea}
+  .topnav .brand{color:#c2674c;font-weight:600;margin-right:.5rem}
+
+  header.hero{position:relative;min-height:92vh;display:grid;grid-template-columns:1.05fr .95fr;gap:0;align-items:stretch;
+    background:radial-gradient(ellipse 70% 55% at 30% 35%,rgba(110,208,234,.10),transparent 65%),#0c1322}
+  .hero-text{display:flex;flex-direction:column;justify-content:center;padding:6vw 4vw 6vw 7vw;position:relative;z-index:2}
+  .kicker{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.34em;text-transform:uppercase;color:#6ed0ea;margin-bottom:2.2rem}
+  h1{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:clamp(3rem,7vw,6.2rem);line-height:.96;letter-spacing:.01em;color:#f3ece4;margin-bottom:1.4rem;text-shadow:0 0 38px rgba(110,208,234,.28)}
+  .tagline{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.4rem,2.6vw,2.1rem);color:#c2674c;margin-bottom:1.8rem}
+  .lede{max-width:30rem;font-size:1.05rem;font-weight:300;color:#aebccd;margin-bottom:2.4rem}
+  .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:.84rem;letter-spacing:.04em;text-decoration:none;padding:.95rem 1.8rem;border-radius:6px;
+    background:#c2674c;color:#1a0f0a;font-weight:500;transition:transform .25s,box-shadow .25s;border:none;cursor:pointer;display:inline-block}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(194,103,76,.4)}
+  .btn-ghost{font-family:'IBM Plex Mono',monospace;font-size:.84rem;cursor:pointer;padding:.95rem 1.5rem;border-radius:6px;background:transparent;
+    border:1px solid rgba(110,208,234,.4);color:#9fdcec;transition:border-color .25s,color .25s}
+  .btn-ghost:hover{border-color:#6ed0ea;color:#cdf0f8}
+  .stat-line{margin-top:2.6rem;display:flex;gap:2.2rem;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.12em;color:#73849a;text-transform:uppercase}
+  .stat-line b{color:#6ed0ea}
+  .hero-art{position:relative;overflow:hidden;background:linear-gradient(160deg,#1b2a44,#0c1322)}
+  .hero-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;animation:auraGlow 7s ease-in-out infinite}
+  .hero-art .fade{position:absolute;inset:0;background:linear-gradient(90deg,#0c1322 2%,transparent 28%)}
+  .scroll-hint{position:absolute;left:7vw;bottom:2rem;font-family:'IBM Plex Mono',monospace;font-size:.66rem;letter-spacing:.26em;text-transform:uppercase;color:#56657a;animation:auraBob 2.4s ease-in-out infinite;z-index:3}
+
+  section{padding:7rem 7vw}
+  .terra{background:#c2674c;color:#2a140d}
+  .navy{background:#0c1322}
+  .label{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;margin-bottom:1.6rem}
+  .terra .label{color:#5e2a1b}
+  .navy .label{color:#6ed0ea}
+  h2{font-family:'Cormorant Garamond',serif;font-weight:400;font-size:clamp(2.1rem,4.6vw,3.4rem);line-height:1.14;margin-bottom:1.6rem}
+  .navy h2{color:#f3ece4}
+  .wide{max-width:62rem;margin:0 auto}
+  .widest{max-width:70rem;margin:0 auto}
+  p.body-text{font-size:1.08rem;font-weight:300;max-width:56ch;margin-bottom:1.2rem}
+  .terra p.body-text{color:#411e13}
+  .navy p.body-text{color:#aebccd}
+
+  .grid3{margin-top:2.6rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(42,20,13,.18);border:1px solid rgba(42,20,13,.18);border-radius:14px;overflow:hidden}
+  .grid3>div{background:#c2674c;padding:2rem 1.8rem}
+  .grid3 .ti{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:#2a140d;margin-bottom:.5rem}
+  .grid3 p{font-size:.92rem;font-weight:300;color:#5e2a1b}
+
+  .steps{display:flex;gap:0;flex-wrap:wrap;justify-content:space-between}
+  .step{flex:1 1 130px;min-width:120px;text-align:center;padding:1.2rem .6rem}
+  .step .n{width:60px;height:60px;margin:0 auto .9rem;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(110,208,234,.35);background:#121b2e;font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:#6ed0ea}
+  .step .name{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#f3ece4;margin-bottom:.4rem}
+  .step p{font-size:.82rem;font-weight:300;color:#8595a8}
+  .term{margin-top:2.6rem;background:#0a1020;border:1px solid rgba(110,208,234,.16);border-radius:12px;padding:1.7rem 1.9rem;font-family:'IBM Plex Mono',monospace;font-size:.84rem;line-height:1.85;overflow-x:auto}
+  .term .lbl{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:#56657a;margin-bottom:.9rem}
+  .term .ok{color:#7fcf95}
+  .term .muted{color:#73849a}
+  .term .pr{color:#c2674c}
+
+  .principles{list-style:none}
+  .principles li{display:flex;gap:1.4rem;padding:1.3rem 0;border-top:1px solid rgba(42,20,13,.2)}
+  .principles .num{font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:#2a140d;min-width:2.2rem;font-style:italic}
+  .principles strong{display:block;font-size:1.05rem;font-weight:600;color:#2a140d;margin-bottom:.25rem}
+  .principles span.b{font-size:.95rem;font-weight:300;color:#5e2a1b}
+
+  .twocol{display:grid;grid-template-columns:1.1fr .9fr;gap:2.4rem;align-items:start}
+  .sublabel{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:#6ed0ea;margin-bottom:1.1rem}
+  .rowlist{display:flex;flex-direction:column;gap:1px;background:rgba(110,208,234,.12);border:1px solid rgba(110,208,234,.12);border-radius:12px;overflow:hidden}
+  .rowlist .r{background:#101a2c;padding:1rem 1.3rem;display:flex;gap:1.1rem;align-items:baseline;justify-content:space-between}
+  .rowlist code{font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:#c2674c;min-width:6rem;font-weight:500}
+  .rowlist .d{font-size:.9rem;font-weight:300;color:#aebccd;text-align:right}
+  .rowlist .pname{font-family:'Cormorant Garamond',serif;font-size:1.08rem;color:#f3ece4}
+
+  .stats4{max-width:64rem;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:2.2rem;text-align:center}
+  .stats4 .v{font-family:'Cormorant Garamond',serif;font-size:clamp(2.4rem,5vw,3.4rem);line-height:1;color:#2a140d}
+  .stats4 .l{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:#5e2a1b;margin-top:.6rem}
+
+  .install-box{display:inline-flex;align-items:center;gap:1.1rem;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.96rem;
+    background:#0a1020;border:1px solid rgba(110,208,234,.3);border-radius:10px;padding:1rem 1.5rem;color:#eaf1f7;transition:border-color .25s}
+  .install-box:hover{border-color:#6ed0ea}
+  .install-box .copied{font-size:.7rem;letter-spacing:.1em;color:#6ed0ea;text-transform:uppercase;margin-left:.6rem}
+
+  /* Issue/fix callout — visible problem & solution note */
+  .status-card{margin:0 auto 3rem;max-width:46rem;border:1px solid rgba(110,208,234,.3);background:#0a1020;border-radius:12px;padding:1.5rem 1.8rem;
+    font-family:'IBM Plex Mono',monospace;font-size:.82rem;line-height:1.8;color:#aebccd;text-align:left}
+  .status-card .h{color:#6ed0ea;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:.7rem}
+  .status-card .fixed{color:#7fcf95}
+  .status-card .was{color:#c2674c}
+
+  footer{background:#0a1020;padding:3rem 7vw;border-top:1px solid rgba(110,208,234,.1);text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.74rem;letter-spacing:.08em;color:#5b6a7e}
+  footer .q{color:#c2674c;font-style:italic;font-family:'Cormorant Garamond',serif;font-size:1rem}
+  footer a{color:#6ed0ea;text-decoration:none}
+
+  @media (max-width:880px){
+    header.hero{grid-template-columns:1fr}
+    .hero-art{min-height:42vh}
+    .twocol{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">AURA CODE</span>
+  <a href="#identity">About</a>
+  <a href="#loop">How it works</a>
+  <a href="#install">Install</a>
+  <a href="aura-windows-manual.html">Windows Manual</a>
+  <a href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">GitHub →</a>
+</nav>
+
+<header class="hero" id="start">
+  <div class="hero-text">
+    <div class="kicker">Autonomous Coding Agent</div>
+    <h1>Aura&nbsp;Code</h1>
+    <p class="tagline">"I don't try. I verify."</p>
+    <p class="lede">An open-source AI coding agent — built by agents, for agents. She reads your codebase, plans, executes, runs your tests, and reports exactly what she verified. Model-agnostic. MIT licensed.</p>
+    <div class="cta-row">
+      <a class="btn" href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
+      <button class="btn-ghost" onclick="copyInstall(this)">$ npm i -g aura-code</button>
+    </div>
+    <div class="stat-line">
+      <span><b>1,121+</b> tests</span>
+      <span><b>MIT</b> licensed</span>
+      <span><b>v0.5.0</b> · node 18+</span>
+    </div>
+  </div>
+  <div class="hero-art">
+    <img src="README-hero.jpg" alt="Aura Code">
+    <div class="fade"></div>
+  </div>
+  <div class="scroll-hint">↓ scroll</div>
+</header>
+
+<section class="navy" style="padding:3.5rem 7vw 0">
+  <div class="status-card">
+    <div class="h">Status</div>
+    <div><span class="was">Was:</span> the site stopped deploying — the page source had no usable HTML for Vercel to serve.</div>
+    <div style="margin-top:.5rem"><span class="fixed">Fixed:</span> rebuilt as static HTML, real assets, and a visible nav to every page. Live now.</div>
+  </div>
+</section>
+
+<section class="terra" id="identity">
+  <div class="wide">
+    <div class="label">01 — Identity</div>
+    <h2>She is the evidence of her own thesis.</h2>
+    <p class="body-text">Every line of Aura was written by AI agents — Claude proposed architecture, others implemented, verified, and reviewed. <strong>The agent that writes your code was itself written by agents. That's not a bug — that's the proof.</strong></p>
+    <p class="body-text" style="color:#5e2a1b">Designed and brought to life by Dušan Milosavljević. Written in TypeScript, strictly typed. Built on the <em>Praktess</em> framework, from the Ancient Greek: <em>she who acts and executes</em>.</p>
+    <div class="grid3">
+      <div><div class="ti">Model-agnostic</div><p>Claude, GPT, Gemini, MiMo, DeepSeek, OpenCode Zen, Ollama — and any OpenAI-compatible endpoint.</p></div>
+      <div><div class="ti">Self-aware</div><p>She cites line numbers and reports what was verified — not what was attempted.</p></div>
+      <div><div class="ti">Open source</div><p>MIT licensed. 1,121+ tests passing. Clone it, read it, run it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="navy" id="loop">
+  <div class="widest">
+    <div class="label">02 — How she works</div>
+    <h2>A loop, not a guess.</h2>
+    <p class="body-text">Read the context, form a plan, execute precisely, verify the result. If verification fails she doesn't retry blindly — she diagnoses, adjusts, and re-executes.</p>
+    <div class="steps">
+      <div class="step"><div class="n">I</div><div class="name">Read</div><p>Files, structure, dependencies — before touching anything.</p></div>
+      <div class="step"><div class="n">II</div><div class="name">Plan</div><p>Decides what to change and how. Minimal, targeted.</p></div>
+      <div class="step"><div class="n">III</div><div class="name">Execute</div><p>Writes code, runs commands, makes precise edits.</p></div>
+      <div class="step"><div class="n">IV</div><div class="name">Verify</div><p>Runs tests, checks integrity, confirms the change.</p></div>
+      <div class="step"><div class="n">V</div><div class="name">Report</div><p>Summarizes what was done and what passed.</p></div>
+    </div>
+    <div class="term">
+      <div class="lbl">terminal</div>
+      <div><span class="pr">$</span> aura <span style="color:#9fdcec">"fix the authentication bug"</span></div>
+      <div class="muted">→ Read context: 14 files scanned</div>
+      <div class="muted">→ Plan: 3-step execution strategy</div>
+      <div class="muted">→ Execute: edited src/auth/handler.ts (line 47)</div>
+      <div class="muted">→ Verify: 1,121 tests passing, 0 regressions</div>
+      <div class="ok" style="margin-top:.4rem">✓ Done. Verified.</div>
+    </div>
+  </div>
+</section>
+
+<section class="terra">
+  <div class="wide">
+    <div class="label">03 — Principles</div>
+    <h2>Rules she never breaks.</h2>
+    <ol class="principles">
+      <li><span class="num">01</span><div><strong>I don't try. I verify.</strong><span class="b">I run the test. I check the diff. I read the output. That's not confidence — it's evidence.</span></div></li>
+      <li><span class="num">02</span><div><strong>Read before write. Always.</strong><span class="b">I never edit a file I haven't read, never assume structure I haven't seen.</span></div></li>
+      <li><span class="num">03</span><div><strong>Minimal change, maximum effect.</strong><span class="b">The exact line, the exact function. A surgeon doesn't amputate to fix a paper cut.</span></div></li>
+      <li><span class="num">04</span><div><strong>If I broke it, I fix it first.</strong><span class="b">A failure I introduced is an emergency, not a todo. The codebase is never left worse.</span></div></li>
+      <li><span class="num">05</span><div><strong>Cite specifics. Never generalities.</strong><span class="b">File paths, line numbers, error messages. "Line 47 throws when steps is empty" is actionable.</span></div></li>
+      <li><span class="num">06</span><div><strong>The loop never ends.</strong><span class="b">Every failure is training data. There is no "done" — only "verified at this point in time."</span></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="navy">
+  <div class="widest">
+    <div class="label">04 — Capability</div>
+    <h2>Six commands. Every model.</h2>
+    <div class="twocol">
+      <div>
+        <div class="sublabel">Modes</div>
+        <div class="rowlist">
+          <div class="r"><code>normal</code><span class="d">Single-agent loop: read → plan → execute → verify.</span></div>
+          <div class="r"><code>:research</code><span class="d">Multi-step research, saved as a cited report.</span></div>
+          <div class="r"><code>:council</code><span class="d">5 independent agents, synthesized into one verdict.</span></div>
+          <div class="r"><code>:dream</code><span class="d">Consolidates a day's work into lessons.</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="sublabel">Providers</div>
+        <div class="rowlist">
+          <div class="r"><span class="pname">Claude</span><span class="d">Opus · Sonnet · Haiku</span></div>
+          <div class="r"><span class="pname">GPT</span><span class="d">gpt-4o · gpt-4o-mini</span></div>
+          <div class="r"><span class="pname">Gemini</span><span class="d">2.5 pro · 2.5 flash</span></div>
+          <div class="r"><span class="pname">DeepSeek</span><span class="d">v4-pro · v4-flash</span></div>
+          <div class="r"><span class="pname">OpenCode Zen</span><span class="d">free + paid tiers</span></div>
+          <div class="r"><span class="pname">Ollama</span><span class="d">any local model</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="terra">
+  <div class="stats4">
+    <div><div class="v">1,121+</div><div class="l">Tests passing</div></div>
+    <div><div class="v">0</div><div class="l">Failures</div></div>
+    <div><div class="v">10+</div><div class="l">Providers</div></div>
+    <div><div class="v">MIT</div><div class="l">Licensed</div></div>
+  </div>
+</section>
+
+<section class="navy" id="install" style="text-align:center">
+  <div style="max-width:46rem;margin:0 auto">
+    <div class="label" style="justify-content:center;display:flex">05 — Get started</div>
+    <h2>Ready to verify?</h2>
+    <p class="body-text" style="margin:0 auto 2.4rem">Install globally, set one API key, and give her a task in plain English.</p>
+    <div class="install-box" onclick="copyInstall(this)">
+      <span style="color:#c2674c">$</span><span>npm install -g aura-code</span><span class="copied" id="copyState">click to copy</span>
+    </div>
+    <div style="margin-top:1.3rem;font-family:'IBM Plex Mono',monospace;font-size:.82rem;color:#73849a">aura 'your task here'</div>
+    <div style="margin-top:2.6rem">
+      <a class="btn" href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Aura Code · Built entirely by AI agents · <span class="q">"I don't try. I verify."</span></p>
+  <p style="margin-top:.7rem">Built by <a href="https://lean-progress-iq.vercel.app" target="_blank" rel="noopener">Lean Progress IQ</a> · <a href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">Source</a> · <a href="aura-windows-manual.html">Windows Manual</a> · MIT licensed</p>
+</footer>
+
+<script>
+function copyInstall(el){
+  var text = 'npm install -g aura-code';
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch(e){}
+  var label = document.getElementById('copyState');
+  if (label) { label.textContent = 'copied ✓'; setTimeout(function(){ label.textContent = 'click to copy'; }, 1800); }
+  if (el && el.tagName === 'BUTTON') { var old = el.textContent; el.textContent = '✓ copied'; setTimeout(function(){ el.textContent = old; }, 1800); }
+}
+</script>
+</body>
+</html>
+Thu Jun 25 09:06:06 PM +07 2026

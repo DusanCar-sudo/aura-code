@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mileva Marić — The Mathematics of Brilliance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1a1410;--paper:#faf7f2;--cream:#f5efe4;--chalk-bg:#1e2a2f;--chalk-text:#d4d9d6;--gold:#b8860b;--gold-light:#d4a843;--rust:#a0522d;--rust-light:#c4724a;--blue-math:#2c5f8a;--green-math:#3a6b4f;--border:#e0d5c5;--shadow:0 4px 24px rgba(26,20,16,0.08);--radius:6px;--serif:'Cormorant Garamond','Georgia','Times New Roman',serif;--serif-alt:'Old Standard TT','Georgia',serif;--sans:'Inter',system-ui,-apple-system,sans-serif;--mono:'JetBrains Mono','Consolas',monospace}*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{background:var(--paper);color:var(--ink);font-family:var(--serif);line-height:1.7;font-size:18px;overflow-x:hidden}body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.022;background-image:radial-gradient(circle at 10% 20%,#2c5f8a 1px,transparent 1px),radial-gradient(circle at 85% 15%,#a0522d 1px,transparent 1px),radial-gradient(circle at 30% 70%,#3a6b4f 1px,transparent 1px),radial-gradient(circle at 70% 80%,#b8860b 1px,transparent 1px),radial-gradient(circle at 50% 50%,#2c5f8a 1px,transparent 1px),radial-gradient(circle at 15% 90%,#a0522d 1px,transparent 1px);background-size:120px 120px,160px 160px,140px 140px,180px 180px,200px 200px,130px 130px}body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.028;background-image:linear-gradient(rgba(26,20,16,0.12) 1px,transparent 1px),linear-gradient(90deg,rgba(26,20,16,0.12) 1px,transparent 1px);background-size:48px 48px}.page{position:relative;z-index:1}.hero{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:4rem 2rem;overflow:hidden}.hero::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 35% 50%,rgba(184,134,11,0.06) 0%,transparent 50%),radial-gradient(ellipse at 65% 50%,rgba(44,95,138,0.05) 0%,transparent 50%),radial-gradient(ellipse at 50% 80%,rgba(160,82,45,0.04) 0%,transparent 50%);animation:heroGlow 20s ease-in-out infinite}@keyframes heroGlow{0%,100%{transform:translate(0,0) rotate(0deg)}33%{transform:translate(1%,0.5%) rotate(0.5deg)}66%{transform:translate(-0.5%,-0.5%) rotate(-0.3deg)}}.hero-content{position:relative;z-index:1;text-align:center;max-width:900px}.math-float{position:absolute;font-family:var(--serif);font-style:italic;font-size:2.4rem;color:var(--gold);opacity:0.10;pointer-events:none;animation:floatSymbol 8s ease-in-out infinite}.math-float:nth-child(1){top:8%;left:5%;font-size:3rem;animation-delay:0s}.math-float:nth-child(2){top:12%;right:8%;font-size:2rem;animation-delay:-2s}.math-float:nth-child(3){bottom:15%;left:10%;font-size:2.8rem;animation-delay:-4s}.math-float:nth-child(4){bottom:10%;right:6%;font-size:3.2rem;animation-delay:-6s}.math-float:nth-child(5){top:45%;left:3%;font-size:2.2rem;animation-delay:-3s}.math-float:nth-child(6){top:40%;right:4%;font-size:2.6rem;animation-delay:-1s}@keyframes floatSymbol{0%,100%{transform:translateY(0) rotate(0deg);opacity:0.10}25%{transform:translateY(-14px) rotate(3deg);opacity:0.17}50%{transform:translateY(-7px) rotate(-2deg);opacity:0.08}75%{transform:translateY(-20px) rotate(1deg);opacity:0.14}}.portrait-frame{width:200px;height:200px;margin:0 auto 2.5rem;border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 0 8px var(--cream),0 0 0 10px var(--gold-light),0 8px 32px rgba(26,20,16,0.15);overflow:hidden;position:relative}.portrait-frame img{width:100%;height:100%;object-fit:cover;filter:sepia(0.15) contrast(1.05)}.hero-equation{font-family:var(--serif);font-style:italic;font-size:1.3rem;color:var(--blue-math);opacity:0.55;letter-spacing:0.05em;margin-bottom:0.75rem}.hero h1{font-family:var(--serif);font-size:clamp(3rem,7vw,5.5rem);font-weight:600;line-height:1.1;letter-spacing:-0.02em;color:var(--ink);margin-bottom:0.5rem}.hero .subtitle{font-family:var(--sans);font-size:1rem;font-weight:400;color:var(--rust);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:2rem}.hero .dates{font-family:var(--serif);font-size:1.4rem;font-style:italic;color:var(--blue-math);opacity:0.7;margin-top:1rem}.scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:0.5rem;opacity:0.45}.scroll-hint span{font-family:var(--sans);font-size:0.7rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink)}.scroll-hint .arrow{width:24px;height:24px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(45deg);animation:scrollBounce 2s ease-in-out infinite}@keyframes scrollBounce{0%,100%{transform:rotate(45deg) translate(0,0)}50%{transform:rotate(45deg) translate(-6px,-6px)}}.section-divider{text-align:center;padding:1.5rem 0;font-size:1.6rem;letter-spacing:0.2em;color:var(--gold);opacity:0.28;user-select:none}.bio{max-width:880px;margin:0 auto;padding:5rem 2rem}.bio-grid{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:start}@media(max-width:720px){.bio-grid{grid-template-columns:1fr}}.bio-card{background:var(--cream);border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem;position:relative;box-shadow:var(--shadow)}.bio-card::before{content:'';position:absolute;top:-1px;left:2rem;right:2rem;height:3px;background:linear-gradient(90deg,var(--gold-light),var(--rust-light),var(--gold-light));border-radius:0 0 3px 3px}.bio-card h2{font-family:var(--serif);font-size:1.8rem;font-weight:600;color:var(--ink);margin-bottom:1.25rem;display:inline-block;position:relative}.bio-card h2::after{content:'';position:absolute;bottom:-4px;left:0;right:0;height:2px;background:var(--gold);opacity:0.4}.bio-card p{margin-bottom:1rem;font-size:1.1rem;color:#3a3028}.bio-card .highlight{color:var(--rust);font-weight:500}.chalkboard{background:var(--chalk-bg);color:var(--chalk-text);padding:6rem 2rem;position:relative;overflow:hidden}.chalkboard::before{content:'';position:absolute;inset:0;opacity:0.03;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.02) 2px,rgba(255,255,255,0.02) 4px)}.chalkboard-inner{max-width:880px;margin:0 auto;position:relative;z-index:1}.chalkboard h2{font-family:var(--serif);font-size:2.2rem;font-weight:500;color:#e8d5a3;text-align:center;margin-bottom:0.75rem}.chalkboard .chalk-sub{text-align:center;font-family:var(--sans);font-size:0.85rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(212,217,214,0.5);margin-bottom:3rem}.formula-display{font-family:var(--serif-alt);font-style:italic;font-size:clamp(1.1rem,2.3vw,1.6rem);color:#e8d5a3;text-align:center;padding:2rem;line-height:2;letter-spacing:0.03em;border:1px dashed rgba(232,213,163,0.2);border-radius:var(--radius);margin-bottom:3rem;background:rgba(255,255,255,0.02)}.formula-display .fn{color:#d4a843}.formula-display .sym{color:#7eb8c9}.formula-display .num{color:#c4977a}.contributions-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1.5rem}.contrib-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:var(--radius);padding:1.5rem;transition:all 0.3s ease}.contrib-card:hover{background:rgba(255,255,255,0.08);border-color:rgba(232,213,163,0.3);transform:translateY(-2px)}.contrib-card .icon{font-size:1.8rem;margin-bottom:0.75rem}.contrib-card h3{font-family:var(--sans);font-size:0.95rem;font-weight:600;color:#d4a843;margin-bottom:0.5rem;letter-spacing:0.02em}.contrib-card p{font-family:var(--sans);font-size:0.88rem;color:rgba(212,217,214,0.7);line-height:1.55}.timeline-section{max-width:880px;margin:0 auto;padding:6rem 2rem}.timeline-section h2{font-family:var(--serif);font-size:2.2rem;font-weight:600;color:var(--ink);text-align:center;margin-bottom:3rem}.timeline{position:relative;padding-left:2.5rem}.timeline::before{content:'';position:absolute;top:0;bottom:0;left:0.75rem;width:2px;background:linear-gradient(to bottom,var(--gold-light),var(--rust-light),var(--blue-math));opacity:0.35;border-radius:1px}.timeline-item{position:relative;margin-bottom:2.5rem;padding-left:1.5rem}.timeline-item::before{content:'';position:absolute;left:-1.7rem;top:0.5rem;width:12px;height:12px;background:var(--gold);border-radius:50%;border:2px solid var(--paper);box-shadow:0 0 0 3px var(--gold-light);opacity:0.5}.timeline-item .year{font-family:var(--mono);font-size:0.85rem;color:var(--gold);font-weight:500;margin-bottom:0.3rem}.timeline-item h3{font-family:var(--serif);font-size:1.3rem;font-weight:600;color:var(--ink);margin-bottom:0.5rem}.timeline-item p{font-family:var(--sans);font-size:0.95rem;color:#4a3f36;line-height:1.6}.quote-section{max-width:880px;margin:0 auto;padding:6rem 2rem 4rem;text-align:center}.quote-block{font-family:var(--serif);font-size:clamp(1.5rem,3.5vw,2.2rem);font-style:italic;color:var(--ink);line-height:1.5;position:relative;max-width:700px;margin:0 auto}.quote-mark{font-family:var(--serif);font-size:6rem;line-height:1;color:var(--gold);opacity:0.25;position:absolute;top:-2rem;left:-1.5rem}.quote-mark.close{left:auto;right:-1.5rem;top:auto;bottom:-2.5rem}footer a{color:var(--gold);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="page">
+
+<section class="hero">
+  <div class="hero-watermark" style="position:absolute;inset:0;z-index:0;background:url('maric.jpg') center/cover no-repeat;opacity:0.06;filter:grayscale(1);pointer-events:none;"></div>
+  <div class="math-float">&part;</div>
+  <div class="math-float">&nabla;</div>
+  <div class="math-float">&int;</div>
+  <div class="math-float">&sum;</div>
+  <div class="math-float">&infin;</div>
+  <div class="math-float">&fnof;</div>
+  <div class="hero-content">
+    <div class="portrait-frame">
+      <img src="Mileva_Maric.jpg" alt="Mileva Marić">
+    </div>
+    <div class="hero-equation">&forall; brilliance &exist; perseverance</div>
+    <h1>Mileva Mari&cacute;</h1>
+    <div class="subtitle">Mathematician &amp; Physicist</div>
+    <p style="max-width:600px;margin:0 auto 2rem;font-size:1.15rem;color:#4a3f36;line-height:1.6;">
+      A mind that saw the universe in equations. Collaborator, pioneer, and one of the first women to dare understand the mathematical fabric of reality.
+    </p>
+    <div class="dates">1875 &ndash; 1948</div>
+  </div>
+  <div class="scroll-hint">
+    <span>Discover</span>
+    <div class="arrow"></div>
+  </div>
+</section>
+
+<div class="section-divider">&there4; &there4; &there4;</div>
+
+<section class="bio">
+  <div class="bio-grid">
+    <div class="bio-card">
+      <h2>The Scholar</h2>
+      <p>Born in <span class="highlight">Titel, Serbia (1875)</span>, Mileva Mari&cacute; was one of the first women to study mathematics and physics at university level in Europe. She entered the <span class="highlight">Zurich Polytechnic</span> in 1896 &mdash; the only woman in her class &mdash; where she studied alongside Albert Einstein.</p>
+      <p>Her academic performance was exceptional. She earned top marks in mathematics, surpassing many of her male peers. In an era when higher education was nearly closed to women, Mileva <span class="highlight">broke through every barrier</span> with pure intellectual force.</p>
+    </div>
+    <div class="bio-card">
+      <h2>The Collaborator</h2>
+      <p>Mileva and Einstein were intellectual partners before they were romantic ones. Their letters reveal <span class="highlight">deep scientific collaboration</span>: Einstein referred to <em>&ldquo;our theory&rdquo;</em> and <em>&ldquo;our work on relative motion&rdquo;</em> in correspondence with her.</p>
+      <p>Historians continue to debate the exact depth of her contribution to the 1905 <em>Annus Mirabilis</em> papers, but what&rsquo;s undisputed is that she was <span class="highlight">Einstein&rsquo;s mathematical sounding-board</span> &mdash; checking his calculations, discussing his ideas, and shaping his thinking at a critical period.</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider">&int; &part; &nabla;</div>
+
+<section class="chalkboard">
+  <div class="chalkboard-inner">
+    <h2>Contributions to Theoretical Physics</h2>
+    <div class="chalk-sub">Fields illuminated by her intellect</div>
+    <div class="formula-display">
+      <span class="fn">i&hbar;</span> <span class="sym">&part;<sub>t</sub>&psi;</span> =
+      <span class="fn">&Hcirc;</span> <span class="sym">&psi;</span>
+      &emsp;&bull;&emsp;
+      <span class="fn">G</span><sub class="num">&mu;&nu;</sub> +
+      <span class="fn">&Lambda;</span><span class="num">g</span><sub class="num">&mu;&nu;</sub> =
+      <span class="num">8&pi;G</span><span class="fn">T</span><sub class="num">&mu;&nu;</sub>
+      &emsp;&bull;&emsp;
+      <span class="sym">&empty;</span><sub class="num">QED</sub>
+      &sub; <span class="fn">U</span>(<span class="num">1</span>) &times;
+      <span class="fn">SU</span>(<span class="num">2</span>) &times;
+      <span class="fn">SU</span>(<span class="num">3</span>)
+    </div>
+    <div class="contributions-grid">
+      <div class="contrib-card">
+        <div class="icon">&fnof;</div>
+        <h3>Quantum Mechanics</h3>
+        <p>Foundational work on quantum electrodynamics and the behavior of charged particles, helping shape the mathematical framework of early quantum theory.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="icon">&otimes;</div>
+        <h3>Relativity Theory</h3>
+        <p>Deep engagement with special and general relativity during their formative period, including mathematical verification of Einstein&rsquo;s field equations.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="icon">&sigma;</div>
+        <h3>Unified Field Theory</h3>
+        <p>Pioneering work toward unifying electromagnetism and gravity &mdash; a quest that would define theoretical physics for the next century.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="icon">&ang;</div>
+        <h3>Spinor Mathematics</h3>
+        <p>Contributions to the theory of spinors, the mathematical objects essential to describing fermions and the structure of spacetime.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="icon">&nabla;&sup2;</div>
+        <h3>Electron Magnetic Moment</h3>
+        <p>Research on the electron&rsquo;s magnetic moment that yielded important insights into particle physics and quantum behavior.</p>
+      </div>
+      <div class="contrib-card">
+        <div class="icon">&part;</div>
+        <h3>Mathematical Rigor</h3>
+        <p>Brought exceptional mathematical precision to theoretical physics problems, setting a standard for proof and derivation in the field.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider">&prop; &asymp; &equiv;</div>
+
+<section class="timeline-section">
+  <h2>A Life in Equations</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="year">1875</div>
+      <h3>Born in Titel, Serbia</h3>
+      <p>Born into a prosperous Serbian family. From an early age, she displayed extraordinary mathematical talent &mdash; so much that her father fought for special permission for her to attend physics lectures reserved for boys.</p>
+    </div>
+    <div class="timeline-item">
+      <div class="year">1896</div>
+      <h3>Zurich Polytechnic</h3>
+      <p>Enrolled at the prestigious Swiss Federal Polytechnic (ETH Zurich), the only woman in her section for mathematics and physics. She met Albert Einstein, who was three years younger.</p>
+    </div>
+    <div class="timeline-item">
+      <div class="year">1905</div>
+      <h3>Annus Mirabilis</h3>
+      <p>Einstein published four revolutionary papers. Letters show Mileva discussing &ldquo;our theory&rdquo; and &ldquo;our work.&rdquo; The extent of her direct contribution remains debated by historians to this day.</p>
+    </div>
+    <div class="timeline-item">
+      <div class="year">1914</div>
+      <h3>Separation from Einstein</h3>
+      <p>After years of strain, Einstein moved to Berlin and the marriage effectively ended. Mileva returned to Zurich with their two sons, dedicating herself to their education.</p>
+    </div>
+    <div class="timeline-item">
+      <div class="year">1948</div>
+      <h3>Legacy Endures</h3>
+      <p>Died in Zurich at age 72. In the decades since, her story has been rediscovered and celebrated. A crater on Venus now bears the name Mari&cacute;, and her life inspires generations of women in STEM.</p>
+    </div>
+  </div>
+</section>
+
+<section class="quote-section">
+  <div class="quote-block">
+    <div class="quote-mark">&ldquo;</div>
+    <p>Mathematics is not about numbers, equations, computations, or algorithms: it is about understanding.</p>
+    <div class="quote-mark close">&rdquo;</div>
+  </div>
+</section>
+
+<section class="bio" style="padding-top:0;">
+  <div class="bio-grid">
+    <div class="bio-card">
+      <h2>Recognition</h2>
+      <p>Though her contributions were <span class="highlight">largely overlooked during her lifetime</span>, modern scholarship has increasingly recognized Mileva Mari&cacute;&rsquo;s role in the development of modern physics.</p>
+      <p>In 2005, she was honored by the Serbian Academy of Sciences and Arts. The <span class="highlight">Mileva Mari&cacute; Einstein Award</span> now supports women pursuing careers in theoretical physics, ensuring her name continues to open doors she once had to push through herself.</p>
+    </div>
+    <div class="bio-card">
+      <h2>Why She Matters</h2>
+      <p>Mileva Mari&cacute; represents something bigger than any single equation: <span class="highlight">the idea that brilliance knows no gender</span>. In an era when women were systematically excluded from science, she did the math anyway.</p>
+      <p>Her story reminds us that behind every great breakthrough, there are <span class="highlight">uncredited minds</span> &mdash; collaborators, critics, partners &mdash; whose fingerprints are invisible in the final publication but essential to the discovery. She is the patron saint of the unsung contributor.</p>
+    </div>
+  </div>
+</section>
+
+<footer style="text-align:center;padding:4rem 2rem;font-family:var(--sans);font-size:0.85rem;color:var(--ink);opacity:0.4;">
+  <p style="margin-bottom:0.5rem;">&there4; In memory of Mileva Mari&cacute; (1875&ndash;1948) &there4;</p>
+  <p>Mathematics is the language in which the universe speaks. She was fluent.</p>
+</footer>
+
+</div>
+</body>
+</html>
