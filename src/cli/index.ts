@@ -345,9 +345,19 @@ const globalCfg = loadGlobalConfig();
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
 const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
 
-// Effective base URL = CLI > .aura.json > global config > undefined
+// Effective base URL = CLI > .aura.json > global config > undefined.
+// CRITICAL: the global config's baseUrl belongs to the provider the wizard
+// configured — it must NOT be forced onto a DIFFERENT model. Otherwise picking
+// `-m deepseek/...` while the global default is a GLM/Z.ai endpoint sends the
+// DeepSeek key to Z.ai → 401. So only inherit globalCfg.baseUrl when the
+// effective model is actually that global default model (same provider).
 const cliBaseUrl = typeof argv['base-url'] === 'string' ? argv['base-url'] : undefined;
-const effectiveBaseUrl = cliBaseUrl ?? fileConfig.baseUrl ?? globalCfg?.baseUrl;
+const globalBaseUrlApplies =
+  !!globalCfg?.baseUrl &&
+  !!globalCfg?.defaultModel &&
+  effectiveModel === globalCfg.defaultModel;
+const effectiveBaseUrl =
+  cliBaseUrl ?? fileConfig.baseUrl ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined);
 
 const resolved = resolveConfig(
   { ...fileConfig, model: effectiveModel, baseUrl: effectiveBaseUrl },
