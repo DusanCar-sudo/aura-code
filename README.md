@@ -148,7 +148,7 @@ Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
 | Metric | Value |
 |--------|-------|
 | Tests | 951 passing, 0 failures |
-| Version | v0.7.2 |
+| Version | v0.8.0 |
 | Language | TypeScript (strict) |
 | License | MIT |
 
