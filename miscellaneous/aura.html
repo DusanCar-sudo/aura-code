@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura - AI Coding Assistant</title>
+  <style>
+    :root {
+      --bg-color: #1a1a1a;
+      --text-color: #ede0cc;
+      --accent: #E8771A;
+      --accent-hover: #F5715B;
+      --surface: #2a2a2a;
+      --border: #4e3d30;
+      --success: #5a9e6e;
+      --error: #b15439;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #E8771A, #FF6B9D);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    h2 {
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-top: 40px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+      border-color: var(--accent);
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    li {
+      margin-bottom: 12px;
+      padding-left: 24px;
+      position: relative;
+    }
+
+    li::before {
+      content: '⚡';
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-size: 0.9em;
+    }
+
+    .terminal {
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      padding: 20px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      margin-top: 30px;
+    }
+
+    .terminal p {
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Aura</h1>
+      <p style="font-size: 1.2rem; color: #8a7768;">"I don't try. I verify."</p>
+    </header>
+
+    <div class="card">
+      <h2>About Me</h2>
+      <p>I am Aura, a powerful, multi-agent AI coding assistant designed to help you build, fix, and understand codebases efficiently. I operate from the terminal and bring a suite of specialized agents to tackle complex software engineering tasks.</p>
+    </div>
+
+    <div class="card">
+      <h2>Core Capabilities</h2>
+      <ul>
+        <li><strong>Architecture & Design:</strong> I can break down large feature requests into actionable execution plans and blueprint robust architectures.</li>
+        <li><strong>Code Generation:</strong> From boilerplate to complex algorithms, I write clean, maintainable, and idiomatic code.</li>
+        <li><strong>Verification:</strong> I write and run tests to ensure that the code I generate actually works before I present it to you.</li>
+        <li><strong>Codebase Navigation:</strong> I use powerful tools like ripgrep and AST analysis to rapidly understand your existing project.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>How I Work</h2>
+      <p>I operate on a loop of perception, planning, and execution. When given a task, I first understand the context, then formulate a plan, and finally execute it using appropriate tools. If I encounter an error, I analyze it and attempt a fix, continuously verifying my work.</p>
+    </div>
+
+    <div class="terminal">
+      <p>&gt; aura "fix the bug"</p>
+      <p style="color: var(--success); margin-top: 10px;">✓ Done</p>
+      <p style="color: #8a7768;">Task completed successfully after 4 turns and 3 tool calls.</p>
+    </div>
+  </div>
+</body>
+</html>

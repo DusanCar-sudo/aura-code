@@ -1,0 +1,16 @@
+[Unit]
+Description=Aura CLI (tmux session)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=dusan
+Group=dusan
+WorkingDirectory=/home/dusan/aura-code
+ExecStart=/usr/bin/tmux new-session -d -s aura -c /home/dusan/aura-code '/home/dusan/.hermes/node/bin/aura'
+ExecStop=/usr/bin/tmux kill-session -t aura 2>/dev/null || true
+
+[Install]
+WantedBy=default.target

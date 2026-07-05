@@ -1,0 +1,60 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make Aura Code better? Tell us about it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve?
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should it work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you've thought about?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Related Mode
+      description: Which mode does this relate to?
+      options:
+        - normal
+        - orchestrate
+        - architect
+        - verify
+        - analyze
+        - CLI general
+        - Providers
+        - Tools
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Screenshots, examples, or references.
+    validations:
+      required: false

@@ -1,0 +1,20 @@
+[Unit]
+Description=Google Drive (rclone mount)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dusan
+Group=dusan
+ExecStart=/usr/bin/rclone mount gdrive: /home/dusan/gdrive \
+    --vfs-cache-mode writes \
+    --dir-cache-time 5m \
+    --poll-interval 1m \
+    --log-level INFO
+ExecStop=/bin/fusermount -u /home/dusan/gdrive
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
