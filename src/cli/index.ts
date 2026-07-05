@@ -1136,6 +1136,28 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
+  // :approve — flip the session into auto-approve (no per-command y/N prompt).
+  //   :approve      → toggle auto ⇄ normal
+  //   :approve all  → auto (approve everything for this session)
+  //   :approve off  → back to normal (confirm destructive commands again)
+  // Dangerous commands are still blocked either way.
+  if (input === ':approve' || input === ':approve all' || input === ':approve off') {
+    const cur = c.permissions.getLevel();
+    let next: PermissionLevel;
+    if (input === ':approve off') next = 'normal';
+    else if (input === ':approve all') next = 'auto';
+    else next = cur === 'auto' ? 'normal' : 'auto';
+    c.permissions.setLevel(next);
+    if (next === 'auto') {
+      console.log(chalk.hex('#d4903a')(
+        '  ✅ Auto-approve ON — commands run without asking (dangerous ones still blocked). `:approve off` to re-enable prompts.\n',
+      ));
+    } else {
+      console.log(chalk.hex('#5a9e6e')('  🔒 Auto-approve OFF — destructive commands will ask for confirmation again.\n'));
+    }
+    return { handled: true };
+  }
+
   if (input === ':dream') {
     const { runDream } = await import('../dream/dream.js');
     c.display.agentThinking();
@@ -1246,6 +1268,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '',
       '  ── Voice ─────────────────────────────────────────',
       '  :speak                  Toggle reading replies aloud (or launch with --speak)',
+      '',
+      '  ── Safety ────────────────────────────────────────',
+      '  :approve                Toggle auto-approve (skip per-command y/N prompts)',
+      '  :approve all            Approve everything this session',
+      '  :approve off            Re-enable confirmation for destructive commands',
       '',
       '  ── Context / Stats ──────────────────────────────',
       '  :context                Show loaded project context',
