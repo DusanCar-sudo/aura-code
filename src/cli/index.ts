@@ -24,6 +24,7 @@ import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
 import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
+import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
 import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { runProviderWizard } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
@@ -61,6 +62,9 @@ const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.AURA_MAX_
 const cliMaxVerifyRetries = num(argv['max-verify-retries']);
 const cliMaxTurns        = num(argv['max-turns']);
 const cliVerify          = argv.verify === true;
+// Voice output: speak task summaries aloud. Enabled by --speak or AURA_SPEAK=1;
+// toggled at runtime in the REPL with :speak. Mutable so :speak can flip it.
+let speakEnabled         = argv.speak === true || process.env.AURA_SPEAK === '1';
 const cliProfile         = typeof argv.profile === 'string' ? argv.profile : undefined;
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
 const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.AURA_API_RPM);
@@ -334,6 +338,12 @@ if (argv._.length === 0 && !argv.interactive && process.stdin.isTTY !== true && 
 const cwd = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
 const fileConfig = loadProjectConfig(cwd);
 
+// Load persisted API keys (~/.aura/keys.json) into process.env before any
+// provider is built — so keys set once with :apikey survive across sessions
+// and every provider sees them, without depending on shell rc files. Real
+// environment values are never overridden.
+loadKeysIntoEnv();
+
 // Pull global config (saved by the first-run wizard) so the user doesn't have
 // to re-set their provider on every run.
 const globalCfg = loadGlobalConfig();
@@ -342,9 +352,19 @@ const globalCfg = loadGlobalConfig();
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
 const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
 
-// Effective base URL = CLI > .aura.json > global config > undefined
+// Effective base URL = CLI > .aura.json > global config > undefined.
+// CRITICAL: the global config's baseUrl belongs to the provider the wizard
+// configured — it must NOT be forced onto a DIFFERENT model. Otherwise picking
+// `-m deepseek/...` while the global default is a GLM/Z.ai endpoint sends the
+// DeepSeek key to Z.ai → 401. So only inherit globalCfg.baseUrl when the
+// effective model is actually that global default model (same provider).
 const cliBaseUrl = typeof argv['base-url'] === 'string' ? argv['base-url'] : undefined;
-const effectiveBaseUrl = cliBaseUrl ?? fileConfig.baseUrl ?? globalCfg?.baseUrl;
+const globalBaseUrlApplies =
+  !!globalCfg?.baseUrl &&
+  !!globalCfg?.defaultModel &&
+  effectiveModel === globalCfg.defaultModel;
+const effectiveBaseUrl =
+  cliBaseUrl ?? fileConfig.baseUrl ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined);
 
 const resolved = resolveConfig(
   { ...fileConfig, model: effectiveModel, baseUrl: effectiveBaseUrl },
@@ -839,10 +859,21 @@ async function main() {
     if (activeChatId && !noSession) {
       await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
     }
+    {
+      const { recordEpisode } = await import('../dream/episode.js');
+      recordEpisode(ctx.root, {
+        task,
+        model: provider.model,
+        success: result.success,
+        tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+        durationMs: 0,
+      });
+    }
 
     if (result.success) {
       display.summary(result.summary, result.turns, result.toolCallCount);
       printUsageFooter(display, result.usage, result.costUsd);
+      if (speakEnabled) await speakSummary(result.summary);
     } else {
       display.error(result.summary);
       process.exit(1);
@@ -854,15 +885,28 @@ async function main() {
   if (activeChatHistory.length > 0) {
     console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
   }
-  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.\n'));
+  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.'));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   // Let mid-task prompts (tool confirmations, plan approval) reuse this
   // interface instead of opening a second readline on the same stdin.
   setSharedReadline(rl);
 
+  // The input "field": a framed prompt pinned just under the header. Output
+  // from each run flows below it. Width caps at 100 cols so it stays tidy on
+  // wide terminals.
+  const fieldWidth = () => Math.min(process.stdout.columns ?? 80, 100) - 4;
+  const renderField = () => {
+    const w = fieldWidth();
+    const idTag = activeChatId ? ` ${activeChatId}` : '';
+    const label = ` ask aura${idTag} `;
+    const dashes = Math.max(0, w - label.length - 1);
+    console.log('');
+    console.log('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
+  };
+
   const ask = () => {
-    const idTag = activeChatId ? chalk.hex('#4e3d30')(` [${activeChatId}]`) : '';
-    rl.question(chalk.hex('#cc785c')('  ▸ ') + idTag + (idTag ? ' ' : ''), async (line) => {
+    renderField();
+    rl.question(chalk.hex('#9b1b30')('  ╰ ') + chalk.hex('#cc785c').bold('❯ '), async (line) => {
       const input = line.trim();
       if (!input) { ask(); return; }
 
@@ -872,6 +916,7 @@ async function main() {
         providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
         permissions, cumulative,
         chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+        sessionPath,
       };
       const cmdResult = await handleReplCommand(input, replCtx);
       if (cmdResult.handled) {
@@ -938,6 +983,17 @@ async function main() {
         await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
       }
 
+      {
+        const { recordEpisode } = await import('../dream/episode.js');
+        recordEpisode(ctx.root, {
+          task: input,
+          model: runtimeConfig.model ?? resolved.model ?? 'unknown',
+          success: result.success,
+          tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+          durationMs: 0,
+        });
+      }
+
       cumulative.turns += result.turns;
       cumulative.toolCalls += result.toolCallCount;
       cumulative.inputTokens += result.usage.inputTokens;
@@ -947,6 +1003,7 @@ async function main() {
       if (result.success) {
         display.summary(result.summary, result.turns, result.toolCallCount);
         printUsageFooter(display, result.usage, result.costUsd);
+        if (speakEnabled) await speakSummary(result.summary);
       } else {
         display.error(result.summary);
       }
@@ -999,6 +1056,7 @@ interface ReplCtx {
   permissions: PermissionSystem;
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
+  sessionPath: string | undefined;
 }
 
 interface ReplCommandResult {
@@ -1006,6 +1064,26 @@ interface ReplCommandResult {
   newChatId?: string | undefined;
   newHistory?: import('../providers/types.js').HistoryMessage[];
   newTitle?: string | undefined;
+}
+
+/** Best-effort map from a model id to the env-var name its key lives under. */
+function envNameForModel(model: string): string | undefined {
+  const m = model.toLowerCase();
+  // Custom providers from .aura.json declare their own apiKeyEnv + prefixes.
+  for (const p of fileConfig.providers ?? []) {
+    if (p.apiKeyEnv && (p.prefixes ?? []).some(pre => m.startsWith(pre.toLowerCase()))) {
+      return p.apiKeyEnv;
+    }
+  }
+  if (m.startsWith('deepseek/')) return 'DEEPSEEK_API_KEY';
+  if (m.startsWith('glm-') || m.startsWith('zhipu')) return 'ZHIPU_API_KEY';
+  if (m.startsWith('mimo-')) return 'XIAOMI_API_KEY';
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return 'OPENAI_API_KEY';
+  if (m.startsWith('claude') || m.startsWith('anthropic')) return 'ANTHROPIC_API_KEY';
+  if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
+  if (m.includes('grok')) return 'XAI_API_KEY';
+  if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
+  return undefined;
 }
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
@@ -1087,6 +1165,111 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     process.exit(0);
   }
 
+  if (input === ':speak') {
+    speakEnabled = !speakEnabled;
+    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#8a7768')(
+      `  🔊 Voice replies ${speakEnabled ? 'ON — Aura will read its answers aloud' : 'OFF'}.\n`,
+    ));
+    return { handled: true };
+  }
+
+  // :approve — flip the session into auto-approve (no per-command y/N prompt).
+  //   :approve      → toggle auto ⇄ normal
+  //   :approve all  → auto (approve everything for this session)
+  //   :approve off  → back to normal (confirm destructive commands again)
+  // Dangerous commands are still blocked either way.
+  if (input === ':approve' || input === ':approve all' || input === ':approve off') {
+    const cur = c.permissions.getLevel();
+    let next: PermissionLevel;
+    if (input === ':approve off') next = 'normal';
+    else if (input === ':approve all') next = 'auto';
+    else next = cur === 'auto' ? 'normal' : 'auto';
+    c.permissions.setLevel(next);
+    if (next === 'auto') {
+      console.log(chalk.hex('#d4903a')(
+        '  ✅ Auto-approve ON — commands run without asking (dangerous ones still blocked). `:approve off` to re-enable prompts.\n',
+      ));
+    } else {
+      console.log(chalk.hex('#5a9e6e')('  🔒 Auto-approve OFF — destructive commands will ask for confirmation again.\n'));
+    }
+    return { handled: true };
+  }
+
+  if (input === ':dream') {
+    const { runDream } = await import('../dream/dream.js');
+    c.display.agentThinking();
+    const res = await runDream(c.ctx.root, buildProvider(c.display));
+    if (res.episodeCount === 0) {
+      c.display.warning('No new episodes since the last dream.');
+    } else {
+      c.display.success(`Dream written: ${res.dreamPath} (${res.episodeCount} episodes)`);
+      if (res.reconciled) c.display.success('Reconciliation also ran (>=3 dreams exist) -> dreams/.reconciled.md');
+    }
+    return { handled: true };
+  }
+  if (input === ':rem') {
+    const { getReconciledOrLatest } = await import('../dream/dream.js');
+    const res = getReconciledOrLatest(c.ctx.root);
+    if (!res) {
+      c.display.warning('No dreams yet. Run :dream first.');
+    } else {
+      console.log(chalk.hex('#8a7768')(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
+      console.log(res.content);
+    }
+    return { handled: true };
+  }
+  if (input.startsWith(':machina ') || input === ':machina') {
+    const machinaTask = input.slice(':machina '.length).trim();
+    if (!machinaTask) {
+      c.display.warning('Usage: :machina <task> -- runs the task with self-verification (file/test checks + auto-retry).');
+      return { handled: true };
+    }
+    const { runWithVerification } = await import('../verify/index.js');
+    const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+    const testCommand = cliTestCommand ?? fileConfig.testCommand;
+    const wrapperResult = await runWithVerification({
+      loopOpts: {
+        provider: buildProvider(c.display), task: machinaTask,
+        context: c.ctx, permissions: c.permissions, display: c.display,
+        initialHistory: c.chatState.activeChatHistory,
+        maxTurns: resolved.maxTurns,
+        spawnConfig: {
+          apiKey: c.providerConfig.apiKey,
+          baseUrl: c.providerConfig.baseUrl,
+        },
+        sessionPath: c.sessionPath,
+      },
+      config: { enabled: true, maxRetries, testCommand },
+      projectRoot: c.ctx.root,
+      display: c.display,
+    });
+    const mResult = wrapperResult.loopResult;
+    if (mResult.success) {
+      c.display.summary(mResult.summary, mResult.turns, mResult.toolCallCount);
+      printUsageFooter(c.display, mResult.usage, mResult.costUsd);
+    } else {
+      c.display.error(mResult.summary);
+    }
+    return { handled: true, newHistory: mResult.history };
+  }
+  if (input.startsWith(':council ') || input === ':council') {
+    const councilTask = input.slice(':council '.length).trim();
+    if (!councilTask) {
+      c.display.warning('Usage: :council <task> -- runs 2-3 read-only domain specialists in parallel, then synthesizes their reports.');
+      return { handled: true };
+    }
+    const { runMixtureOfAgents } = await import('../agent/mixture.js');
+    const councilResult = await runMixtureOfAgents({
+      provider: buildProvider(c.display), task: councilTask, context: c.ctx, display: c.display,
+    });
+    if (councilResult.success) {
+      c.display.summary(councilResult.summary, councilResult.turns, councilResult.toolCallCount);
+      printUsageFooter(c.display, councilResult.usage, councilResult.costUsd);
+    } else {
+      c.display.error(councilResult.summary);
+    }
+    return { handled: true };
+  }
   if (input === ':help' || input === '/help') {
     console.log(chalk.hex('#8a7768')([
       '',
@@ -1113,6 +1296,20 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :workflow               Create & run a multi-step workflow',
       '    <name> "step1" "step2" ...',
       '  :resume-workflow <id>   Resume a paused/failed workflow',
+      '  :machina <task>         Run task with self-verification + auto-retry',
+      '  :council <task>         2-3 parallel read-only specialists, then synthesis',
+      '',
+      '  ── Memory ───────────────────────────────────────',
+      '  :dream                  Consolidate recent episodes into a dream entry',
+      '  :rem                    Show reconciled memory (or latest dream)',
+      '',
+      '  ── Voice ─────────────────────────────────────────',
+      '  :speak                  Toggle reading replies aloud (or launch with --speak)',
+      '',
+      '  ── Safety ────────────────────────────────────────',
+      '  :approve                Toggle auto-approve (skip per-command y/N prompts)',
+      '  :approve all            Approve everything this session',
+      '  :approve off            Re-enable confirmation for destructive commands',
       '',
       '  ── Context / Stats ──────────────────────────────',
       '  :context                Show loaded project context',
@@ -1370,7 +1567,20 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const newKey = input.slice(sep.length).trim();
     runtimeConfig.apiKey = newKey;
     c.providerConfig.apiKey = newKey;
-    console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session.'));
+    // Persist it so it survives across sessions (fixes "type the key every
+    // time"). Save under the env-var name for the current provider, and also
+    // set that env var live so getApiKey resolves it this session.
+    const envName = globalCfg?.apiKeyEnv || envNameForModel(resolved.model ?? '');
+    if (envName) {
+      try {
+        const p = saveKey(envName, newKey);
+        console.log(chalk.hex('#5a9e6e')(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).`));
+      } catch (e) {
+        console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session (could not persist: ' + String(e) + ').'));
+      }
+    } else {
+      console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session.'));
+    }
     return { handled: true };
   }
 
@@ -1772,6 +1982,30 @@ function printUsageFooter(
   console.log(chalk.hex('#4e3d30')(
     `  ↳ ${total.toLocaleString()} tokens (${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out) · est. $${costUsd.toFixed(4)}`,
   ));
+}
+
+/**
+ * Read a task summary aloud (the "Aura talks back" half of the voice loop).
+ * Best-effort: strips code/markdown, caps length so a long report doesn't
+ * monologue, and never throws into the caller (a TTS/network failure must
+ * not break a successful task).
+ */
+async function speakSummary(text: string): Promise<void> {
+  if (!text || !text.trim()) return;
+  // Strip fenced code blocks, inline code, markdown markers, and collapse
+  // whitespace — TTS should read the prose, not backticks and hashes.
+  const spoken = text
+    .replace(/```[\s\S]*?```/g, ' (code omitted) ')
+    .replace(/`[^`]*`/g, '')
+    .replace(/[#*_>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 600);
+  if (!spoken) return;
+  try {
+    const { speakText } = await import('../tools/dictate.js');
+    await speakText(spoken);
+  } catch { /* speech is best-effort — never break the task on TTS failure */ }
 }
 
 function printHelp() {

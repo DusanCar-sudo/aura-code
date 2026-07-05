@@ -48,13 +48,28 @@ export interface BannerInfo {
   extras?: string[];
 }
 
+/** Clear the screen and move the cursor to the top-left (home). */
+export function clearToTop(): void {
+  // \x1b[2J clears the screen, \x1b[3J wipes scrollback, \x1b[H homes cursor.
+  // Matches how Claude Code pins its header at the top on launch.
+  if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+}
+
+/** A ruby horizontal rule spanning the terminal width (capped). */
+function rule(): string {
+  const width = Math.min(process.stdout.columns ?? 80, 100);
+  return shadow('─'.repeat(width));
+}
+
 /**
  * Full startup banner: big ASCII "AURA CODE" logo in a ruby gradient,
- * with the gem beside it, followed by session info.
+ * with the gem beside it, session info, and a rule — pinned to the top
+ * of a cleared screen so it reads like a real app header, not scrollback.
  */
 export function renderBanner(info: BannerInfo): void {
   const gemPadding = ' '.repeat(GEM[0].length + 2);
 
+  clearToTop();
   console.log('');
   LOGO.forEach((row, i) => {
     const gemPart = GEM[i] ? '  ' + GEM_SHADES[i](GEM[i]) : gemPadding;
@@ -74,7 +89,7 @@ export function renderBanner(info: BannerInfo): void {
   if (meta) console.log('  ' + dim(meta));
   console.log('  ' + dim(info.cwd ?? process.cwd()));
   console.log('  ' + light.italic('"I don\'t try. I verify."'));
-  console.log('');
+  console.log(rule());
 }
 
 /** Standalone diamond (no info column) — splash contexts. */

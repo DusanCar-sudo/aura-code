@@ -1,8 +1,12 @@
 import type { ProjectContext } from './context.js';
 import { getDomainPromptBlock } from './domain-expertise.js';
+import { loadUnifiedMemory } from './unified-memory.js';
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
+  // Unified memory: global identity/facts (shared with the Telegram bot) plus
+  // this project's reconciled lessons. Replaces the old dreams-only block.
+  const memoryBlock = loadUnifiedMemory({ projectRoot: ctx.root });
 
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
@@ -35,7 +39,7 @@ You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framewo
 - Do not introduce new dependencies unless explicitly asked.
 - Prefer targeted, minimal changes over rewrites.
 - Add or update tests when you modify logic.
-${domainBlock}
+${domainBlock}${memoryBlock}
 ## Safety
 - Never delete files unless explicitly instructed.
 - Never commit to git unless explicitly instructed.

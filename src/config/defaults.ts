@@ -86,6 +86,7 @@ export const IGNORE_PATTERNS = [
   '.env', '.env.local', '*.lock', 'package-lock.json',
   '*.pyc', '.DS_Store', 'coverage', '.next', '.nuxt',
   '*.min.js', '*.map',
+  'google-cloud-sdk', 'graphify-out',
 ];
 
 export const BINARY_EXTENSIONS = [

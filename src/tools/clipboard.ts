@@ -76,7 +76,13 @@ export async function clipboardTool(input: ClipboardInput): Promise<string> {
       if (input.text === undefined) return 'Error: text is required for copy';
       try {
         const [bin, ...args] = cmds.copy;
-        execSync(`${bin} ${args.join(' ')}`, { input: input.text });
+        // stdout/stderr must be ignored: wl-copy (and xclip) fork a daemon
+        // that inherits them, so with pipes execSync never returns.
+        execSync(`${bin} ${args.join(' ')}`, {
+          input: input.text,
+          stdio: ['pipe', 'ignore', 'ignore'],
+          timeout: 5000,
+        });
         return `Copied ${input.text.length} characters to clipboard.`;
       } catch (e: any) {
         return `Error copying to clipboard: ${e?.message}`;

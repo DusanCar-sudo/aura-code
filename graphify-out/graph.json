@@ -36,27 +36,6 @@
       "summary": "Source file: README.md"
     },
     {
-      "id": "TELEGRAM_BOT_SETUP.md",
-      "label": "TELEGRAM_BOT_SETUP.md",
-      "type": "file",
-      "file": "TELEGRAM_BOT_SETUP.md",
-      "summary": "Source file: TELEGRAM_BOT_SETUP.md"
-    },
-    {
-      "id": "TELEGRAM_README.md",
-      "label": "TELEGRAM_README.md",
-      "type": "file",
-      "file": "TELEGRAM_README.md",
-      "summary": "Source file: TELEGRAM_README.md"
-    },
-    {
-      "id": "TELEGRAM_SOLUTION_SUMMARY.md",
-      "label": "TELEGRAM_SOLUTION_SUMMARY.md",
-      "type": "file",
-      "file": "TELEGRAM_SOLUTION_SUMMARY.md",
-      "summary": "Source file: TELEGRAM_SOLUTION_SUMMARY.md"
-    },
-    {
       "id": "aura-rebrand-directive.md",
       "label": "aura-rebrand-directive.md",
       "type": "file",
@@ -515,6 +494,40 @@
       "summary": "Source file: docs/test-report.json"
     },
     {
+      "id": "dreams/.last.json",
+      "label": "dreams/.last.json",
+      "type": "file",
+      "file": "dreams/.last.json",
+      "summary": "Source file: dreams/.last.json"
+    },
+    {
+      "id": "mod:dreams",
+      "label": "dreams/",
+      "type": "file",
+      "summary": "Module directory: dreams/"
+    },
+    {
+      "id": "dreams/.reconciled.md",
+      "label": "dreams/.reconciled.md",
+      "type": "file",
+      "file": "dreams/.reconciled.md",
+      "summary": "Source file: dreams/.reconciled.md"
+    },
+    {
+      "id": "dreams/2026-07-03.md",
+      "label": "dreams/2026-07-03.md",
+      "type": "file",
+      "file": "dreams/2026-07-03.md",
+      "summary": "Source file: dreams/2026-07-03.md"
+    },
+    {
+      "id": "dreams/2026-07-04.md",
+      "label": "dreams/2026-07-04.md",
+      "type": "file",
+      "file": "dreams/2026-07-04.md",
+      "summary": "Source file: dreams/2026-07-04.md"
+    },
+    {
       "id": "examples/01_bug_fix.md",
       "label": "examples/01_bug_fix.md",
       "type": "file",
@@ -738,6 +751,13 @@
       "summary": "Source file: src/providers/factory.ts"
     },
     {
+      "id": "src/dream/dream.ts",
+      "label": "src/dream/dream.ts",
+      "type": "file",
+      "file": "src/dream/dream.ts",
+      "summary": "Source file: src/dream/dream.ts"
+    },
+    {
       "id": "src/architect/engine.ts",
       "label": "src/architect/engine.ts",
       "type": "file",
@@ -925,6 +945,19 @@
       "label": "src/config/",
       "type": "file",
       "summary": "Module directory: src/config/"
+    },
+    {
+      "id": "mod:src/dream",
+      "label": "src/dream/",
+      "type": "file",
+      "summary": "Module directory: src/dream/"
+    },
+    {
+      "id": "src/dream/episode.ts",
+      "label": "src/dream/episode.ts",
+      "type": "file",
+      "file": "src/dream/episode.ts",
+      "summary": "Source file: src/dream/episode.ts"
     },
     {
       "id": "mod:src/harness",
@@ -1214,6 +1247,13 @@
       "label": "openai",
       "type": "concept",
       "summary": "External npm package: openai"
+    },
+    {
+      "id": "src/util/json-repair.ts",
+      "label": "src/util/json-repair.ts",
+      "type": "file",
+      "file": "src/util/json-repair.ts",
+      "summary": "Source file: src/util/json-repair.ts"
     },
     {
       "id": "src/providers/resilient.ts",
@@ -1568,13 +1608,6 @@
       "summary": "Source file: src/tools/whatsapp.ts"
     },
     {
-      "id": "src/tools/telegram-agent-bot.ts",
-      "label": "src/tools/telegram-agent-bot.ts",
-      "type": "file",
-      "file": "src/tools/telegram-agent-bot.ts",
-      "summary": "Source file: src/tools/telegram-agent-bot.ts"
-    },
-    {
       "id": "src/tools/telegram-bot.ts",
       "label": "src/tools/telegram-bot.ts",
       "type": "file",
@@ -1586,6 +1619,12 @@
       "label": "src/util/",
       "type": "file",
       "summary": "Module directory: src/util/"
+    },
+    {
+      "id": "npm:jsonrepair",
+      "label": "jsonrepair",
+      "type": "concept",
+      "summary": "External npm package: jsonrepair"
     },
     {
       "id": "src/verify/checks.ts",
@@ -2162,7 +2201,7 @@
       "id": "decision:architecture",
       "label": "Architecture decisions",
       "type": "decision",
-      "summary": "![Aura](./README-hero.jpg) | ![Aura](./README-hero.jpg) | <p align=\"center\">"
+      "summary": "![Aura](./README-hero.jpg) | <p align=\"center\"> |   <img src=\"assets/ruby-diamond.jpg\" width=\"240\" alt=\"Ruby Diamond Technologies\" />"
     }
   ],
   "edges": [
@@ -2512,6 +2551,11 @@
       "relation": "depends_on"
     },
     {
+      "source": "src/agent/system-prompt.ts",
+      "target": "src/dream/dream.ts",
+      "relation": "depends_on"
+    },
+    {
       "source": "src/architect/engine.ts",
       "target": "npm:fs",
       "relation": "depends_on"
@@ -2744,6 +2788,46 @@
     {
       "source": "src/config/project-config.ts",
       "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/dream.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/dream.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/dream.ts",
+      "target": "src/providers/types.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/dream.ts",
+      "target": "src/dream/episode.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/episode.ts",
+      "target": "npm:fs",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/episode.ts",
+      "target": "npm:path",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/episode.ts",
+      "target": "npm:os",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/dream/episode.ts",
+      "target": "npm:crypto",
       "relation": "depends_on"
     },
     {
@@ -3363,6 +3447,11 @@
     },
     {
       "source": "src/providers/openai-compatible.ts",
+      "target": "src/util/json-repair.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/providers/openai-compatible.ts",
       "target": "src/providers/types.ts",
       "relation": "depends_on"
     },
@@ -3847,6 +3936,11 @@
       "relation": "depends_on"
     },
     {
+      "source": "src/setup/provider-wizard.ts",
+      "target": "src/providers/factory.ts",
+      "relation": "depends_on"
+    },
+    {
       "source": "src/tools/browser.ts",
       "target": "src/providers/types.ts",
       "relation": "depends_on"
@@ -4192,31 +4286,6 @@
       "relation": "depends_on"
     },
     {
-      "source": "src/tools/telegram-agent-bot.ts",
-      "target": "npm:fs",
-      "relation": "depends_on"
-    },
-    {
-      "source": "src/tools/telegram-agent-bot.ts",
-      "target": "npm:path",
-      "relation": "depends_on"
-    },
-    {
-      "source": "src/tools/telegram-agent-bot.ts",
-      "target": "npm:os",
-      "relation": "depends_on"
-    },
-    {
-      "source": "src/tools/telegram-agent-bot.ts",
-      "target": "npm:https",
-      "relation": "depends_on"
-    },
-    {
-      "source": "src/tools/telegram-agent-bot.ts",
-      "target": "npm:child_process",
-      "relation": "depends_on"
-    },
-    {
       "source": "src/tools/telegram-bot.ts",
       "target": "npm:fs",
       "relation": "depends_on"
@@ -4243,7 +4312,27 @@
     },
     {
       "source": "src/tools/telegram-bot.ts",
-      "target": "npm:child_process",
+      "target": "src/providers/factory.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/tools/telegram-bot.ts",
+      "target": "src/config/project-config.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/tools/telegram-bot.ts",
+      "target": "src/tools/dictate.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/tools/telegram-bot.ts",
+      "target": "src/providers/types.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/tools/telegram-bot.ts",
+      "target": "src/agent/session-store.ts",
       "relation": "depends_on"
     },
     {
@@ -4334,6 +4423,11 @@
     {
       "source": "src/tools/write-file.ts",
       "target": "src/tools/tools.ts",
+      "relation": "depends_on"
+    },
+    {
+      "source": "src/util/json-repair.ts",
+      "target": "npm:jsonrepair",
       "relation": "depends_on"
     },
     {

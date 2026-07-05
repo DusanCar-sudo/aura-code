@@ -40,3 +40,11 @@ patch-installed-registry.mjs
 # Test-run artifact (generated during vitest runs)
 /Aura.mp3
 .vercel
+
+# Runtime-generated memory & viz state (machine output, not source)
+dreams/
+graphify-out/enriched.json
+
+# Downloaded tooling (reinstallable — must never be committed)
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz

@@ -1,7 +1,5 @@
 ![Aura](./README-hero.jpg)
 
-![Aura](./README-hero.jpg)
-
 <p align="center">
   <img src="assets/ruby-diamond.jpg" width="240" alt="Ruby Diamond Technologies" />
 </p>
@@ -69,6 +67,47 @@ See [docs/MEMORY.md](docs/MEMORY.md) and [examples/](examples/) for the full pic
 
 ---
 
+## Voice — talk to Aura (`dic`)
+
+Aura ships with **`dic`**, a standalone speech-to-text / text-to-speech tool. Speak a task; it transcribes and types the words straight into whatever window has focus — Aura's prompt, your editor, anywhere.
+
+```bash
+dic                 # record → transcribe → type into the focused window (+Enter)
+dic --no-inject     # record → transcribe → clipboard only (no typing)
+dic toggle          # hotkey mode: 1st run starts recording, 2nd sends
+dic loop            # continuous: speak, pause, it types, repeats
+dic speak "hello"   # text-to-speech (MiMo TTS)
+dic devices         # list microphones
+```
+
+**Speech providers** (first available wins): `PARAKEET_BASE_URL` (local NVIDIA Parakeet, no key) › `XIAOMI_API_KEY` (MiMo ASR) › `OPENAI_API_KEY` (Whisper) › `GROQ_API_KEY` (Whisper via Groq).
+
+### Hands-free hotkey (Linux / Wayland)
+
+`dic toggle` is built to sit behind a global shortcut — press once to start talking, press again to send. Typing into the focused window uses, in order, `wtype` → `ydotool` → `xdotool`.
+
+- **KDE / KWin on Wayland** rejects `wtype`, so install **ydotool** and enable its daemon:
+
+  ```bash
+  sudo apt install ydotool
+  sudo usermod -aG input $USER          # then log out / in
+  systemctl --user enable --now ydotool.service
+  ```
+
+- **Binding a key** independent of the desktop is most reliable with **keyd**:
+
+  ```bash
+  sudo apt install keyd
+  # /etc/keyd/default.conf
+  #   [meta]
+  #   space = command(/path/to/dic-toggle)
+  sudo systemctl enable --now keyd
+  ```
+
+Now the flow is: **hotkey → speak → hotkey → your words type into Aura's prompt and run.**
+
+---
+
 ## Modes
 
 | Mode | What it does |
@@ -108,8 +147,8 @@ Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
 
 | Metric | Value |
 |--------|-------|
-| Tests | 734+ passing, 0 failures |
-| Version | v0.3.0 |
+| Tests | 951 passing, 0 failures |
+| Version | v0.8.0 |
 | Language | TypeScript (strict) |
 | License | MIT |
 
