@@ -24,6 +24,9 @@ interface TelegramConfig {
   default_chat_id?: string;
   model?: string;          // LLM model for chat (default: gemini-2.0-flash)
   system_prompt?: string;  // system prompt override
+  /** Telegram user IDs allowed to use the bot. If set, everyone else is
+   *  refused (the bot can run shell commands, so this gate is mandatory). */
+  allowed_user_ids?: string | string[];
 }
 
 function loadConfig(): TelegramConfig {
@@ -42,6 +45,21 @@ function loadConfig(): TelegramConfig {
 const config = loadConfig();
 const TOKEN = config.bot_token;
 const OFFSET_FILE = path.join(os.homedir(), '.aura', 'telegram.offset');
+
+// ── Authorization: only allowed users may talk to the bot ────────────────────
+// The bot can run shell commands, send files, and take webcam photos, so an
+// open door means anyone who finds it controls the PC. If allowed_user_ids is
+// set, everyone else is silently refused.
+const ALLOWED_USER_IDS: string[] = (() => {
+  const raw = config.allowed_user_ids;
+  if (!raw) return [];
+  return (Array.isArray(raw) ? raw : [raw]).map(String);
+})();
+
+function isAuthorized(userId: string | number | undefined): boolean {
+  if (ALLOWED_USER_IDS.length === 0) return true; // no allowlist configured → open (logged as a warning at startup)
+  return userId != null && ALLOWED_USER_IDS.includes(String(userId));
+}
 
 // Register custom providers from project's .aura.json (needed for deepseek/ etc.)
 const projectCfg = loadProjectConfig(process.cwd());
@@ -535,7 +553,72 @@ function isCatastrophic(cmd: string): boolean {
   return banned.some(d => c.includes(d.toLowerCase()));
 }
 
+/**
+ * A command is "read-only" (safe to run without approval) only if EVERY
+ * whitespace/pipe/;-separated segment starts with a known inspection command
+ * AND it contains no output redirection. Anything else (writes, installs,
+ * deletes, unknown binaries) requires explicit approval. Deny-by-default: if
+ * we're not sure it's read-only, we treat it as needing approval.
+ */
+const READ_ONLY_CMDS = new Set([
+  'ls', 'cat', 'pwd', 'whoami', 'date', 'df', 'du', 'ps', 'top', 'free', 'uname',
+  'which', 'find', 'grep', 'rg', 'head', 'tail', 'wc', 'echo', 'stat', 'file',
+  'git', 'uptime', 'hostname', 'id', 'env', 'printenv', 'lsblk', 'lscpu', 'sensors',
+  'nvidia-smi', 'systemctl', 'journalctl', 'sort', 'uniq', 'cut', 'awk', 'sed',
+]);
+function isReadOnlyCommand(cmd: string): boolean {
+  if (/[>]|>>|\btee\b|\bdd\b/.test(cmd)) return false;       // any redirection → mutating
+  // git/systemctl subcommands that mutate:
+  if (/\bgit\s+(push|commit|reset|checkout|clean|rm|merge|rebase|stash\s+drop)\b/.test(cmd)) return false;
+  if (/\bsystemctl\s+(start|stop|restart|enable|disable|mask)\b/.test(cmd)) return false;
+  // Split on shell separators; every segment's first token must be read-only.
+  const segments = cmd.split(/\||;|&&|\|\|/).map(s => s.trim()).filter(Boolean);
+  if (segments.length === 0) return false;
+  for (const seg of segments) {
+    const first = seg.split(/\s+/)[0].replace(/^sudo$/, '');
+    if (first === 'sudo') return false;                       // sudo always needs approval
+    if (!READ_ONLY_CMDS.has(first)) return false;
+  }
+  return true;
+}
+
 const AGENT_MAX_STEPS = 4;
+
+// ── Approval flow ─────────────────────────────────────────────────────────────
+// Mutating actions from the agent (or /run) don't execute immediately — they
+// send an inline ✅/❌ to Dušan and wait. The callback handler in the poll loop
+// resolves the matching promise. Keyed by a short callback id.
+interface PendingApproval {
+  resolve: (approved: boolean) => void;
+  command: string;
+  createdAt: number;
+}
+const pendingApprovals = new Map<string, PendingApproval>();
+const APPROVAL_TIMEOUT_MS = 5 * 60_000;
+
+/** Ask Dušan to approve a command; resolves true/false (false on timeout). */
+async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
+  const id = `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const keyboard = {
+    inline_keyboard: [[
+      { text: '✅ Approve', callback_data: `ok:${id}` },
+      { text: '❌ Deny', callback_data: `no:${id}` },
+    ]],
+  };
+  await apiPost('sendMessage', {
+    chat_id: chatId,
+    text: `⚠️ Approve ${label}?\n\n\`${command.slice(0, 300)}\``,
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+  return new Promise<boolean>((resolve) => {
+    pendingApprovals.set(id, { resolve, command, createdAt: Date.now() });
+    setTimeout(() => {
+      const p = pendingApprovals.get(id);
+      if (p) { pendingApprovals.delete(id); p.resolve(false); }
+    }, APPROVAL_TIMEOUT_MS);
+  });
+}
 
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
   const provider = getChatProvider();
@@ -583,6 +666,15 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
           console.error(`[${ts0()}] agent RUN: ${arg}`);
           if (isCatastrophic(arg)) {
             toolOut = 'BLOCKED: refused as catastrophic. Do not retry this command.';
+          } else if (!isReadOnlyCommand(arg)) {
+            // Mutating / unknown command → require Dušan's explicit approval.
+            const approved = await requestApproval(chatId, 'this command', arg);
+            if (!approved) {
+              toolOut = 'DENIED by user (not approved). Do not retry; suggest an alternative or ask.';
+            } else {
+              const r = await execShell(arg);
+              toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
+            }
           } else {
             const r = await execShell(arg);
             toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
@@ -800,6 +892,11 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     if (isCatastrophic(cmd)) {
       return '🚫 Blocked: extremely dangerous command detected. This would destroy your system.';
     }
+    // Mutating commands need an explicit ✅ approval; read-only run immediately.
+    if (!isReadOnlyCommand(cmd)) {
+      const approved = await requestApproval(chatId, 'this command', cmd);
+      if (!approved) return '❌ Denied — command not run.';
+    }
 
     const result = await execShell(cmd);
     const output = result.stdout || result.stderr || '(no output)';
@@ -1008,54 +1105,87 @@ async function poll(): Promise<void> {
         offset = update.update_id + 1;
         saveOffset(offset);
 
+        // Approval button taps (✅/❌) arrive as callback_query, not messages.
+        const cb = update.callback_query;
+        if (cb) {
+          const cbAuthorized = isAuthorized(cb.from?.id);
+          const data: string = cb.data ?? '';
+          const m = data.match(/^(ok|no):(.+)$/);
+          let note = 'Expired or already handled.';
+          if (cbAuthorized && m) {
+            const pending = pendingApprovals.get(m[2]);
+            if (pending) {
+              pendingApprovals.delete(m[2]);
+              const approved = m[1] === 'ok';
+              pending.resolve(approved);
+              note = approved ? '✅ Approved' : '❌ Denied';
+            }
+          } else if (!cbAuthorized) {
+            note = '🚫 Not authorized.';
+          }
+          // Acknowledge the tap (removes the spinner) and update the message.
+          try { await apiPost('answerCallbackQuery', { callback_query_id: cb.id, text: note }); } catch { /* ignore */ }
+          try {
+            await apiPost('editMessageText', {
+              chat_id: cb.message?.chat?.id,
+              message_id: cb.message?.message_id,
+              text: `${cb.message?.text ?? ''}\n\n${note}`,
+            });
+          } catch { /* ignore */ }
+          continue;
+        }
+
         const msg = update.message;
         if (!msg) continue;
 
         const chatId = msg.chat.id;
         const from = msg.from?.first_name ?? msg.from?.username ?? 'unknown';
 
-        // Voice message → transcribe it (STT) and treat as text. Replying by
-        // voice too, so the whole exchange can be hands-free.
-        let text: string = msg.text ?? '';
-        let cameFromVoice = false;
-        const voice = msg.voice || msg.audio;
-        if (!text && voice?.file_id) {
-          cameFromVoice = true;
-          try {
-            const audioPath = await downloadTelegramFile(voice.file_id);
-            text = await transcribeFile(audioPath);
-            try { fs.unlinkSync(audioPath); } catch {}
-            console.log(`[${ts()}] 🎤 [${from}] (voice): ${text}`);
-            if (text) await sendMessage(chatId, `🎤 “${text}”`);
-          } catch (e: any) {
-            console.error(`[${ts()}] ❌ Transcription error: ${e.message}`);
-            await sendMessage(chatId, `❌ Couldn't transcribe that: ${e.message}`);
-            continue;
-          }
+        // AUTH GATE — refuse anyone not on the allowlist. The bot controls the
+        // PC, so this is the primary security boundary.
+        if (!isAuthorized(msg.from?.id)) {
+          console.error(`[${ts()}] 🚫 Unauthorized ${from} (id ${msg.from?.id}) — refused: ${(msg.text ?? '(non-text)').slice(0, 60)}`);
+          try { await sendMessage(chatId, '🚫 Not authorized.'); } catch { /* ignore */ }
+          continue;
         }
-        if (!text) continue;
 
-        if (!cameFromVoice) console.log(`[${ts()}] 📩 [${from}]: ${text}`);
-
-        try {
-          const response = await handleCommand(chatId, text, from);
-          await sendMessage(chatId, response);
-          // If the user spoke to us, reply with voice too (best-effort).
-          if (cameFromVoice) {
-            try {
-              const wav = await synthesizeSpeech(response.slice(0, 1000));
-              await sendVoice(chatId, wav);
-            } catch (e: any) {
-              console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
+        // Handle the message WITHOUT blocking the poll loop. A command may wait
+        // on an approval tap (requestApproval), and that tap arrives as a later
+        // update — if we awaited the handler here, the loop couldn't fetch it
+        // (deadlock). So process each message as a detached task; the loop keeps
+        // polling and can deliver the callback that unblocks it.
+        void (async () => {
+          try {
+            let text: string = msg.text ?? '';
+            let cameFromVoice = false;
+            const voice = msg.voice || msg.audio;
+            if (!text && voice?.file_id) {
+              cameFromVoice = true;
+              const audioPath = await downloadTelegramFile(voice.file_id);
+              text = await transcribeFile(audioPath);
+              try { fs.unlinkSync(audioPath); } catch {}
+              console.log(`[${ts()}] 🎤 [${from}] (voice): ${text}`);
+              if (text) await sendMessage(chatId, `🎤 “${text}”`);
             }
+            if (!text) return;
+            if (!cameFromVoice) console.log(`[${ts()}] 📩 [${from}]: ${text}`);
+
+            const response = await handleCommand(chatId, text, from);
+            await sendMessage(chatId, response);
+            if (cameFromVoice) {
+              try {
+                const wav = await synthesizeSpeech(response.slice(0, 1000));
+                await sendVoice(chatId, wav);
+              } catch (e: any) {
+                console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
+              }
+            }
+            console.log(`[${ts()}] 📤 Replied to ${from}`);
+          } catch (e: any) {
+            console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
+            try { await sendMessage(chatId, `❌ Greška: ${e.message}`); } catch { /* give up */ }
           }
-          console.log(`[${ts()}] 📤 Replied to ${from}`);
-        } catch (e: any) {
-          console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
-          try {
-            await sendMessage(chatId, `❌ Greška: ${e.message}`);
-          } catch { /* give up */ }
-        }
+        })();
       }
 
       // Periodic heartbeat
