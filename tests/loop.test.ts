@@ -1,4 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Give the fake model a tiny context window so compaction triggers with
+// test-sized histories; every other model resolves as usual.
+vi.mock('../src/providers/factory.js', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../src/providers/factory.js')>();
+  return {
+    ...mod,
+    getContextWindow: (m: string) => (m === 'fake-model' ? 10_000 : mod.getContextWindow(m)),
+  };
+});
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -177,6 +187,36 @@ describe('runAgentLoop', () => {
     expect(result.success).toBe(true);
     expect(result.summary).toBe('made it');
     expect(result.turns).toBe(34);
+  });
+
+  it('compacts history mid-run and keeps the executive digest + full toolCallLog', async () => {
+    // ~2,900 tokens of prose per turn (3.5 chars/token fallback) against a
+    // 10k window (mocked above): the 75% trigger fires after ~3 turns.
+    const fat = 'y'.repeat(10_000);
+    const responses: LLMResponse[] = Array.from({ length: 5 }, (_, i) => ({
+      text: fat,
+      toolCalls: [{ id: `c${i}`, name: 'write_file', input: { path: `f${i}.ts`, content: 'x' } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+
+    expect(result.success).toBe(true);
+    // Compaction happened: some later provider call saw the recap message,
+    // carrying the executive digest of already-executed mutations.
+    const recaps = provider.calls.filter(
+      m => m.role === 'assistant' && m.content.includes('[Earlier conversation compacted'),
+    );
+    expect(recaps.length).toBeGreaterThan(0);
+    expect(recaps.some(m => (m as { content: string }).content.includes('do not repeat'))).toBe(true);
+    expect(recaps.some(m => (m as { content: string }).content.includes('write_file f0.ts'))).toBe(true);
+    // The verify-layer contract holds: toolCallLog still has every call.
+    expect(result.toolCallLog.filter(c => c.name === 'write_file').length).toBe(5);
   });
 
   it('never widens past an explicit maxTurns override', async () => {

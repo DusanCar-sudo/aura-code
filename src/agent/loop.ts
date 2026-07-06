@@ -12,6 +12,9 @@ import type { VerificationConfig } from '../verify/types.js';
 import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
 import { createCheckpoint, pruneCheckpoints } from '../checkpoints/engine.js';
 import { DEFAULTS } from '../config/defaults.js';
+import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
+import { compactHistory, estimateContextTokens } from './compactor.js';
+import { detectFrustration } from './affect.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -56,9 +59,6 @@ export interface TokenUsage {
   outputTokens: number;
   totalTokens: number;
 }
-
-/** Tools that can change the working tree — the checkpoint trigger set. */
-const MUTATING_TOOLS = new Set(['write_file', 'edit_file', 'run_shell']);
 
 const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
   'claude-opus-4-5-20251001':   { in: 15,  out: 75  },
@@ -130,6 +130,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const { opts, provider, system, history, profile, pricingModel, display, permissions } = args;
   let { turns, toolCallCount, usage } = args;
   const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
+  // Bounded record of state-altering calls; its digest survives compaction so
+  // the model never repeats a write/edit/command it already executed.
+  const execQueue = new ExecutiveQueue();
 
   // Stall detection: if the recent turns repeat the exact same tool call(s)
   // (or alternate between the same two), the agent is stuck rather than
@@ -161,6 +164,20 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       }
     }
     turns++;
+
+    // Compaction check runs pre-call: estimateContextTokens measures the
+    // payload about to be sent (see its doc for why not per-turn usage sums).
+    {
+      const estimated = estimateContextTokens(system, history);
+      const compacted = compactHistory(history, estimated, provider.model, {
+        executiveDigest: execQueue.size > 0 ? execQueue.digest() : undefined,
+        affectHint: detectFrustration(history) ?? undefined,
+      });
+      if (compacted) {
+        display.warning(`Context compacted (~${estimated} tokens estimated).`);
+        await persist(opts.sessionPath, history);
+      }
+    }
 
     let responseText = '';
     const responseToolCalls: ToolCall[] = [];
@@ -323,6 +340,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         display.toolResult(call.name, result, elapsed);
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
         toolCallLog.push({ name: call.name, input: call.input });
+        if (!isError) execQueue.push(call.name, call.input, turns);
 
         if (opts.hooks && opts.hooks.length > 0) {
           const { runHooks } = await import('../plugins/hooks.js');
