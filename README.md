@@ -67,6 +67,16 @@ See [docs/MEMORY.md](docs/MEMORY.md) and [examples/](examples/) for the full pic
 
 ---
 
+### Context compaction (new)
+
+Long sessions now auto-summarize older turns to stay within the model's
+context window instead of growing unbounded. This is recently added and
+still being hardened against edge cases in unusual tool-call sequences —
+if you hit a session that loses track of something it already did, that's
+the area to report.
+
+---
+
 ## Voice — talk to Aura (`dic`)
 
 Aura ships with **`dic`**, a standalone speech-to-text / text-to-speech tool. Speak a task; it transcribes and types the words straight into whatever window has focus — Aura's prompt, your editor, anywhere.
@@ -147,7 +157,7 @@ Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
 
 | Metric | Value |
 |--------|-------|
-| Tests | 951 passing, 0 failures |
+| Tests | 1245 passing, 43 known failures (pre-existing, untriaged — not from recent changes) |
 | Version | v0.8.0 |
 | Language | TypeScript (strict) |
 | License | MIT |
