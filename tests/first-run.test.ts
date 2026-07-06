@@ -2,21 +2,25 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { hasAnyProvider, needsWizard, PROVIDER_CHOICES } from '../src/setup/first-run.js';
+import { hasAnyProvider, needsWizard } from '../src/setup/first-run.js';
+import { PROVIDER_REGISTRY } from '../src/setup/provider-registry.js';
 import { getApiKey } from '../src/util/env.js';
+
+function wipeProviderEnv(): void {
+  for (const p of PROVIDER_REGISTRY) {
+    if (p.envKey) {
+      delete process.env[p.envKey];
+      delete process.env[p.envKey.toLowerCase()];
+    }
+  }
+}
 
 describe('first-run detection', () => {
   const orig = { ...process.env };
   const origXdg = process.env.XDG_CONFIG_HOME;
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
   beforeEach(() => {
-    // Wipe all known provider env vars (both cases)
-    for (const p of PROVIDER_CHOICES) {
-      if (p.apiKeyEnv) {
-        delete process.env[p.apiKeyEnv];
-        delete process.env[p.apiKeyEnv.toLowerCase()];
-      }
-    }
+    wipeProviderEnv();
     // Isolate global config from the user's actual home so the test does not
     // depend on (and does not leak state to) ~/.config/aura-code/config.json.
     process.env.XDG_CONFIG_HOME = tmpHome;
@@ -26,6 +30,7 @@ describe('first-run detection', () => {
     if (origXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = origXdg;
     fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.mkdirSync(tmpHome, { recursive: true });
   });
 
   it('hasAnyProvider is false when no key is set', () => {
@@ -62,11 +67,9 @@ describe('first-run detection', () => {
   });
 
   it('needsWizard does NOT trigger when global config exists (model already saved)', () => {
-    // Write a fake global config to the test-isolated path
-    const xdg = process.env.XDG_CONFIG_HOME!;
-    const cfgDir = `${xdg}/aura-code`;
-    require('fs').mkdirSync(cfgDir, { recursive: true });
-    require('fs').writeFileSync(`${cfgDir}/config.json`, JSON.stringify({
+    const cfgDir = path.join(process.env.XDG_CONFIG_HOME!, 'aura-code');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({
       provider: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY',
       defaultModel: 'claude-sonnet-4-5-20251001',
       createdAt: 'x', updatedAt: 'x',
@@ -74,32 +77,38 @@ describe('first-run detection', () => {
     expect(needsWizard({})).toBe(false);
   });
 
-  it('PROVIDER_CHOICES covers 8 vendors with description + models', () => {
-    expect(PROVIDER_CHOICES.length).toBeGreaterThanOrEqual(8);
-    for (const p of PROVIDER_CHOICES) {
-      expect(p.id).toBeTruthy();
+  it('needsWizard does NOT trigger when a wizard provider.json exists (keyless providers)', () => {
+    const cfgDir = path.join(process.env.XDG_CONFIG_HOME!, 'aura-code');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(path.join(cfgDir, 'provider.json'), JSON.stringify({
+      provider: 'Ollama (local, free)', model: 'llama3.2',
+      baseUrl: 'http://localhost:11434/v1',
+    }));
+    expect(needsWizard({})).toBe(false);
+  });
+
+  it('PROVIDER_REGISTRY entries are well-formed', () => {
+    expect(PROVIDER_REGISTRY.length).toBeGreaterThanOrEqual(8);
+    const names = new Set<string>();
+    for (const p of PROVIDER_REGISTRY) {
       expect(p.name).toBeTruthy();
-      expect(p.description).toBeTruthy();
-      expect(p.models.length).toBeGreaterThan(0);
-      if (p.needsKey) expect(p.apiKeyEnv).toBeTruthy();
+      expect(names.has(p.name)).toBe(false); // no duplicate provider entries
+      names.add(p.name);
+      for (const m of p.models) {
+        expect(m.id).toBeTruthy();
+        expect(m.contextWindow).toBeGreaterThan(0);
+      }
     }
   });
 
-  it('PROVIDER_CHOICES includes the major vendors', () => {
-    const ids = PROVIDER_CHOICES.map(p => p.id);
-    expect(ids).toContain('anthropic');
-    expect(ids).toContain('openai');
-    expect(ids).toContain('google');
-    expect(ids).toContain('xiaomi');
-    expect(ids).toContain('xai');
-    expect(ids).toContain('openrouter');
-    expect(ids).toContain('ollama');
-    expect(ids).toContain('local');
-  });
-
-  it('every provider has at least 3 models in its menu', () => {
-    for (const p of PROVIDER_CHOICES) {
-      expect(p.models.length).toBeGreaterThanOrEqual(3);
+  it('a model id resolves to ONE context window across the registry', () => {
+    const windows = new Map<string, number>();
+    for (const p of PROVIDER_REGISTRY) {
+      for (const m of p.models) {
+        const seen = windows.get(m.id);
+        if (seen !== undefined) expect(seen).toBe(m.contextWindow);
+        windows.set(m.id, m.contextWindow);
+      }
     }
   });
 });
@@ -107,12 +116,7 @@ describe('first-run detection', () => {
 describe('regression: getApiKey + provider selection', () => {
   const orig = { ...process.env };
   beforeEach(() => {
-    for (const p of PROVIDER_CHOICES) {
-      if (p.apiKeyEnv) {
-        delete process.env[p.apiKeyEnv];
-        delete process.env[p.apiKeyEnv.toLowerCase()];
-      }
-    }
+    wipeProviderEnv();
   });
   afterEach(() => {
     process.env = { ...orig };

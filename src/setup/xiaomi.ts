@@ -41,15 +41,16 @@ export function normalizeXiaomiWizardConfig(
   model: string,
   apiKey: string | undefined,
   baseUrl: string,
+  region: 'sgp' | 'cn' | 'ams' = 'sgp',
 ): { model: string; baseUrl: string; note?: string } {
   const kind = xiaomiKeyKind(apiKey);
   let outModel = model;
-  let outBase = baseUrl.trim() || defaultXiaomiBaseUrl(apiKey);
+  let outBase = baseUrl.trim() || defaultXiaomiBaseUrl(apiKey, region);
   let note: string | undefined;
 
   if (kind === 'token-plan' || isTokenPlanBaseUrl(outBase)) {
     if (!outBase.includes('token-plan')) {
-      outBase = defaultXiaomiBaseUrl(apiKey);
+      outBase = defaultXiaomiBaseUrl(apiKey, region);
       note = 'Token Plan key detected — using Token Plan base URL.';
     }
     if (!(XIAOMI_TOKEN_PLAN_MODELS as readonly string[]).includes(outModel)) {

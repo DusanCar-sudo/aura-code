@@ -80,28 +80,6 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
-    name: 'Zhipu (Z.ai)',
-    baseUrl: 'https://api.z.ai/api/paas/v4',
-    envKey: 'ZHIPU_API_KEY',
-    signupUrl: 'https://z.ai/manage-apikey/apikey-list',
-    models: [
-      { id: 'glm-5.2', label: 'GLM-5.2', speed: 'Powerful · 1M context', contextWindow: 1_000_000 },
-      { id: 'glm-5.1', label: 'GLM-5.1', speed: 'Powerful · agentic', contextWindow: 200_000 },
-      { id: 'glm-5', label: 'GLM-5', speed: 'Powerful · 744B MoE', contextWindow: 200_000 },
-    ],
-  },
-  {
-    name: 'Zhipu Coding Plan (Z.ai)',
-    baseUrl: 'https://api.z.ai/api/coding/paas/v4',
-    envKey: 'ZHIPU_API_KEY',
-    signupUrl: 'https://z.ai/subscribe',
-    models: [
-      { id: 'glm-5.2', label: 'GLM-5.2 (Coding Plan)', speed: 'Powerful · 1M context', contextWindow: 1_000_000 },
-      { id: 'glm-5.1', label: 'GLM-5.1 (Coding Plan)', speed: 'Powerful · agentic', contextWindow: 200_000 },
-      { id: 'glm-5', label: 'GLM-5 (Coding Plan)', speed: 'Powerful · 744B MoE', contextWindow: 200_000 },
-    ],
-  },
-  {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
     envKey: 'OPENROUTER_API_KEY',
@@ -144,13 +122,15 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
   },
   {
     name: 'GLM (Zhipu)',
-    baseUrl: '', // resolved in wizard based on Coding Plan vs pay-as-you-go choice
+    // General endpoint as default; the wizard swaps in the Coding Plan
+    // endpoint when the user picks that plan.
+    baseUrl: 'https://api.z.ai/api/paas/v4',
     envKey: 'ZHIPU_API_KEY',
     signupUrl: 'https://z.ai',
     models: [
       { id: 'glm-5.2', label: 'GLM-5.2', speed: 'Powerful · 1M context', contextWindow: 1_000_000 },
       { id: 'glm-5.1', label: 'GLM-5.1', speed: 'Powerful · agentic', contextWindow: 200_000 },
-      { id: 'glm-5',   label: 'GLM-5',   speed: 'Powerful · 744B MoE', contextWindow: 128_000 },
+      { id: 'glm-5',   label: 'GLM-5',   speed: 'Powerful · 744B MoE', contextWindow: 200_000 },
     ],
   },
   {
