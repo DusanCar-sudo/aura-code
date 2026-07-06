@@ -8,34 +8,39 @@ const ruby   = chalk.hex('#9b1b30');
 const shadow = chalk.hex('#6d1322');
 const dim    = chalk.hex('#8a7768');
 
-// Gem: flat top table, monotonically narrowing straight down to a single
-// point. No widen-then-narrow bulge (that reads as a heart, not a gem).
-// Solid blocks only — no fractional glyphs — so the point renders cleanly
-// on every terminal font.
+/**
+ * Brilliant-cut gem, 9 rows: a narrow flat table, a widening crown, the
+ * wide girdle (row 4, the widest point), then a long tapering pavilion
+ * down to a single point — the silhouette of an actual cut diamond, not
+ * a symmetric kite or a wedge. Solid blocks only (no fractional glyphs)
+ * so the point renders cleanly on every terminal font; per-row 3D facet
+ * shading is applied at render time by styleGemRow, not baked in here.
+ */
 const GEM = [
-'  ██████████  ',
-'██████████████',
-' ████████████ ',
-'  ██████████  ',
-'   ████████   ',
-'    ██████    ',
-'     ████     ',
-'      ██      ',
+  '   █████    ', // table
+  '  ████████  ', // crown
+  ' ██████████ ', // crown → girdle
+  '████████████', // girdle (widest)
+  ' █████████  ', // pavilion
+  '  ███████   ', // pavilion
+  '   █████    ', // pavilion
+  '    ███     ', // pavilion, narrowing to the point
+  '     █      ', // point
 ];
 
 const LOGO = [
-' ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░         ░▒▓██████▓▒░  ▒▓██████▓▒░░▒▓███████▓▒░░ ▒▓████████▓ ',
-'░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ▒▓█▓▒░      ',
-'░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓█▓▒░      ',
-'░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓████████▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓██████▓▒  ',
-'░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓█▓▒░      ',
-'░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ▒▓█▓▒░      ',
-'░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░        ░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓███████▓▒░░ ▒▓████████▓ '
+  ' ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░         ░▒▓██████▓▒░  ▒▓██████▓▒░░▒▓███████▓▒░░ ▒▓████████▓ ',
+  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ▒▓█▓▒░      ',
+  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓█▓▒░      ',
+  '░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓████████▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓██████▓▒  ',
+  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓█▓▒░      ',
+  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ▒▓█▓▒░      ',
+  '░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░        ░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓███████▓▒░░ ▒▓████████▓ ',
 ];
 
-// Gradient across the 7 LOGO/GEM rows: bright ruby at top fading to deep wine.
-const LOGO_SHADES = [light, light, mid, mid, ruby, ruby, shadow];
-const GEM_SHADES  = [light, light, mid, mid, ruby, ruby, shadow];
+// Shade zones for 3D faceted diamond: [leftFace, midFace, shadowFace].
+// Light comes from top-left, so left face is brightest.
+const FACET_SHADES = [light, mid, shadow] as const;
 
 export interface BannerInfo {
   version: string;
@@ -62,19 +67,59 @@ function rule(): string {
 }
 
 /**
- * Full startup banner: big ASCII "AURA CODE" logo in a ruby gradient,
- * with the gem beside it, session info, and a rule — pinned to the top
- * of a cleared screen so it reads like a real app header, not scrollback.
+ * Apply 3D faceted lighting to a diamond row: bright → mid → shadow across
+ * the width of its solid-block run (three-zone split, 40/35/25).
+ */
+function styleGemRow(row: string, shades: readonly chalk.Chalk[]): string {
+  const match = row.match(/([█]+)/);
+  if (!match) return row;
+
+  const blockStr = match[1];
+  const blockIdx = match.index!;
+  const len = blockStr.length;
+
+  const leftLen  = Math.max(1, Math.ceil(len * 0.40));
+  const midLen   = Math.max(1, Math.ceil(len * 0.35));
+  const rightLen = Math.max(0, len - leftLen - midLen);
+
+  let styled = '';
+  if (leftLen > 0)  styled += shades[0](blockStr.slice(0, leftLen));
+  if (midLen > 0)   styled += shades[1](blockStr.slice(leftLen, leftLen + midLen));
+  if (rightLen > 0) styled += shades[2](blockStr.slice(leftLen + midLen));
+
+  return row.slice(0, blockIdx) + styled + row.slice(blockIdx + len);
+}
+
+/** Render the gem alone, centered above whatever text follows it. */
+function renderGemBlock(indent: number): void {
+  const pad = ' '.repeat(Math.max(0, indent));
+  GEM.forEach(row => console.log(pad + styleGemRow(row, FACET_SHADES)));
+}
+
+/**
+ * Render the banner:
+ * - Brilliant-cut gem centered above the wordmark, each row faceted
+ *   left-bright / mid / shadow (light hits from the top-left).
+ * - LOGO text gets a left-bright / right-shadow treatment.
+ * - Session metadata (version, provider/model, cwd, tagline) below,
+ *   pinned to the top of a cleared screen so it reads like a real app
+ *   header, not scrollback.
  */
 export function renderBanner(info: BannerInfo): void {
-  const gemPadding = ' '.repeat(GEM[0].length + 2);
-
   clearToTop();
   console.log('');
-  LOGO.forEach((row, i) => {
-    const gemPart = GEM[i] ? '  ' + GEM_SHADES[i](GEM[i]) : gemPadding;
-    console.log(LOGO_SHADES[i](row) + gemPart);
+
+  const gemIndent = Math.floor((LOGO[0].length - GEM[0].length) / 2);
+  renderGemBlock(gemIndent);
+  console.log('');
+
+  LOGO.forEach(row => {
+    const midPoint = Math.floor(row.length / 2);
+    const leftSide  = row.slice(0, midPoint);
+    const rightSide = row.slice(midPoint);
+    console.log(light(leftSide) + shadow(rightSide));
   });
+
   console.log('');
 
   const meta = [
@@ -92,9 +137,9 @@ export function renderBanner(info: BannerInfo): void {
   console.log(rule());
 }
 
-/** Standalone diamond (no info column) — splash contexts. */
+/** Standalone diamond (no logo, no info column) — splash contexts. */
 export function renderDiamond(): void {
   console.log('');
-  GEM.forEach((row, i) => console.log('  ' + GEM_SHADES[i](row)));
+  renderGemBlock(2);
   console.log('');
 }
