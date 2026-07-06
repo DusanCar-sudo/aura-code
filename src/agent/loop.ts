@@ -13,7 +13,8 @@ import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from '.
 import { createCheckpoint, pruneCheckpoints } from '../checkpoints/engine.js';
 import { DEFAULTS } from '../config/defaults.js';
 import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
-import { compactHistory, estimateContextTokens } from './compactor.js';
+import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } from './compactor.js';
+import { maybeRollover } from './generational-flush.js';
 import { detectFrustration } from './affect.js';
 
 export interface LoopOptions {
@@ -168,14 +169,27 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     // Compaction check runs pre-call: estimateContextTokens measures the
     // payload about to be sent (see its doc for why not per-turn usage sums).
     {
-      const estimated = estimateContextTokens(system, history);
-      const compacted = compactHistory(history, estimated, provider.model, {
+      const compactionExtras = {
         executiveDigest: execQueue.size > 0 ? execQueue.digest() : undefined,
         affectHint: detectFrustration(history) ?? undefined,
-      });
-      if (compacted) {
-        display.warning(`Context compacted (~${estimated} tokens estimated).`);
-        await persist(opts.sessionPath, history);
+      };
+      // The ladder in compactHistory escalates its own trigger per recap
+      // generation; once a recap has been recompacted ROLLOVER_AT_GENERATION
+      // times, a further in-place pass would just be lossy recompaction —
+      // flush it to the dream store instead (one LLM call) and start clean.
+      if (getRecapGeneration(history) >= ROLLOVER_AT_GENERATION) {
+        const { flushed } = await maybeRollover(history, opts.context.root, provider, compactionExtras);
+        if (flushed) {
+          display.warning('Context flushed to memory — starting a fresh context window.');
+          await persist(opts.sessionPath, history);
+        }
+      } else {
+        const estimated = estimateContextTokens(system, history);
+        const compacted = compactHistory(history, estimated, provider.model, compactionExtras);
+        if (compacted) {
+          display.warning(`Context compacted (~${estimated} tokens estimated).`);
+          await persist(opts.sessionPath, history);
+        }
       }
     }
 

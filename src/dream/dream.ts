@@ -18,12 +18,23 @@ function todayFile(root: string): string {
   return path.join(dreamsDir(root), `${d}.md`);
 }
 
+/**
+ * Dated dream-store path for a mid-session flush (see generational-flush.ts).
+ * Suffixed so multiple flushes in one day don't collide with each other or
+ * with the end-of-session `todayFile()` dream — each is its own dream file,
+ * picked up the same way by `listDreamFiles`/`runReconciliation`.
+ */
+export function sessionFlushFile(root: string, seq: number): string {
+  const d = new Date().toISOString().slice(0, 10);
+  return path.join(dreamsDir(root), `${d}-flush-${seq}.md`);
+}
+
 function listDreamFiles(root: string): string[] {
   const dir = dreamsDir(root);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
-    .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
-    .sort(); // ISO dates sort chronologically as strings
+    .filter(f => /^\d{4}-\d{2}-\d{2}(-flush-\d+)?\.md$/.test(f))
+    .sort(); // ISO dates + suffix sort chronologically as strings
 }
 
 function lastDreamTimestamp(root: string): number {
@@ -51,6 +62,31 @@ const DREAM_SYSTEM = [
 ].join(' ');
 
 /**
+ * Spend one LLM call distilling `userContent` under `systemPrompt`, and
+ * write the result to `outPath`. The one shared distillation primitive —
+ * `runDream` uses it for episode batches, and a mid-session context-window
+ * rollover (src/agent/generational-flush.ts) uses it for a recap block —
+ * so both write into the same dream-store shape and both feed the same
+ * `runReconciliation()` pass.
+ */
+export async function distillText(opts: {
+  systemPrompt: string;
+  userContent: string;
+  provider: LLMProvider;
+  outPath: string;
+}): Promise<string> {
+  const response = await opts.provider.complete(
+    opts.systemPrompt,
+    [{ role: 'user', content: opts.userContent }],
+    [],
+  );
+  const text = response.text || '(model returned no content)';
+  fs.mkdirSync(path.dirname(opts.outPath), { recursive: true });
+  fs.writeFileSync(opts.outPath, text);
+  return text;
+}
+
+/**
  * Run one dream cycle: consolidate episodes since the last dream into a
  * dated markdown file. Spends exactly one LLM call. Triggers reconciliation
  * automatically once >=3 dream files exist.
@@ -58,8 +94,9 @@ const DREAM_SYSTEM = [
 export async function runDream(
   root: string,
   provider: LLMProvider,
+  full = false,
 ): Promise<{ dreamPath: string; episodeCount: number; reconciled: boolean }> {
-  const since = lastDreamTimestamp(root);
+  const since = full ? 0 : lastDreamTimestamp(root);
   const episodes = since > 0 ? listEpisodesSince(root, since) : listEpisodes(root);
 
   fs.mkdirSync(dreamsDir(root), { recursive: true });
@@ -71,14 +108,13 @@ export async function runDream(
   }
 
   const episodesText = formatEpisodesForPrompt(episodes);
-  const response = await provider.complete(
-    DREAM_SYSTEM,
-    [{ role: 'user', content: `${episodes.length} episodes since last dream:\n\n${episodesText}` }],
-    [],
-  );
-
   const dreamPath = todayFile(root);
-  fs.writeFileSync(dreamPath, response.text || '(model returned no content)');
+  await distillText({
+    systemPrompt: DREAM_SYSTEM,
+    userContent: `${episodes.length} episodes${full ? ' (full — all recorded)' : ' since last dream'}:\n\n${episodesText}`,
+    provider,
+    outPath: dreamPath,
+  });
 
   let reconciled = false;
   if (listDreamFiles(root).length >= 3) {

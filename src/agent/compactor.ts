@@ -1,17 +1,51 @@
 import type { HistoryMessage } from '../providers/types.js';
 import { getContextWindow } from '../providers/factory.js';
 
-/** Compact when the estimated payload reaches this share of the window. */
-const COMPACTION_THRESHOLD = 0.75;
+/**
+ * Escalating trigger ladder, indexed by "recap generation" (how many times
+ * the current recap has already been through compaction). Later generations
+ * tolerate more fill before firing again — that content is already dense/
+ * pre-summarized, so there's less marginal value in acting early. Held at
+ * the last value once the ladder is exhausted; ROLLOVER_AT_GENERATION caps
+ * how many in-place rounds happen before a full generational flush (see
+ * generational-flush.ts) instead of a further round of lossy recompaction.
+ */
+const LADDER = [0.55, 0.70, 0.85] as const;
+export const ROLLOVER_AT_GENERATION = 3;
 /** Verbatim recent-history budget kept through compaction, as a share of the
- *  window. 40% preserves interaction nuance over long sequences; together
- *  with the 0.75 trigger it leaves ~35% slack for estimation error. */
+ *  window. 40% preserves interaction nuance over long sequences. */
 const RETENTION_RATIO = 0.40;
 const DEFAULT_WINDOW = 128_000;
 /** Messages kept when no later user turn exists to anchor the tail. */
 const FALLBACK_KEEP = 3;
 /** Per-tool-result cap applied by the churn guard (see compactHistory). */
 const MAX_RESULT_CHARS = 4_000;
+
+function thresholdRatio(generation: number): number {
+  return LADDER[Math.min(generation, LADDER.length - 1)];
+}
+
+/** Marker prefixing every recap message; also carries the generation number. */
+const RECAP_MARKER = '[Earlier conversation compacted';
+
+function isRecap(msg: HistoryMessage): msg is HistoryMessage & { role: 'assistant' } {
+  return msg.role === 'assistant' && msg.content.startsWith(RECAP_MARKER);
+}
+
+/** Generation of the current recap (0 if history hasn't been compacted yet). */
+export function getRecapGeneration(history: HistoryMessage[]): number {
+  const recap = history.find(isRecap);
+  if (!recap) return 0;
+  const match = (recap as { content: string }).content.match(/\(gen (\d+)\)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/** Index of the current recap message, or -1 if history hasn't been
+ *  compacted yet. Used by generational-flush.ts to locate the recap it's
+ *  about to flush and replace. */
+export function findRecapIndex(history: HistoryMessage[]): number {
+  return history.findIndex(isRecap);
+}
 
 /** Average characters per token used for the local size estimate. Deliberately
  *  conservative (real ratio is ~4 for English prose, lower for code/JSON) so we
@@ -89,6 +123,58 @@ function countMessage(msg: HistoryMessage): number {
   }
 }
 
+/** Generic English + prior-recap boilerplate excluded from term extraction. */
+const RECAP_STOPWORDS = new Set([
+  'the', 'a', 'an', 'is', 'was', 'were', 'be', 'been', 'to', 'of', 'in', 'on',
+  'for', 'and', 'or', 'it', 'this', 'that', 'with', 'not', 'note', 'recent',
+  'user', 'assistant', 'tool', 'results', 'called', 'earlier', 'conversation',
+  'compacted', 'turns', 'removed', 'stay', 'within', 'context', 'limits',
+]);
+
+/** Top-N most frequent non-stopword tokens across a set of lines. Pure stats,
+ *  no LLM — same style as dream.ts's topicKey / mining/extract.ts. */
+function extractTopTerms(lines: string[], n: number): string[] {
+  const freq = new Map<string, number>();
+  for (const line of lines) {
+    const words = line.toLowerCase().replace(/[^a-z0-9\s./_-]/g, ' ').split(/\s+/);
+    for (const w of words) {
+      if (w.length <= 3 || RECAP_STOPWORDS.has(w)) continue;
+      freq.set(w, (freq.get(w) ?? 0) + 1);
+    }
+  }
+  return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+}
+
+/** First non-empty line, truncated to ~8 words — a cheap topic label. */
+function extractConcept(lines: string[]): string {
+  const first = lines.find(l => l.trim().length > 0)?.trim() ?? '(no content)';
+  const words = first.split(/\s+/);
+  return words.length > 8 ? words.slice(0, 8).join(' ') + '…' : first;
+}
+
+/**
+ * Reduce an existing recap to: 1 concept + top 5 terms, plus its LAST body
+ * line preserved verbatim ("last thread, pre-compaction"). Replaces
+ * summariseMessage's blind slice(0,120) for recap messages specifically —
+ * that truncation was destroying the executive digest and prior context on
+ * any second compaction in the same run.
+ */
+function compressRecap(msg: HistoryMessage & { role: 'assistant' }): string {
+  const lines = msg.content.split('\n').filter(l => l.trim().length > 0);
+  const body = lines.slice(1); // drop the "[Earlier conversation compacted...]" header
+  const lastThread = body.length > 0 ? body[body.length - 1] : '';
+  const rest = body.slice(0, -1);
+
+  const concept = extractConcept(rest);
+  const terms = extractTopTerms(rest, 5);
+
+  return [
+    `Concept: ${concept}`,
+    terms.length > 0 ? `Terms: ${terms.join(', ')}` : '',
+    lastThread ? `Last thread: ${lastThread}` : '',
+  ].filter(Boolean).join(' · ');
+}
+
 function summariseMessage(msg: HistoryMessage): string {
   switch (msg.role) {
     case 'user':
@@ -106,10 +192,15 @@ function summariseMessage(msg: HistoryMessage): string {
 }
 
 /**
- * Compact conversation history when context usage crosses COMPACTION_THRESHOLD
- * of the model's window. Keeps the first message (task) and a recent tail of
- * up to RETENTION_RATIO of the window verbatim; replaces the middle with a
- * recap that can carry an executive digest and tone hint (see extras).
+ * Compact conversation history when context usage crosses the escalating
+ * LADDER threshold for the current recap generation (see thresholdRatio).
+ * Keeps the first message (task) and a recent tail of up to RETENTION_RATIO
+ * of the window verbatim; replaces the middle with a recap that can carry an
+ * executive digest and tone hint (see extras). If the middle already
+ * contains a prior recap, it's compressed via compressRecap rather than
+ * blindly truncated, and the new recap's generation increments — once it
+ * would exceed ROLLOVER_AT_GENERATION, callers should flush via
+ * generational-flush.ts instead of calling this again.
  *
  * Mutates `history` in place (clears and re-fills) so callers that hold a
  * shared reference see the compacted version without reassignment.
@@ -129,8 +220,9 @@ export function compactHistory(
   model: string,
   extras?: CompactionExtras,
 ): boolean {
+  const generation = getRecapGeneration(history);
   const window = getContextWindow(model) ?? DEFAULT_WINDOW;
-  const threshold = Math.floor(window * COMPACTION_THRESHOLD);
+  const threshold = Math.floor(window * thresholdRatio(generation));
 
   if (totalTokens < threshold) return false;
   if (history.length <= 3) return false;
@@ -176,11 +268,12 @@ export function compactHistory(
     return truncateOversizedResults(history, threshold);
   }
 
-  const summaries = toCompact.map(summariseMessage);
+  const summaries = toCompact.map(msg => isRecap(msg) ? compressRecap(msg) : summariseMessage(msg));
+  const newGeneration = generation + 1;
   const recap: HistoryMessage = {
     role: 'assistant',
     content: [
-      `[Earlier conversation compacted: ${toCompact.length} turns removed to stay within context limits.]`,
+      `${RECAP_MARKER} (gen ${newGeneration}): ${toCompact.length} turns removed to stay within context limits.]`,
       ...(extras?.affectHint ? [extras.affectHint] : []),
       ...(extras?.executiveDigest ? ['', extras.executiveDigest, ''] : []),
       ...summaries,

@@ -8,7 +8,8 @@ vi.mock('../src/providers/factory.js', () => ({
   getContextWindow: (model: string) => (model === 'test-model' ? WINDOW : undefined),
 }));
 
-const { compactHistory, estimateContextTokens } = await import('../src/agent/compactor.js');
+const { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } =
+  await import('../src/agent/compactor.js');
 
 const user = (content: string): HistoryMessage => ({ role: 'user', content });
 const assistant = (content: string, toolCalls?: HistoryMessage extends never ? never : any[]): HistoryMessage =>
@@ -88,6 +89,57 @@ describe('compactHistory', () => {
   it('falls back to DEFAULT_WINDOW for unknown models (no compaction at small sizes)', () => {
     const h = bigHistory(); // ~9.7k tokens, far below 128k * 0.75
     expect(compactHistory(h, estimateContextTokens('', h), 'mystery-model')).toBe(false);
+  });
+
+  it('escalates the trigger threshold with each recap generation', () => {
+    const h = bigHistory(); // ~9.7k tokens, well above gen-0's 55% (5,500)
+    expect(getRecapGeneration(h)).toBe(0);
+    compactHistory(h, estimateContextTokens('', h), 'test-model');
+    expect(getRecapGeneration(h)).toBe(1);
+
+    // Right after compaction the history is small again — below even the
+    // relaxed gen-1 threshold (70% = 7,000) — so it should NOT re-fire yet.
+    const est1 = estimateContextTokens('', h);
+    expect(compactHistory(h, est1, 'test-model')).toBe(false);
+    expect(getRecapGeneration(h)).toBe(1);
+
+    // Grow past the gen-1 threshold: compaction fires again and bumps gen to 2.
+    for (let i = 0; i < 4; i++) {
+      h.push(user(`follow-up ${i} ` + text(700)));
+      h.push(assistant(`working on follow-up ${i}`, [{ id: `d${i}`, name: 'edit_file', input: { path: `g${i}.ts` } }]));
+      h.push(toolResult('edit_file', text(700)));
+    }
+    const est2 = estimateContextTokens('', h);
+    expect(est2).toBeGreaterThan(WINDOW * 0.70);
+    expect(compactHistory(h, est2, 'test-model')).toBe(true);
+    expect(getRecapGeneration(h)).toBe(2);
+  });
+
+  it('compressRecap reduces a re-compacted recap to concept + terms + last thread, never a blind 120-char cut', () => {
+    const h = bigHistory();
+    compactHistory(h, estimateContextTokens('', h), 'test-model', {
+      executiveDigest: 'Recent state-altering actions already executed (do not repeat):\nwrite_file parser_core.ts',
+    });
+    expect(getRecapGeneration(h)).toBe(1);
+
+    // Grow past the gen-1 threshold so the gen-1 recap itself gets compacted.
+    for (let i = 0; i < 4; i++) {
+      h.push(user(`follow-up ${i} ` + text(700)));
+      h.push(assistant(`working on follow-up ${i}`, [{ id: `d${i}`, name: 'edit_file', input: { path: `g${i}.ts` } }]));
+      h.push(toolResult('edit_file', text(700)));
+    }
+    compactHistory(h, estimateContextTokens('', h), 'test-model');
+    expect(getRecapGeneration(h)).toBe(2);
+
+    const recap = (h[1] as { content: string }).content;
+    expect(recap).toContain('Concept:');
+    expect(recap).toContain('Terms:');
+    expect(recap).toContain('Last thread:');
+    // The old digest survives recognizably in the concept line instead of
+    // vanishing behind an unrelated 120-char slice of conversation prose —
+    // it was the first content line in the old recap, so extractConcept
+    // (which takes the first non-empty line) preserves it verbatim.
+    expect(recap.toLowerCase()).toContain('do not repeat');
   });
 
   it('churn guard truncates oversized tool_result bodies when still over threshold', () => {

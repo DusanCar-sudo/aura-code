@@ -41,13 +41,16 @@ class FakeProvider implements LLMProvider {
   supportsTools = true;
   responses: LLMResponse[];
   calls: HistoryMessage[] = [];
+  /** Text returned by complete() — used by the loop's own retry path AND by
+   *  generational-flush's distillText, which calls complete() directly
+   *  rather than stream(). Kept off the stream() queue so a mid-run flush
+   *  doesn't consume a response meant for the next stream() turn. */
+  completeText = '- distilled fact';
 
   constructor(responses: LLMResponse[]) { this.responses = responses; }
 
   async complete(): Promise<LLMResponse> {
-    const next = this.responses.shift();
-    if (!next) throw new Error('No more responses queued');
-    return next;
+    return { text: this.completeText, toolCalls: [], stopReason: 'done' };
   }
 
   async *stream(_system: string, history: HistoryMessage[]): AsyncGenerator<StreamChunk> {
@@ -217,6 +220,52 @@ describe('runAgentLoop', () => {
     expect(recaps.some(m => (m as { content: string }).content.includes('write_file f0.ts'))).toBe(true);
     // The verify-layer contract holds: toolCallLog still has every call.
     expect(result.toolCallLog.filter(c => c.name === 'write_file').length).toBe(5);
+  });
+
+  it('rolls over to a fresh context window after enough recap generations, flushing to the dream store', async () => {
+    // Ladder is [0.55, 0.70, 0.85] against the mocked 10k window; each fat
+    // turn (~2,900 tokens) pushes the estimate well past whichever rung is
+    // current, so this should compact repeatedly, escalate generations, and
+    // eventually roll over (ROLLOVER_AT_GENERATION = 3) rather than produce
+    // a 4th lossy in-place recap.
+    const fat = 'y'.repeat(10_000);
+    const responses: LLMResponse[] = Array.from({ length: 14 }, (_, i) => ({
+      text: fat,
+      toolCalls: [{ id: `c${i}`, name: 'write_file', input: { path: `f${i}.ts`, content: 'x' } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    provider.completeText = '- distilled: refactored the parser across many files';
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+
+    expect(result.success).toBe(true);
+
+    // A rollover happened: some later stream() call saw a flush pointer
+    // instead of an ever-growing recap, and the flush file actually landed
+    // in the project's dream store (same mechanism runDream/:dream use).
+    const flushPointers = provider.calls.filter(
+      m => m.role === 'assistant' && m.content.includes('flushed to memory'),
+    );
+    expect(flushPointers.length).toBeGreaterThan(0);
+
+    const dreamsDir = path.join(tmpDir, 'dreams');
+    expect(fs.existsSync(dreamsDir)).toBe(true);
+    const flushFiles = fs.readdirSync(dreamsDir).filter(f => f.includes('-flush-'));
+    expect(flushFiles.length).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(dreamsDir, flushFiles[0]), 'utf8')).toContain('refactored the parser');
+
+    // No stale recap text from before the flush survives in-context —
+    // the pointer replaced it, not a further recompaction of it.
+    const laterCalls = provider.calls.slice(-20);
+    expect(laterCalls.some(m => m.role === 'assistant' && m.content.startsWith('[Earlier conversation compacted (gen 4)'))).toBe(false);
+
+    // Verify layer contract holds: every write_file call is still logged.
+    expect(result.toolCallLog.filter(c => c.name === 'write_file').length).toBe(14);
   });
 
   it('never widens past an explicit maxTurns override', async () => {
