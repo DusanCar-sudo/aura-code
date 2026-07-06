@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
-import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
+import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel } from '../providers/factory.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
@@ -23,10 +23,10 @@ import pkg from '../../package.json';
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
-import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
+import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
-import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
-import { runProviderWizard } from '../setup/provider-wizard.js';
+import { needsWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
+import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
@@ -344,13 +344,21 @@ const fileConfig = loadProjectConfig(cwd);
 // environment values are never overridden.
 loadKeysIntoEnv();
 
-// Pull global config (saved by the first-run wizard) so the user doesn't have
-// to re-set their provider on every run.
+// Pull global config (saved by the setup wizard) so the user doesn't have
+// to re-set their provider on every run. provider.json is the fuller record
+// from the same wizard save — it also carries the API key and base URL, so a
+// choice made last session works next session without any env vars.
 const globalCfg = loadGlobalConfig();
+const savedProvider = loadProviderConfig();
 
 // Effective model = CLI > AURA_MODEL env > .aura.json > global config > undefined
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
-const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
+const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel
+  ?? savedProvider?.model ?? process.env.AURA_MODEL;
+
+// The saved provider record only applies when we're actually running the
+// model it was saved with — its baseUrl/apiKey belong to that provider.
+const savedProviderApplies = !!savedProvider && effectiveModel === savedProvider.model;
 
 // Effective base URL = CLI > .aura.json > global config > undefined.
 // CRITICAL: the global config's baseUrl belongs to the provider the wizard
@@ -364,7 +372,9 @@ const globalBaseUrlApplies =
   !!globalCfg?.defaultModel &&
   effectiveModel === globalCfg.defaultModel;
 const effectiveBaseUrl =
-  cliBaseUrl ?? fileConfig.baseUrl ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined);
+  cliBaseUrl ?? fileConfig.baseUrl
+    ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined)
+    ?? (savedProviderApplies ? savedProvider!.baseUrl : undefined);
 
 const resolved = resolveConfig(
   { ...fileConfig, model: effectiveModel, baseUrl: effectiveBaseUrl },
@@ -391,7 +401,11 @@ const permissionLevel: PermissionLevel = resolved.mode;
 const runtimeConfig = {
   model: resolved.model,
   baseUrl: resolved.baseUrl,
-  apiKey: typeof argv['api-key'] === 'string' ? argv['api-key'] : undefined,
+  // --api-key wins; otherwise the key the wizard saved with this model last
+  // session. Env vars only apply when neither is present (factory fallback).
+  apiKey: typeof argv['api-key'] === 'string'
+    ? argv['api-key']
+    : (savedProviderApplies ? savedProvider!.apiKey : undefined),
 };
 
 // ── Profile: local → Ollama defaults ─────────────────────────────────────────
@@ -447,8 +461,10 @@ async function main() {
   const skipSetup = argv['no-setup'] === true || argv.help === true || argv.h === true || argv.models === true || argv.version === true || argv.v === true;
   const resetSetup = argv['reset-setup'] === true;
   if (resetSetup) {
-    // Wipe global config so the wizard fires unconditionally.
+    // Wipe both saved configs so the wizard fires unconditionally and no
+    // stale provider record (baseUrl/apiKey) survives the reset.
     try { fs.unlinkSync(globalConfigPath()); } catch { /* not present */ }
+    try { fs.unlinkSync(path.join(path.dirname(globalConfigPath()), 'provider.json')); } catch { /* not present */ }
   }
   // When --reset-setup is set, force the wizard to fire (overrides env-var
   // detection — the user explicitly wants to reconfigure).
@@ -464,19 +480,20 @@ async function main() {
       console.error(chalk.hex('#8a7768')('  or pass --api-key <key> --model <id> on the command line,\n'));
       process.exit(1);
     }
-    const cfg = await runFirstRunWizard();
+    // Full provider wizard: pick provider + model, detect/enter key, and
+    // TEST the connection (URL normalization + response validation) before
+    // saving. The choice is persisted and restored on every later run.
+    const cfg = await runProviderWizard();
     if (!cfg) {
       console.error(chalk.hex('#b15439')('\n  ✗ Setup cancelled. Set an API key env var (e.g. export OPENAI_API_KEY=...) or run with --api-key.\n'));
       process.exit(1);
     }
-    // Re-resolve with the new global config
-    const fresh = loadGlobalConfig();
-    if (fresh) {
-      resolved.model = fresh.defaultModel;
-      resolved.baseUrl = fresh.baseUrl;
-      runtimeConfig.model = fresh.defaultModel;
-      runtimeConfig.baseUrl = fresh.baseUrl;
-    }
+    // Apply the wizard's choice to this session (it already saved to disk).
+    resolved.model = cfg.model;
+    resolved.baseUrl = cfg.baseUrl || undefined;
+    runtimeConfig.model = cfg.model;
+    runtimeConfig.baseUrl = cfg.baseUrl || undefined;
+    if (cfg.apiKey) runtimeConfig.apiKey = cfg.apiKey;
   }
 
   let ctx;
@@ -1066,24 +1083,13 @@ interface ReplCommandResult {
   newTitle?: string | undefined;
 }
 
-/** Best-effort map from a model id to the env-var name its key lives under. */
+/**
+ * Best-effort map from a model id to the env-var name its key lives under.
+ * Delegates to the factory helper — custom providers from .aura.json are
+ * covered because registerCustomProviders runs at startup.
+ */
 function envNameForModel(model: string): string | undefined {
-  const m = model.toLowerCase();
-  // Custom providers from .aura.json declare their own apiKeyEnv + prefixes.
-  for (const p of fileConfig.providers ?? []) {
-    if (p.apiKeyEnv && (p.prefixes ?? []).some(pre => m.startsWith(pre.toLowerCase()))) {
-      return p.apiKeyEnv;
-    }
-  }
-  if (m.startsWith('deepseek/')) return 'DEEPSEEK_API_KEY';
-  if (m.startsWith('glm-') || m.startsWith('zhipu')) return 'ZHIPU_API_KEY';
-  if (m.startsWith('mimo-')) return 'XIAOMI_API_KEY';
-  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return 'OPENAI_API_KEY';
-  if (m.startsWith('claude') || m.startsWith('anthropic')) return 'ANTHROPIC_API_KEY';
-  if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
-  if (m.includes('grok')) return 'XAI_API_KEY';
-  if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
-  return undefined;
+  return apiKeyEnvVarForModel(model);
 }
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
@@ -1095,6 +1101,19 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
     const test = buildProvider(c.display);
     c.providerConfig.model = newModel;
     console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
+    // Remember the choice for the next session. The saved baseUrl belongs to
+    // the wizard-configured model — keep it only when switching back to that
+    // model, otherwise the factory's per-provider default applies.
+    try {
+      saveGlobalConfig({
+        provider: globalCfg?.provider ?? test.name,
+        // loadGlobalConfig treats an empty apiKeyEnv as "not configured", so
+        // derive it from the model to keep the saved choice loadable.
+        apiKeyEnv: envNameForModel(newModel) ?? globalCfg?.apiKeyEnv ?? 'AURA_API_KEY',
+        defaultModel: newModel,
+        baseUrl: savedProvider && newModel === savedProvider.model ? savedProvider.baseUrl : undefined,
+      });
+    } catch { /* persistence is best-effort; the switch itself succeeded */ }
     return { ok: true };
   } catch (e) {
     runtimeConfig.model = prevModel;  // rollback on error
@@ -1195,15 +1214,82 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':dream') {
+  if (input === ':dream' || input === ':dream full') {
+    const full = input === ':dream full';
     const { runDream } = await import('../dream/dream.js');
     c.display.agentThinking();
-    const res = await runDream(c.ctx.root, buildProvider(c.display));
+    const res = await runDream(c.ctx.root, buildProvider(c.display), full);
     if (res.episodeCount === 0) {
-      c.display.warning('No new episodes since the last dream.');
+      c.display.warning(full ? 'No episodes recorded at all.' : 'No new episodes since the last dream.');
     } else {
-      c.display.success(`Dream written: ${res.dreamPath} (${res.episodeCount} episodes)`);
+      c.display.success(`Dream written: ${res.dreamPath} (${res.episodeCount} episodes${full ? ', full run' : ''})`);
       if (res.reconciled) c.display.success('Reconciliation also ran (>=3 dreams exist) -> dreams/.reconciled.md');
+    }
+    return { handled: true };
+  }
+  if (input.startsWith(':research ') || input === ':research') {
+    const topic = input.slice(':research '.length).trim();
+    if (!topic) {
+      c.display.warning('Usage: :research <topic> -- runs a multi-step research pass and saves to research/*.md.');
+      return { handled: true };
+    }
+    console.log(chalk.hex('#8a7768')(`\n  Researching "${topic}"…\n`));
+    try {
+      const { runResearch } = await import('../research/research.js');
+      const res = await runResearch({
+        projectRoot: c.ctx.root,
+        topic,
+        provider: buildProvider(c.display),
+        context: c.ctx,
+        permissions: c.permissions,
+        display: c.display,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
+      console.log(chalk.hex('#8a7768')(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+  if (input === ':confessions') {
+    const { listConfessions } = await import('../agent/confess.js');
+    const confs = listConfessions();
+    if (confs.length === 0) {
+      console.log(chalk.hex('#8a7768')('\n  No confessions yet. Run :confess after a high-token episode.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold(`\n  ${confs.length} confession(s):\n`));
+      for (const c of confs) {
+        console.log(chalk.hex('#8a7768')(`  ${c.file}`));
+        console.log(chalk.hex('#4e3d30')(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
+      }
+      console.log('');
+    }
+    return { handled: true };
+  }
+  if (input === ':confess') {
+    const { runConfession, findEpisodeToConfess } = await import('../agent/confess.js');
+    const targetEp = findEpisodeToConfess(c.ctx.root);
+    if (!targetEp) {
+      console.log(chalk.hex('#cc9e5c')('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
+      return { handled: true };
+    }
+    console.log(chalk.hex('#8a7768')(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
+    try {
+      // Use a different model than the one that made the mistake
+      const confessorModel = targetEp.model.startsWith('deepseek') ? 'glm-5.2' : 'deepseek/deepseek-chat';
+      const { createProvider } = await import('../providers/factory.js');
+      const provider = createProvider({ model: confessorModel });
+      const result = await runConfession({
+        projectRoot: c.ctx.root,
+        episodeId: targetEp.id,
+        provider,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Confession written: ${result.path}`));
+      console.log(chalk.hex('#8a7768')(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
+      console.log(chalk.hex('#cc9e6c')('  Permanent lesson:'));
+      console.log(chalk.hex('#ede0cc')(`  "${result.lesson}"\n`));
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -1301,7 +1387,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '',
       '  ── Memory ───────────────────────────────────────',
       '  :dream                  Consolidate recent episodes into a dream entry',
+      '  :dream full             Consolidate ALL episodes, ignoring last-dream cutoff',
       '  :rem                    Show reconciled memory (or latest dream)',
+      '  :research <topic>       Multi-step research pass, saved to research/*.md',
+      '  :confess                Auto-detect & confess an anomalous episode',
+      '  :confessions            List all confessions',
       '',
       '  ── Voice ─────────────────────────────────────────',
       '  :speak                  Toggle reading replies aloud (or launch with --speak)',

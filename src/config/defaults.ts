@@ -71,15 +71,12 @@ export const SAFE_SHELL_COMMANDS = [
 ];
 
 /**
- * Default fallback model chain tried in order when the primary model
- * exhausts its retries.  Overridden by --fallback flags or AURA_FALLBACK_MODEL.
+ * Fallback model chain tried in order when the primary model exhausts its
+ * retries. Empty by default — hardcoding vendor models here silently sent
+ * traffic to providers the user never configured (and has no keys for).
+ * Set via --fallback flags, AURA_FALLBACK_MODEL, or "fallbacks" in .aura.json.
  */
-export const FALLBACK_CHAIN: readonly string[] = [
-  'mimo-v2.5-pro',
-  'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
-  'openrouter/deepseek/deepseek-chat',
-  'openrouter/minimax/minimax-m2.5',
-];
+export const FALLBACK_CHAIN: readonly string[] = [];
 
 export const IGNORE_PATTERNS = [
   'node_modules', '.git', 'dist', 'build', '__pycache__',

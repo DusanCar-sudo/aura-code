@@ -20,7 +20,7 @@ import {
   PROVIDER_REGISTRY, detectExistingKey, maskApiKey,
   type ProviderEntry,
 } from './provider-registry.js';
-import { testProviderConnection } from './provider-test.js';
+import { testProviderConnection, normalizeBaseUrl } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
 import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig } from './xiaomi.js';
 import { ZHIPU_CODING_BASE_URL, ZHIPU_GENERAL_BASE_URL } from '../providers/factory.js';
@@ -83,6 +83,18 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
     }
     const enteredUrl = await askInput(rl, baseUrlPrompt);
     let baseUrl = enteredUrl.trim() || defaultBase || provider.baseUrl || '';
+    // Normalize user-typed URLs (trailing slash, pasted /chat/completions path).
+    if (baseUrl) {
+      const normalized = normalizeBaseUrl(baseUrl);
+      if (normalized !== baseUrl) {
+        console.log(chalk.hex('#8a7768')(`  ↪ Base URL normalized to ${chalk.hex('#ede0cc')(normalized)}`));
+      }
+      baseUrl = normalized;
+    }
+    if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+      console.log(chalk.hex('#b15439')(`  ✗ Base URL must start with http:// or https:// (got "${baseUrl}").`));
+      return null;
+    }
 
     if (provider.name === 'Xiaomi MiMo') {
       const norm = normalizeXiaomiWizardConfig(effectiveModel, apiKey ?? undefined, baseUrl);

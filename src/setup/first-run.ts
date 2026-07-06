@@ -15,6 +15,7 @@ import chalk from 'chalk';
 import { KNOWN_MODELS } from '../providers/factory.js';
 import { getApiKey } from '../util/env.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath, type GlobalConfig } from './global-config.js';
+import { loadProviderConfig } from './provider-wizard.js';
 
 export interface ProviderChoice {
   id: string;        // 'anthropic' | 'openai' | 'google' | 'xai' | 'xiaomi' | 'openrouter' | 'ollama' | 'local'
@@ -144,7 +145,8 @@ export function hasAnyEnvKey(): boolean {
 export function needsWizard(opts: { cliApiKey?: string; cliModel?: string } = {}): boolean {
   if (opts.cliApiKey) return false;
   if (opts.cliModel) return false;
-  if (hasGlobalConfig()) return false;  // has a model saved already
+  if (hasGlobalConfig()) return false;      // has a model saved already
+  if (loadProviderConfig() !== null) return false;  // wizard save (covers keyless providers like Ollama)
   return true;
 }
 
