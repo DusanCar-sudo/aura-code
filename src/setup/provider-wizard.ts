@@ -22,7 +22,7 @@ import {
 } from './provider-registry.js';
 import { testProviderConnection, normalizeBaseUrl } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
-import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig } from './xiaomi.js';
+import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig, xiaomiKeyKind } from './xiaomi.js';
 import { ZHIPU_CODING_BASE_URL, ZHIPU_GENERAL_BASE_URL } from '../providers/factory.js';
 
 export interface ProviderConfig {
@@ -71,10 +71,23 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
       }
     }
 
+    // Xiaomi Token Plan is region-scoped; pay-as-you-go (sk-) keys all use
+    // the same host, so only ask when the region actually matters.
+    let xiaomiRegion: 'sgp' | 'cn' | 'ams' = 'sgp';
+    if (provider.name === 'Xiaomi MiMo' && xiaomiKeyKind(apiKey ?? undefined) !== 'paygo') {
+      console.log(chalk.hex('#cc785c')('\n  Which Token Plan region?\n'));
+      console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Singapore')} ${chalk.hex('#5a4a3a')('(default)')}`);
+      console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('China')}`);
+      console.log(`  ${chalk.hex('#8a7768')('3.')} ${chalk.hex('#e8d5b7')('Amsterdam')}`);
+      const regionChoice = (await askInput(rl, '  ▸ Choose (1, 2, or 3) [1]: ')).trim();
+      if (regionChoice === '2') xiaomiRegion = 'cn';
+      else if (regionChoice === '3') xiaomiRegion = 'ams';
+    }
+
     // Build baseUrl
     let baseUrlPrompt = '  ▸ Enter base URL: ';
     const defaultBase = provider.name === 'Xiaomi MiMo'
-      ? defaultXiaomiBaseUrl(apiKey ?? undefined)
+      ? defaultXiaomiBaseUrl(apiKey ?? undefined, xiaomiRegion)
       : provider.name === 'GLM (Zhipu)'
         ? (effectiveModel.startsWith('zhipu-coding/') ? ZHIPU_CODING_BASE_URL : ZHIPU_GENERAL_BASE_URL)
         : (provider.baseUrl || '');
@@ -97,7 +110,7 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
     }
 
     if (provider.name === 'Xiaomi MiMo') {
-      const norm = normalizeXiaomiWizardConfig(effectiveModel, apiKey ?? undefined, baseUrl);
+      const norm = normalizeXiaomiWizardConfig(effectiveModel, apiKey ?? undefined, baseUrl, xiaomiRegion);
       effectiveModel = norm.model;
       baseUrl = norm.baseUrl;
       if (norm.note) {

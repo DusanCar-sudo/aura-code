@@ -6,6 +6,7 @@ import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
 import { getLiveModels } from './live-models.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
+import { defaultXiaomiBaseUrl } from '../setup/xiaomi.js';
 import * as http from 'http';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,11 +164,15 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   // ── Xiaomi MiMo ────────────────────────────────────────────────────────────
   if (model.startsWith('mimo-') || model.startsWith('xiaomi/') || model.startsWith('mimo/')) {
     const mimoModel = model.replace(/^(xiaomi|mimo)\//, '');
+    const mimoKey = config.apiKey ?? getApiKey('XIAOMI_API_KEY');
     return new OpenAICompatibleProvider({
       ...config,
       model: mimoModel,
-      baseUrl: config.baseUrl ?? getEnv('XIAOMI_BASE_URL') ?? 'https://token-plan-sgp.xiaomimimo.com/v1',
-      apiKey: config.apiKey ?? getApiKey('XIAOMI_API_KEY'),
+      // Key-type aware default: tp- keys → Token Plan endpoint, sk- keys →
+      // pay-as-you-go api.xiaomimimo.com. A hardcoded token-plan URL used to
+      // send pay-as-you-go keys to the wrong host.
+      baseUrl: config.baseUrl ?? getEnv('XIAOMI_BASE_URL') ?? defaultXiaomiBaseUrl(mimoKey),
+      apiKey: mimoKey,
     }, 'Xiaomi MiMo');
   }
 
@@ -291,8 +296,8 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   // ── Xiaomi MiMo ─────────────────────────────────────────────────────────
   { id: 'mimo-v2.5-pro',   name: 'MiMo V2.5 Pro',   provider: 'Xiaomi MiMo', speed: 'Powerful · 1T params' },
   { id: 'mimo-v2.5',       name: 'MiMo V2.5',       provider: 'Xiaomi MiMo', speed: 'Fast · 310B' },
-  { id: 'mimo-v2-flash',   name: 'MiMo V2 Flash',   provider: 'Xiaomi MiMo', speed: 'Fastest · efficient' },
-  { id: 'mimo-v1',         name: 'MiMo V1',         provider: 'Xiaomi MiMo', speed: 'Legacy' },
+  { id: 'mimo-v2-flash',   name: 'MiMo V2 Flash',   provider: 'Xiaomi MiMo', speed: 'Fastest · pay-as-you-go (sk-) keys only' },
+  { id: 'mimo-v1',         name: 'MiMo V1',         provider: 'Xiaomi MiMo', speed: 'Legacy · pay-as-you-go (sk-) keys only' },
 
   // ── Zhipu (Z.ai GLM) — use zhipu-coding/<id> to route via the Coding Plan ─
   { id: 'glm-5.2',         name: 'GLM-5.2',         provider: 'Zhipu', speed: 'Powerful · 1M context' },
