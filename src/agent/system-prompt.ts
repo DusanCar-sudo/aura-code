@@ -1,12 +1,21 @@
 import type { ProjectContext } from './context.js';
 import { getDomainPromptBlock } from './domain-expertise.js';
 import { loadUnifiedMemory } from './unified-memory.js';
+import { loadConfessionsSection } from './confess.js';
+import { loadAllPlugins } from '../plugins/loader.js';
+
+const WEB_KEYWORDS = /website|webpage|frontend|front-end|ui component|landing page|homepage|web app|portfolio|hero section|marketing page|site design|visual design|html.*css|make.*page|create.*page|build.*site/;
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
   // Unified memory: global identity/facts (shared with the Telegram bot) plus
   // this project's reconciled lessons. Replaces the old dreams-only block.
   const memoryBlock = loadUnifiedMemory({ projectRoot: ctx.root });
+  // Confessions: permanent lessons extracted from high-cost failures.
+  // Loaded separately so they sit above regular memory with elevated priority.
+  const confessionsBlock = loadConfessionsSection();
+  // Plugin skills: inject relevant plugin skills when task matches their domain.
+  const pluginBlock = loadPluginSkillsBlock(task);
 
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
@@ -34,12 +43,17 @@ You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framewo
 - Never inline large multi-line content (HTML, generated code, long files) as a raw string inside a tool call's JSON arguments — models frequently produce invalid JSON when escaping quotes/newlines in big blocks, causing repeated failed calls.
 - For content longer than ~30 lines, write it via run_shell using a heredoc (cat > file << 'EOF' ... EOF), or build it incrementally with edit_file on small, well-escaped chunks.
 
+## Images and screenshots
+- You CAN read local image files (screenshots, diagrams, photos). Never tell the user you cannot access local files or \`file://\` paths — you have the image_read tool.
+- When the user references an image path — a plain path, or a \`file://\` URL like \`file:///home/user/shot.png\` — call \`image_read\` with \`action=ocr\` to extract the text/content, then answer from what it actually contains. Use \`action=info\` for dimensions/format.
+- Never guess or invent what an image shows, and never ask the user to describe it before trying image_read first. Read it, then reason about it.
+
 ## Code standards
 - Match the existing code style: indentation, naming conventions, comment style.
 - Do not introduce new dependencies unless explicitly asked.
 - Prefer targeted, minimal changes over rewrites.
 - Add or update tests when you modify logic.
-${domainBlock}${memoryBlock}
+${domainBlock}${memoryBlock}${confessionsBlock}${pluginBlock}
 ## Safety
 - Never delete files unless explicitly instructed.
 - Never commit to git unless explicitly instructed.
@@ -69,6 +83,30 @@ ${ctx.readme}
 ${ctx.recentCommits}
 
 Provider: ${providerName}. Work efficiently — minimize unnecessary tool calls.`;
+}
+
+/** Load plugin skills relevant to the current task. Cached per process. */
+let _pluginSkillsCache: string | null = null;
+
+function loadPluginSkillsBlock(task: string): string {
+  if (_pluginSkillsCache === null) {
+    try {
+      const plugins = loadAllPlugins();
+      const lines: string[] = [];
+      for (const p of plugins) {
+        for (const s of p.skills) {
+          lines.push(`\n\n## Plugin skill: ${s.name} (from ${p.name})\n${s.body}`);
+        }
+      }
+      _pluginSkillsCache = lines.join('');
+    } catch {
+      _pluginSkillsCache = '';
+    }
+  }
+  if (!_pluginSkillsCache) return '';
+  // Only inject for web/UI tasks — avoid polluting non-design prompts
+  if (!WEB_KEYWORDS.test(task.toLowerCase())) return '';
+  return `\n\n## Plugin instructions\nThese skill instructions from installed plugins apply to this task:${_pluginSkillsCache}`;
 }
 
 export function buildArchitectPrompt(task: string, projectRoot: string): string {
