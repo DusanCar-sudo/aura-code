@@ -5,6 +5,7 @@ import { GoogleProvider } from './google.js';
 import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
 import { getLiveModels } from './live-models.js';
+import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
 import * as http from 'http';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,6 +30,58 @@ export function registerCustomProviders(providers: ProviderDef[]): void {
 /** Get currently registered custom providers. */
 export function getCustomProviders(): ProviderDef[] {
   return customProviders;
+}
+
+/**
+ * Strip Aura's internal routing prefixes from a model id so it can be looked
+ * up against registry entries (which store unprefixed ids).
+ */
+function stripRoutingPrefix(model: string): string {
+  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile)\//, '');
+}
+
+/**
+ * Context window (in tokens) for a model, from the provider registry.
+ * Returns undefined for unknown models — callers supply their own default.
+ * (Reinstated: the original was lost in the backup-restore commit 6e5481a5.)
+ */
+export function getContextWindow(model: string): number | undefined {
+  // Lazy import would be circular-safe, but provider-registry has no factory
+  // dependency, so a static import is fine (see top of file).
+  const candidates = [model, stripRoutingPrefix(model)];
+  for (const entry of PROVIDER_REGISTRY) {
+    for (const m of entry.models) {
+      if (candidates.includes(m.id) && m.contextWindow > 0) return m.contextWindow;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Env var name whose value holds the API key for a given model id, matching
+ * createProvider's routing rules. Custom providers (registered from
+ * .aura.json) win over built-in prefixes. Returns undefined for models that
+ * need no key (ollama/local) or aren't recognized.
+ * (Reinstated: the original was lost in the backup-restore commit 6e5481a5.)
+ */
+export function apiKeyEnvVarForModel(model: string): string | undefined {
+  const m = model.toLowerCase();
+  for (const p of customProviders) {
+    if (p.apiKeyEnv && (p.prefixes ?? []).some(pre => m.startsWith(pre.toLowerCase()))) {
+      return p.apiKeyEnv;
+    }
+  }
+  if (m.startsWith('go-anthropic/')) return 'OPENCODE_GO_API_KEY';
+  if (m.startsWith('opencode/') || m.startsWith('zen/')) return 'OPENCODE_API_KEY';
+  if (m.startsWith('deepseek/') || m.startsWith('deepseek-')) return 'DEEPSEEK_API_KEY';
+  if (m.startsWith('glm-') || m.startsWith('zhipu')) return 'ZHIPU_API_KEY';
+  if (m.startsWith('mimo-') || m.startsWith('mimo/') || m.startsWith('xiaomi/')) return 'XIAOMI_API_KEY';
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return 'OPENAI_API_KEY';
+  if (m.startsWith('claude') || m.startsWith('anthropic')) return 'ANTHROPIC_API_KEY';
+  if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
+  if (m.includes('grok') || m.startsWith('xai/')) return 'XAI_API_KEY';
+  if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
+  return undefined;
 }
 
 /**
@@ -143,6 +196,16 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       baseUrl: 'https://api.x.ai/v1',
       apiKey: config.apiKey ?? getApiKey('XAI_API_KEY'),
     }, 'xAI');
+  }
+
+  // ── DeepSeek ──────────────────────────────────────────────────────────────
+  if (model.startsWith('deepseek/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('deepseek/', ''),
+      baseUrl: config.baseUrl ?? 'https://api.deepseek.com/v1',
+      apiKey: config.apiKey ?? getApiKey('DEEPSEEK_API_KEY'),
+    }, 'DeepSeek');
   }
 
   // ── Ollama (local) ─────────────────────────────────────────────────────────
