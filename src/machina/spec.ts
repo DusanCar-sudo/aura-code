@@ -64,7 +64,7 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
     component: 'delta',
     description: 'The main transition loop — one iteration is one application of δ. The turn budget is checked inside the loop so it can widen once when work is still in progress.',
     file: 'src/agent/loop.ts',
-    line: 168,
+    line: 172,
     mustContain: 'while (true)',
   },
   {
@@ -72,7 +72,7 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
     component: 'O',
     description: "The oracle invocation — O(history) -> stream of {text, tool_calls, stop_reason}.",
     file: 'src/agent/loop.ts',
-    line: 231,
+    line: 235,
     mustContain: 'provider.stream(',
   },
   {
@@ -80,7 +80,7 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
     component: 'delta',
     description: 'The safety gate inside δ — tool calls are checked against permissions before primitives execute.',
     file: 'src/agent/loop.ts',
-    line: 345,
+    line: 349,
     mustContain: 'permissions.check(',
   },
   {
