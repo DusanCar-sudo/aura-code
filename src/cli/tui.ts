@@ -1,35 +1,15 @@
 /**
  * TUI — Terminal User Interface with fixed bottom input line.
  *
- * Manages a split-terminal layout:
- *   • Top area: scrollable output (agent responses, tool calls, etc.)
- *   • Bottom area: fixed input line with the ruby red frame, always visible
+ * Manages a split-terminal layout using absolute cursor positioning:
+ *   • Output area: rows 0 to (rows - INPUT_LINES)
+ *   • Input area: bottom INPUT_LINES rows, always pinned, ruby red frame
  *
- * The user can type at any time, even while the agent is responding.
- * Commands like :btw and :stop are buffered and processed accordingly.
+ * The user can type at any time. Commands like :btw buffer during responses.
  */
 import chalk from 'chalk';
 import type { Display } from './display.js';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
-
-// ── ANSI helpers ───────────────────────────────────────────────────────────
-// Uses ABSOLUTE row positioning (ESC[row;colH) so terminal scrolling
-// never breaks the layout. The bottom INPUT_LINES rows are reserved for
-// the input frame. All output writes to the area above it.
-
-const CSI = '\x1b[';
-const cursorAbs  = (row: number, col: number) => process.stdout.write(CSI + row + ';' + col + 'H');
-const cursorUp   = (n: number) => { if (n > 0) process.stdout.write(CSI + n + 'A'); };
-const cursorDown = (n: number) => { if (n > 0) process.stdout.write(CSI + n + 'B'); };
-const clearLine  = () => process.stdout.write(CSI + '0K');
-const clearDown  = () => process.stdout.write(CSI + '0J');
-const hideCursor = () => process.stdout.write(CSI + '?25l');
-const showCursor = () => process.stdout.write(CSI + '?25h');
-
-/** Absolute row of the first input-frame line (1-indexed). */
-const inputTop = () => rows - INPUT_LINES;
-/** Absolute row of the prompt line (where user types). */
-const inputPromptRow = () => rows - INPUT_LINES + 2;
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -38,48 +18,76 @@ let rows = process.stdout.rows ?? 24;
 let inputBuffer = '';
 let cursorPos = 0;
 let inputActive = false;
-let stdinHandler: ((chunk: string) => void) | null = null;
+let stdinHandler: ((data: string) => void) | null = null;
 let chatId = '';
 
-// Callbacks set by the REPL
 let onEnter: ((line: string) => void) | null = null;
 let onStop: (() => void) | null = null;
 
 const INPUT_LINES = 4;
 const FIELD_WIDTH = () => Math.min(cols, 100) - 4;
+let currentAbort: AbortController | null = null;
 
 process.stdout.on('resize', () => {
   cols = process.stdout.columns ?? 80;
   rows = process.stdout.rows ?? 24;
-  if (inputActive) drawInputLine();
+  if (inputActive) drawInputFrame();
 });
 
-export function setChatId(id: string): void { chatId = id; }
+// ── Low-level terminal control ─────────────────────────────────────────────
 
-// ── Input line rendering ───────────────────────────────────────────────────
+/** Move cursor to (row, col), 1-indexed. Row 1 = top of terminal. */
+function goto(row: number, col = 1): void {
+  process.stdout.write(`\x1b[${row};${col}H`);
+}
 
-function drawInputLine(): void {
+function clearEol(): void {
+  process.stdout.write('\x1b[0K');
+}
+
+function hideCursor(): void {
+  process.stdout.write('\x1b[?25l');
+}
+
+function showCursor(): void {
+  process.stdout.write('\x1b[?25h');
+}
+
+// ── AbortController management ─────────────────────────────────────────────
+
+export function createAbortController(): AbortController {
+  currentAbort = new AbortController();
+  return currentAbort;
+}
+
+export function clearAbortController(): void {
+  currentAbort = null;
+}
+
+// ── Input frame rendering ──────────────────────────────────────────────────
+
+/** Draw the 4-line input frame at the bottom of the terminal. */
+function drawInputFrame(): void {
   const w = FIELD_WIDTH();
   const idTag = chatId ? ` ${chatId}` : '';
   const label = ` ask aura${idTag} `;
   const dashes = Math.max(0, w - label.length - 1);
   const displayText = inputBuffer;
   const isEmpty = displayText.length === 0;
+  const inputRow = rows - INPUT_LINES + 1; // 1-indexed, first row of the input area
 
-  const t = inputTop();
-
-  // Line 1: spacer (at inputTop)
-  cursorAbs(t, 1);
-  clearLine();
+  // Line 1: spacer (empty)
+  goto(inputRow, 1);
+  clearEol();
 
   // Line 2: top border
-  cursorAbs(t + 1, 1);
-  clearLine();
+  goto(inputRow + 1, 1);
+  clearEol();
   process.stdout.write('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
 
-  // Line 3: prompt + input text
-  cursorAbs(t + 2, 1);
-  clearLine();
+  // Line 3: prompt line
+  goto(inputRow + 2, 1);
+  clearEol();
   const prompt = chalk.hex('#9b1b30')('╰ ') + chalk.hex('#cc785c').bold('❯ ');
   const placeholder = isEmpty ? chalk.hex('#4e3d30')('type a task, :btw, :q, :help...  ') : '';
   const cursorChar = chalk.hex('#cc785c')('█');
@@ -93,43 +101,36 @@ function drawInputLine(): void {
     process.stdout.write('  ' + prompt + before + at + after);
   }
 
-  // Line 4: bottom spacer (last row of terminal)
-  cursorAbs(t + 3, 1);
-  clearLine();
-
-  // Move cursor to the prompt position for blinking cursor
-  const promptLen = 6; // "  ╰ ❯ "
-  cursorAbs(t + 2, promptLen + 2 + cursorPos);
+  // Line 4: bottom spacer
+  goto(inputRow + 3, 1);
+  clearEol();
 }
 
 // ── Output writing ─────────────────────────────────────────────────────────
 
-/**
- * Write a line to the output area above the fixed input line.
- */
+/** Write one or more lines to the output area (above the input frame). */
 export function writeOutput(text: string): void {
-  // Move cursor to the last line of the output area (just above the input frame).
-  // After writing, the cursor will scroll naturally if needed.
-  // Then redraw the input frame at the absolute bottom rows.
-  
-  // Put cursor at the top of the input area, take it back one line,
-  // write output, let terminal scroll if needed, then redraw input at bottom.
-  cursorAbs(rows - INPUT_LINES, 1);
-  // Move up one line so output appears in the scrollable area
-  cursorUp(1);
-  
-  // Write output — if this causes a scroll, the input lines get pushed up.
-  // That's OK because we redraw them right after.
-  process.stdout.write(text);
+  // Find the first row of the input area
+  const inputStart = rows - INPUT_LINES + 1;
+  // Move cursor to the output area (just above the input frame)
+  goto(inputStart - 1, 1);
+  // If there's existing content on this line, we need to move further up
+  // Write a newline to scroll, then go back up
   process.stdout.write('\n');
-  
-  // Redraw the input frame at the fixed bottom rows
-  if (inputActive) drawInputLine();
+  goto(inputStart - 1, 1);
+  clearEol();
+  process.stdout.write(text);
+  // Redraw the input frame
+  drawInputFrame();
+  // Place cursor at the prompt line for typing
+  goto(inputStart + 2, 5 + promptPrefixLength());
 }
 
-/**
- * Write text inline (used during streaming).
- */
+function promptPrefixLength(): number {
+  return 3 + 3; // "  ╰ " + "❯ " ≈ 6 visible chars
+}
+
+/** Write streaming text inline (no newline). */
 export function writeStream(text: string): void {
   process.stdout.write(text);
 }
@@ -137,74 +138,63 @@ export function writeStream(text: string): void {
 // ── Input handling ─────────────────────────────────────────────────────────
 
 function handleChar(ch: string): void {
+  const inputStart = rows - INPUT_LINES + 1;
+
   // Ctrl+C → abort running task, or exit if idle
   if (ch === '\x03') {
     if (currentAbort && !currentAbort.signal.aborted) {
       currentAbort.abort();
-      writeOutput(chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+      // Write abort message to output area
+      goto(inputStart - 1, 1);
+      process.stdout.write('\n' + chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+      drawInputFrame();
       if (onStop) onStop();
       return;
     }
-    destroyTui();
+    showCursor();
     process.stdout.write('\n');
     process.exit(0);
   }
+
   // ENTER
   if (ch === '\r' || ch === '\n') {
     const line = inputBuffer.trim();
     inputBuffer = '';
     cursorPos = 0;
-    drawInputLine();
+    drawInputFrame();
     if (line && onEnter) onEnter(line);
     return;
   }
+
   // BACKSPACE
   if (ch === '\x7f' || ch === '\b') {
     if (cursorPos > 0) {
       inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
       cursorPos--;
-      drawInputLine();
+      drawInputFrame();
     }
     return;
   }
+
   // Ctrl+U — clear line
   if (ch === '\x15') {
     inputBuffer = '';
     cursorPos = 0;
-    drawInputLine();
+    drawInputFrame();
     return;
   }
+
   // Printable
   if (ch >= ' ' && ch <= '~') {
     inputBuffer = inputBuffer.slice(0, cursorPos) + ch + inputBuffer.slice(cursorPos);
     cursorPos++;
-    drawInputLine();
+    drawInputFrame();
     return;
   }
-  // Arrow keys (escape sequences) — skip for now
 }
 
-function rawDataHandler(chunk: string): void {
-  for (const ch of chunk) handleChar(ch);
-}
-
-let currentAbort: AbortController | null = null;
-
-/**
- * Get a fresh AbortController that gets aborted when the user presses Ctrl+C
- * during a running task. Pass its signal to runAgentLoop.
- */
-export function getAbortController(): AbortController | null {
-  return currentAbort;
-}
-
-export function createAbortController(): AbortController {
-  currentAbort = new AbortController();
-  return currentAbort;
-}
-
-export function clearAbortController(): void {
-  currentAbort = null;
+function rawHandler(data: string): void {
+  for (const ch of data) handleChar(ch);
 }
 
 export function startInput(): void {
@@ -215,9 +205,9 @@ export function startInput(): void {
   if (process.stdin.isTTY) process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
-  stdinHandler = rawDataHandler;
+  stdinHandler = rawHandler;
   process.stdin.on('data', stdinHandler);
-  drawInputLine();
+  drawInputFrame();
 }
 
 export function stopInput(): void {
@@ -236,21 +226,23 @@ export function setCallbacks(opts: { onEnter: (line: string) => void; onStop?: (
   onStop = opts.onStop ?? null;
 }
 
+export function setChatId(id: string): void {
+  chatId = id;
+}
+
 export function initTui(): void {
   hideCursor();
-  // Clear the terminal and draw the input frame
-  // Write enough newlines to fill the scrollback, then draw at bottom
-  cursorAbs(1, 1);
-  clearDown();
-  // Draw the empty input frame at the bottom
-  drawInputLine();
+  // Clear screen and reserve space
+  process.stdout.write('\n'.repeat(INPUT_LINES));
+  drawInputFrame();
+  // Move cursor to the prompt line
+  const inputStart = rows - INPUT_LINES + 1;
+  goto(inputStart + 2, 5);
 }
 
 export function destroyTui(): void {
   stopInput();
   showCursor();
-  cursorAbs(rows, 1);
-  clearLine();
   process.stdout.write('\n');
 }
 
@@ -283,7 +275,7 @@ function fmtIn(name: string, input: Record<string, unknown>): string {
 }
 
 function sep(): string {
-  return '─'.repeat(Math.min(process.stdout.columns ?? 80, 60));
+  return '─'.repeat(Math.min(cols, 60));
 }
 
 export function createTuiDisplay(): Display {
@@ -292,11 +284,16 @@ export function createTuiDisplay(): Display {
   return {
     agentThinking() {},
 
-    toolStart(_name: string, _id: string) {},
+    toolStart() {},
 
     streamText(text: string) {
       if (!inStream) {
         inStream = true;
+        // Move to output area
+        const inputStart = rows - INPUT_LINES + 1;
+        goto(inputStart - 1, 1);
+        process.stdout.write('\n');
+        // Redraw input after we're done
       }
       writeStream(chalk.hex('#ede0cc')(text));
     },
