@@ -1,14 +1,16 @@
 /**
- * TUI — Terminal User Interface with sticky TOP input line.
+ * TUI — Top-input layout: fixed input at the top, output scrolls below.
  *
- * Layout:
- *   ╭ ask aura ──────────────────────╮   ← input frame, always at top
- *   ╰❯ type here█                    │
- *   ─────────────────────────────────    ← output below, scrolls down naturally
- *   ✓ tool result...
- *   ...
+ * ──────────────────────────────────
+ *  ╭ ask aura ───────────────────╮   ← fixed at top
+ *  ╰❯ your input here█          │
+ * ──────────────────────────────────
+ *  → output scrolls below ↓
+ *  ✓ tool result
+ *  ✓ done
+ *  ...
  *
- * The user can type at any time. Output flows below the frame.
+ * The user can type at any time. Ctrl+C aborts the current task.
  */
 import chalk from 'chalk';
 import type { Display } from './display.js';
@@ -21,103 +23,109 @@ let cursorPos = 0;
 let inputActive = false;
 let stdinHandler: ((data: string) => void) | null = null;
 let chatId = '';
-let outputLine = 0; // tracks how many output lines have been written
+let promptLines = 0; // how many lines the prompt actually takes (2)
+let outputLine = 0;  // how many lines of output have been written
 
 let onEnter: ((line: string) => void) | null = null;
 let onStop: (() => void) | null = null;
 let currentAbort: AbortController | null = null;
 
-// ── AbortController ────────────────────────────────────────────────────────
-
 export function createAbortController(): AbortController {
   currentAbort = new AbortController();
   return currentAbort;
 }
+export function clearAbortController(): void { currentAbort = null; }
 
-export function clearAbortController(): void {
-  currentAbort = null;
-}
+// ── Low-level ──────────────────────────────────────────────────────────────
 
-// ── Terminal helpers ────────────────────────────────────────────────────────
+function home(): void { process.stdout.write('\x1b[H'); }
+function clearEol(): void { process.stdout.write('\x1b[0K'); }
+function clearEos(): void { process.stdout.write('\x1b[0J'); }
+function cursorUp(n: number): void { if (n > 0) process.stdout.write(`\x1b[${n}A`); }
+function cursorDown(n: number): void { if (n > 0) process.stdout.write(`\x1b[${n}B`); }
+function cursorCol(n: number): void { process.stdout.write(`\x1b[${n}G`); }
+function scrollUp(n: number): void { process.stdout.write(`\x1b[${n}S`); }
+function hideCursor(): void { process.stdout.write('\x1b[?25l'); }
+function showCursor(): void { process.stdout.write('\x1b[?25h'); }
 
-function cursorUp(n: number): void {
-  if (n > 0) process.stdout.write(`\x1b[${n}A`);
-}
-function cursorDown(n: number): void {
-  if (n > 0) process.stdout.write(`\x1b[${n}B`);
-}
-function cursorCol(n: number): void {
-  process.stdout.write(`\x1b[${n}G`);
-}
-function clearEol(): void {
-  process.stdout.write('\x1b[0K');
-}
+const cols = () => process.stdout.columns ?? 80;
+const fieldWidth = () => Math.min(cols(), 100) - 4;
 
-// ── Input prompt rendering ─────────────────────────────────────────────────
+// ── Prompt rendering ───────────────────────────────────────────────────────
 
-const PROMPT_LINES = 2; // top border + prompt line
-
-/** Draw the 2-line prompt at the top of the terminal. */
-function drawPrompt(): void {
-  const cols = process.stdout.columns ?? 80;
-  const w = Math.min(cols, 100) - 4;
+function drawPromptTop(): void {
+  const w = fieldWidth();
   const idTag = chatId ? ` ${chatId}` : '';
   const label = ` ask aura${idTag} `;
   const dashes = Math.max(0, w - label.length - 1);
+  const txt = inputBuffer;
   const cursorChar = chalk.hex('#cc785c')('█');
 
-  // Move to row 1, col 1
-  cursorCol(1);
-  cursorUp(10); // go up enough to clear old prompt
-  clearEol();
-  process.stdout.write('\r\x1b[0K');
+  // Go home, clear from here to end of screen
+  home();
+  clearEos();
 
-  // Line 1: top border
+  // Line 1: border
+  cursorCol(1);
   process.stdout.write('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
   process.stdout.write('\n');
 
   // Line 2: prompt
-  process.stdout.write('\r\x1b[0K');
+  cursorCol(1);
+  clearEol();
   const prompt = chalk.hex('#9b1b30')('╰ ') + chalk.hex('#cc785c').bold('❯ ');
-  const placeholder = inputBuffer.length === 0
+  const placeholder = txt.length === 0
     ? chalk.hex('#4e3d30')('type a task, :btw, :q, :help...  ')
     : '';
 
-  if (inputBuffer.length === 0) {
+  if (txt.length === 0) {
     process.stdout.write('  ' + prompt + placeholder + cursorChar);
   } else {
-    const before = chalk.hex('#ede0cc')(inputBuffer.slice(0, cursorPos));
+    const before = chalk.hex('#ede0cc')(txt.slice(0, cursorPos));
     const at = cursorChar;
-    const after = chalk.hex('#ede0cc')(inputBuffer.slice(cursorPos));
+    const after = chalk.hex('#ede0cc')(txt.slice(cursorPos));
     process.stdout.write('  ' + prompt + before + at + after);
   }
-}
 
-/** Redraw just the prompt in its fixed position without scrolling. */
-function redrawPrompt(): void {
-  // Go up PROMPT_LINES + outputLine to reach the prompt row, then draw
-  const total = PROMPT_LINES + outputLine;
-  if (total > 0) cursorUp(total);
-  cursorCol(1);
-  drawPrompt();
-  // Move back to where we were (below all output)
-  if (total > 0) cursorDown(total);
+  promptLines = 2;
+
+  // Move cursor to after the last output line
+  const cursorRow = 1 + promptLines + outputLine;
+  if (cursorRow > promptLines) {
+    process.stdout.write('\n');
+  }
+  cursorDown(outputLine);
 }
 
 // ── Output ─────────────────────────────────────────────────────────────────
 
-/** Write a line of output below the prompt. */
+/** Write a line of output below the prompt, then redraw the prompt at top. */
 export function writeOutput(text: string): void {
-  // Move to the line just after the prompt
-  const promptEnd = PROMPT_LINES + 1;
-  // If we have output, we're already there. Just append.
-  process.stdout.write('\r\x1b[0K');
+  // Move to position: promptLines + outputLine + 1
+  // Write the text
+  const row = 1 + promptLines + outputLine;
+  home();
+  cursorDown(row - 1);
+  cursorCol(1);
+  clearEol();
   process.stdout.write(text);
   process.stdout.write('\n');
   outputLine++;
+
+  // Check if we're near bottom of terminal — if so, scroll and redraw
+  const termRows = process.stdout.rows ?? 24;
+  if (promptLines + outputLine >= termRows - 1) {
+    // Scroll output area up by 1 line (but not the prompt)
+    // Redraw prompt at top
+    drawPromptTop();
+    // Move cursor to bottom of output
+    const endRow = promptLines + outputLine;
+    home();
+    cursorDown(endRow);
+  }
 }
 
-/** Streaming text — write inline. */
+/** Streaming text — appends to current output line. */
 export function writeStream(text: string): void {
   process.stdout.write(text);
 }
@@ -132,19 +140,20 @@ function handleChar(ch: string): void {
       if (onStop) onStop();
       return;
     }
+    showCursor();
     process.stdout.write('\n');
     process.exit(0);
   }
 
   if (ch === '\r' || ch === '\n') {
     const line = inputBuffer.trim();
-    // Echo the input line to output before clearing
     if (line) {
+      // Echo the input to output area
       writeOutput(chalk.hex('#4e3d30')(`❯ ${line}`));
     }
     inputBuffer = '';
     cursorPos = 0;
-    redrawPrompt();
+    drawPromptTop();
     if (line && onEnter) onEnter(line);
     return;
   }
@@ -153,7 +162,7 @@ function handleChar(ch: string): void {
     if (cursorPos > 0) {
       inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
       cursorPos--;
-      redrawPrompt();
+      drawPromptTop();
     }
     return;
   }
@@ -161,14 +170,14 @@ function handleChar(ch: string): void {
   if (ch === '\x15') {
     inputBuffer = '';
     cursorPos = 0;
-    redrawPrompt();
+    drawPromptTop();
     return;
   }
 
   if (ch >= ' ' && ch <= '~') {
     inputBuffer = inputBuffer.slice(0, cursorPos) + ch + inputBuffer.slice(cursorPos);
     cursorPos++;
-    redrawPrompt();
+    drawPromptTop();
     return;
   }
 }
@@ -211,13 +220,13 @@ export function setChatId(id: string): void {
 
 export function initTui(): void {
   outputLine = 0;
-  drawPrompt();
-  // Move cursor below the prompt
-  process.stdout.write('\n');
+  hideCursor();
+  drawPromptTop();
 }
 
 export function destroyTui(): void {
   stopInput();
+  showCursor();
   process.stdout.write('\n');
 }
 
@@ -250,7 +259,7 @@ function fmtIn(name: string, input: Record<string, unknown>): string {
 }
 
 function sep(): string {
-  return '─'.repeat(Math.min(process.stdout.columns ?? 80, 60));
+  return '─'.repeat(Math.min(cols(), 60));
 }
 
 export function createTuiDisplay(): Display {
@@ -258,19 +267,25 @@ export function createTuiDisplay(): Display {
 
   return {
     agentThinking() {},
-
     toolStart() {},
 
     streamText(text: string) {
       if (!inStream) {
         inStream = true;
+        // Move cursor to end of output before streaming
+        const row = 1 + promptLines + outputLine;
+        home();
+        cursorDown(row - 1);
+        cursorCol(1);
+        clearEol();
       }
       writeStream(chalk.hex('#ede0cc')(text));
     },
 
     streamEnd() {
       if (inStream) {
-        writeOutput('');
+        process.stdout.write('\n');
+        outputLine++;
         inStream = false;
       }
     },
