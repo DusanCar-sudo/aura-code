@@ -60,6 +60,9 @@ function createNoopDisplay(): Display {
     showPlan: () => {},
     stepStarted: () => {},
     stepCompleted: () => {},
+    contextBar: () => {},
+    contextDashboard: () => {},
+    compactionEvent: () => {},
   };
 }
 

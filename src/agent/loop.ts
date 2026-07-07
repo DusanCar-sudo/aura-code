@@ -16,6 +16,7 @@ import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
 import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } from './compactor.js';
 import { maybeRollover } from './generational-flush.js';
 import { detectFrustration } from './affect.js';
+import { ContextHealthTracker } from '../cli/context-health.js';
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -42,6 +43,10 @@ export interface LoopOptions {
   hooks?: import('../plugins/types.js').HookEntry[];
   /** Optional abort signal — when aborted the loop stops after the current tool turn. */
   abortSignal?: AbortSignal;
+  /** Optional shared context-health tracker (e.g. the REPL's). When omitted the
+   *  loop creates an internal one. Passing it in lets a /context command read
+   *  the accumulated compaction history and per-turn snapshots. */
+  healthTracker?: import('../cli/context-health.js').ContextHealthTracker;
 }
 
 export interface LoopResult {
@@ -137,6 +142,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   // the model never repeats a write/edit/command it already executed.
   const execQueue = new ExecutiveQueue();
 
+  // Context health tracker: observational visibility into token pressure,
+  // compaction ladder, and session cost. Never mutates history itself.
+  // Use the caller-provided tracker (so /context can read it) or make one.
+  const health = opts.healthTracker ?? new ContextHealthTracker(() => system, () => history, provider.model, pricingModel);
+  health.updateSystem(system);
+
   // Stall detection: if the recent turns repeat the exact same tool call(s)
   // (or alternate between the same two), the agent is stuck rather than
   // progressing. Stopping early here saves turns/cost on a run that would
@@ -174,6 +185,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     turns++;
+    health.incrementTurn();
 
     // Compaction check runs pre-call: estimateContextTokens measures the
     // payload about to be sent (see its doc for why not per-turn usage sums).
@@ -187,20 +199,29 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       // times, a further in-place pass would just be lossy recompaction —
       // flush it to the dream store instead (one LLM call) and start clean.
       if (getRecapGeneration(history) >= ROLLOVER_AT_GENERATION) {
+        const beforeTokens = estimateContextTokens(system, history);
         const { flushed } = await maybeRollover(history, opts.context.root, provider, compactionExtras);
         if (flushed) {
-          display.warning('Context flushed to memory — starting a fresh context window.');
+          const afterTokens = estimateContextTokens(system, history);
+          const generation = getRecapGeneration(history);
+          health.recordCompaction(beforeTokens, afterTokens, generation);
+          display.compactionEvent?.({ beforeTokens, afterTokens, generation, threshold: beforeTokens });
           await persist(opts.sessionPath, history);
         }
       } else {
         const estimated = estimateContextTokens(system, history);
         const compacted = compactHistory(history, estimated, provider.model, compactionExtras);
         if (compacted) {
-          display.warning(`Context compacted (~${estimated} tokens estimated).`);
+          const afterTokens = estimateContextTokens(system, history);
+          const generation = getRecapGeneration(history);
+          health.recordCompaction(estimated, afterTokens, generation);
+          display.compactionEvent?.({ beforeTokens: estimated, afterTokens, generation, threshold: estimated });
           await persist(opts.sessionPath, history);
         }
       }
     }
+
+    display.contextBar?.(health.snapshot(usage.inputTokens, usage.outputTokens));
 
     let responseText = '';
     const responseToolCalls: ToolCall[] = [];
@@ -376,6 +397,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       }
       toolResults.push({ id: call.id, name: call.name, content: result, isError });
     }
+
+    health.incrementToolCalls(responseToolCalls.length);
 
     history.push({ role: 'tool_result', results: toolResults });
 

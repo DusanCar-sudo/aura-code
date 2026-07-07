@@ -113,6 +113,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       showPlan: (plan) => send(ws, { type: 'plan_created', plan }),
       stepStarted: (step) => send(ws, { type: 'step_started', step }),
       stepCompleted: (step, result) => send(ws, { type: 'step_completed', step, result }),
+      contextBar: (health) => send(ws, { type: 'context_bar', health }),
+      contextDashboard: (health) => send(ws, { type: 'context_dashboard', health }),
+      compactionEvent: (info) => send(ws, { type: 'compaction', ...info }),
     };
 
     // Try orchestration first

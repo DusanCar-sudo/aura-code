@@ -15,6 +15,7 @@
 import chalk from 'chalk';
 import type { Display } from './display.js';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
+import { formatContextBar, formatContextDashboard } from './context-health.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -61,16 +62,14 @@ function drawPromptTop(): void {
   const txt = inputBuffer;
   const cursorChar = chalk.hex('#cc785c')('█');
 
-  // Go home, clear from here to end of screen
+  // ── Line 1: go to row 0, clear only this line, draw border ──
   home();
-  clearEos();
-
-  // Line 1: border
-  cursorCol(1);
+  clearEol();
   process.stdout.write('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
-  process.stdout.write('\n');
 
-  // Line 2: prompt
+  // ── Line 2: go to row 1, clear only this line, draw prompt ──
+  home();
+  cursorDown(1);
   cursorCol(1);
   clearEol();
   const prompt = chalk.hex('#9b1b30')('╰ ') + chalk.hex('#cc785c').bold('❯ ');
@@ -89,40 +88,38 @@ function drawPromptTop(): void {
 
   promptLines = 2;
 
-  // Move cursor to after the last output line
-  const cursorRow = 1 + promptLines + outputLine;
-  if (cursorRow > promptLines) {
-    process.stdout.write('\n');
-  }
-  cursorDown(outputLine);
+  // ── Move cursor to end of output area (row 2 + outputLine) ──
+  const outputRow = 2 + outputLine;
+  home();
+  cursorDown(outputRow);
 }
 
 // ── Output ─────────────────────────────────────────────────────────────────
 
-/** Write a line of output below the prompt, then redraw the prompt at top. */
+/** Write a line of output below the prompt. */
 export function writeOutput(text: string): void {
-  // Move to position: promptLines + outputLine + 1
-  // Write the text
-  const row = 1 + promptLines + outputLine;
+  // Position at row 2 + outputLine (row 0-1 = prompt)
+  const row = 2 + outputLine;
   home();
-  cursorDown(row - 1);
+  cursorDown(row);
   cursorCol(1);
   clearEol();
   process.stdout.write(text);
   process.stdout.write('\n');
   outputLine++;
 
-  // Check if we're near bottom of terminal — if so, scroll and redraw
+  // Check if we're near bottom of terminal — scroll output area up
   const termRows = process.stdout.rows ?? 24;
-  if (promptLines + outputLine >= termRows - 1) {
-    // Scroll output area up by 1 line (but not the prompt)
-    // Redraw prompt at top
+  if (2 + outputLine >= termRows - 1) {
+    // Scroll the output area up by 1 line (preserving prompt at rows 0-1)
+    scrollUp(1);
+    // Redraw just the two prompt lines (don't erase output below)
     drawPromptTop();
-    // Move cursor to bottom of output
-    const endRow = promptLines + outputLine;
-    home();
-    cursorDown(endRow);
   }
+
+  // Position cursor at end of output
+  home();
+  cursorDown(2 + outputLine);
 }
 
 /** Streaming text — appends to current output line. */
@@ -219,6 +216,8 @@ export function setChatId(id: string): void {
 }
 
 export function initTui(): void {
+  // Don't clear the screen — banner from renderBanner() is already there.
+  // outputLine starts at 0; first writeOutput() goes to row 2.
   outputLine = 0;
   hideCursor();
   drawPromptTop();
@@ -264,18 +263,30 @@ function sep(): string {
 
 export function createTuiDisplay(): Display {
   let inStream = false;
+  let thinkingFrame = 0;
 
   return {
-    agentThinking() {},
+    agentThinking() {
+      // Show a subtle spinner on its own line
+      const spinners = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+      const s = spinners[(thinkingFrame++) % spinners.length];
+      const row = 2 + outputLine;
+      home();
+      cursorDown(row);
+      cursorCol(1);
+      clearEol();
+      process.stdout.write(chalk.hex('#8a7768')(`  ${s} thinking`));
+      // Don't increment outputLine — this line will be overwritten
+    },
     toolStart() {},
 
     streamText(text: string) {
       if (!inStream) {
         inStream = true;
-        // Move cursor to end of output before streaming
-        const row = 1 + promptLines + outputLine;
+        // Position at end of output area
+        const row = 2 + outputLine;
         home();
-        cursorDown(row - 1);
+        cursorDown(row);
         cursorCol(1);
         clearEol();
       }
@@ -287,6 +298,9 @@ export function createTuiDisplay(): Display {
         process.stdout.write('\n');
         outputLine++;
         inStream = false;
+        // Position cursor to end of output
+        home();
+        cursorDown(2 + outputLine);
       }
     },
 
@@ -395,6 +409,19 @@ export function createTuiDisplay(): Display {
     circuit(info) {
       const colour = info.state === 'open' ? '#b15439' : info.state === 'half-open' ? '#d4903a' : '#5a9e6e';
       writeOutput(chalk.hex(colour)(`  ◯ Circuit ${info.provider}: ${info.state}`));
+    },
+
+    contextBar(health) {
+      writeOutput(formatContextBar(health));
+    },
+
+    contextDashboard(health) {
+      writeOutput(formatContextDashboard(health));
+    },
+
+    compactionEvent(info) {
+      const saved = ((1 - info.afterTokens / info.beforeTokens) * 100).toFixed(0);
+      writeOutput(chalk.hex('#d4903a')(`  ⚠  Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens (-${saved}%) · gen ${info.generation}`));
     },
   };
 }
