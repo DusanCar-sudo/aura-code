@@ -912,15 +912,15 @@ async function main() {
   startInput();
 
   // Buffer for :btw and :stop typed during the agent loop
-  let pendingBtw = null;
-  let pendingStop = false;
+  let pendingBtw: string | null = null;
+let abortController: AbortController | null = null;
 
   setCallbacks({
     onEnter(line: string) {
       processLine(line);
     },
     onStop() {
-      pendingStop = true;
+      if (abortController) abortController?.abort();
     },
   });
 
@@ -948,10 +948,10 @@ async function main() {
 
     // Run task
     let result;
-    let loopCancelled = false;
+    abortController = new AbortController();
+    const abortSignal = abortController.signal;
     try {
       const currentProvider = buildProvider(tuiDisplay);
-      pendingStop = false;
       pendingBtw = null;
 
       const doVerify = argv.verify === true || !!fileConfig.verify;
@@ -965,6 +965,7 @@ async function main() {
             context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
             maxTurns: resolved.maxTurns,
+            abortSignal,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
               baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -987,11 +988,20 @@ async function main() {
             baseUrl: runtimeConfig.baseUrl ?? undefined,
           },
           sessionPath,
+          abortSignal,
         });
       }
     } catch (err) {
       const msg = err instanceof Error ? (err.stack || err.message) : String(err);
       writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+
+      return;
+    }
+
+    // Check if task was cancelled by user
+    if (abortController?.signal.aborted && !result.success) {
+      writeOutput(chalk.hex('#d4903a')('  ⏹ Task cancelled.'));
+      // Don't record episode for cancelled tasks
       return;
     }
 
@@ -1032,6 +1042,7 @@ async function main() {
     if (pendingBtw) {
       const q = pendingBtw;
       pendingBtw = null;
+      abortController = new AbortController();
       const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
       writeOutput(chalk.hex('#4e3d30')('  Side question: "' + q + '"'));
       const btwResult = await runBtwQuery(q, buildProvider(tuiDisplay), ctx);

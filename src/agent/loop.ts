@@ -40,6 +40,8 @@ export interface LoopOptions {
   checkpoints?: boolean;
   /** Plugin hooks fired around tool execution (PreToolUse can block). */
   hooks?: import('../plugins/types.js').HookEntry[];
+  /** Optional abort signal — when aborted the loop stops after the current tool turn. */
+  abortSignal?: AbortSignal;
 }
 
 export interface LoopResult {
@@ -164,6 +166,13 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         break;
       }
     }
+
+    // Abort check — user requested stop via :stop / Ctrl+C
+    if (opts.abortSignal?.aborted) {
+      display.warning('Task cancelled by user — stopping loop.');
+      break;
+    }
+
     turns++;
 
     // Compaction check runs pre-call: estimateContextTokens measures the
