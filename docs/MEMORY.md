@@ -102,7 +102,7 @@ The memory section is **optional** — if no reconciled file exists (new project
 | `:dream` | Consolidate today's episodes into a dream. If ≥3 dreams exist, also runs reconciliation. |
 | `:dream full` | Consolidate ALL episodes, ignoring the last-dream cutoff. |
 | `:rem` | Show the reconciled memory projection (or the latest dream if no projection exists). |
-| `:stats` | Show episode-level statistics: completion rate, models used, token counts. |
+| `/stats`, `/usage` | Show episode-level statistics: completion rate, models used, token counts. |
 
 ## File layout
 
@@ -110,7 +110,7 @@ The memory section is **optional** — if no reconciled file exists (new project
 dreams/
   2026-06-24.md          ← immutable daily dream (append-only)
   2026-06-26.md          ← another day's dream
-  .last.json             ← cutoff timestamp (when was the last dream?)
+  .state.json            ← cutoff timestamp (newest episode covered by the last successful dream)
   .reconciled.md         ← the projection (materialized view, regenerated each :dream)
 
 episodes/

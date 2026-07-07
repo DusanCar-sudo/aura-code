@@ -136,6 +136,36 @@ aura --verify --test-command "npm test" 'fix the tests'  # verify
 aura --analyze                                           # analyze
 ```
 
+`--doctor` is a sixth, standalone mode: `aura --doctor` scans Aura's own
+install (build, config, deps, env, git) across 10 check categories and can
+attempt 4 kinds of auto-repair with `--doctor --fix`.
+
+---
+
+## Interactive Commands (REPL)
+
+Run `aura --interactive` (or just `aura` with no task) to drop into the REPL.
+`:help` in-session always has the full, current list — this is a snapshot of it.
+
+| Command | What it does |
+|---|---|
+| `:dream` / `:dream full` | Consolidate recent (or all) episodes into a dated dream entry — see [The Memory Loop](#the-memory-loop). |
+| `:rem` | Show the reconciled memory projection, or the latest dream if none exists yet. |
+| `:machina <task>` | Run a task with self-verification and automatic retry on failure. |
+| `:council <task>` | 2-3 parallel read-only domain specialists, then a synthesis pass. |
+| `:q add / list / run / drop / clear` | Persistent task queue — enqueue prompts, run them later, one at a time. |
+| `:btw <question>` | Quick side question, read-only, doesn't pollute the current conversation history. |
+| `:research <topic>` | Multi-step research pass, saved to `research/*.md`. |
+| `:doctor` / `:doctor --fix` | Same self-diagnostic as `--doctor`, from inside a running session. |
+| `/context` | Context health dashboard — token usage bar, compaction ladder, generation count. |
+| `/stats`, `/usage` | Token + cost usage for the current session. |
+| `:model`, `:provider`, `:apikey` | Switch models, rerun the provider wizard, set an API key mid-session. |
+| `:sessions`, `:resume`, `:save` | Session management — list, resume, or rename saved conversations. |
+| `:workflow`, `:workflows` | Create/run and list saved multi-step workflows. |
+| `:graph`, `:graph refresh` | Codebase knowledge graph summary; re-extract from the current tree. |
+| `:viz`, `:dashboard` | Generate and open the memory dashboard. |
+| `:approve`, `:approve all/off` | Toggle or set the auto-approve permission level. |
+
 ---
 
 ## Providers
@@ -147,9 +177,15 @@ aura --analyze                                           # analyze
 | **Gemini** (Google) | gemini-2.5-pro, gemini-2.5-flash |
 | **MiMo** (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 |
 | **GLM** (Zhipu / Z.ai) | glm-5.2, glm-5.1, glm-5 — `zhipu-coding/<model>` routes via the Coding Plan endpoint |
+| **DeepSeek** | deepseek-v4-pro, deepseek-v4-flash (also via OpenRouter) |
+| **xAI** (Grok) | grok-2, grok-2-mini, grok-beta |
+| **OpenCode Zen** | Gateway to third-party models via `opencode/<model>` or `zen/<model>` |
+| **OpenCode Go** | Anthropic-style endpoint via `go-anthropic/<model>` (MiniMax, Qwen) |
+| **NVIDIA NIM** | Self-hosted / NIM-served OpenAI-compatible models |
 | **Ollama** (Local) | Any local model — no API key needed |
 
-Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
+Any OpenAI-compatible endpoint also works via `openrouter/<model>`, or by
+registering a custom provider in `.aura.json`.
 
 ---
 
@@ -157,7 +193,7 @@ Any OpenAI-compatible endpoint also works via `openrouter/<model>`.
 
 | Metric | Value |
 |--------|-------|
-| Tests | 1245 passing, 43 known failures (pre-existing, untriaged — not from recent changes) |
+| Tests | 1317 passing, 0 failures (94 files) |
 | Version | v0.8.0 |
 | Language | TypeScript (strict) |
 | License | MIT |

@@ -26,27 +26,27 @@ Verified against live source via `:machina` (see `docs/machina.html` for the ful
 
 The agent loop (`src/agent/loop.ts`) is the concrete implementation of δ. Each iteration:
 
-1. **Compaction check** — before consulting the oracle, the loop measures current history size against the model's context window. Once it crosses 70% (`COMPACTION_THRESHOLD`, `src/agent/compactor.ts:4`), the compactor runs (`src/agent/compactor.ts:113`).
+1. **Compaction check** — before consulting the oracle, the loop measures current history size against the model's context window and compares it to an escalating **generational ladder**: `LADDER = [0.55, 0.70, 0.85]` (`src/agent/compactor.ts:13`). Each time a recap gets recompacted the threshold for the *next* pass rises one rung; once it crosses the ladder for the current generation, `compactHistory()` runs (checked at `src/agent/compactor.ts:227`, triggered from `src/agent/loop.ts:217`).
 
-2. **Oracle invocation** — `provider.stream(system, history, TOOL_DEFINITIONS)` at `src/agent/loop.ts:142`. Yields text chunks, tool start/input/end events, and a final `{ stopReason }`.
+2. **Oracle invocation** — `provider.stream(system, history, TOOL_DEFINITIONS)` at `src/agent/loop.ts:235`. Yields text chunks, tool start/input/end events, and a final `{ stopReason }`.
 
-3. **Safety gate** — every tool call from the oracle is checked against the permissions system before execution (`src/agent/loop.ts:241`). Dangerous invocations may require user confirmation.
+3. **Safety gate** — every tool call from the oracle is checked against the permissions system before execution (`src/agent/loop.ts:349`). Dangerous invocations may require user confirmation.
 
 4. **State update** — tool results and oracle text fold back into S.
 
-5. **Loop back** — s′ becomes the new s. Continues until the oracle signals `stopReason: 'done'` or the turn counter hits the hard bound.
+5. **Loop back** — s′ becomes the new s. Continues until the oracle signals `stopReason: 'done'` or the turn counter hits the bound.
 
-**The hard halting bound:** `maxTurns: 150` (`src/config/defaults.ts:17`). This makes the *real* machine decidable — it always terminates — unlike the unbounded theoretical AAM, which is Turing-complete and therefore subject to the Halting Problem: no general test can say whether an arbitrary unbounded task ever finishes. Real Aura is deliberately not that machine.
+**The halting bound:** `maxTurns: 150` by default (`src/config/defaults.ts:10`), sized per task shape by the loop's profile logic. A run that hits its ceiling while still making visible progress gets **one** upgrade to a wider ceiling instead of dying with a resume hint — `--max-turns` set explicitly on the command line never widens. This makes the *real* machine decidable — it always terminates — unlike the unbounded theoretical AAM, which is Turing-complete and therefore subject to the Halting Problem: no general test can say whether an arbitrary unbounded task ever finishes. Real Aura is deliberately not that machine.
 
 ### Context compaction, precisely
 
 `src/agent/compactor.ts` does not simply keep "the last N messages." The real rule, in order:
 
-1. Walk backward from the end of history to find the **last complete user turn** (`keepFrom`, set at the first `role === 'user'` message found walking back).
-2. If a user turn is found, compaction preserves everything from that point forward, plus the original task (`history[0]`) and a generated recap of what was compacted.
-3. **Only if no user turn is found** nearby does it fall back to a fixed window: `PRESERVE_RECENT = 3` — the 3 most recent messages — walked forward slightly to avoid landing mid-tool-call.
+1. Walk backward from the end of history accumulating message token-cost until the verbatim tail would exceed `RETENTION_RATIO` (40%) of the model's context window — this sets the initial `keepFrom` boundary by *budget*, not by a fixed message count.
+2. Snap that boundary forward to the nearest user-turn start within the next 6 messages, if one exists, so the kept slice opens with real user context and no `tool_use`/`tool_result` pair gets split.
+3. **Only if no user turn is found** nearby does it fall back to a fixed window: `FALLBACK_KEEP = 3` — the 3 most recent messages — then walked forward past any leading `tool_result` so the kept slice never opens on an orphaned result.
 
-So "keep the 3 most recent messages" is the *fallback* path, not the primary rule. The primary rule is turn-boundary-aware: don't cut a user's question away from its context, whenever a reasonable cut point exists.
+So "keep the 3 most recent messages" is the *fallback* path, not the primary rule. The primary rule is token-budget-aware and turn-boundary-aware: don't cut a user's question away from its context, whenever a reasonable cut point exists within budget.
 
 ### Tool primitives (P)
 
@@ -70,7 +70,7 @@ episodes (raw experience, append-only)
 
 A dream is an offline consolidation pass over recorded episodes:
 
-1. **Recall** — load episodes since the last dream (tracked in `dreams/.last.json`).
+1. **Recall** — load episodes since the last dream (cutoff tracked in `dreams/.state.json`, and only ever advanced after a dream is successfully written — see the key invariant below).
 2. **Consolidate** — feed episode digests to an LLM, distilling them into `## Lessons`, `## Patterns`, `## Open threads`, and a `## Tomorrow brief`.
 3. **Prepare** — write one dated `.md` file under `dreams/<date>.md`.
 4. **Reconcile** — if ≥3 dreams exist, run cross-dream reconciliation.
@@ -119,17 +119,24 @@ episodes
 
 **Papa Ruby** takes Baby Ruby's concepts and asks a local model (RubyAlternator's configured small model, e.g. `qwen2.5-coder:1.5b` via Ollama) to judge whether each concept is a real, generalizable lesson or coincidental noise. Pre-call gating skips weak-signal concepts before ever spending a model call. Deduplicates against `dreams/.reconciled.md` so the two independent pipelines (dream reconciliation and mining) don't produce redundant rows. Accepted lessons are written as `TrainingExample` rows, ready for external fine-tuning — the same approach used to build the Serbian Legal LLM corpus.
 
-Reachable via `:mine` (Baby Ruby only) and `:mine --refine` (both stages).
+Implemented in `src/mining/extract.ts` and `src/mining/refine.ts`; as of this
+writing there is no `:mine` REPL command or CLI flag wired to either stage —
+the pipeline runs, but only when called directly (e.g. from tests or another
+module), not from user-facing Aura.
 
 ## Council and Research
 
 | Command | What happens |
 |---|---|
 | `:research <topic>` | Single agent, multi-turn web research → markdown report in `research/`. |
-| `:council <topic>` | 5 independent agents research separately, never seeing each other's work → synthesis reconciles into one verdict in `council/`. |
-| `:council --reader` | Also generates a narrated HTML reading view — words light up as spoken, emphasized terms pop in color. |
+| `:council <topic>` | 2-3 parallel read-only domain specialists (Mixture of Agents, `src/agent/mixture.ts`), never seeing each other's work, then one synthesis pass. |
 
-Council panel model resolves from the user's configured provider (or `--panel`/`AURA_PANEL_MODEL` override) — works for every provider, not locked to any single vendor.
+`src/research/council.ts` also implements a separate, independently-testable
+5-agent Ecclesia (`runCouncil`, default `panelSize: 5`, resolves its panel
+model from the configured provider or a `--panel`/`AURA_PANEL_MODEL`
+override) described in `docs/COMMITTEE.md` — as of this writing it is not
+called from the CLI or REPL, so `:council` currently means the 2-3-agent
+Mixture of Agents path above, not this Ecclesia.
 
 ## Verification
 
@@ -161,7 +168,7 @@ Web search follows the same resilience pattern: Tavily (API) → Serper (Google 
 
 ## Stats
 
-- **1215+ tests**, 0 failures
+- **1317 tests**, 0 failures (94 files)
 - **27 tool primitives**
-- **v0.6.3**
+- **v0.8.0**
 - TypeScript (strict), MIT license
