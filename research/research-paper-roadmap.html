@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Research Paper Writing — Analysis &amp; Roadmap</title>
+<style>
+  :root {
+    --bg: #fdf6f0; --card: #fffaf5; --text: #2a1f18; --muted: #8a7768;
+    --accent: #cc5c3c; --accent-2: #5a9e6e; --accent-3: #d4903a;
+    --border: #e8d5c8; --code-bg: #f4ede6; --shadow: 0 4px 24px rgba(62,47,36,.08);
+    --radius: 12px; --serif: 'Georgia', 'Times New Roman', serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --rating-5: #3fb950; --rating-4: #5a9e6e; --rating-3: #d4903a; --rating-1: #b15439;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1b18; --card: #26221e; --text: #ede0cc; --muted: #9e8e80;
+      --accent: #e08a6e; --accent-2: #6db880; --accent-3: #e0a64a;
+      --border: #3a322a; --code-bg: #2c2722; --shadow: 0 4px 24px rgba(0,0,0,.25);
+    }
+  }
+  @media print {
+    :root { --bg: #fff; --card: #fff; --text: #111; --muted: #666; --border: #ccc; --shadow: none; }
+    .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+    .hero { padding: 1rem 0 1.5rem; }
+    .container { max-width: 100%; padding: 1rem; }
+    .page-break { page-break-before: always; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--serif); line-height: 1.75; font-size: 17px; }
+  .container { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  .hero {
+    text-align: center; padding: 3rem 0 2.5rem; border-bottom: 2px solid var(--border); margin-bottom: 2.5rem;
+  }
+  .hero .badge {
+    display: inline-block; background: var(--accent); color: #fff; font-family: var(--sans);
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 0.3em 1em; border-radius: 100px; margin-bottom: 1.25rem;
+  }
+  .hero h1 { font-family: var(--sans); font-size: 2.2rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+  .hero .meta { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 2.2rem 2.8rem; margin-bottom: 1.8rem;
+  }
+  .card h2 { font-family: var(--sans); font-size: 1.4rem; color: var(--accent); margin: 0 0 0.75rem; border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; }
+  .card h3 { font-family: var(--sans); font-size: 1.1rem; color: var(--accent-2); margin: 1.5rem 0 0.5rem; }
+  .card h4 { font-family: var(--sans); font-size: 1rem; color: var(--accent-3); margin: 1.2rem 0 0.3rem; }
+  .card p { margin: 0.7rem 0; }
+  .card ul, .card ol { margin: 0.7rem 0; padding-left: 1.8rem; }
+  .card li { margin: 0.35rem 0; }
+  .card a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); }
+  .card code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 0.12em 0.35em; border-radius: 3px; }
+  .card pre {
+    font-family: var(--mono); font-size: 0.83em; background: var(--code-bg);
+    padding: 1.2rem 1.5rem; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+  .card blockquote {
+    border-left: 3px solid var(--accent); padding: 0.5rem 0 0.5rem 1.2rem;
+    margin: 1rem 0; color: var(--muted); font-style: italic;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92em; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--sans); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  tr:hover { background: var(--code-bg); }
+  .rating { font-weight: 700; }
+  .r5 { color: var(--rating-5); } .r4 { color: var(--rating-4); } .r3 { color: var(--rating-3); } .r1 { color: var(--rating-1); }
+  .badge-sm {
+    display: inline-block; padding: 0.15em 0.6em; border-radius: 4px; font-family: var(--sans);
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; margin-left: 0.3em;
+  }
+  .b-new { background: rgba(90,158,110,.15); color: var(--accent-2); }
+  .b-fix { background: rgba(177,84,57,.12); color: var(--rating-1); }
+  .b-ok  { background: rgba(58,47,36,.08); color: var(--muted); }
+  .toc { list-style: none; padding: 0; }
+  .toc li { margin: 0.5rem 0; font-family: var(--sans); }
+  .toc a { border-bottom: none; font-weight: 500; }
+  .footer { text-align: center; margin-top: 2.5rem; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); opacity: 0.7; }
+  @media (max-width: 640px) {
+    .card { padding: 1.3rem; } .hero h1 { font-size: 1.5rem; } .container { padding: 1rem 0.75rem 3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <div class="badge">Analysis &amp; Roadmap</div>
+  <h1>Aura Research Paper Writing<br>Pipeline</h1>
+  <div class="meta">Current state assessment · Architecture proposals · Implementation roadmap</div>
+</header>
+
+<!-- TOC -->
+<div class="card">
+<h2>Table of Contents</h2>
+<ol class="toc">
+  <li><a href="#s1">1. What Exists Today — Current Research Stack</a></li>
+  <li><a href="#s2">2. Output Quality Audit — What Works vs What Fails</a></li>
+  <li><a href="#s3">3. The Mileva Marić Problem — Hallucination in Multi-Agent Research</a></li>
+  <li><a href="#s4">4. What's Missing for Academic Paper Writing</a></li>
+  <li><a href="#s5">5. Proposed Architecture — The :paper Pipeline</a></li>
+  <li><a href="#s6">6. Implementation Roadmap (Priority Order)</a></li>
+  <li><a href="#s7">7. Component Design Sketches</a></li>
+  <li><a href="#s8">8. Cost &amp; Token Economics</a></li>
+</ol>
+</div>
+
+<!-- Section 1 -->
+<div class="card" id="s1">
+<h2>1. What Exists Today</h2>
+
+<h3>1.1 <code>:research &lt;topic&gt;</code> — Single-Agent Pass</h3>
+<p><strong>File:</strong> <code>src/research/research.ts</code> (110 lines). Inspired by ByteDance's <strong>DeerFlow</strong> SuperAgent harness.</p>
+<ul>
+  <li>One agent, 12-turn max budget</li>
+  <li>Prompt breaks topic into 3-6 sub-questions → web_search/web_fetch for each → synthesise into Markdown</li>
+  <li>Output saved to <code>research/YYYY-MM-DD-&lt;slug&gt;.md</code></li>
+  <li><strong>Known limitation</strong> (stated in code comments): "intentionally the <em>minimal</em> version" — no middleware pipeline, no concurrent sub-agents, no confidence-scored memory.</li>
+</ul>
+
+<h3>1.2 <code>:council &lt;topic&gt;</code> — Ecclesia Multi-Agent Council</h3>
+<p><strong>File:</strong> <code>src/research/council.ts</code> (275 lines). More mature than <code>:research</code>.</p>
+<ul>
+  <li><strong>5 independent agents</strong> (odd number — avoids ties), running <em>sequentially</em> (cost-conscious)</li>
+  <li>Each agent produces bullet findings with sources — they do not see each other's work</li>
+  <li><strong>Synthesis pass</strong> on the caller's active provider, producing four canonical sections:
+    <ul>
+      <li><strong>Convergent findings</strong> — claims most/all agents independently arrived at</li>
+      <li><strong>Contested</strong> — where agents disagreed, with split counts</li>
+      <li><strong>Minority signal</strong> — things only 1-2 agents caught worth surfacing</li>
+      <li><strong>Verdict</strong> — bottom-line conclusion with confidence level</li>
+    </ul>
+  </li>
+  <li>Output: <code>.md</code> + styled <code>.html</code> under <code>council/</code></li>
+  <li><strong>Panel model resolution</strong>: <code>--panel &lt;model&gt;</code> → <code>AURA_PANEL_MODEL</code> env var → synthesis provider's model</li>
+</ul>
+
+<h3>1.3 Supporting Infrastructure</h3>
+<ul>
+  <li><code>src/tools/web-search.ts</code> — DuckDuckGo (no API key needed)</li>
+  <li><code>src/tools/web-fetch.ts</code> — HTTP GET with SSRF guard</li>
+  <li><code>src/agent/loop.ts</code> — generic agent loop used by both research and council</li>
+  <li><code>src/agent/mixture.ts</code> — MoA (mixture-of-agents) for exploratory tasks, already used by <code>:council</code></li>
+  <li><code>research/generate-pdf.mjs</code> — Puppeteer HTML→PDF (tested, works)</li>
+</ul>
+</div>
+
+<!-- Section 2 -->
+<div class="card" id="s2">
+<h2>2. Output Quality Audit</h2>
+
+<table>
+<thead>
+<tr><th>Topic</th><th>Method</th><th>Rating</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>Milutin Milanković</td>
+  <td>Council (5 agents)</td>
+  <td class="rating r5">★★★★★</td>
+  <td>Exceptional. Accurate birth/death dates, nuanced "Croll vs original synthesis" contestation, minority signals flagged (Revised Julian calendar mathematical precision, untranslated autobiography), high-confidence verdict. 7 proper sources.</td>
+</tr>
+<tr>
+  <td>Antigravity</td>
+  <td>Research (single)</td>
+  <td class="rating r5">★★★★★</td>
+  <td>Near-academic quality. Einstein field equations in LaTeX, 18 sources with DOIs, ALPHA-g experiment results with exact values, structured "Open Debates" table. Arguably the best output in the repo.</td>
+</tr>
+<tr>
+  <td>Russian Cancer Vaccines</td>
+  <td>Council (5 agents)</td>
+  <td class="rating r4">★★★★</td>
+  <td>Good structure, appropriately skeptical. Sources are real: Nature, Lancet, ClinicalTrials.gov, New York Times. One agent's "some vaccines already approved" claim flagged as minority outlier.</td>
+</tr>
+<tr>
+  <td>Nikola Tesla</td>
+  <td>Council (5 agents)</td>
+  <td class="rating r3">★★★☆☆</td>
+  <td>Correct but shallow. All 5 agents converged on the same generic facts. Only one trivial contested item. No novel synthesis — reads like a Wikipedia summary.</td>
+</tr>
+<tr>
+  <td>Mihajlo Pupin</td>
+  <td>Research (single)</td>
+  <td class="rating r1">★☆☆☆☆</td>
+  <td><strong>Failed.</strong> "Loop ended after 12 turns" — agent got stuck. The polished <code>index.html</code> was manually constructed, not agent-generated.</td>
+</tr>
+<tr>
+  <td>Mileva Marić</td>
+  <td>Council (5 agents)</td>
+  <td class="rating r1">★☆☆☆☆</td>
+  <td><strong>Hallucination disaster.</strong> See Section 3.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<!-- Section 3 -->
+<div class="card" id="s3">
+<h2>3. The Mileva Marić Problem</h2>
+
+<p>This is the single most important quality failure in the current system. Five independent agents researching Mileva Marić produced <strong>catastrophically hallucinated claims</strong>:</p>
+
+<table>
+<thead><tr><th>Claim</th><th>Reality</th></tr></thead>
+<tbody>
+<tr><td>"Coined the term quantum field theory"</td><td><strong>False.</strong> QFT was developed by Dirac, Heisenberg, Pauli, Feynman, Schwinger, Tomonaga (1920s-1940s).</td></tr>
+<tr><td>"Developed the concept of spacetime"</td><td><strong>False.</strong> Minkowski (1908), building on Einstein's special relativity.</td></tr>
+<tr><td>"Maric-Penrose spinors" (1934)</td><td><strong>Fabricated.</strong> No such concept exists. Penrose's spinor work is from the 1960s.</td></tr>
+<tr><td>"Received Nobel Prize in Physics (posthumously)"</td><td><strong>Fabricated.</strong> She never received any Nobel Prize.</td></tr>
+<tr><td>"President of the Serbian Academy of Sciences"</td><td><strong>Fabricated.</strong> She never held this position.</td></tr>
+<tr><td>Born 1905, died 1987</td><td><strong>False.</strong> Actual: 1875–1948.</td></tr>
+<tr><td>"Worked with Einstein on the EPR paradox"</td><td><strong>False.</strong> EPR paper (Einstein-Podolsky-Rosen) was 1935, long after their relationship ended.</td></tr>
+<tr><td>Sources cited: "Maric, M. (1980)", "Einstein &amp; Maric (1936)", etc.</td><td><strong>All fabricated.</strong> These publications do not exist.</td></tr>
+</tbody>
+</table>
+
+<p><strong>Root cause:</strong> The agents were asked to research a historical figure about whom <em>little reliable training data exists</em> — Mileva Marić's actual scientific contributions are a legitimate historical debate, but LLMs fill the vacuum with synthetic "facts." The council's own synthesis pass partially caught this ("confidence is low regarding any specific achievement"), but it <em>still</em> presented the hallucinated claims as "agent findings" that a reader could easily mistake for real research.</p>
+
+<h3>Required Fix: Anti-Hallucination Pass</h3>
+<p>Every research output needs a <strong>Devil's Advocate pass</strong> — an agent whose only job is to challenge every factual claim:</p>
+<pre>For each claim in the report:
+  - Find the original source online
+  - Verify the claim against the source
+  - Mark: ✅ VERIFIED (with link)  |  ⚠️ PLAUSIBLE BUT UNVERIFIED  |  ❌ CONTRADICTED (with evidence)</pre>
+<p>This should run <em>after</em> research but <em>before</em> the final synthesis.</p>
+</div>
+
+<!-- Section 4 -->
+<div class="card" id="s4">
+<h2>4. What's Missing for Academic Paper Writing</h2>
+
+<h3>4.1 Depth — Multi-Pass Iterative Research</h3>
+<p>Current <code>:research</code> does one pass. Academic deep research requires:</p>
+<ul>
+  <li><strong>Iterative deepening:</strong> Pass 1 → identify gaps → Pass 2 focused on gaps → Pass 3</li>
+  <li><strong>Citation tracing:</strong> Find paper → follow backward references → follow forward citations</li>
+  <li><strong>Source quality scoring:</strong> distinguish arXiv preprint from peer-reviewed Nature paper</li>
+</ul>
+
+<h3>4.2 Formal Academic Structure</h3>
+<p>Current outputs are reports, not papers. Missing sections:</p>
+<ul>
+  <li>Abstract (250-300 word structured summary)</li>
+  <li>Introduction / Literature Review</li>
+  <li>Methodology (how was the research conducted)</li>
+  <li>Findings / Results</li>
+  <li>Discussion (implications, limitations, future work)</li>
+  <li>Conclusion</li>
+  <li>References (formatted: APA, BibTeX, or journal-specific)</li>
+</ul>
+<p>The council's "Convergent / Contested / Minority Signal / Verdict" structure is <em>analogous</em> but not a proper academic format.</p>
+
+<h3>4.3 Citation Management</h3>
+<ul>
+  <li>No source registry — each agent rediscoveres sources independently</li>
+  <li>No <code>.bib</code> output — can't feed into LaTeX or Zotero</li>
+  <li>No citation key system — can't write "as shown by \cite{smith2024}"</li>
+</ul>
+
+<h3>4.4 LaTeX / PDF Output</h3>
+<p>Current output: Markdown + HTML. For actual papers: LaTeX with proper typesetting, <code>\cite{}</code>, <code>\section{}</code>, <code>\begin{figure}</code>, journal templates, generated PDF.</p>
+
+<h3>4.5 Peer Review Simulation</h3>
+<p>No quality gate before final output. A simulated reviewer pass would catch:
+structural gaps, unsupported claims, contradictions between sections, missing methodology.</p>
+</div>
+
+<!-- Section 5 -->
+<div class="card page-break" id="s5">
+<h2>5. Proposed Architecture — The <code>:paper</code> Pipeline</h2>
+
+<pre>:paper "Quantum Error Correction in NISQ-era Devices"
+  │
+  ├─ Phase 1: DEEP RESEARCH (3-5 agents, multiple passes)
+  │   ├─ 1a. Council-style multi-agent research
+  │   ├─ 1b. Identify gaps &amp; conflicting claims
+  │   ├─ 1c. Focused 2nd pass on gaps
+  │   └─ 1d. Source registry (collect all citations)
+  │
+  ├─ Phase 2: DEVIL'S ADVOCATE
+  │   └─ Challenge every claim: verified / plausible / contradicted
+  │
+  ├─ Phase 3: OUTLINE
+  │   └─ Structure paper: sections, subsections, key claims per section
+  │
+  ├─ Phase 4: WRITING
+  │   ├─ 4a. Write each section (citing Phase 1 sources)
+  │   ├─ 4b. Generate .bib file from source registry
+  │   └─ 4c. Cross-section consistency check
+  │
+  ├─ Phase 5: PEER REVIEW
+  │   └─ Simulated reviewer: structured feedback, gap analysis
+  │
+  ├─ Phase 6: FINAL ASSEMBLY
+  │   ├─ 6a. Apply reviewer fixes
+  │   ├─ 6b. Format: Markdown + LaTeX
+  │   └─ 6c. Render PDF via LaTeX (or Puppeteer fallback)
+  │
+  └─ Output: paper.md + paper.tex + references.bib + paper.pdf</pre>
+</div>
+
+<!-- Section 6 -->
+<div class="card" id="s6">
+<h2>6. Implementation Roadmap</h2>
+
+<h3>Tier 1 — Quick Wins (hours/days)</h3>
+
+<h4>6.1 Anti-Hallucination Pass <span class="badge-sm b-fix">CRITICAL</span></h4>
+<p><strong>New file:</strong> <code>src/research/fact-check.ts</code></p>
+<ul>
+  <li>Runs after <code>:research</code> and <code>:council</code> (opt-in flag: <code>--fact-check</code>)</li>
+  <li>Agent receives the full report + instruction to verify every factual claim</li>
+  <li>Output: annotated report with ✅ / ⚠️ / ❌ markers</li>
+  <li>Estimated tokens: ~8k-15k per pass</li>
+</ul>
+
+<h4>6.2 Iterative Deepening <code>--rounds N</code></h4>
+<p><strong>Modify:</strong> <code>src/research/research.ts</code></p>
+<ul>
+  <li>Each round receives the previous round's output + "find what's missing, go deeper"</li>
+  <li>Default: 1 round (current behaviour). <code>--rounds 3</code> for deep research</li>
+</ul>
+
+<h3>Tier 2 — Core Paper Pipeline (days/week)</h3>
+
+<h4>6.3 Source Registry + Citation Engine</h4>
+<p><strong>New file:</strong> <code>src/research/citation-engine.ts</code></p>
+<ul>
+  <li>Collects all URLs/sources from research phase</li>
+  <li>Assigns citation keys: <code>smith2024</code>, <code>nature2023</code></li>
+  <li>Generates <code>.bib</code> output (BibTeX format)</li>
+  <li>Enables <code>\cite{smith2024}</code> in generated text</li>
+</ul>
+
+<h4>6.4 <code>:paper</code> Command Shell</h4>
+<p><strong>New file:</strong> <code>src/research/paper.ts</code></p>
+<ul>
+  <li>Orchestrator: deep research → fact-check → outline → write → review</li>
+  <li>Reuses existing <code>research.ts</code> and <code>council.ts</code> as Phase 1 engines</li>
+  <li>CLI: <code>:paper &lt;topic&gt; [--model &lt;m&gt;] [--panel &lt;m&gt;] [--rounds &lt;n&gt;] [--format md|tex]</code></li>
+</ul>
+
+<h4>6.5 LaTeX Output</h4>
+<p><strong>New file:</strong> <code>src/research/latex-render.ts</code></p>
+<ul>
+  <li>Convert the structured paper into <code>.tex</code> with proper <code>\section</code>, <code>\cite</code>, <code>\begin{abstract}</code></li>
+  <li>Use an existing journal template (e.g., arXiv, IEEE, Springer LNCS)</li>
+  <li>PDF generation: call <code>pdflatex</code> if available, fall back to Puppeteer as already done in <code>research/generate-pdf.mjs</code></li>
+</ul>
+
+<h3>Tier 3 — Advanced (weeks)</h3>
+
+<h4>6.6 Automated Peer Review</h4>
+<p><strong>New file:</strong> <code>src/research/peer-review.ts</code></p>
+<ul>
+  <li>Agent acts as a journal reviewer: structured feedback form</li>
+  <li>Checks: evidence quality, logical flow, missing citations, overclaims</li>
+  <li>Optionally: second iteration — apply reviewer fixes, re-review</li>
+</ul>
+
+<h4>6.7 Research Plan / Template System</h4>
+<p>User specifies: "I want a systematic review on X, with methodology comparison and case study." System adapts the research plan to the template, allocating agent budget per section.</p>
+
+<h4>6.8 Knowledge Graph Integration</h4>
+<p>Write research findings into the existing perception graph (<code>src/perception/</code>). Future papers can query: "What do we already know about Milanković cycles?" — reusing previous research to seed new investigations.</p>
+</div>
+
+<!-- Section 7 -->
+<div class="card" id="s7">
+<h2>7. Component Design Sketches</h2>
+
+<h3>7.1 Source Registry (Data Structure)</h3>
+<pre>interface SourceEntry {
+  key: string;          // "smith2024"
+  type: 'paper' | 'article' | 'webpage' | 'report';
+  title: string;
+  authors: string[];
+  year: number;
+  url: string;
+  doi?: string;
+  journal?: string;
+  verified: boolean;    // did fact-check confirm this exists?
+  claims: string[];     // which claims in the paper cite this source
+}</pre>
+
+<h3>7.2 Paper Outline (Data Structure)</h3>
+<pre>interface PaperOutline {
+  title: string;
+  abstract: string;
+  sections: {
+    heading: string;
+    subsections?: { heading: string; keyClaims: string[] }[];
+    keyClaims: string[];
+    assignedSources: string[];  // citation keys
+  }[];
+}</pre>
+
+<h3>7.3 Fact-Check Report</h3>
+<pre>interface FactCheckResult {
+  claim: string;
+  section: string;
+  verdict: 'verified' | 'plausible' | 'contradicted' | 'unverifiable';
+  source?: string;      // URL that confirms or refutes
+  note?: string;        // explanation
+}</pre>
+
+<h3>7.4 Peer Review Form</h3>
+<pre>interface PeerReview {
+  overallRating: 1-5;
+  strengths: string[];
+  weaknesses: string[];
+  evidenceQuality: { section: string; rating: 1-5; note: string }[];
+  structuralIssues: string[];
+  missingCitations: string[];
+  recommendation: 'accept' | 'minor_revision' | 'major_revision' | 'reject';
+}</pre>
+</div>
+
+<!-- Section 8 -->
+<div class="card" id="s8">
+<h2>8. Cost &amp; Token Economics</h2>
+
+<p>Estimates for a ~5,000-word academic paper on a moderately deep topic, using <code>glm-5.2</code> as synthesis model and <code>glm-5.1</code> as panel model:</p>
+
+<table>
+<thead><tr><th>Phase</th><th>Agents</th><th>Tokens (est.)</th><th>Cost (GLM-5 pay-as-you-go)</th></tr></thead>
+<tbody>
+<tr><td>Deep Research (3 rounds × 5 agents)</td><td>15 runs</td><td>~180,000</td><td>~$0.27</td></tr>
+<tr><td>Fact-Check Pass</td><td>1 run</td><td>~12,000</td><td>~$0.02</td></tr>
+<tr><td>Outline Generation</td><td>1 run</td><td>~8,000</td><td>~$0.01</td></tr>
+<tr><td>Section Writing (6 sections)</td><td>6 runs</td><td>~48,000</td><td>~$0.07</td></tr>
+<tr><td>Cross-Section Consistency</td><td>1 run</td><td>~15,000</td><td>~$0.02</td></tr>
+<tr><td>Peer Review</td><td>1 run</td><td>~18,000</td><td>~$0.03</td></tr>
+<tr><td>Final Assembly + LaTeX</td><td>1 run</td><td>~20,000</td><td>~$0.03</td></tr>
+<tr style="font-weight:700"><td>TOTAL</td><td>26 runs</td><td>~301,000</td><td>~$0.45</td></tr>
+</tbody>
+</table>
+
+<p><strong>Note:</strong> This is for one full paper cycle. With Coding Plan subscription (zhipu-coding/), cost drops significantly. A <code>--fast</code> mode using <code>mimo-v2-flash</code> for panel agents would bring it under <strong>$0.15/paper</strong>.</p>
+
+<p><strong>Time estimate:</strong> With sequential agent runs at ~15-30s each, total wall-clock time: <strong>~8-15 minutes</strong> per paper. Could be parallelised for panel phases (council already supports this conceptually, currently sequential by design for cost safety).</p>
+
+<h3>Token Budget Comparison</h3>
+<table>
+<thead><tr><th>Operation</th><th>Current</th><th>Proposed :paper</th></tr></thead>
+<tbody>
+<tr><td>:dream full (glm-5.1)</td><td>952,492</td><td>—</td></tr>
+<tr><td>:council (5 agents, no deepening)</td><td>~60,000</td><td>—</td></tr>
+<tr><td>:research (single pass)</td><td>~30,000</td><td>—</td></tr>
+<tr><td>:paper full cycle (est.)</td><td>—</td><td>~301,000</td></tr>
+</tbody>
+</table>
+<p>A full <code>:paper</code> costs ~⅓ of a <code>:dream full</code> and ~5× a <code>:council</code>. This is reasonable: you're trading 5× the tokens for a complete academic paper with fact-checking, citations, and peer review — not just a research summary.</p>
+</div>
+
+<footer class="footer">
+  <p>Generated by Aura Code &middot; Research Paper Writing Pipeline Analysis &middot; July 2026</p>
+</footer>
+
+</div>
+</body>
+</html>
