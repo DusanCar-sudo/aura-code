@@ -13,17 +13,23 @@ import type { Display } from './display.js';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
 
 // ── ANSI helpers ───────────────────────────────────────────────────────────
+// Uses ABSOLUTE row positioning (ESC[row;colH) so terminal scrolling
+// never breaks the layout. The bottom INPUT_LINES rows are reserved for
+// the input frame. All output writes to the area above it.
 
 const CSI = '\x1b[';
-const savePos  = () => process.stdout.write(CSI + 's');
-const restPos  = () => process.stdout.write(CSI + 'u');
-const cursorUp    = (n: number) => { if (n > 0) process.stdout.write(CSI + n + 'A'); };
-const cursorDown  = (n: number) => { if (n > 0) process.stdout.write(CSI + n + 'B'); };
-const cursorCol   = (n: number) => process.stdout.write(CSI + n + 'G');
-const clearLine   = () => process.stdout.write(CSI + '0K');
-const clearDown   = () => process.stdout.write(CSI + '0J');
-const hideCursor  = () => process.stdout.write(CSI + '?25l');
-const showCursor  = () => process.stdout.write(CSI + '?25h');
+const cursorAbs  = (row: number, col: number) => process.stdout.write(CSI + row + ';' + col + 'H');
+const cursorUp   = (n: number) => { if (n > 0) process.stdout.write(CSI + n + 'A'); };
+const cursorDown = (n: number) => { if (n > 0) process.stdout.write(CSI + n + 'B'); };
+const clearLine  = () => process.stdout.write(CSI + '0K');
+const clearDown  = () => process.stdout.write(CSI + '0J');
+const hideCursor = () => process.stdout.write(CSI + '?25l');
+const showCursor = () => process.stdout.write(CSI + '?25h');
+
+/** Absolute row of the first input-frame line (1-indexed). */
+const inputTop = () => rows - INPUT_LINES;
+/** Absolute row of the prompt line (where user types). */
+const inputPromptRow = () => rows - INPUT_LINES + 2;
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -60,23 +66,19 @@ function drawInputLine(): void {
   const displayText = inputBuffer;
   const isEmpty = displayText.length === 0;
 
-  // Save cursor, move to bottom line area, draw 4 lines, restore cursor
-  savePos();
-  // Move to the bottom of the terminal
-  cursorDown(rows);
-  // Go up INPUT_LINES to reach the top of our input area
-  cursorUp(INPUT_LINES);
+  const t = inputTop();
 
-  // Line 1: spacer
+  // Line 1: spacer (at inputTop)
+  cursorAbs(t, 1);
   clearLine();
-  process.stdout.write('\n');
 
-  // Line 2: top border — ruby red frame
+  // Line 2: top border
+  cursorAbs(t + 1, 1);
   clearLine();
   process.stdout.write('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
-  process.stdout.write('\n');
 
-  // Line 3: prompt line with input
+  // Line 3: prompt + input text
+  cursorAbs(t + 2, 1);
   clearLine();
   const prompt = chalk.hex('#9b1b30')('╰ ') + chalk.hex('#cc785c').bold('❯ ');
   const placeholder = isEmpty ? chalk.hex('#4e3d30')('type a task, :btw, :q, :help...  ') : '';
@@ -90,12 +92,14 @@ function drawInputLine(): void {
     const after = chalk.hex('#ede0cc')(displayText.slice(cursorPos));
     process.stdout.write('  ' + prompt + before + at + after);
   }
-  process.stdout.write('\n');
 
-  // Line 4: bottom spacer
+  // Line 4: bottom spacer (last row of terminal)
+  cursorAbs(t + 3, 1);
   clearLine();
 
-  restPos();
+  // Move cursor to the prompt position for blinking cursor
+  const promptLen = 6; // "  ╰ ❯ "
+  cursorAbs(t + 2, promptLen + 2 + cursorPos);
 }
 
 // ── Output writing ─────────────────────────────────────────────────────────
@@ -104,16 +108,22 @@ function drawInputLine(): void {
  * Write a line to the output area above the fixed input line.
  */
 export function writeOutput(text: string): void {
-  savePos();
-  // Move cursor up above the input frame
-  cursorUp(INPUT_LINES);
-  // If the cursor is in the input area, this puts us in the output area
-  clearLine();
+  // Move cursor to the last line of the output area (just above the input frame).
+  // After writing, the cursor will scroll naturally if needed.
+  // Then redraw the input frame at the absolute bottom rows.
+  
+  // Put cursor at the top of the input area, take it back one line,
+  // write output, let terminal scroll if needed, then redraw input at bottom.
+  cursorAbs(rows - INPUT_LINES, 1);
+  // Move up one line so output appears in the scrollable area
+  cursorUp(1);
+  
+  // Write output — if this causes a scroll, the input lines get pushed up.
+  // That's OK because we redraw them right after.
   process.stdout.write(text);
   process.stdout.write('\n');
-  // Ensure we're not scrolled into the input area
-  // Redraw input
-  restPos();
+  
+  // Redraw the input frame at the fixed bottom rows
   if (inputActive) drawInputLine();
 }
 
@@ -127,9 +137,15 @@ export function writeStream(text: string): void {
 // ── Input handling ─────────────────────────────────────────────────────────
 
 function handleChar(ch: string): void {
-  // Ctrl+C → stop current task or exit
+  // Ctrl+C → abort running task, or exit if idle
   if (ch === '\x03') {
-    if (onStop) { onStop(); return; }
+    if (currentAbort && !currentAbort.signal.aborted) {
+      currentAbort.abort();
+      writeOutput(chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+      if (onStop) onStop();
+      return;
+    }
+    destroyTui();
     process.stdout.write('\n');
     process.exit(0);
   }
@@ -172,6 +188,25 @@ function rawDataHandler(chunk: string): void {
   for (const ch of chunk) handleChar(ch);
 }
 
+let currentAbort: AbortController | null = null;
+
+/**
+ * Get a fresh AbortController that gets aborted when the user presses Ctrl+C
+ * during a running task. Pass its signal to runAgentLoop.
+ */
+export function getAbortController(): AbortController | null {
+  return currentAbort;
+}
+
+export function createAbortController(): AbortController {
+  currentAbort = new AbortController();
+  return currentAbort;
+}
+
+export function clearAbortController(): void {
+  currentAbort = null;
+}
+
 export function startInput(): void {
   if (inputActive) return;
   inputActive = true;
@@ -203,14 +238,19 @@ export function setCallbacks(opts: { onEnter: (line: string) => void; onStop?: (
 
 export function initTui(): void {
   hideCursor();
-  // Reserve space
-  process.stdout.write('\n'.repeat(INPUT_LINES));
-  cursorUp(INPUT_LINES);
+  // Clear the terminal and draw the input frame
+  // Write enough newlines to fill the scrollback, then draw at bottom
+  cursorAbs(1, 1);
+  clearDown();
+  // Draw the empty input frame at the bottom
+  drawInputLine();
 }
 
 export function destroyTui(): void {
   stopInput();
   showCursor();
+  cursorAbs(rows, 1);
+  clearLine();
   process.stdout.write('\n');
 }
 
