@@ -53,6 +53,9 @@ function mutedDisplay(base: Display, label: string): Display {
     showPlan: () => {},
     stepStarted: () => {},
     stepCompleted: () => {},
+    contextBar: () => {},
+    contextDashboard: () => {},
+    compactionEvent: () => {},
   };
 }
 

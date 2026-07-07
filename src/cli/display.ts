@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
+import { formatContextBar as formatContextBarFromHealth, formatContextDashboard } from './context-health.js';
 
 // The Display interface — used by the loop, easy to swap (web UI later)
 export interface Display {
@@ -27,6 +28,12 @@ export interface Display {
   failover?(info: { from: string; to: string; reason: string }): void;
   /** Circuit breaker for a provider opened or closed. */
   circuit?(info: { provider: string; state: 'closed' | 'open' | 'half-open' }): void;
+  /** One-line context health bar — shown before each LLM call. */
+  contextBar?(health: import('./context-health.js').ContextHealth): void;
+  /** Full context dashboard — shown on /context command. */
+  contextDashboard?(health: import('./context-health.js').ContextHealth): void;
+  /** Compaction event — replaces the current generic warning. */
+  compactionEvent?(info: { beforeTokens: number; afterTokens: number; generation: number; threshold: number }): void;
 }
 
 export function createTerminalDisplay(): Display {
@@ -35,7 +42,7 @@ export function createTerminalDisplay(): Display {
 
   return {
     agentThinking() {
-      // Subtle indicator — don't spam
+      process.stdout.write(chalk.hex('#4e3d30')('  ◆ ') + chalk.hex('#8a7768')('thinking…') + '\r');
     },
 
     streamText(text: string) {
@@ -139,6 +146,19 @@ export function createTerminalDisplay(): Display {
       console.log(chalk.hex(colour)(`  ◯ Circuit ${info.provider}: ${info.state}`));
     },
 
+    contextBar(health) {
+      console.log(formatContextBarFromHealth(health));
+    },
+
+    contextDashboard(health) {
+      console.log(formatContextDashboard(health));
+    },
+
+    compactionEvent(info) {
+      const saved = ((1 - info.afterTokens / info.beforeTokens) * 100).toFixed(0);
+      console.log(chalk.hex('#d4903a')(`  ⚠  Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens (-${saved}%) · gen ${info.generation}`));
+    },
+
     showPlan(plan: ExecutionPlan) {
       const w = process.stdout.columns ?? 80;
       const line = '─'.repeat(Math.min(w - 4, 60));
@@ -200,4 +220,20 @@ function formatInput(name: string, input: Record<string, unknown>): string {
     case 'git_diff':   return input.path ? String(input.path) : 'all files';
     default:           return JSON.stringify(input).slice(0, 60);
   }
+}
+
+/**
+ * One-line context-usage bar used by tests and any direct callers.
+ * Clamps the visual fill to the bar width but keeps the true percentage in text
+ * so over-limit usage (cumulative session tokens vs a single model window) is
+ * visible rather than hidden.
+ */
+export function formatContextBar(usedTokens: number, limitTokens: number, isEstimated = false): string {
+  const barWidth = 10;
+  const pct = limitTokens > 0 ? (usedTokens / limitTokens) * 100 : 0;
+  const filled = Math.max(0, Math.min(barWidth, Math.round((usedTokens / Math.max(1, limitTokens)) * barWidth)));
+  const empty = barWidth - filled;
+  const bar = '█'.repeat(filled) + '░'.repeat(empty);
+  const label = isEstimated ? `~${usedTokens.toLocaleString()} (estimated)` : usedTokens.toLocaleString();
+  return `  ◆ Context: ${bar} ${pct.toFixed(0)}% (${label} / ${limitTokens.toLocaleString()})`;
 }

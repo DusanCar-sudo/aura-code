@@ -73,7 +73,7 @@ function loadEncoder(): ((text: string) => number[]) | null {
 }
 
 /** Tokens for a single string: exact via tokenizer, else char-ratio estimate. */
-function countText(text: string): number {
+export function countText(text: string): number {
   if (!text) return 0;
   const enc = loadEncoder();
   if (enc) {
@@ -102,7 +102,7 @@ export function estimateContextTokens(system: string, history: HistoryMessage[])
 }
 
 /** Token estimate for a single history message. */
-function countMessage(msg: HistoryMessage): number {
+export function countMessage(msg: HistoryMessage): number {
   switch (msg.role) {
     case 'user':
       return countText(msg.content);
