@@ -15,6 +15,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
+import { initTui, startInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -496,7 +497,7 @@ async function main() {
     if (cfg.apiKey) runtimeConfig.apiKey = cfg.apiKey;
   }
 
-  let ctx;
+  let ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   try {
     ctx = await loadProjectContext(cwd);
   } catch (e) {
@@ -898,84 +899,70 @@ async function main() {
     return;
   }
 
-  // ── Interactive REPL mode ──────────────────────────────────────────────────
+  // ── Interactive REPL mode (TUI — fixed bottom input) ────────────────────────
   if (activeChatHistory.length > 0) {
-    console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
+    writeOutput(chalk.hex('#8a7768')('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
   }
-  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.'));
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  // Let mid-task prompts (tool confirmations, plan approval) reuse this
-  // interface instead of opening a second readline on the same stdin.
-  setSharedReadline(rl);
 
-  // The input "field": a framed prompt pinned just under the header. Output
-  // from each run flows below it. Width caps at 100 cols so it stays tidy on
-  // wide terminals.
-  const fieldWidth = () => Math.min(process.stdout.columns ?? 80, 100) - 4;
-  const renderField = () => {
-    const w = fieldWidth();
-    const idTag = activeChatId ? ` ${activeChatId}` : '';
-    const label = ` ask aura${idTag} `;
-    const dashes = Math.max(0, w - label.length - 1);
-    console.log('');
-    console.log('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
-  };
+  // Use the TUI display for output
+  
+  const tuiDisplay = createTuiDisplay();
+  initTui();
+  if (activeChatId) setChatId(activeChatId);
+  startInput();
 
-  const ask = () => {
-    renderField();
-    rl.question(chalk.hex('#9b1b30')('  ╰ ') + chalk.hex('#cc785c').bold('❯ '), async (line) => {
-      const input = line.trim();
-      if (!input) { ask(); return; }
+  // Buffer for :btw and :stop typed during the agent loop
+  let pendingBtw = null;
+  let pendingStop = false;
 
-      // Slash / colon commands
-      const replCtx: ReplCtx = {
-        rl, ctx, display,
-        providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
-        permissions, cumulative,
-        chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
-        sessionPath,
-      };
-      const cmdResult = await handleReplCommand(input, replCtx);
-      if (cmdResult.handled) {
-        // Commands may update chat state
-        if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
-        if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
-        if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
-        ask();
-        return;
-      }
+  setCallbacks({
+    onEnter(line: string) {
+      processLine(line);
+    },
+    onStop() {
+      pendingStop = true;
+    },
+  });
 
-      // Run task — pass current conversation history for stay-active mode
-      let result;
-      try {
-        const currentProvider = buildProvider(display);
+  let tuiInputHistory = [];
 
-        const doVerify = argv.verify === true || !!fileConfig.verify;
-        if (doVerify) {
-          const { runWithVerification } = await import('../verify/index.js');
-          const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
-          const testCommand = cliTestCommand ?? fileConfig.testCommand;
-          const wrapperResult = await runWithVerification({
-            loopOpts: {
-              provider: currentProvider, task: input,
-              context: ctx, permissions, display,
-              initialHistory: activeChatHistory,
-              maxTurns: resolved.maxTurns,
-              spawnConfig: {
-                apiKey: runtimeConfig.apiKey,
-                baseUrl: runtimeConfig.baseUrl ?? undefined,
-              },
-              sessionPath,
-            },
-            config: { enabled: true, maxRetries, testCommand },
-            projectRoot: ctx.root,
-            display,
-          });
-          result = wrapperResult.loopResult;
-        } else {
-          result = await runAgentLoop({
+  async function processLine(input: string) {
+    const replCtx = {
+      rl: null,
+      ctx, display: tuiDisplay,
+      providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
+      permissions, cumulative,
+      chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+      sessionPath,
+    };
+
+    // Check for REPL commands
+    const cmdResult = await handleReplCommand(input, replCtx);
+    if (cmdResult.handled) {
+      if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
+      if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
+      if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
+      if (activeChatId) setChatId(activeChatId);
+      return;
+    }
+
+    // Run task
+    let result;
+    let loopCancelled = false;
+    try {
+      const currentProvider = buildProvider(tuiDisplay);
+      pendingStop = false;
+      pendingBtw = null;
+
+      const doVerify = argv.verify === true || !!fileConfig.verify;
+      if (doVerify) {
+        const { runWithVerification } = await import('../verify/index.js');
+        const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+        const testCommand = cliTestCommand ?? fileConfig.testCommand;
+        const wrapperResult = await runWithVerification({
+          loopOpts: {
             provider: currentProvider, task: input,
-            context: ctx, permissions, display,
+            context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
             maxTurns: resolved.maxTurns,
             spawnConfig: {
@@ -983,70 +970,76 @@ async function main() {
               baseUrl: runtimeConfig.baseUrl ?? undefined,
             },
             sessionPath,
-          });
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-        console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
-        ask();
-        return;
-      }
-
-      // Update stay-active history
-      activeChatHistory = result.history;
-
-      // Persist session
-      if (activeChatId && !noSession) {
-        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
-      }
-
-      {
-        const { recordEpisode } = await import('../dream/episode.js');
-        recordEpisode(ctx.root, {
-          task: input,
-          model: runtimeConfig.model ?? resolved.model ?? 'unknown',
-          success: result.success,
-          tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
-          durationMs: 0,
+          },
+          config: { enabled: true, maxRetries, testCommand },
+          projectRoot: ctx.root,
+          display: tuiDisplay,
+        });
+        result = wrapperResult.loopResult;
+      } else {
+        result = await runAgentLoop({
+          provider: currentProvider, task: input,
+          context: ctx, permissions, display: tuiDisplay,
+          initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
+          spawnConfig: {
+            apiKey: runtimeConfig.apiKey,
+            baseUrl: runtimeConfig.baseUrl ?? undefined,
+          },
+          sessionPath,
         });
       }
-
-      cumulative.turns += result.turns;
-      cumulative.toolCalls += result.toolCallCount;
-      cumulative.inputTokens += result.usage.inputTokens;
-      cumulative.outputTokens += result.usage.outputTokens;
-      cumulative.costUsd += result.costUsd;
-
-      if (result.success) {
-        display.summary(result.summary, result.turns, result.toolCallCount);
-        printUsageFooter(display, result.usage, result.costUsd);
-        if (speakEnabled) await speakSummary(result.summary);
-      } else {
-        display.error(result.summary);
-      }
-
-      ask();
-    });
-  };
-
-  // Ctrl+C: if a task is running, prompt to force-quit; second Ctrl+C exits.
-  let ctrlC = 0;
-  rl.on('SIGINT', () => {
-    ctrlC++;
-    if (ctrlC === 1) {
-      console.log(chalk.hex('#cc785c')('\n  ⏳ Press Ctrl+C again to exit (current task will keep running).'));
-      setTimeout(() => { ctrlC = 0; }, 3000);
-    } else {
-      console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
-      process.exit(0);
+    } catch (err) {
+      const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+      writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+      return;
     }
-  });
 
-  ask();
-  rl.on('close', () => {
-    console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
-    process.exit(0);
-  });
+    // Update stay-active history
+    activeChatHistory = result.history;
+
+    // Persist session
+    if (activeChatId && !noSession) {
+      await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
+    }
+
+    {
+      const { recordEpisode } = await import('../dream/episode.js');
+      recordEpisode(ctx.root, {
+        task: input,
+        model: runtimeConfig.model ?? resolved.model ?? 'unknown',
+        success: result.success,
+        tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+        durationMs: 0,
+      });
+    }
+
+    cumulative.turns += result.turns;
+    cumulative.toolCalls += result.toolCallCount;
+    cumulative.inputTokens += result.usage.inputTokens;
+    cumulative.outputTokens += result.usage.outputTokens;
+    cumulative.costUsd += result.costUsd;
+
+    if (result.success) {
+      tuiDisplay.summary(result.summary, result.turns, result.toolCallCount);
+      printUsageFooter(tuiDisplay, result.usage, result.costUsd);
+      if (speakEnabled) await speakSummary(result.summary);
+    } else {
+      tuiDisplay.error(result.summary);
+    }
+
+    // Process any :btw that was typed during the loop
+    if (pendingBtw) {
+      const q = pendingBtw;
+      pendingBtw = null;
+      const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
+      writeOutput(chalk.hex('#4e3d30')('  Side question: "' + q + '"'));
+      const btwResult = await runBtwQuery(q, buildProvider(tuiDisplay), ctx);
+      writeOutput(renderBtwAnswer(btwResult.answer, btwResult.tokens));
+    }
+  }
+
+  writeOutput(chalk.hex('#8a7768')('  Type a task, or :help for commands.'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1066,7 +1059,7 @@ interface ReplCtx {
   // creating their own interface — two readlines on one stdin both echo
   // every keypress (doubled characters), and closing the second one pauses
   // stdin, which drains the event loop and kills the REPL.
-  rl: readline.Interface;
+  rl: readline.Interface | null;
   ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   display: ReturnType<typeof createTerminalDisplay>;
   providerConfig: { model: string; apiKey?: string; baseUrl?: string };
@@ -1152,7 +1145,9 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
   console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
 
   const answer = await new Promise<string>(resolve => {
-    c.rl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
+        const promptRl = c.rl;
+    if (!promptRl) { resolve('y'); return; }
+    promptRl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
   });
   const choice = answer.trim();
 
@@ -1696,7 +1691,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   // ── Provider wizard command ────────────────────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    const cfg = await runProviderWizard(c.rl);
+    const cfg = await runProviderWizard(c.rl ?? undefined);
     if (cfg) {
       // Update current session's provider without restart
       runtimeConfig.model = cfg.model;
