@@ -1180,6 +1180,84 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
   const unhandled: ReplCommandResult = { handled: false };
 
+  // ── :q — Task queue (with subcommands, keep bare :q as quit) ─────────────
+  if (input.startsWith(':q ')) {
+    const sub = input.slice(3).trimStart();
+    const { addToQueue, loadQueue, removeFromQueue, clearQueue, runQueueItem, formatQueue }
+      = await import('../repl/queue.js');
+
+    if (sub.startsWith('add ')) {
+      const prompt = sub.slice(4).trim();
+      if (!prompt) {
+        c.display.warning('Usage: :q add <prompt> -- add a task to the queue.');
+        return { handled: true };
+      }
+      const item = addToQueue(prompt);
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Queued #${loadQueue().length}: "${prompt.slice(0, 60)}"\n`));
+      return { handled: true };
+    }
+
+    if (sub === 'list') {
+      const items = loadQueue();
+      console.log(formatQueue(items));
+      return { handled: true };
+    }
+
+    if (sub.startsWith('run ')) {
+      const n = parseInt(sub.slice(4).trim(), 10);
+      if (isNaN(n) || n < 1) {
+        c.display.warning('Usage: :q run <number> — run the task at that position (see :q list).');
+        return { handled: true };
+      }
+      const items = loadQueue();
+      if (n > items.length) {
+        c.display.warning(`Queue only has ${items.length} item(s).`);
+        return { handled: true };
+      }
+      c.display.agentThinking();
+      const result = await runQueueItem(n - 1, buildProvider(c.display), c.ctx, c.permissions, c.display);
+      if (!result) {
+        c.display.warning('Could not run that item.');
+        return { handled: true };
+      }
+      c.display.success(`Queue item #${n}: ${result.success ? 'done' : 'failed'}`);
+      if (result.output) {
+        console.log(chalk.hex('#ede0cc')(`  ${result.output.slice(0, 240)}`));
+      }
+      console.log(chalk.hex('#4e3d30')(`  ${result.turns} turn(s) · ${result.toolCalls} tool call(s).\n`));
+      return { handled: true };
+    }
+
+    if (sub.startsWith('drop ')) {
+      const n = parseInt(sub.slice(5).trim(), 10);
+      if (isNaN(n) || n < 1) {
+        c.display.warning('Usage: :q drop <number> — remove the task at that position.');
+        return { handled: true };
+      }
+      const removed = removeFromQueue(n - 1);
+      if (!removed) {
+        c.display.warning(`No item at position ${n}.`);
+        return { handled: true };
+      }
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Dropped #${n}: "${removed.prompt.slice(0, 60)}"\n`));
+      return { handled: true };
+    }
+
+    if (sub === 'clear') {
+      const count = loadQueue().length;
+      if (count === 0) {
+        c.display.warning('Queue is already empty.');
+        return { handled: true };
+      }
+      clearQueue();
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Queue cleared (${count} item(s) removed).\n`));
+      return { handled: true };
+    }
+
+    c.display.warning('Usage: :q add <prompt> | :q list | :q run <n> | :q drop <n> | :q clear');
+    return { handled: true };
+  }
+
   if (input === ':quit' || input === ':q' || input === '/exit') {
     process.exit(0);
   }
@@ -1356,6 +1434,20 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     return { handled: true };
   }
+  // ── :btw — Side channel question (read-only, no history) ────────────────
+  if (input.startsWith(':btw ')) {
+    const question = input.slice(5).trim();
+    if (!question) {
+      c.display.warning('Usage: :btw <question> — ask a quick side question without interrupting the current task.');
+      return { handled: true };
+    }
+    const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
+    c.display.agentThinking();
+    const result = await runBtwQuery(question, buildProvider(c.display), c.ctx);
+    console.log(renderBtwAnswer(result.answer, result.tokens));
+    return { handled: true };
+  }
+
   if (input === ':help' || input === '/help') {
     console.log(chalk.hex('#8a7768')([
       '',
@@ -1382,16 +1474,22 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :workflow               Create & run a multi-step workflow',
       '    <name> "step1" "step2" ...',
       '  :resume-workflow <id>   Resume a paused/failed workflow',
+      '  :q add <prompt>         Enqueue a task in the queue',
+      '  :q list                 List queued tasks',
+      '  :q run <n>              Execute queued task #n',
+      '  :q drop <n>             Remove queued task #n',
+      '  :q clear                Wipe the queue',
       '  :machina <task>         Run task with self-verification + auto-retry',
       '  :council <task>         2-3 parallel read-only specialists, then synthesis',
       '',
-      '  ── Memory ───────────────────────────────────────',
+      '  ── Memory / Side ─────────────────────────────────',
       '  :dream                  Consolidate recent episodes into a dream entry',
       '  :dream full             Consolidate ALL episodes, ignoring last-dream cutoff',
       '  :rem                    Show reconciled memory (or latest dream)',
       '  :research <topic>       Multi-step research pass, saved to research/*.md',
       '  :confess                Auto-detect & confess an anomalous episode',
       '  :confessions            List all confessions',
+      '  :btw <question>         Quick side question (read-only, no history pollution)',
       '',
       '  ── Voice ─────────────────────────────────────────',
       '  :speak                  Toggle reading replies aloud (or launch with --speak)',
