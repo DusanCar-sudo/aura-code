@@ -9,6 +9,9 @@ import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForMod
 import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
+process.on('unhandledRejection', (reason) => {
+  console.error(chalk.hex('#b15439')('  \u2717 Unhandled rejection: ' + String(reason)));
+});
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
@@ -37,6 +40,8 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderBanner } from './diamond.js';
+import { ContextHealthTracker } from './context-health.js';
+import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,7 +50,7 @@ import { renderBanner } from './diamond.js';
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -152,6 +157,16 @@ if (argv.analyze) {
     console.log(chalk.hex('#8a7768')(`  ${report.summary}\n`));
   }
   process.exit(0);
+}
+
+if (argv.doctor === true) {
+  const cwd = typeof argv.cwd === 'string' ? path.resolve(argv.cwd) : process.cwd();
+  const fix = process.argv.includes('--fix');
+  const offline = process.argv.includes('--offline');
+  runDoctor({ projectRoot: cwd, fix, offline }).then(report => {
+    console.log(formatDoctorReport(report));
+    process.exit(report.summary.error > 0 ? 1 : 0);
+  }).catch(e => { console.error('Doctor error:', String(e)); process.exit(1); });
 }
 
 if (argv['propose-harness']) {
@@ -325,7 +340,7 @@ if (argv.help) {
 // When run with no args + a TTY or piped input, fall through to the REPL/wizard.
 // Skip this gate when --reset-setup is set (the wizard should fire even if env
 // vars make needsWizard() return false).
-if (argv._.length === 0 && !argv.interactive && process.stdin.isTTY !== true && !argv['reset-setup']) {
+if (argv._.length === 0 && !argv.interactive && !argv.doctor && process.stdin.isTTY !== true && !argv['reset-setup']) {
   if (!needsWizard({})) {
     printHelp();
     process.exit(0);
@@ -907,6 +922,16 @@ async function main() {
   // Use the TUI display for output
   
   const tuiDisplay = createTuiDisplay();
+  // Shared context-health tracker: the loop records compaction events and
+  // per-turn snapshots into it; the /context command reads it back. The
+  // system-prompt source starts empty — the loop calls updateSystem() with
+  // the real (task-embedded) prompt each run.
+  const healthTracker = new ContextHealthTracker(
+    () => '',
+    () => activeChatHistory,
+    resolved.model ?? 'gpt-4o',
+    resolved.model ?? 'gpt-4o',
+  );
   initTui();
   if (activeChatId) setChatId(activeChatId);
   startInput();
@@ -934,6 +959,7 @@ let abortController: AbortController | null = null;
       permissions, cumulative,
       chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
       sessionPath,
+      healthTracker,
     };
 
     // Check for REPL commands
@@ -971,6 +997,7 @@ let abortController: AbortController | null = null;
               baseUrl: runtimeConfig.baseUrl ?? undefined,
             },
             sessionPath,
+            healthTracker,
           },
           config: { enabled: true, maxRetries, testCommand },
           projectRoot: ctx.root,
@@ -989,6 +1016,7 @@ let abortController: AbortController | null = null;
           },
           sessionPath,
           abortSignal,
+          healthTracker,
         });
       }
     } catch (err) {
@@ -1006,6 +1034,7 @@ let abortController: AbortController | null = null;
     }
 
     // Update stay-active history
+    try {
     activeChatHistory = result.history;
 
     // Persist session
@@ -1048,6 +1077,10 @@ let abortController: AbortController | null = null;
       const btwResult = await runBtwQuery(q, buildProvider(tuiDisplay), ctx);
       writeOutput(renderBtwAnswer(btwResult.answer, btwResult.tokens));
     }
+    } catch (err) {
+      const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+      writeOutput(chalk.hex('#b15439')('  \u2717 Unhandled error after task completed: ' + msg));
+    }
   }
 
   writeOutput(chalk.hex('#8a7768')('  Type a task, or :help for commands.'));
@@ -1078,6 +1111,7 @@ interface ReplCtx {
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
   sessionPath: string | undefined;
+  healthTracker: ContextHealthTracker;
 }
 
 interface ReplCommandResult {
@@ -1388,6 +1422,20 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     return { handled: true };
   }
+
+  if (input === ':doctor' || input.startsWith(':doctor')) {
+    const fix = input.includes('--fix');
+    const offline = input.includes('--offline');
+    c.display.agentThinking();
+    const report = await runDoctor({ projectRoot: c.ctx.root, fix, offline });
+    if (typeof writeOutput === 'function') {
+      writeOutput(formatDoctorReport(report));
+    } else {
+      console.log(formatDoctorReport(report));
+    }
+    return { handled: true };
+  }
+
   if (input.startsWith(':machina ') || input === ':machina') {
     const machinaTask = input.slice(':machina '.length).trim();
     if (!machinaTask) {
@@ -1511,7 +1559,10 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       '  :graph refresh          Reload graph from graphify-out/graph.json',
       '  :plans                  List saved execution plans',
       '  :viz, :dashboard        Generate and open the memory dashboard',
+      '  :doctor                 Scan Aura itself for issues (build, config, deps, env)',
+      '  :doctor --fix           Scan and attempt auto-repairs',
       '  /stats, /usage          Show token + cost usage this session',
+      '  /context                Context health dashboard (window, compaction, cost)',
       '  /clear, /reset          Reset cumulative usage stats',
       '',
       '  ── General ──────────────────────────────────────',
@@ -1802,6 +1853,15 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       `    Est. cost:    ${u.costUsd.toFixed(4)}`,
       '',
     ].join('\n')));
+    return { handled: true };
+  }
+
+  if (input === '/context') {
+    const u = c.cumulative;
+    const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
+    h.turnCount = u.turns;
+    h.toolCallCount = u.toolCalls;
+    c.display.contextDashboard?.(h);
     return { handled: true };
   }
 
@@ -2241,6 +2301,9 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --analyze                Mine session history for weakness patterns; save report
     --propose-harness        Generate system-prompt patches from weakness report
     --apply-harness <id>     Apply a proposal patch; reverts if tests fail
+    --doctor                 Scan Aura itself for issues (build, config, deps, env, git)
+    --doctor --fix           Scan and attempt auto-repairs (rebuild, restore, reinstall)
+    --doctor --offline       Skip the network version check
     --workflow <name> ...    Create and run a sequential workflow with named steps
     --resume-workflow <id>   Resume a paused/failed workflow from last completed step
     --workflows              List all persisted workflows
@@ -2309,7 +2372,9 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
 `);
 }
 
-if (argv._[0] === 'serve') {
+if (argv.doctor === true) {
+  // --doctor runs async above and exits on completion; don't start main().
+} else if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);
   startServer({ port, cwd, model: argv.model, apiKey: argv['api-key'] ?? undefined, baseUrl: argv['base-url'] ?? undefined, open: argv.open !== false }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {
