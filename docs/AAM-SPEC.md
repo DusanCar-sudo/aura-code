@@ -1,6 +1,6 @@
 # Abstract Agent Machine — Formal Specification
 
-**Version:** 0.6.0  
+**Version:** 0.8.0 (spec text re-verified against source 2026-07-07; §6 anchors below match live `src/` line numbers as of that date — expect drift after future edits to `loop.ts`/`compactor.ts`, since `:machina` checks the structural claims, not this document's line numbers)
 **Status:** Draft  
 **Author:** Aura (built by agents, for agents)
 
@@ -340,9 +340,9 @@ The Aura Code codebase (`src/`) is a concrete instance of $\mathcal{M}_{\text{AA
 
 | AAM | Aura Code | File:Line |
 |-----|-----------|-----------|
-| Primitive set $\mathbb{P}$ | `TOOL_DEFINITIONS[]` | `src/tools/index.ts:32-160` |
-| Dispatcher | `executeTool()` switch | `src/tools/index.ts:166-204` |
-| Safety gate | `permissions.check()` | `src/agent/loop.ts:224-240` |
+| Primitive set $\mathbb{P}$ | `TOOL_DEFINITIONS[]` | `src/tools/index.ts:29-154` |
+| Dispatcher | `executeTool()` | `src/tools/index.ts:160-195` |
+| Safety gate | `permissions.check()` | `src/agent/loop.ts:349` |
 
 ### 6.3 Oracle: LLMProvider
 
@@ -356,21 +356,27 @@ The Aura Code codebase (`src/`) is a concrete instance of $\mathcal{M}_{\text{AA
 
 | AAM | Aura Code | File:Line |
 |-----|-----------|-----------|
-| Main loop | `while (turns < maxTurns)` | `src/agent/loop.ts:127` |
-| Oracle call | `provider.stream(...)` | `src/agent/loop.ts:142` |
-| Tool exec | `executeTool(...)` | `src/agent/loop.ts:243` |
-| Halt: done | `stopReason === 'done'` | `src/agent/loop.ts:193` |
-| Halt: limit | `stopReason === 'limit'` | `src/agent/loop.ts:204` |
-| Halt: max | `turns >= maxTurns` | `src/agent/loop.ts:263` |
+| Main loop | `while (true)`, budget checked each iteration | `src/agent/loop.ts:172` |
+| Oracle call | `provider.stream(...)` | `src/agent/loop.ts:235` |
+| Tool exec | `executeTool(...)` call site | `src/agent/loop.ts:386` |
+| Halt: done | `stopReason === 'done'` | `src/agent/loop.ts:305` |
+| Halt: limit | `stopReason === 'limit'` | `src/agent/loop.ts:316` |
+| Halt: max | `turns >= maxTurns` (widens once via `profile.widenTo` before halting) | `src/agent/loop.ts:173` |
 
 ### 6.5 Compaction: compactHistory()
 
+Compaction is no longer a single fixed threshold — it's an escalating
+generational ladder plus a token-budget retention window.
+
 | AAM | Aura Code | File:Line |
 |-----|-----------|-----------|
-| Threshold $\tau$ | `COMPACTION_THRESHOLD = 0.7` | `src/agent/compactor.ts:4` |
-| Trigger | `compactHistory()` call | `src/agent/loop.ts:135` |
-| Lossy merge | `summariseMessage()` | `src/agent/compactor.ts:79-93` |
-| Last turn guard | Backward search for user role | `src/agent/compactor.ts:125-128` |
+| Threshold ladder $\tau_g$ | `LADDER = [0.55, 0.70, 0.85]`, indexed by recap generation | `src/agent/compactor.ts:13` |
+| Threshold check | `if (totalTokens < threshold) return false;` | `src/agent/compactor.ts:227` |
+| Trigger | `compactHistory()` call | `src/agent/loop.ts:217` |
+| Lossy merge | `summariseMessage()` | `src/agent/compactor.ts:178-190` |
+| Retention budget | `RETENTION_RATIO = 0.40` of context window, walked backward from the tail | `src/agent/compactor.ts:17, 234-241` |
+| Turn-boundary snap | Snap `keepFrom` to the nearest user turn within 6 messages | `src/agent/compactor.ts:246-253` |
+| Fallback (no nearby user turn) | `FALLBACK_KEEP = 3` most recent messages, walked forward past any leading `tool_result` | `src/agent/compactor.ts:20, 254-261` |
 
 ### 6.6 State Machine Diagram
 
@@ -402,7 +408,7 @@ The Aura Code codebase (`src/`) is a concrete instance of $\mathcal{M}_{\text{AA
 | Limit | Source | Bound |
 |-------|--------|-------|
 | Context window | Oracle's max input size | 8K–2M tokens (model-dependent) |
-| Execution depth | $T_{\max}$ config | 10–100 turns (default: 25) |
+| Execution depth | $T_{\max}$ config (`src/config/defaults.ts:10`) | default: 150, sized per task shape by the loop profile; widens once if the ceiling is hit mid-progress |
 | Primitive set | Source at compile time | ~25 primitives |
 | Tool call inputs | MCP constraints | ~1MB per call (practical) |
 

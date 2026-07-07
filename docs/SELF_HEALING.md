@@ -34,7 +34,7 @@ work is *detecting* corruption and *triggering* the restore automatically.
 ### Dynamic files — only snippet-level repair, never wholesale replacement
 
 Files whose content is unique and grows with usage: `episodes/*.json`,
-`dreams/*.md`, `dreams/.last.json`, `dreams/.reconciled.md`, `knowledge/`,
+`dreams/*.md`, `dreams/.state.json`, `dreams/.reconciled.md`, `knowledge/`,
 `research/*.md`, `council/*.md`, training data. These have **no canonical
 original** — there is nothing to "download a fresh copy" of, because the
 content is irreplaceable history specific to this project and this user.
@@ -57,7 +57,7 @@ which is worse than leaving it broken and visible.
 Self-healing does **not** scan files preemptively or run on every read.
 It fires only when something already failed:
 
-- A `JSON.parse()` throws while loading an episode or `.last.json`.
+- A `JSON.parse()` throws while loading an episode or `.state.json`.
 - `parser.ts`'s dream-section parsing produces an empty or clearly
   truncated result where content was expected (e.g. a dream file with a
   title line but zero parsed sections, when the raw file is non-trivial

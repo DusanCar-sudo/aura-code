@@ -1,6 +1,56 @@
 # Changelog
 
 All notable changes to Aura Code are documented here.
+
+## [0.8.0] — 2026-07-07
+
+### Added
+- **Context health dashboard** — `/context` shows a token-usage bar, the
+  compaction generation/ladder state, and running cost for the session.
+- **`aura doctor`** — self-diagnostic for Aura's own install: `--doctor` flag
+  and `:doctor` REPL command, 10 check categories (build, config, deps, env,
+  git, and more), 4 kinds of auto-repair via `--doctor --fix`.
+
+### Fixed
+- **Silent process death after any reply.** `processLine()`'s try/catch in
+  `src/cli/index.ts` only wrapped the agent-loop call itself; everything
+  after it — session persistence, episode recording, stats display, TTS,
+  the `:btw` follow-up block — ran unguarded. Since the REPL never awaits
+  or `.catch()`s that promise, any exception in the tail became an
+  unhandled rejection, which kills the process on Node 22 by default. The
+  whole post-task tail is now inside the try/catch, plus a global
+  `unhandledRejection` handler prints a visible error instead of dying
+  silently for anything this class of bug produces in the future.
+- **`resolveTaskModelBaseUrl` and 4 related provider-factory helpers had
+  been silently dropped** by an earlier "restore from backup" commit,
+  breaking base-URL/model pairing safety for Telegram-bot and CLI provider
+  resolution. Reinstated and extended for providers added since (Zhipu/GLM,
+  OpenCode Go).
+- **`runDream` didn't match its own test suite's spec** — rebuilt with a
+  persisted cutoff (`dreams/.state.json`) that only advances after a
+  successful write, so episodes are never burned on a provider failure or
+  empty response, plus a one-time local-Ollama fallback retry.
+- **`RubyAlternator` defaulted to `PermissionSystem('auto')`**, meaning its
+  small-model attempt path could auto-approve destructive tool calls
+  regardless of the session's actual permission mode. Now defaults to
+  `'normal'` and accepts an injected `PermissionSystem`; also now threads
+  `confirmFn`/`initialHistory` through to the agent loop and returns the
+  full `LoopResult` instead of a flattened summary string.
+- **Codebase-graph extractor left a dangling edge** whenever a repo has a
+  `CHANGELOG.md` — the `aligns_with` edge pointed at a `constraint:changes`
+  node that was never created.
+- **`:machina`'s AAM self-check claims had drifted** from the restructured
+  agent loop and compactor (generational compaction ladder replaced the old
+  fixed threshold) — line anchors re-verified against live source.
+
+### Tests
+- Full suite: **1317 passing, 0 failures** (94 files), up from 35 failing /
+  1282 passing at the start of this cleanup pass. Root-caused and fixed
+  independently: provider-factory functions, the wizard integration tests
+  (rewritten against a local stub endpoint instead of the pre-recovery
+  wizard's menu), `:dream`, `:machina`, `RubyAlternator`, and the
+  perception-extractor dangling-edge check.
+
 ## [0.6.1] — 2026-06-25
 
 ### Added
