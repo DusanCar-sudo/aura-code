@@ -7,7 +7,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { LLMProvider } from '../providers/types.js';
 import * as os from 'os';
-import { listEpisodes, listEpisodesSince, listAllEpisodes, type Episode } from './episode.js';
+import { listAllEpisodes } from './episode.js';
+import { loadEpisodes } from '../ruby/episode-capture.js';
+import { createProvider, checkOllamaHealth } from '../providers/factory.js';
+import type { Episode } from '../ruby/types.js';
 
 function dreamsDir(root: string): string {
   return path.join(root, 'dreams');
@@ -37,17 +40,39 @@ function listDreamFiles(root: string): string[] {
     .sort(); // ISO dates + suffix sort chronologically as strings
 }
 
-function lastDreamTimestamp(root: string): number {
-  const files = listDreamFiles(root);
-  if (files.length === 0) return 0;
-  const last = path.join(dreamsDir(root), files[files.length - 1]);
-  try { return fs.statSync(last).mtimeMs; } catch { return 0; }
+function stateFile(root: string): string {
+  return path.join(dreamsDir(root), '.state.json');
+}
+
+/**
+ * The consolidation cutoff: the timestamp of the newest episode covered by
+ * the last successful dream. Stored in dreams/.state.json — NOT derived from
+ * file mtimes, so a failed run (which writes nothing) can never advance it
+ * and the same episodes are re-recalled next time.
+ */
+export function lastDreamTimestamp(root: string): number {
+  try {
+    const raw = fs.readFileSync(stateFile(root), 'utf8');
+    const parsed = JSON.parse(raw) as { lastEpisodeTimestamp?: number };
+    return typeof parsed.lastEpisodeTimestamp === 'number' ? parsed.lastEpisodeTimestamp : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function advanceCutoff(root: string, ts: number): void {
+  fs.mkdirSync(dreamsDir(root), { recursive: true });
+  fs.writeFileSync(stateFile(root), JSON.stringify({ lastEpisodeTimestamp: ts }, null, 2) + '\n');
 }
 
 function formatEpisodesForPrompt(episodes: Episode[]): string {
   return episodes.map(e => {
     const date = new Date(e.timestamp).toISOString();
-    return `- [${date}] (${e.model}, ${e.success ? 'success' : 'FAILED'}, ${e.tokens} tok, ${Math.round(e.durationMs / 1000)}s): ${e.task.slice(0, 200)}`;
+    const outcome = e.rubyAttempted
+      ? (e.rubySucceeded ? 'ruby succeeded' : `ruby failed${e.largeModelUsed ? `, escalated to ${e.largeModelUsed}` : ''}`)
+      : (e.largeModelUsed ? `handled by ${e.largeModelUsed}` : 'no model recorded');
+    const review = e.reviewerApproved ? 'approved' : 'NOT approved';
+    return `- [${date}] (${e.taskCategory ?? 'uncategorized'}, ${outcome}, ${review}, ${Math.round(e.durationMs / 1000)}s): ${e.task.slice(0, 200)}`;
   }).join('\n');
 }
 
@@ -86,35 +111,114 @@ export async function distillText(opts: {
   return text;
 }
 
+export interface DreamOptions {
+  projectRoot: string;
+  provider: LLMProvider;
+  /** Cutoff override (ms). Defaults to the stored cutoff from the last successful dream. */
+  since?: number;
+  /** Ignore the cutoff and consolidate every recorded episode. */
+  full?: boolean;
+  /**
+   * Local model to retry with when the primary provider fails (Ollama must be
+   * running). Pass `false` to disable the fallback entirely.
+   */
+  ollamaFallbackModel?: string | false;
+}
+
+export interface DreamResult {
+  /** True when nothing was written — empty day, or provider failure. */
+  skipped: boolean;
+  /** Episodes recalled for this cycle (still counted on failure — they're preserved). */
+  episodeCount: number;
+  /** Why the run was skipped, for the empty-day case. */
+  reason?: string;
+  /** Written dream file, on success. */
+  path?: string;
+  /** The cutoff actually used (0 for full runs). */
+  recalledSince?: number;
+  /** Provider failure detail — set only when skipped due to LLM errors. */
+  providerError?: string;
+  /** True when >=3 dreams existed after the write and reconciliation ran. */
+  reconciled?: boolean;
+}
+
 /**
  * Run one dream cycle: consolidate episodes since the last dream into a
- * dated markdown file. Spends exactly one LLM call. Triggers reconciliation
- * automatically once >=3 dream files exist.
+ * dated markdown file. Spends exactly one LLM call (plus at most one Ollama
+ * fallback call). Triggers reconciliation automatically once >=3 dream
+ * files exist.
+ *
+ * Critical invariant: episodes are NEVER burned on failure. The dream file
+ * and the cutoff advance together, and only after the model produced real
+ * content — any provider error or empty response leaves both untouched, so
+ * the next run re-recalls the same episodes.
  */
-export async function runDream(
-  root: string,
-  provider: LLMProvider,
-  full = false,
-): Promise<{ dreamPath: string; episodeCount: number; reconciled: boolean }> {
-  const since = full ? 0 : lastDreamTimestamp(root);
-  const episodes = since > 0 ? listEpisodesSince(root, since) : listEpisodes(root);
-
-  fs.mkdirSync(dreamsDir(root), { recursive: true });
+export async function runDream(opts: DreamOptions): Promise<DreamResult> {
+  const root = opts.projectRoot;
+  const recalledSince = opts.full ? 0 : (opts.since ?? lastDreamTimestamp(root));
+  const all = await loadEpisodes(root);
+  const episodes = all.filter(e => e.timestamp > recalledSince);
 
   if (episodes.length === 0) {
-    const path_ = todayFile(root);
-    fs.writeFileSync(path_, `## Lessons\n\n(no new episodes since the last dream)\n\n## Patterns\n\n## Open threads\n\n## Tomorrow brief\n\nNo new activity to report.\n`);
-    return { dreamPath: path_, episodeCount: 0, reconciled: false };
+    return {
+      skipped: true,
+      episodeCount: 0,
+      reason: opts.full ? 'no episodes recorded at all' : 'no new episodes since the last dream',
+      recalledSince,
+    };
   }
 
-  const episodesText = formatEpisodesForPrompt(episodes);
+  const categories = [...new Set(episodes.map(e => e.taskCategory ?? 'uncategorized'))];
+  const userContent =
+    `${episodes.length} episodes${opts.full ? ' (full — all recorded)' : ' since last dream'}:\n\n`
+    + formatEpisodesForPrompt(episodes);
+
+  const complete = async (provider: LLMProvider): Promise<string> => {
+    const response = await provider.complete(DREAM_SYSTEM, [{ role: 'user', content: userContent }], []);
+    const text = (response.text ?? '').trim();
+    if (!text) throw new Error('provider returned an empty response');
+    return text;
+  };
+
+  let body: string;
+  try {
+    body = await complete(opts.provider);
+  } catch (primaryErr) {
+    const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+    const fallbackModel = opts.ollamaFallbackModel ?? 'llama3.2';
+    if (fallbackModel === false) {
+      return { skipped: true, episodeCount: episodes.length, providerError: primaryMsg, recalledSince };
+    }
+    if (!(await checkOllamaHealth())) {
+      return {
+        skipped: true,
+        episodeCount: episodes.length,
+        providerError: `${primaryMsg}; Ollama not reachable for fallback`,
+        recalledSince,
+      };
+    }
+    try {
+      const fallback = createProvider({ model: `ollama/${fallbackModel}`, maxTokens: 2048 });
+      body = await complete(fallback);
+    } catch (fallbackErr) {
+      const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+      return {
+        skipped: true,
+        episodeCount: episodes.length,
+        providerError: `${primaryMsg}; Ollama fallback also failed: ${fallbackMsg}`,
+        recalledSince,
+      };
+    }
+  }
+
   const dreamPath = todayFile(root);
-  await distillText({
-    systemPrompt: DREAM_SYSTEM,
-    userContent: `${episodes.length} episodes${full ? ' (full — all recorded)' : ' since last dream'}:\n\n${episodesText}`,
-    provider,
-    outPath: dreamPath,
-  });
+  const dateLabel = new Date().toISOString().slice(0, 10);
+  const header =
+    `# Dream — ${dateLabel}\n\n`
+    + `${episodes.length} episodes recalled (categories: ${categories.join(', ')})\n\n`;
+  fs.mkdirSync(dreamsDir(root), { recursive: true });
+  fs.writeFileSync(dreamPath, header + body + '\n');
+  advanceCutoff(root, Math.max(...episodes.map(e => e.timestamp)));
 
   let reconciled = false;
   if (listDreamFiles(root).length >= 3) {
@@ -122,7 +226,13 @@ export async function runDream(
     reconciled = true;
   }
 
-  return { dreamPath, episodeCount: episodes.length, reconciled };
+  return {
+    skipped: false,
+    episodeCount: episodes.length,
+    path: dreamPath,
+    recalledSince,
+    reconciled,
+  };
 }
 
 // ── Reconciliation — pure statistics, no LLM ────────────────────────────────

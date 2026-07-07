@@ -1336,11 +1336,13 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const full = input === ':dream full';
     const { runDream } = await import('../dream/dream.js');
     c.display.agentThinking();
-    const res = await runDream(c.ctx.root, buildProvider(c.display), full);
-    if (res.episodeCount === 0) {
-      c.display.warning(full ? 'No episodes recorded at all.' : 'No new episodes since the last dream.');
+    const res = await runDream({ projectRoot: c.ctx.root, provider: buildProvider(c.display), full });
+    if (res.skipped) {
+      c.display.warning(res.providerError
+        ? `Dream skipped (episodes preserved): ${res.providerError}`
+        : (res.reason ?? 'Nothing to consolidate.'));
     } else {
-      c.display.success(`Dream written: ${res.dreamPath} (${res.episodeCount} episodes${full ? ', full run' : ''})`);
+      c.display.success(`Dream written: ${res.path} (${res.episodeCount} episodes${full ? ', full run' : ''})`);
       if (res.reconciled) c.display.success('Reconciliation also ran (>=3 dreams exist) -> dreams/.reconciled.md');
     }
     return { handled: true };
