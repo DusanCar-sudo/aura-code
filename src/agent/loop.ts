@@ -43,6 +43,10 @@ export interface LoopOptions {
   hooks?: import('../plugins/types.js').HookEntry[];
   /** Optional abort signal — when aborted the loop stops after the current tool turn. */
   abortSignal?: AbortSignal;
+  /** Confirmation prompt override for needs-confirm tool calls. Defaults to the
+   *  terminal readline confirm — embedded callers (alternator, bots) supply
+   *  their own so confirmation isn't silently impossible off-terminal. */
+  confirmFn?: (message: string) => Promise<boolean>;
   /** Optional shared context-health tracker (e.g. the REPL's). When omitted the
    *  loop creates an internal one. Passing it in lets a /context command read
    *  the accumulated compaction history and per-turn snapshots. */
@@ -351,7 +355,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
         if (perm.needsConfirm) {
           const desc = formatCallForConfirmation(call);
-          const approved = await confirm(`Allow: ${desc}?`);
+          const approved = await (opts.confirmFn ?? confirm)(`Allow: ${desc}?`);
           if (!approved) {
             display.toolBlocked(call.name, 'denied by user');
             toolResults.push({ id: call.id, name: call.name, content: 'User denied this action.', isError: true });

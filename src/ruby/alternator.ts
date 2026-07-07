@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
-import type { LLMProvider } from '../providers/types.js';
+import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
-import { runAgentLoop } from '../agent/loop.js';
+import { runAgentLoop, type LoopResult } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
@@ -27,13 +27,41 @@ export interface AlternatorOptions {
   context: ProjectContext;
   /** When set, routing and loop events are surfaced to the user. */
   display?: Display;
+  /**
+   * The session's permission system. When omitted, defaults to the safe
+   * 'normal' level — NEVER 'auto': the Ruby attempt must not auto-approve
+   * destructive operations the user's chosen mode would have prompted for.
+   */
+  permissions?: PermissionSystem;
+  /** Confirmation prompt for needs-confirm tool calls, threaded into the loop. */
+  confirmFn?: (message: string) => Promise<boolean>;
+  /** Prior conversation history (multi-turn REPL), threaded into the loop. */
+  initialHistory?: HistoryMessage[];
 }
 
 export interface AlternatorRunResult {
+  /** Final user-facing output text (loopResult.summary, or an error note). */
   result: string;
+  /** The full LoopResult from whichever model handled the task. Never undefined —
+   *  a safe empty result is substituted when every path failed. */
+  loopResult: LoopResult;
   episode: Episode;
   usedRuby: boolean;
   decision: AlternationDecision;
+}
+
+/** Inert LoopResult for the both-paths-failed case — run() never throws. */
+function emptyLoopResult(summary: string): LoopResult {
+  return {
+    success: false,
+    summary,
+    turns: 0,
+    toolCallCount: 0,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    costUsd: 0,
+    history: [],
+    toolCallLog: [],
+  };
 }
 
 const RECENT_EPISODE_LIMIT = 50;
@@ -127,11 +155,12 @@ function buildRubyProvider(config: RubyConfig): OpenAICompatibleProvider {
 export class RubyAlternator {
   private readonly opts: AlternatorOptions;
   private readonly display: Display;
-  private readonly permissions = new PermissionSystem('auto');
+  private readonly permissions: PermissionSystem;
 
   constructor(opts: AlternatorOptions) {
     this.opts = opts;
     this.display = opts.display ?? createNoopDisplay();
+    this.permissions = opts.permissions ?? new PermissionSystem('normal');
   }
 
   /**
@@ -157,6 +186,7 @@ export class RubyAlternator {
     let largeModelTokens = 0;
     let usedRuby = false;
     let result = '';
+    let finalLoopResult: LoopResult | undefined;
 
     try {
       const recent = await episodeStore.loadEpisodes(projectRoot, RECENT_EPISODE_LIMIT);
@@ -183,6 +213,8 @@ export class RubyAlternator {
               display: this.display,
               disableSpawn: true,
               maxTurns: 15,
+              confirmFn: this.opts.confirmFn,
+              initialHistory: this.opts.initialHistory,
             });
 
             rubyTokens = loopResult.usage.totalTokens;
@@ -192,6 +224,7 @@ export class RubyAlternator {
               rubySucceeded = true;
               usedRuby = true;
               result = rubyOutput!;
+              finalLoopResult = loopResult;
               this.display.success('Ruby handled the task without escalation.');
             } else {
               this.display.warning('Ruby did not produce a usable result — escalating.');
@@ -213,9 +246,12 @@ export class RubyAlternator {
             permissions: this.permissions,
             display: this.display,
             disableSpawn: true,
+            confirmFn: this.opts.confirmFn,
+            initialHistory: this.opts.initialHistory,
           });
           largeModelTokens = loopResult.usage.totalTokens;
           largeModelOutput = loopResult.summary;
+          finalLoopResult = loopResult;
           result = isNonEmptyResult(largeModelOutput)
             ? largeModelOutput!
             : loopResult.success
@@ -268,7 +304,13 @@ export class RubyAlternator {
       /* best-effort */
     }
 
-    return { result, episode, usedRuby, decision };
+    return {
+      result,
+      loopResult: finalLoopResult ?? emptyLoopResult(result),
+      episode,
+      usedRuby,
+      decision,
+    };
   }
 
   /**
