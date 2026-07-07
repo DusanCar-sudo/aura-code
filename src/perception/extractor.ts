@@ -141,6 +141,13 @@ export async function extractPerception(projectRoot: string): Promise<ProjectPer
       description: recentLines.join('\n').slice(0, 500),
       metadata: { source: 'CHANGELOG.md' },
     });
+    nodes.push({
+      id: 'constraint:changes',
+      type: 'constraint',
+      label: 'Recent changes context',
+      description: 'New work should be consistent with the direction of recent changelog entries.',
+      metadata: { source: 'CHANGELOG.md' },
+    });
     edges.push(buildEdge(changelogNodeId, 'constraint:changes', 'aligns_with', 0.5));
   }
 
