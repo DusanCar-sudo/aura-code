@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  body, html { margin:0; padding:0; background:transparent; overflow:hidden; width:1080px; height:1920px; font-family:'Georgia','Times New Roman',serif; }
+  .scene { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; }
+  .title { font-size:72px; font-weight:700; color:#faf5ef; text-align:center; line-height:1.1; letter-spacing:-0.02em; }
+  .title .gold { color:#e0b860; }
+  .title .accent { color:#e08a6e; }
+  .subtitle { font-size:32px; color:rgba(250,245,239,.6); margin-top:24px; font-weight:300; }
+  .layer-num { font-size:140px; font-weight:800; color:#e08a6e; line-height:1; }
+  .layer-name { font-size:48px; font-weight:700; color:#faf5ef; margin-top:8px; letter-spacing:-0.01em; }
+  .layer-desc { font-size:28px; color:rgba(250,245,239,.55); margin-top:16px; max-width:700px; text-align:center; line-height:1.4; }
+  .layer-sub { font-size:26px; color:rgba(250,245,239,.45); margin-top:12px; max-width:700px; text-align:center; }
+  .verdict-big { font-size:64px; font-weight:700; margin-top:8px; }
+  .conf { color:#e08a6e; }
+  .pipeline-row { display:flex; gap:28px; margin-top:40px; }
+  .pipe-box { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:28px 22px; width:200px; text-align:center; }
+  .pipe-box .num { font-size:56px; font-weight:800; color:#e08a6e; }
+  .pipe-box .name { font-size:20px; color:#faf5ef; margin-top:4px; font-weight:600; }
+  .pipe-box .detail { font-size:15px; color:rgba(250,245,239,.45); margin-top:6px; line-height:1.3; }
+  .stat-row { display:flex; gap:48px; margin-top:36px; }
+  .stat-big { text-align:center; }
+  .stat-big .val { font-size:80px; font-weight:800; color:#e0b860; line-height:1; }
+  .stat-big .lbl { font-size:20px; color:rgba(250,245,239,.5); margin-top:4px; }
+  .closing { font-size:38px; color:rgba(250,245,239,.8); text-align:center; line-height:1.5; max-width:750px; }
+  .closing .emp { color:#e08a6e; font-weight:700; }
+  .gem { font-size:96px; margin-bottom:20px; }
+  #sc-0 { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- SCENE 0: Title (0-8s) -->
+<div id="sc-0" class="scene">
+  <div class="title">AURA<br><span class="gold">MEMORY</span><br>PIPELINE</div>
+  <div class="subtitle">How an AI agent remembers — event-sourced, four layers deep</div>
+</div>
+
+<!-- SCENE 1: Layer 1 - EPISODE (8-24s) -->
+<div id="sc-1" class="scene">
+  <div class="layer-num">1</div>
+  <div class="layer-name">EPISODE</div>
+  <div class="layer-desc">Every task auto-recorded. Zero LLM calls.</div>
+  <div class="layer-sub">Timestamp · Model · Success/Fail · Tokens · Duration<br>No judgment. Just raw data.</div>
+</div>
+
+<!-- SCENE 2: Layer 2 - DREAM (24-40s) -->
+<div id="sc-2" class="scene">
+  <div class="layer-num">2</div>
+  <div class="layer-name">DREAM</div>
+  <div class="layer-desc">One LLM call consolidates all recent episodes</div>
+  <div class="layer-sub">Lessons · Patterns · Open Threads · Tomorrow Brief<br>Distill signal from noise.</div>
+</div>
+
+<!-- SCENE 3: Layer 3 - RECONCILE (40-56s) -->
+<div id="sc-3" class="scene">
+  <div class="layer-num">3</div>
+  <div class="layer-name">RECONCILE</div>
+  <div class="layer-desc">Pure statistics. No AI guesswork.</div>
+  <div style="font-size:36px; color:rgba(250,245,239,.55); margin-top:20px;">confidence =</div>
+  <div style="font-size:48px; color:#e0b860; margin-top:4px;">appearances ÷ total dreams</div>
+  <div class="verdict-big"><span class="conf">0.50</span> <span style="font-size:30px; color:rgba(250,245,239,.4);">= 50% = appeared in 1 of 2 dreams</span></div>
+  <div class="layer-sub" style="margin-top:24px;">6 deterministic verdicts: KEEP · STRENGTHEN · MERGE<br>SUPERSEDE · CONFLICT · DROP</div>
+</div>
+
+<!-- SCENE 4: Layer 4 - INJECT (56-68s) -->
+<div id="sc-4" class="scene">
+  <div class="layer-num">4</div>
+  <div class="layer-name">INJECT</div>
+  <div class="layer-desc">Reconciled memory injected into every session</div>
+  <div class="layer-sub">4 KB cap · Identity (60%) + Lessons (40%)<br>Shared across CLI and Telegram bot</div>
+  <div style="font-size:26px; color:rgba(250,245,239,.45); margin-top:16px;">Forgetting is a feature, not a bug.</div>
+</div>
+
+<!-- SCENE 5: All 4 Layers Summary (68-78s) -->
+<div id="sc-5" class="scene">
+  <div class="title" style="font-size:56px;">THE FULL<br><span class="accent">PIPELINE</span></div>
+  <div class="pipeline-row">
+    <div class="pipe-box"><div class="num">1</div><div class="name">EPISODE</div><div class="detail">Zero LLM<br>Auto-record</div></div>
+    <div class="pipe-box"><div class="num">2</div><div class="name">DREAM</div><div class="detail">One LLM call<br>Consolidate</div></div>
+    <div class="pipe-box"><div class="num">3</div><div class="name">RECONCILE</div><div class="detail">Pure stats<br>No AI guess</div></div>
+    <div class="pipe-box"><div class="num">4</div><div class="name">INJECT</div><div class="detail">System prompt<br>Every session</div></div>
+  </div>
+</div>
+
+<!-- SCENE 6: Research Paper Pipeline (78-88s) -->
+<div id="sc-6" class="scene">
+  <div class="title" style="font-size:56px;">RESEARCH<br><span class="gold">PAPER</span><br>PIPELINE</div>
+  <div class="layer-sub" style="font-size:24px; max-width:700px;">Deep multi-agent research · Fact-checking<br>Citation engine · LaTeX output · Peer review</div>
+  <div class="stat-row">
+    <div class="stat-big"><div class="val">300K</div><div class="lbl">tokens per paper</div></div>
+    <div class="stat-big"><div class="val">$0.45</div><div class="lbl">on GLM-5</div></div>
+    <div class="stat-big"><div class="val">15min</div><div class="lbl">wall time</div></div>
+  </div>
+</div>
+
+<!-- SCENE 7: Closing (88-93s) -->
+<div id="sc-7" class="scene">
+  <div class="gem">💎</div>
+  <div class="closing">The more you use <span class="emp">Aura</span>,<br>the deeper her memory becomes.</div>
+  <div style="margin-top:24px; font-size:26px; color:rgba(250,245,239,.4);">Built by agents. Building herself.</div>
+</div>
+
+<script>
+const tl = gsap.timeline({ paused: true });
+
+function show(id, at, dur) {
+  tl.set('#' + id, { opacity:1, display:'flex' }, at);
+  tl.set('#' + id, { opacity:0, display:'none' }, at + dur);
+}
+
+// Scene timing synced to narration
+show('sc-0', 0, 8);     // Title
+show('sc-1', 8, 16);    // EPISODE
+show('sc-2', 24, 16);   // DREAM
+show('sc-3', 40, 16);   // RECONCILE
+show('sc-4', 56, 12);   // INJECT
+show('sc-5', 68, 10);   // Full pipeline summary
+show('sc-6', 78, 10);   // Research paper
+show('sc-7', 88, 5);    // Closing
+
+window.__timelines = window.__timelines || {};
+window.__timelines["overlays"] = tl;
+</script>
+</body>
+</html>

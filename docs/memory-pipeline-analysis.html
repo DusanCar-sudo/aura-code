@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Memory Pipeline — Deep Architecture Analysis</title>
+<style>
+  :root {
+    --bg: #fdf6f0; --card: #fffaf5; --text: #2a1f18; --muted: #8a7768;
+    --accent: #cc5c3c; --accent-2: #5a9e6e; --accent-3: #d4903a;
+    --border: #e8d5c8; --code-bg: #f4ede6; --shadow: 0 4px 24px rgba(62,47,36,.08);
+    --radius: 12px; --serif: 'Georgia', 'Times New Roman', serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --layer-1: #b15439; --layer-2: #d4903a; --layer-3: #5a9e6e; --layer-4: #3b82f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1b18; --card: #26221e; --text: #ede0cc; --muted: #9e8e80;
+      --accent: #e08a6e; --accent-2: #6db880; --accent-3: #e0a64a;
+      --border: #3a322a; --code-bg: #2c2722; --shadow: 0 4px 24px rgba(0,0,0,.25);
+      --layer-1: #e0604a; --layer-2: #e0a64a; --layer-3: #6db880; --layer-4: #60a5fa;
+    }
+  }
+  @media print {
+    :root { --bg: #fff; --card: #fff; --text: #111; --muted: #555; --border: #ccc; --shadow: none; }
+    .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+    .hero { padding: 1rem 0 1.5rem; } .container { max-width: 100%; padding: 1rem; }
+    .page-break { page-break-before: always; }
+    .pipeline-diagram { background: #fff; border: 2px solid #333; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--serif); line-height: 1.75; font-size: 17px; }
+  .container { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  .hero { text-align: center; padding: 3rem 0 2.5rem; border-bottom: 2px solid var(--border); margin-bottom: 2.5rem; }
+  .hero .badge { display: inline-block; background: var(--accent); color: #fff; font-family: var(--sans); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.3em 1em; border-radius: 100px; margin-bottom: 1.25rem; }
+  .hero h1 { font-family: var(--sans); font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+  .hero .meta { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 2.2rem 2.8rem; margin-bottom: 1.8rem; }
+  .card h2 { font-family: var(--sans); font-size: 1.4rem; color: var(--accent); margin: 0 0 0.75rem; border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; }
+  .card h3 { font-family: var(--sans); font-size: 1.1rem; color: var(--accent-2); margin: 1.5rem 0 0.5rem; }
+  .card h4 { font-family: var(--sans); font-size: 0.95rem; color: var(--accent-3); margin: 1.2rem 0 0.3rem; }
+  .card p { margin: 0.7rem 0; }
+  .card ul, .card ol { margin: 0.7rem 0; padding-left: 1.8rem; }
+  .card li { margin: 0.35rem 0; }
+  .card a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); }
+  .card code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 0.12em 0.35em; border-radius: 3px; }
+  .card pre { font-family: var(--mono); font-size: 0.81em; background: var(--code-bg); padding: 1.2rem 1.5rem; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; line-height: 1.5; border: 1px solid var(--border); }
+  .card blockquote { border-left: 3px solid var(--accent); padding: 0.3rem 0 0.3rem 1.2rem; margin: 0.8rem 0; color: var(--muted); font-style: italic; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92em; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--sans); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  tr:hover { background: var(--code-bg); }
+  .pipeline-diagram { background: var(--code-bg); border: 2px solid var(--border); border-radius: 12px; padding: 1.8rem 1.5rem; margin: 1.5rem 0; text-align: center; font-family: var(--mono); font-size: 0.85em; line-height: 2; white-space: pre; overflow-x: auto; }
+  .layer-badge { display: inline-block; padding: 0.2em 0.8em; border-radius: 100px; font-family: var(--sans); font-size: 0.68rem; font-weight: 700; color: #fff; letter-spacing: 0.05em; }
+  .l1 { background: var(--layer-1); } .l2 { background: var(--layer-2); } .l3 { background: var(--layer-3); } .l4 { background: var(--layer-4); }
+  .verdict { font-family: var(--mono); font-size: 0.8em; font-weight: 700; padding: 0.1em 0.5em; border-radius: 3px; }
+  .v-keep { background: rgba(200,200,200,.2); } .v-strengthen { background: rgba(90,158,110,.15); color: var(--accent-2); }
+  .v-merge { background: rgba(59,130,246,.15); color: var(--layer-4); } .v-conflict { background: rgba(177,84,57,.12); color: var(--layer-1); }
+  .v-drop { background: rgba(138,119,104,.1); color: var(--muted); text-decoration: line-through; }
+  .v-supersede { background: rgba(212,144,58,.12); color: var(--accent-3); }
+  .toc { list-style: none; padding: 0; }
+  .toc li { margin: 0.5rem 0; font-family: var(--sans); }
+  .toc a { border-bottom: none; font-weight: 500; }
+  .file-ref { font-family: var(--mono); font-size: 0.8em; color: var(--muted); }
+  .footer { text-align: center; margin-top: 2.5rem; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); opacity: 0.7; }
+  @media (max-width: 640px) { .card { padding: 1.3rem; } .hero h1 { font-size: 1.5rem; } .container { padding: 1rem 0.75rem 3rem; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <div class="badge">Memory Architecture — Deep Dive</div>
+  <h1>How Aura Remembers<br>Event-Sourced Memory Pipeline</h1>
+  <div class="meta">EPISODE → DREAM → RECONCILE → INJECT · Pure statistics, zero AI hallucination about importance</div>
+</header>
+
+<div class="card">
+<h2>Table of Contents</h2>
+<ol class="toc">
+  <li><a href="#s1">1. The Four-Layer Pipeline — Overview</a></li>
+  <li><a href="#s2">2. Layer 1: EPISODE — Auto-Recording, Zero LLM</a></li>
+  <li><a href="#s3">3. Layer 2: DREAM — One LLM Call, Consolidation</a></li>
+  <li><a href="#s4">4. Layer 3: RECONCILE — Pure Statistics, No AI</a></li>
+  <li><a href="#s5">5. Layer 4: INJECT — System Prompt Injection</a></li>
+  <li><a href="#s6">6. How Depth Translates to Importance</a></li>
+  <li><a href="#s7">7. The Current State — What's Forming</a></li>
+  <li><a href="#s8">8. Source Code Map</a></li>
+</ol>
+</div>
+
+<!-- Section 1: Pipeline Overview -->
+<div class="card" id="s1">
+<h2>1. The Four-Layer Pipeline</h2>
+<p>Unlike conventional AI systems where "memory" is just a growing prompt prefix, Aura's memory is a <strong>four-layer event-sourced pipeline</strong>. Each layer has a precise, non-overlapping responsibility. Three of the four layers <em>never call an LLM</em>.</p>
+
+<div class="pipeline-diagram">
+LAYER 1                LAYER 2                 LAYER 3                  LAYER 4
+┌──────────┐   ┌──────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│ EPISODE  │──▶│    DREAM     │──▶│   RECONCILE      │──▶│     INJECT       │
+│          │   │              │   │                  │   │                  │
+│ zero LLM │   │ one LLM call │   │ pure statistics  │   │ system prompt    │
+│ auto-    │   │ consolidation│   │ no model guess   │   │ every session    │
+│ record   │   │              │   │                  │   │                  │
+└──────────┘   └──────────────┘   └──────────────────┘   └──────────────────┘
+     │               │                    │                      │
+     │          ~/.aura/              dreams/              dreams/
+     │         episodes/           2026-07-04.md        .reconciled.md
+     │                                                     + identity.json
+     │                                                         │
+     └─────────────────── ALL FEED INTO ───────────────────────┘
+</div>
+
+<table>
+<thead><tr><th>Layer</th><th>Source File</th><th>LLM Calls</th><th>Output</th><th>Philosophy</th></tr></thead>
+<tbody>
+<tr><td><span class="layer-badge l1">1</span> Episode</td><td><code>src/dream/episode.ts</code> (84 lines)</td><td><strong>0</strong></td><td><code>~/.aura/episodes/&lt;hash&gt;/*.json</code></td><td>Record everything. Judge nothing.</td></tr>
+<tr><td><span class="layer-badge l2">2</span> Dream</td><td><code>src/dream/dream.ts</code> (278 lines)</td><td><strong>1</strong></td><td><code>dreams/YYYY-MM-DD.md</code></td><td>Distill signal from noise. One call only.</td></tr>
+<tr><td><span class="layer-badge l3">3</span> Reconcile</td><td><code>src/dream/dream.ts</code> (runReconciliation)</td><td><strong>0</strong></td><td><code>dreams/.reconciled.md</code></td><td>Trust numbers, not a model's guess.</td></tr>
+<tr><td><span class="layer-badge l4">4</span> Inject</td><td><code>src/agent/unified-memory.ts</code> (123 lines)</td><td><strong>0</strong></td><td>System prompt (~4 KB block)</td><td>One canonical view. CLI + Telegram.</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- Section 2: Episode -->
+<div class="card" id="s2">
+<h2>2. Layer 1: EPISODE <span class="layer-badge l1">Zero LLM</span></h2>
+<p><strong>Source:</strong> <code>src/dream/episode.ts</code> — 84 lines, pure TypeScript, no imports from LLM modules.</p>
+
+<p>Every task you complete with Aura is automatically recorded:</p>
+
+<pre>interface Episode {
+  id: string;          // timestamp + random hex
+  timestamp: number;   // when it happened
+  task: string;        // what you asked (first 200 chars)
+  model: string;       // which model was used
+  success: boolean;    // did it succeed?
+  tokens: number;      // how many tokens consumed
+  durationMs: number;  // how long it took
+}</pre>
+
+<h3>Key Design Decisions</h3>
+<ul>
+  <li><strong>Best-effort only.</strong> If recording fails (disk full, permissions), the task still completes. Memory is <em>secondary</em> to the task.</li>
+  <li><strong>Atomic writes.</strong> <code>.tmp</code> → <code>rename</code> — no partial files, no corruption.</li>
+  <li><strong>Namespaced per project.</strong> Each project gets its own subdirectory, keyed by a SHA-256 hash of the absolute root path.</li>
+  <li><strong>No evaluation.</strong> Episode does not attempt to rate "quality." It stores <em>what happened</em> — success/fail, tokens, duration. Quality assessment is deferred to later layers.</li>
+</ul>
+
+<h3>Why No Valuation Here?</h3>
+<p>This is the critical insight: <strong>you cannot evaluate importance at recording time.</strong> Something that seems trivial today may turn out to be crucial tomorrow. Something that seems profound may be noise. The only honest thing to do is record everything raw and let <em>time + statistics</em> surface what matters.</p>
+
+<p>Current state: <strong>38 episodes</strong> recorded, 35 succeeded, 0 Ruby wins.</p>
+</div>
+
+<!-- Section 3: Dream -->
+<div class="card page-break" id="s3">
+<h2>3. Layer 2: DREAM <span class="layer-badge l2">One LLM Call</span></h2>
+<p><strong>Source:</strong> <code>src/dream/dream.ts</code> (lines 1-90) — the <code>runDream()</code> function.</p>
+
+<h3>What Happens When You Run <code>:dream</code></h3>
+<ol>
+  <li><strong>Collect episodes</strong> since the last dream's timestamp (<code>listEpisodesSince</code>)</li>
+  <li><strong>Format them</strong> as compact one-liners: <code>[timestamp] (model, ok/fail, X tok, Ys): task</code></li>
+  <li><strong>Send ONE LLM call</strong> with a focused system prompt asking for four sections:</li>
+</ol>
+
+<pre>DREAM SYSTEM PROMPT:
+"You distill a set of recent coding-agent task episodes into a compact,
+dated memory entry. Write exactly four sections:
+
+## Lessons — concrete, specific things learned (file names, root causes,
+  gotchas). Not generic advice.
+
+## Patterns — recurring behavior across multiple episodes (which task
+  types fail, which models struggle, repeated bugs).
+
+## Open threads — unfinished work or unresolved questions visible
+  from the episodes.
+
+## Tomorrow brief — 2-4 sentences a future session should read first.
+
+Be concrete and specific. No filler, no generic AI-assistant advice."</pre>
+
+<h3>Cost Discipline</h3>
+<p>Dream spends exactly <strong>one LLM call</strong>, full stop. The design explicitly avoids the temptation to "analyze a little more" — every additional call dilutes the signal-to-cost ratio. This single call processes all accumulated episodes since the last dream, regardless of count (which can be dozens).</p>
+
+<h3>Current State</h3>
+<ul>
+  <li>2 dream files: <code>2026-07-03.md</code> (27 lines) and <code>2026-07-04.md</code> (11 lines)</li>
+  <li>The 2026-07-03 dream consolidated the initial 38 episodes from the benchmark harness runs</li>
+  <li>The 2026-07-04 dream captured the <code>:dream full</code> invocation itself plus a few Telegram bot sessions</li>
+</ul>
+</div>
+
+<!-- Section 4: Reconcile -->
+<div class="card" id="s4">
+<h2>4. Layer 3: RECONCILE <span class="layer-badge l3">Pure Statistics</span></h2>
+<p><strong>Source:</strong> <code>src/dream/dream.ts</code> (lines 92-199) — <code>runReconciliation()</code>. This is the most important layer in the pipeline and the one that directly answers "how do you value memory?"</p>
+
+<h3>What Reconciliation Does</h3>
+<p>When ≥3 dream files exist, reconciliation automatically runs. It reads <strong>all</strong> dream files, extracts every claim, groups them by topic (lexical overlap heuristic), and assigns each a <strong>deterministic verdict</strong>:</p>
+
+<pre>confidence = (dream files containing this claim) / (total dream files)</pre>
+
+<h3>The Six Verdicts — Deterministic Rules</h3>
+
+<table>
+<thead><tr><th>Rule</th><th>Verdict</th><th>Meaning</th><th>Action</th></tr></thead>
+<tbody>
+<tr>
+  <td>Has both positive AND negative sentiment across claims</td>
+  <td><span class="verdict v-conflict">CONFLICT</span></td>
+  <td>Contradictory — one dream says it works, another says it's broken</td>
+  <td>Surfaced for human attention. Not resolved automatically.</td>
+</tr>
+<tr>
+  <td>Appears in 1 dream only AND that dream is older than 3 generations</td>
+  <td><span class="verdict v-drop">DROP</span></td>
+  <td>Stale — mentioned once, never again, now old</td>
+  <td>Removed from projection. Not injected.</td>
+</tr>
+<tr>
+  <td>More claim instances than distinct dream files (same topic, multiple claims)</td>
+  <td><span class="verdict v-merge">MERGE</span></td>
+  <td>Repeated within dreams — consolidate into one statement</td>
+  <td>Combined into a single, stronger claim.</td>
+</tr>
+<tr>
+  <td>confidence ≥ 0.50 (appears in ≥ half of all dreams)</td>
+  <td><span class="verdict v-strengthen">STRENGTHEN</span></td>
+  <td>Confirmed across time — this is a real pattern</td>
+  <td>Injected every session. Confidence number attached.</td>
+</tr>
+<tr>
+  <td>Newer version differs from older version (same topic, different text)</td>
+  <td><span class="verdict v-supersede">SUPERSEDE</span></td>
+  <td>Replaced by newer understanding</td>
+  <td>Old version retired. New version takes its place.</td>
+</tr>
+<tr>
+  <td>None of the above (only one dream, not stale, not positive/negative)</td>
+  <td><span class="verdict v-keep">KEEP</span></td>
+  <td>Waiting — not enough data yet to judge</td>
+  <td>Kept in projection. Re-evaluated next reconciliation.</td>
+</tr>
+</tbody>
+</table>
+
+<h3>Why This Matters: "How Do You Value Memory?"</h3>
+<p><strong>I don't.</strong> The system does — through time, repetition, and statistics. No AI ever decides "this is important." Instead:</p>
+
+<ul>
+  <li>A claim that appears in <strong>1 dream → KEEP</strong> — we don't know yet. Wait.</li>
+  <li>A claim that appears in <strong>3 of 4 dreams → confidence 0.75 → STRENGTHEN</strong> — this is real.</li>
+  <li>A claim that appears <strong>once, 3 generations ago → DROP</strong> — it was noise.</li>
+  <li>A claim that is <strong>contradicted → CONFLICT</strong> — needs a human to resolve.</li>
+</ul>
+
+<p>This is event-sourced valuation. <strong>Value = frequency × recency × consistency.</strong> No model hallucination about importance. No "I think this is a 7/10." Pure arithmetic on what actually happened, over time.</p>
+
+<h3>Current Reconciliation</h3>
+<p>With only 2 dream files, the current <code>.reconciled.md</code> (56 lines) shows every claim at confidence 0.50 — the minimum. This is expected: with 2 files, a claim appearing in 1 of 2 gets 0.50. The system is still in its infancy. With 3+ dreams, confidence would differentiate into 0.33, 0.67, 1.00 tiers.</p>
+</div>
+
+<!-- Section 5: Inject -->
+<div class="card" id="s5">
+<h2>5. Layer 4: INJECT <span class="layer-badge l4">Unified Memory</span></h2>
+<p><strong>Source:</strong> <code>src/agent/unified-memory.ts</code> (123 lines) — <code>loadUnifiedMemory()</code>.</p>
+
+<h3>How It Works</h3>
+<p>Every session — CLI or Telegram bot — begins by loading a unified memory block that is injected into the system prompt. This block has two sources:</p>
+
+<table>
+<thead><tr><th>Source</th><th>Budget</th><th>Content</th><th>Location</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>Identity / Facts</strong></td>
+  <td>60% (~2,400 chars)</td>
+  <td>Who the user is, their projects, preferences, technical patterns</td>
+  <td><code>~/.aura/memory/identity.json</code></td>
+</tr>
+<tr>
+  <td><strong>Lessons</strong></td>
+  <td>40% (~1,600 chars)</td>
+  <td>Reconciled dream projection (CLI) or global digest (Telegram bot)</td>
+  <td><code>dreams/.reconciled.md</code> or <code>lessons-global.md</code></td>
+</tr>
+</tbody>
+</table>
+
+<h3>Length Cap</h3>
+<p>The entire memory block is <strong>hard-capped at ~4 KB</strong>. This prevents unbounded growth. As the reconciled memory grows, older, lower-confidence claims are naturally pushed out by newer, higher-confidence ones. This is a deliberate design choice: <strong>forgetting is a feature, not a bug.</strong></p>
+
+<h3>Cross-Surface Sharing</h3>
+<p>Before unified memory, the CLI and Telegram bot had <em>separate memory stores</em> — facts saved by one surface never reached the other. Now they share one canonical view:
+  <br>• <strong>CLI:</strong> identity + per-project reconciled lessons
+  <br>• <strong>Telegram bot:</strong> identity + global lessons digest (across all projects)</p>
+</div>
+
+<!-- Section 6: Depth → Importance -->
+<div class="card page-break" id="s6">
+<h2>6. How Depth Translates to Importance</h2>
+
+<p>This is the core answer to your question. "Depth" is not a metric the system explicitly measures — it is <strong>an emergent property of time and repetition</strong>.</p>
+
+<h3>The Lifecycle of a Memory Claim</h3>
+
+<table>
+<thead><tr><th>Stage</th><th>What Happens</th><th>Verdict</th><th>"Depth"</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>Birth</strong></td>
+  <td>Episode recorded after a task. Raw, unevaluated.</td>
+  <td>—</td>
+  <td>Zero. Just data.</td>
+</tr>
+<tr>
+  <td><strong>Extraction</strong></td>
+  <td>Dream consolidates episodes. If the LLM distiller notices this event, it becomes a claim in a dream file.</td>
+  <td>—</td>
+  <td>Shallow. One human reading.</td>
+</tr>
+<tr>
+  <td><strong>First appearance</strong></td>
+  <td>Reconciliation finds this claim in exactly 1 dream. Too early to judge.</td>
+  <td><span class="verdict v-keep">KEEP</span></td>
+  <td>Pending. Waiting for corroboration.</td>
+</tr>
+<tr>
+  <td><strong>Corroboration</strong></td>
+  <td>Same claim appears in a 2nd dream (confidence 0.67 with 3 total). Now it's a pattern.</td>
+  <td><span class="verdict v-strengthen">STRENGTHEN</span></td>
+  <td>Confirmed. Survived multiple sessions.</td>
+</tr>
+<tr>
+  <td><strong>Repetition</strong></td>
+  <td>Multiple claims on the same topic cluster together. Consolidated.</td>
+  <td><span class="verdict v-merge">MERGE</span></td>
+  <td>Deepening. The system is building a coherent belief.</td>
+</tr>
+<tr>
+  <td><strong>Contradiction</strong></td>
+  <td>A dream says X works; a later dream says X is broken. System flags this.</td>
+  <td><span class="verdict v-conflict">CONFLICT</span></td>
+  <td>Deepest form. Requires human resolution.</td>
+</tr>
+<tr>
+  <td><strong>Obsolescence</strong></td>
+  <td>Claim appears once, never again, now 3+ dream generations old.</td>
+  <td><span class="verdict v-drop">DROP</span></td>
+  <td>Forgotten. Was noise.</td>
+</tr>
+<tr>
+  <td><strong>Evolution</strong></td>
+  <td>A newer claim replaces an older one on the same topic.</td>
+  <td><span class="verdict v-supersede">SUPERSEDE</span></td>
+  <td>Deepened by refinement. Understanding improved.</td>
+</tr>
+</tbody>
+</table>
+
+<h3>Yes — Depth IS Importance</h3>
+<p>A claim that reaches <span class="verdict v-strengthen">STRENGTHEN</span> (confidence ≥ 0.50) has <strong>survived multiple dream cycles</strong>. It has been observed, extracted by the LLM distiller, re-observed in subsequent sessions, re-extracted, and statistically confirmed. That <em>is</em> importance — measured not by opinion but by <strong>persistence through time.</strong></p>
+
+<p>A claim that reaches <span class="verdict v-conflict">CONFLICT</span> is arguably the <strong>most important</strong> — it represents something the system cannot resolve on its own and needs the human (you) to decide. This is the "deepest" memory because it's the most actionable.</p>
+
+<h3>What High-Quality Memory Looks Like</h3>
+<p>A high-quality memory claim survives the pipeline <em>without being dropped</em> and <em>without being contradicted</em>. It:</p>
+<ol>
+  <li>Is grounded in multiple real episodes (not fabricated by the dream LLM)</li>
+  <li>Appears across ≥3 dream files (temporal persistence)</li>
+  <li>Has consistent sentiment (never flagged as CONFLICT)</li>
+  <li>Accumulates confidence with each new dream cycle</li>
+</ol>
+<p>Such claims become the <strong>bedrock</strong> of Aura's identity — the facts and patterns that inform every future session. They are the system's equivalent of "long-term potentiation" in biological memory: repeated firing strengthens the connection.</p>
+</div>
+
+<!-- Section 7: Current State -->
+<div class="card" id="s7">
+<h2>7. Current State — What's Forming</h2>
+
+<h3>Raw Numbers</h3>
+<table>
+<thead><tr><th>Metric</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Total episodes recorded</td><td>38</td></tr>
+<tr><td>Successful episodes</td><td>35 (92%)</td></tr>
+<tr><td>Dream files</td><td>2 (<code>2026-07-03.md</code>, <code>2026-07-04.md</code>)</td></tr>
+<tr><td>Reconciled claims</td><td>26 claims across 56 lines</td></tr>
+<tr><td>Minimum confidence</td><td>0.50 (expected with only 2 dreams)</td></tr>
+<tr><td>Needed for confidence differentiation</td><td>≥3 dream files</td></tr>
+</tbody>
+</table>
+
+<h3>What's Already Forming</h3>
+<p>Even with only 2 dreams, patterns are emerging. The reconciled memory already contains:</p>
+<ul>
+  <li><strong>Testing patterns:</strong> "A well-written test file that documents expected behavior turns off-by-one errors into fast, reliable fixes."</li>
+  <li><strong>Security patterns:</strong> "SQL injection vulnerabilities are eliminated by parameterizing queries, not by escaping user input."</li>
+  <li><strong>Code-reading patterns:</strong> "Adapter files reveal the interface between an agent and an external API, making them a key target for integration work."</li>
+  <li><strong>Process patterns:</strong> "Test-driven bugfixing dominates: tasks include a known-good test file, and the fix consists of aligning implementation to that test."</li>
+  <li><strong>Conflict spotted:</strong> "An LRU cache eviction bug is fixed by updating the access order inside both <code>get</code> and <code>put</code> to track true recency" — flagged as <span class="verdict v-conflict">CONFLICT</span> because different dreams described the fix differently.</li>
+</ul>
+
+<h3>What's Missing</h3>
+<p>With only 2 dreams, the memory is in its infancy. Key limitations:</p>
+<ul>
+  <li><strong>Confidence cannot differentiate</strong> — every claim is 0.50 (1 of 2). Need ≥3 dreams for 0.33/0.67/1.00 tiers.</li>
+  <li><strong>No claims have been dropped yet</strong> — the DROP rule requires a claim to be ≥3 generations old with only 1 appearance.</li>
+  <li><strong>Most claims are MERGE</strong> — they appear multiple times within single dreams, but not yet across enough dreams to STRENGTHEN.</li>
+</ul>
+
+<h3>Recommendation</h3>
+<p>Run <code>:dream</code> daily, especially after significant sessions. Every dream cycle:</p>
+<ol>
+  <li>Consolidates new episodes into a dream file</li>
+  <li>If ≥3 dreams exist, triggers reconciliation</li>
+  <li>Reconciliation updates confidence based on fresh data</li>
+  <li><code>CONFLICT</code> markers show you where human attention is needed</li>
+  <li><code>DROP</code> markers automatically purge stale noise</li>
+</ol>
+<p><strong>The more you use Aura, the deeper, more precise, and more useful its memory becomes — automatically, without any manual "rating" or curation.</strong></p>
+</div>
+
+<!-- Section 8: Source Map -->
+<div class="card" id="s8">
+<h2>8. Source Code Map</h2>
+
+<table>
+<thead><tr><th>File</th><th>Lines</th><th>Responsibility</th></tr></thead>
+<tbody>
+<tr><td><code>src/dream/episode.ts</code></td><td>84</td><td>Layer 1 — Record episodes. <code>recordEpisode()</code>, <code>listEpisodes()</code>, <code>listAllEpisodes()</code>. Atomic writes, per-project namespacing, best-effort.</td></tr>
+<tr><td><code>src/dream/dream.ts</code></td><td>278</td><td>Layer 2 + 3 — <code>runDream()</code> (one LLM call to distill episodes) + <code>runReconciliation()</code> (pure statistics, zero LLM). Also: <code>getReconciledOrLatest()</code> for <code>:rem</code>, <code>runGlobalReconciliation()</code> for Telegram bot.</td></tr>
+<tr><td><code>src/agent/unified-memory.ts</code></td><td>123</td><td>Layer 4 — <code>loadUnifiedMemory()</code>. Loads identity + lessons, length-capped, injected into system prompt. Shared by CLI and Telegram bot.</td></tr>
+<tr><td><code>src/agent/system-prompt.ts</code></td><td>115</td><td>Consumer — <code>buildSystemPrompt()</code>. Calls <code>loadUnifiedMemory()</code> at line 9 to inject the memory block into every session's prompt.</td></tr>
+<tr><td><code>src/tools/memory.ts</code></td><td>101</td><td>Key-value store (the <code>memory</code> tool). Backs <code>identity.json</code>. CLI and bot can <code>remember</code>, <code>recall</code>, <code>forget</code>.</td></tr>
+<tr><td><code>src/agent/memory-consolidate.ts</code></td><td>—</td><td>One-time migration: merged legacy <code>default.json</code> + <code>user.json</code> namespaces into <code>identity.json</code>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer class="footer">
+  <p>Generated by Aura Code · Memory Pipeline Architecture Analysis · July 2026</p>
+</footer>
+
+</div>
+</body>
+</html>
