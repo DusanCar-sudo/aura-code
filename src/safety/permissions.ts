@@ -114,8 +114,24 @@ export function getSharedReadline(): readline.Interface | null {
   return sharedRl;
 }
 
+// The TUI owns stdin in raw mode via its own 'data' handler — a plain
+// readline.Interface (below) forces stdin out of raw mode the moment it
+// attaches and never restores it, so a confirm() prompt during TUI mode
+// used to fight the TUI's own input handling for every keystroke (garbled
+// echo, dropped characters, leftover fragments on screen). setSharedReadline
+// was meant to prevent a *second* readline.Interface, but the TUI doesn't
+// use readline at all — it needs its own raw-mode-safe prompt. cli/index.ts
+// registers one via setConfirmHandler() when TUI mode starts; confirm()
+// prefers it over readline whenever it's set.
+let confirmHandler: ((message: string) => Promise<boolean>) | null = null;
+
+export function setConfirmHandler(fn: ((message: string) => Promise<boolean>) | null): void {
+  confirmHandler = fn;
+}
+
 /** Ask user to confirm in the terminal. Returns true if approved. */
 export async function confirm(message: string): Promise<boolean> {
+  if (confirmHandler) return confirmHandler(message);
   const rl = sharedRl ?? readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => {
     rl.question(`\n⚠️  ${message} [y/N] `, answer => {
