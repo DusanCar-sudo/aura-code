@@ -7,22 +7,26 @@
  * palette.
  *
  * ──────────────────────────────────────────────────────────
- *  ╭ ask aura ──────────────╮      Commands
- *  │ your input here█       │      · :dream
- *  ╰────────────────────────╯      · :rem
- *   Build · gpt-4o · normal        Skills
- * ──────────────────────────────────────────────────────────  · antv-s2-expert
+ *  ╭ ask aura ──────────────╮      Try
+ *  │ your input here█       │      · :help — see all commands
+ *  │                        │      · run: npm test
+ *  │                        │
+ *  │                        │
+ *  │                        │
+ *  ╰────────────────────────╯
+ *  -- INSERT -- gpt-4o · normal
+ * ──────────────────────────────────────────────────────────
  *  │ give me the weather in Da Nang  (message bubble, ruby bar)
  *  │ 6:42 PM
  *  ✓ tool result
  *  ✓ done
  *  ...
  *
- * The header is two columns: the fixed-height input box (+ one unboxed
- * metadata row below it) and a right-side panel (commands / skills /
- * suggestions) whose height is independent of the box's — the panel can run
- * taller and keep going alongside the scrollable output, matching the
- * reference. On narrow terminals the panel drops out and the box alone
+ * The header is two columns: the fixed-height multi-line input box (+ one
+ * unboxed metadata row below it) and a right-side "Try" suggestions panel
+ * whose height is independent of the box's. (The panel used to also carry
+ * Commands/Skills sections — removed by design; the command list lives in
+ * :help.) On narrow terminals the panel drops out and the box alone
  * widens — see computeLayout().
  *
  * Pinning strategy: purely relative cursor movement, no absolute
@@ -163,15 +167,16 @@ export function setFooter(text: string): void {
   if (inputActive) redrawFooterInPlace();
 }
 
-export interface PanelCommand { cmd: string; desc?: string }
-let panelCommands: PanelCommand[] = [];
-let panelSkills: string[] = [];
 let panelSuggestions: string[] = [];
 
-/** Feed the right-side panel's three sections. Safe to call before initTui(). */
-export function setPanelContent(opts: { commands?: PanelCommand[]; skills?: string[]; suggestions?: string[] }): void {
-  if (opts.commands) panelCommands = opts.commands;
-  if (opts.skills) panelSkills = opts.skills;
+/**
+ * Feed the right-side panel's "Try" suggestions. Safe to call before
+ * initTui(). The panel is Try-only by design: the Commands/Skills sections
+ * it used to carry were informational clutter next to the input — the
+ * actual command list lives in :help and doesn't need permanent sidebar
+ * space.
+ */
+export function setPanelContent(opts: { suggestions?: string[] }): void {
   if (opts.suggestions) panelSuggestions = opts.suggestions;
   if (inputActive) drawPromptTop();
 }
@@ -304,8 +309,11 @@ process.on('exit', () => {
 
 // ── Header layout ────────────────────────────────────────────────────────
 
-// Compact 2-row input box: 1 top border + 2 content rows + 1 bottom border.
-const HEADER_ROWS = 4;
+// Input box: 1 top border + 5 content rows + 1 bottom border — tall enough
+// that multi-line task entry doesn't feel cramped (raised from the earlier
+// compact 2-content-row box by design; wrapInput() scrolls if a draft
+// outgrows even this).
+const HEADER_ROWS = 7;
 const BOX_CONTENT_ROWS = HEADER_ROWS - 2; // minus top/bottom border rows
 
 interface Layout {
@@ -369,19 +377,10 @@ function wrapInput(innerWidth: number): { rows: string[]; cursorRow: number; cur
  * layout where the sidebar visibly outlasts the compact input box.
  */
 function buildPanelLines(width: number): string[] {
-  const sections: Array<{ title: string; items: string[] }> = [
-    { title: 'Commands', items: panelCommands.map(c => c.cmd) },
-    { title: 'Skills', items: panelSkills },
-    { title: 'Try', items: panelSuggestions },
-  ].filter(s => s.items.length > 0);
-
+  if (panelSuggestions.length === 0) return [];
   const trunc = (s: string) => s.length > width ? s.slice(0, Math.max(0, width - 1)) + '…' : s;
-
-  const lines: string[] = [];
-  for (const section of sections) {
-    lines.push(trunc(ACCENT.bold(section.title)));
-    for (const item of section.items) lines.push(trunc(GOLD(`· ${item}`)));
-  }
+  const lines: string[] = [trunc(ACCENT.bold('Try'))];
+  for (const item of panelSuggestions) lines.push(trunc(GOLD(`· ${item}`)));
   return lines;
 }
 

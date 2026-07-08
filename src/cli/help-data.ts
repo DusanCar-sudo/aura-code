@@ -1,9 +1,8 @@
 /**
- * Single source of truth for the ":help" text. The REPL's `:help` command
- * prints HELP_TEXT verbatim; the TUI's right-side panel derives its "quick
- * commands" list from `findCommand()` below instead of hardcoding its own
- * copy of descriptions — so if a command is renamed or dropped here, the
- * panel picks that up (or silently omits it) rather than going stale.
+ * Single source of truth for the ":help" text — the REPL's `:help` command
+ * prints HELP_TEXT verbatim. (The TUI sidebar used to derive a quick-command
+ * list from this file too; that panel section was removed by design — the
+ * command list lives in :help, not permanently on screen.)
  */
 
 export const HELP_TEXT = [
@@ -73,25 +72,3 @@ export const HELP_TEXT = [
   '',
 ];
 
-export interface HelpCommand {
-  cmd: string;
-  desc: string;
-}
-
-/** All commands parsed out of HELP_TEXT: "  :cmd <arg>   description" lines. */
-export const HELP_COMMANDS: HelpCommand[] = HELP_TEXT
-  .map(line => line.match(/^ {2}(:\S[^ ]*(?: <[^>]+>| \[[^\]]+\]|,\s*\S+)*)\s{2,}(.+)$/))
-  .filter((m): m is RegExpMatchArray => m !== null)
-  .map(m => ({ cmd: m[1].trim(), desc: m[2].trim() }));
-
-/**
- * Look up a command's description by exact or prefix match on its first
- * token (":dream" matches both ":dream" and ":dream full"). Returns
- * undefined if the command was renamed/removed since the panel's static
- * quick-list was written — callers should skip it rather than fabricate
- * a description.
- */
-export function findCommand(name: string): HelpCommand | undefined {
-  return HELP_COMMANDS.find(c => c.cmd === name || c.cmd.startsWith(name + ' '))
-    ?? HELP_COMMANDS.find(c => c.cmd.split(/[ ,]/)[0] === name);
-}
