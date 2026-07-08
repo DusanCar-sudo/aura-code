@@ -16,9 +16,9 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { PermissionSystem, setSharedReadline, getSharedReadline } from '../safety/permissions.js';
+import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui } from './tui.js';
+import { initTui, startInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -39,9 +39,11 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner } from './diamond.js';
+import { renderBanner, buildBannerLines } from './diamond.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
+import { HELP_TEXT, findCommand } from './help-data.js';
+import { loadAllPlugins } from '../plugins/loader.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +104,7 @@ if (argv.models) {
     return acc;
   }, {});
   for (const [provider, models] of Object.entries(byProvider)) {
-    console.log(chalk.hex('#8a7768')(`  ${provider}`));
+    console.log(chalk.hex('#a68a2a')(`  ${provider}`));
     for (const m of models) {
       console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
     }
@@ -117,7 +119,7 @@ if (argv['list-sessions']) {
   const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
   const sessions = sessionStore.listSessions(root);
   if (sessions.length === 0) {
-    console.log(chalk.hex('#8a7768')('\n  No saved sessions for this project.\n'));
+    console.log(chalk.hex('#a68a2a')('\n  No saved sessions for this project.\n'));
   } else {
     console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
     for (const s of sessions) {
@@ -125,7 +127,7 @@ if (argv['list-sessions']) {
       const turns = Math.floor(s.history.length / 2);
       console.log(
         `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-        `${chalk.hex('#ede0cc')(s.title.slice(0, 45).padEnd(46))} ` +
+        `${chalk.hex('#d4af37')(s.title.slice(0, 45).padEnd(46))} ` +
         `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}`,
       );
     }
@@ -138,15 +140,15 @@ if (argv.analyze) {
   const report = mineWeaknesses();
   const outPath = saveReport(report);
   console.log(chalk.hex('#cc785c').bold('\n  Weakness Analysis Report\n'));
-  console.log(chalk.hex('#8a7768')(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
-  console.log(chalk.hex('#8a7768')(`  Report saved to: ${outPath}\n`));
+  console.log(chalk.hex('#a68a2a')(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
+  console.log(chalk.hex('#a68a2a')(`  Report saved to: ${outPath}\n`));
 
   if (report.patterns.length === 0) {
     console.log(chalk.hex('#5a9e6e')('  ✓ No recurring weakness patterns detected. Agent behavior looks healthy.\n'));
   } else {
     for (const p of report.patterns) {
       console.log(chalk.hex('#b15439').bold(`  ✗ ${p.pattern} (${p.frequency} occurrences)`));
-      console.log(chalk.hex('#8a7768')(`    ${p.description}`));
+      console.log(chalk.hex('#a68a2a')(`    ${p.description}`));
       if (p.occurrences[0]) {
         console.log(chalk.hex('#4e3d30')(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
         console.log(chalk.hex('#4e3d30')(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
@@ -154,7 +156,7 @@ if (argv.analyze) {
       console.log(chalk.hex('#cc785c')(`    Suggestion: ${p.promptPatch.slice(0, 120)}...`));
       console.log();
     }
-    console.log(chalk.hex('#8a7768')(`  ${report.summary}\n`));
+    console.log(chalk.hex('#a68a2a')(`  ${report.summary}\n`));
   }
   process.exit(0);
 }
@@ -172,7 +174,7 @@ if (argv.doctor === true) {
 if (argv['propose-harness']) {
   // Ensure a weakness report exists — mine if needed
   if (!fs.existsSync(reportPath())) {
-    console.log(chalk.hex('#8a7768')('\n  No weakness report found — mining sessions first...\n'));
+    console.log(chalk.hex('#a68a2a')('\n  No weakness report found — mining sessions first...\n'));
     const report = mineWeaknesses();
     saveReport(report);
   }
@@ -184,13 +186,13 @@ if (argv['propose-harness']) {
     console.log(chalk.hex('#cc785c').bold('\n  Harness Proposals\n'));
     for (const p of proposals) {
       console.log(chalk.hex('#cc785c')(`  ${p.id}`));
-      console.log(chalk.hex('#8a7768')(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
-      console.log(chalk.hex('#8a7768')(`    Section:  ${p.targetSection}`));
+      console.log(chalk.hex('#a68a2a')(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
+      console.log(chalk.hex('#a68a2a')(`    Section:  ${p.targetSection}`));
       console.log(chalk.hex('#4e3d30')(`    Patch:    ${p.patchText.slice(0, 80)}...`));
       console.log();
     }
     console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
-    console.log(chalk.hex('#8a7768')('  Apply with: ruby --apply-harness <id>\n'));
+    console.log(chalk.hex('#a68a2a')('  Apply with: ruby --apply-harness <id>\n'));
   }
   process.exit(0);
 }
@@ -213,7 +215,7 @@ if (argv.workflows) {
   (async () => {
     const workflows = await listWorkflows();
     if (workflows.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved workflows.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No saved workflows.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
@@ -223,7 +225,7 @@ if (argv.workflows) {
         const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
         console.log(
           `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex('#ede0cc')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex('#d4af37')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
           `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
         );
@@ -239,7 +241,7 @@ if (argv.blueprints) {
   (async () => {
     const bps = await listArchitectBlueprints();
     if (bps.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved blueprints.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No saved blueprints.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved blueprints:\n'));
       for (const bp of bps) {
@@ -250,7 +252,7 @@ if (argv.blueprints) {
         console.log(
           `  ${chalk.hex(statusColor)(bp.status.padEnd(10))} ` +
           `${chalk.hex('#cc785c')(bp.id.slice(0, 16).padEnd(18))} ` +
-          `${chalk.hex('#ede0cc')(bp.task.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex('#d4af37')(bp.task.slice(0, 40).padEnd(41))} ` +
           `${chalk.hex('#4e3d30')(`${builtCount}/${totalFiles} files · ${created}`)}`,
         );
       }
@@ -271,21 +273,21 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
 
     const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
     console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-    console.log(`  ${chalk.hex('#8a7768')('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
-    console.log(`  ${chalk.hex('#8a7768')('Task:')}    ${chalk.hex('#ede0cc')(bp.task)}`);
-    console.log(`  ${chalk.hex('#8a7768')('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
-    console.log(`  ${chalk.hex('#8a7768')('Steps:')}   ${bp.estimatedSteps}`);
-    console.log(`  ${chalk.hex('#8a7768')('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
-    if (bp.builtAt) console.log(`  ${chalk.hex('#8a7768')('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
+    console.log(`  ${chalk.hex('#a68a2a')('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
+    console.log(`  ${chalk.hex('#a68a2a')('Task:')}    ${chalk.hex('#d4af37')(bp.task)}`);
+    console.log(`  ${chalk.hex('#a68a2a')('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
+    console.log(`  ${chalk.hex('#a68a2a')('Steps:')}   ${bp.estimatedSteps}`);
+    console.log(`  ${chalk.hex('#a68a2a')('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
+    if (bp.builtAt) console.log(`  ${chalk.hex('#a68a2a')('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
 
     if (bp.files.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Files:\n'));
       for (const f of bp.files) {
-        const fileStatusColor = f.status === 'built' ? '#5a9e6e' : f.status === 'skipped' ? '#8a7768' : '#cc785c';
+        const fileStatusColor = f.status === 'built' ? '#5a9e6e' : f.status === 'skipped' ? '#a68a2a' : '#cc785c';
         console.log(
           `    ${chalk.hex(fileStatusColor)(f.status.padEnd(8))} ${chalk.hex('#cc785c')(f.path)}`,
         );
-        console.log(`            ${chalk.hex('#8a7768')(f.purpose)}`);
+        console.log(`            ${chalk.hex('#a68a2a')(f.purpose)}`);
         if (f.exports.length > 0) {
           console.log(`            ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
         }
@@ -298,7 +300,7 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.dataModels.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
       for (const dm of bp.dataModels) {
-        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#8a7768')(dm.description)}`);
+        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#a68a2a')(dm.description)}`);
         for (const field of dm.fields) {
           console.log(`      ${chalk.hex('#4e3d30')(field)}`);
         }
@@ -315,7 +317,7 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.risks.length > 0) {
       console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
       for (const risk of bp.risks) {
-        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#8a7768')(risk)}`);
+        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#a68a2a')(risk)}`);
       }
     }
 
@@ -323,7 +325,7 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
       console.log(chalk.hex('#cc9e5c').bold('\n  Deviations:\n'));
       for (const dev of bp.deviations) {
         const time = new Date(dev.recordedAt).toLocaleString();
-        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex('#8a7768')(dev.description)} ${chalk.hex('#4e3d30')(`(${time})`)}`);
+        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex('#a68a2a')(dev.description)} ${chalk.hex('#4e3d30')(`(${time})`)}`);
       }
     }
 
@@ -353,6 +355,9 @@ if (argv._.length === 0 && !argv.interactive && !argv.doctor && process.stdin.is
 
 const cwd = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
 const fileConfig = loadProjectConfig(cwd);
+
+// No TLS patching needed — the DigiCert root CA used by the MiMo endpoint
+// is already trusted by Node's built-in certificate store.
 
 // Load persisted API keys (~/.aura/keys.json) into process.env before any
 // provider is built — so keys set once with :apikey survive across sessions
@@ -492,8 +497,8 @@ async function main() {
     // hang. Skip with a helpful message instead.
     if (process.stdin.isTTY !== true && !process.stdin.readable) {
       console.error(chalk.hex('#b15439')('\n  ✗ No interactive input available.'));
-      console.error(chalk.hex('#8a7768')('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
-      console.error(chalk.hex('#8a7768')('  or pass --api-key <key> --model <id> on the command line,\n'));
+      console.error(chalk.hex('#a68a2a')('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
+      console.error(chalk.hex('#a68a2a')('  or pass --api-key <key> --model <id> on the command line,\n'));
       process.exit(1);
     }
     // Full provider wizard: pick provider + model, detect/enter key, and
@@ -523,9 +528,9 @@ async function main() {
   // ── Guard: we need a model before we can build a provider ─────────────────
   if (!resolved.model) {
     console.error(chalk.hex('#b15439')('\n  ✗ No model configured.'));
-    console.error(chalk.hex('#8a7768')('  Run `aura` with no args in a TTY to launch the setup wizard,'));
-    console.error(chalk.hex('#8a7768')('  or pass --model <id> --api-key <key> on the command line,'));
-    console.error(chalk.hex('#8a7768')('  or set the model in .aura.json (`"model": "..."`).'));
+    console.error(chalk.hex('#a68a2a')('  Run `aura` with no args in a TTY to launch the setup wizard,'));
+    console.error(chalk.hex('#a68a2a')('  or pass --model <id> --api-key <key> on the command line,'));
+    console.error(chalk.hex('#a68a2a')('  or set the model in .aura.json (`"model": "..."`).'));
     process.exit(1);
   }
 
@@ -616,8 +621,8 @@ async function main() {
     }
 
     display.header('Architect Builder', `Building from blueprint: ${bp.id}`);
-    console.log(chalk.hex('#8a7768')(`  Task: ${bp.task}`));
-    console.log(chalk.hex('#8a7768')(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
+    console.log(chalk.hex('#a68a2a')(`  Task: ${bp.task}`));
+    console.log(chalk.hex('#a68a2a')(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
 
     await updateBlueprintStatus(bp.id, 'building');
 
@@ -682,7 +687,7 @@ async function main() {
     const stepTasks = argv._.map(String);
     if (stepTasks.length === 0) {
       console.error(chalk.hex('#b15439')('\n  ✗ No step tasks provided.'));
-      console.error(chalk.hex('#8a7768')('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
+      console.error(chalk.hex('#a68a2a')('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
       process.exit(1);
     }
 
@@ -734,7 +739,7 @@ async function main() {
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex('#8a7768')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex('#a68a2a')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -788,7 +793,7 @@ async function main() {
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex('#8a7768')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex('#a68a2a')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -797,7 +802,7 @@ async function main() {
   // ── Single task mode: aura "fix the bug" ──────────────────────────────────────
   if (argv._.length > 0) {
     const task = argv._.join(' ');
-    console.log(chalk.hex('#8a7768')(`\n  Task: ${chalk.hex('#ede0cc')(task)}\n`));
+    console.log(chalk.hex('#a68a2a')(`\n  Task: ${chalk.hex('#d4af37')(task)}\n`));
 
     // --architect: plan-only — decompose and display, then exit (no execution)
     if (argv.architect === true) {
@@ -915,9 +920,39 @@ async function main() {
   }
 
   // ── Interactive REPL mode (TUI — fixed bottom input) ────────────────────────
-  if (activeChatHistory.length > 0) {
-    writeOutput(chalk.hex('#8a7768')('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
-  }
+  // Enter the alternate screen buffer for the whole interactive session —
+  // see enterAltScreen()'s doc comment in tui.ts for why: redrawing the
+  // header in place on the NORMAL screen (needed so it stays pinned while
+  // reflecting live typing) leaves every intermediate redraw frame
+  // permanently baked into the real terminal's scrollback the moment it
+  // scrolls past the top of the viewport — the live view was always
+  // correct, but scrolling up through history showed it stacked dozens of
+  // times. The alt screen is an isolated buffer with no persistent
+  // scrollback, so this can't happen; leaving it (destroyTui()/Ctrl+C)
+  // restores the terminal exactly as it was, same as quitting vim or less.
+  // The banner was already drawn once above (renderBanner() is shared with
+  // one-shot mode, which does NOT use the alt screen), so it has to be
+  // redrawn here — it rendered to the now-hidden normal screen, not this
+  // fresh alt-screen buffer.
+  enterAltScreen();
+  const tuiBannerInfo = {
+    version: pkg.version,
+    title: ctx.name,
+    provider: provider.name,
+    model: runtimeConfig.model,
+    language: ctx.language,
+    mode: permissionLevel,
+    cwd: projectRoot,
+    extras: [
+      ...(fileConfig.model ? ['.aura.json loaded'] : []),
+      ...(activeChatId ? [`chat ${activeChatId}`] : []),
+    ],
+  };
+  renderBanner(tuiBannerInfo);
+  // The TUI keeps its own copy of the banner rows: when scroll mode hands
+  // the screen back, the live view is rebuilt from scratch, and on the alt
+  // screen there's no scrollback to recover the banner from.
+  setBannerLines(buildBannerLines(tuiBannerInfo));
 
   // Use the TUI display for output
   
@@ -932,9 +967,38 @@ async function main() {
     resolved.model ?? 'gpt-4o',
     resolved.model ?? 'gpt-4o',
   );
+  // ── Right-panel content: commands / skills / suggestions ────────────────
+  // Commands are looked up in HELP_TEXT (via findCommand) rather than
+  // re-typed here, so a rename/removal there just drops the entry instead
+  // of leaving a stale copy in the panel.
+  const QUICK_COMMANDS = [':dream', ':rem', ':machina', ':council', ':q', ':btw', ':doctor', '/context'];
+  const panelCommands = QUICK_COMMANDS
+    .map(name => findCommand(name))
+    .filter((c): c is NonNullable<typeof c> => c !== undefined)
+    .map(c => ({ cmd: c.cmd, desc: c.desc }));
+  const panelSkills = loadAllPlugins().flatMap(p => p.skills.map(s => s.name));
+  const panelSuggestions = [
+    activeChatHistory.length === 0 ? ':help — see all commands' : ':doctor — scan for issues',
+    ctx.language ? `run: ${ctx.language === 'TypeScript' || ctx.language === 'JavaScript' ? 'npm test' : ':graph'}` : ':viz — memory dashboard',
+  ];
+  setPanelContent({ commands: panelCommands, skills: panelSkills, suggestions: panelSuggestions });
+  // Unboxed metadata line under the input box, mirroring the reference's
+  // "Build · <model> · <mode>" line under its own input box.
+  setStatusLine([provider.name, runtimeConfig.model, permissionLevel].filter(Boolean).join(' · '));
+
   initTui();
   if (activeChatId) setChatId(activeChatId);
   startInput();
+  // Route permission confirmations through the TUI's own raw-mode-safe
+  // prompt instead of a plain readline.Interface, which forces stdin out
+  // of raw mode and fights the TUI's own input handler (see tui.ts).
+  setConfirmHandler(askConfirm);
+  // Must come after initTui() — writeOutput() assumes the "cursor at base
+  // row" invariant initTui() establishes; calling it any earlier corrupts
+  // that baseline.
+  if (activeChatHistory.length > 0) {
+    writeOutput(chalk.hex('#a68a2a')('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
+  }
 
   // Buffer for :btw and :stop typed during the agent loop
   let pendingBtw: string | null = null;
@@ -1083,7 +1147,7 @@ let abortController: AbortController | null = null;
     }
   }
 
-  writeOutput(chalk.hex('#8a7768')('  Type a task, or :help for commands.'));
+  writeOutput(chalk.hex('#a68a2a')('  Type a task, or :help for commands.'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1173,11 +1237,11 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
   for (const m of allModels) {
     if (m.provider !== currentProvider) {
       currentProvider = m.provider;
-      entries.push({ id: '', label: chalk.hex('#8a7768').bold(`  ── ${currentProvider} ──`), provider: currentProvider });
+      entries.push({ id: '', label: chalk.hex('#a68a2a').bold(`  ── ${currentProvider} ──`), provider: currentProvider });
     }
     entries.push({
       id: m.id,
-      label: `    ${chalk.hex('#cc785c')(String(entries.length + 1).padStart(2))}. ${chalk.hex('#ede0cc')(m.name.padEnd(30))} ${chalk.hex('#4e3d30')(m.speed)}`,
+      label: `    ${chalk.hex('#cc785c')(String(entries.length + 1).padStart(2))}. ${chalk.hex('#d4af37')(m.name.padEnd(30))} ${chalk.hex('#4e3d30')(m.speed)}`,
       provider: m.provider,
     });
   }
@@ -1262,7 +1326,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       }
       c.display.success(`Queue item #${n}: ${result.success ? 'done' : 'failed'}`);
       if (result.output) {
-        console.log(chalk.hex('#ede0cc')(`  ${result.output.slice(0, 240)}`));
+        console.log(chalk.hex('#d4af37')(`  ${result.output.slice(0, 240)}`));
       }
       console.log(chalk.hex('#4e3d30')(`  ${result.turns} turn(s) · ${result.toolCalls} tool call(s).\n`));
       return { handled: true };
@@ -1304,7 +1368,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   if (input === ':speak') {
     speakEnabled = !speakEnabled;
-    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#8a7768')(
+    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#a68a2a')(
       `  🔊 Voice replies ${speakEnabled ? 'ON — Aura will read its answers aloud' : 'OFF'}.\n`,
     ));
     return { handled: true };
@@ -1353,7 +1417,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       c.display.warning('Usage: :research <topic> -- runs a multi-step research pass and saves to research/*.md.');
       return { handled: true };
     }
-    console.log(chalk.hex('#8a7768')(`\n  Researching "${topic}"…\n`));
+    console.log(chalk.hex('#a68a2a')(`\n  Researching "${topic}"…\n`));
     try {
       const { runResearch } = await import('../research/research.js');
       const res = await runResearch({
@@ -1365,7 +1429,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         display: c.display,
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
-      console.log(chalk.hex('#8a7768')(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
+      console.log(chalk.hex('#a68a2a')(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
@@ -1375,11 +1439,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const { listConfessions } = await import('../agent/confess.js');
     const confs = listConfessions();
     if (confs.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No confessions yet. Run :confess after a high-token episode.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No confessions yet. Run :confess after a high-token episode.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold(`\n  ${confs.length} confession(s):\n`));
       for (const c of confs) {
-        console.log(chalk.hex('#8a7768')(`  ${c.file}`));
+        console.log(chalk.hex('#a68a2a')(`  ${c.file}`));
         console.log(chalk.hex('#4e3d30')(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
       }
       console.log('');
@@ -1393,7 +1457,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#cc9e5c')('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
       return { handled: true };
     }
-    console.log(chalk.hex('#8a7768')(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
+    console.log(chalk.hex('#a68a2a')(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
     try {
       // Use a different model than the one that made the mistake
       const confessorModel = targetEp.model.startsWith('deepseek') ? 'glm-5.2' : 'deepseek/deepseek-chat';
@@ -1405,9 +1469,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         provider,
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Confession written: ${result.path}`));
-      console.log(chalk.hex('#8a7768')(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
+      console.log(chalk.hex('#a68a2a')(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
       console.log(chalk.hex('#cc9e6c')('  Permanent lesson:'));
-      console.log(chalk.hex('#ede0cc')(`  "${result.lesson}"\n`));
+      console.log(chalk.hex('#d4af37')(`  "${result.lesson}"\n`));
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
@@ -1419,7 +1483,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (!res) {
       c.display.warning('No dreams yet. Run :dream first.');
     } else {
-      console.log(chalk.hex('#8a7768')(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
+      console.log(chalk.hex('#a68a2a')(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
       console.log(res.content);
     }
     return { handled: true };
@@ -1505,72 +1569,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':help' || input === '/help') {
-    console.log(chalk.hex('#8a7768')([
-      '',
-      '  ── Session ──────────────────────────────────────',
-      '  :id                     Show current chat ID',
-      '  :sessions               List all saved sessions',
-      '  :resume                 Resume the latest session',
-      '  :resume <id>            Resume a specific session by ID',
-      '  :new                    Start a new session (fresh history)',
-      '  :history                Show turn count in current session',
-      '  :clear-history          Wipe conversation history (keep session ID)',
-      '  :save [title]           Rename / save current session',
-      '  :delete <id>            Delete a saved session',
-      '',
-      '  ── Model / API ──────────────────────────────────',
-      '  :model                  Interactive model selector',
-      '  :model <id>             Switch to a specific model',
-      '  :models                 List all available models',
-      '  :provider               Provider setup wizard (pick provider, model, key)',
-      '  :apikey <key>           Set API key for current session',
-      '',
-      '  ── Workflows ─────────────────────────────────────',
-      '  :workflows              List all saved workflows',
-      '  :workflow               Create & run a multi-step workflow',
-      '    <name> "step1" "step2" ...',
-      '  :resume-workflow <id>   Resume a paused/failed workflow',
-      '  :q add <prompt>         Enqueue a task in the queue',
-      '  :q list                 List queued tasks',
-      '  :q run <n>              Execute queued task #n',
-      '  :q drop <n>             Remove queued task #n',
-      '  :q clear                Wipe the queue',
-      '  :machina <task>         Run task with self-verification + auto-retry',
-      '  :council <task>         2-3 parallel read-only specialists, then synthesis',
-      '',
-      '  ── Memory / Side ─────────────────────────────────',
-      '  :dream                  Consolidate recent episodes into a dream entry',
-      '  :dream full             Consolidate ALL episodes, ignoring last-dream cutoff',
-      '  :rem                    Show reconciled memory (or latest dream)',
-      '  :research <topic>       Multi-step research pass, saved to research/*.md',
-      '  :confess                Auto-detect & confess an anomalous episode',
-      '  :confessions            List all confessions',
-      '  :btw <question>         Quick side question (read-only, no history pollution)',
-      '',
-      '  ── Voice ─────────────────────────────────────────',
-      '  :speak                  Toggle reading replies aloud (or launch with --speak)',
-      '',
-      '  ── Safety ────────────────────────────────────────',
-      '  :approve                Toggle auto-approve (skip per-command y/N prompts)',
-      '  :approve all            Approve everything this session',
-      '  :approve off            Re-enable confirmation for destructive commands',
-      '',
-      '  ── Context / Stats ──────────────────────────────',
-      '  :context                Show loaded project context',
-      '  :graph                  Show codebase knowledge graph summary',
-      '  :graph refresh          Reload graph from graphify-out/graph.json',
-      '  :plans                  List saved execution plans',
-      '  :viz, :dashboard        Generate and open the memory dashboard',
-      '  :doctor                 Scan Aura itself for issues (build, config, deps, env)',
-      '  :doctor --fix           Scan and attempt auto-repairs',
-      '  /stats, /usage          Show token + cost usage this session',
-      '  /context                Context health dashboard (window, compaction, cost)',
-      '  /clear, /reset          Reset cumulative usage stats',
-      '',
-      '  ── General ──────────────────────────────────────',
-      '  :quit, :q, /exit        Exit',
-      '',
-    ].join('\n')));
+    console.log(chalk.hex('#a68a2a')(HELP_TEXT.join('\n')));
     return { handled: true };
   }
 
@@ -1579,11 +1578,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':id') {
     const cs = c.chatState;
     if (cs.activeChatId) {
-      console.log(chalk.hex('#8a7768')(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
-      if (cs.activeChatTitle) console.log(chalk.hex('#8a7768')(`  Title:   ${cs.activeChatTitle}`));
+      console.log(chalk.hex('#a68a2a')(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
+      if (cs.activeChatTitle) console.log(chalk.hex('#a68a2a')(`  Title:   ${cs.activeChatTitle}`));
       console.log(chalk.hex('#4e3d30')(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
     } else {
-      console.log(chalk.hex('#8a7768')('\n  No active session (--no-session mode).\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No active session (--no-session mode).\n'));
     }
     return { handled: true };
   }
@@ -1591,7 +1590,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':sessions') {
     const sessions = sessionStore.listSessions(c.chatState.projectRoot);
     if (sessions.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved sessions.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No saved sessions.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
       for (const s of sessions) {
@@ -1600,7 +1599,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
         console.log(
           `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-          `${chalk.hex('#ede0cc')(s.title.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex('#d4af37')(s.title.slice(0, 40).padEnd(41))} ` +
           `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}${marker}`,
         );
       }
@@ -1612,7 +1611,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':resume' || input === ':resume ') {
     const latest = sessionStore.findLatestSession(c.chatState.projectRoot);
     if (!latest) {
-      console.log(chalk.hex('#8a7768')('\n  No saved sessions to resume.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No saved sessions to resume.\n'));
       return { handled: true };
     }
     console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
@@ -1638,7 +1637,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   if (input === ':history') {
     const turns = Math.floor(c.chatState.activeChatHistory.length / 2);
-    console.log(chalk.hex('#8a7768')(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
+    console.log(chalk.hex('#a68a2a')(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
     return { handled: true };
   }
 
@@ -1651,7 +1650,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const title = input.startsWith(':save ') ? input.slice(':save '.length).trim() : undefined;
     const cs = c.chatState;
     if (!cs.activeChatId) {
-      console.log(chalk.hex('#8a7768')('\n  No active session to save (--no-session mode).\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No active session to save (--no-session mode).\n'));
       return { handled: true };
     }
     const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
@@ -1666,7 +1665,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
       if (id === c.chatState.activeChatId) {
         const newId = sessionStore.generateId();
-        console.log(chalk.hex('#8a7768')(`  Starting new session: ${newId}\n`));
+        console.log(chalk.hex('#a68a2a')(`  Starting new session: ${newId}\n`));
         return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
       }
     } else {
@@ -1678,7 +1677,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   // ── Model / API commands ─────────────────────────────────────────────────
 
   if (input === ':context') {
-    console.log(chalk.hex('#8a7768')(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
+    console.log(chalk.hex('#a68a2a')(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
     console.log(chalk.hex('#4e3d30')(`  Root: ${c.ctx.root}\n`));
     return { handled: true };
   }
@@ -1686,21 +1685,21 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':graph') {
     const summary = loadGraphSummary(c.ctx.root);
     if (!summary) {
-      console.log(chalk.hex('#8a7768')('\n  No graph.json found. Run :graph refresh to extract.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No graph.json found. Run :graph refresh to extract.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
-      console.log(chalk.hex('#8a7768')(summary));
+      console.log(chalk.hex('#a68a2a')(summary));
       console.log();
     }
     return { handled: true };
   }
 
   if (input === ':viz' || input === ':dashboard') {
-    console.log(chalk.hex('#8a7768')('\n  Generating dashboard…\n'));
+    console.log(chalk.hex('#a68a2a')('\n  Generating dashboard…\n'));
     try {
       const outPath = generateDashboard(c.ctx.root);
       console.log(chalk.hex('#5a9e6e')(`  ✓ Dashboard written to ${outPath}`));
-      console.log(chalk.hex('#8a7768')('  Opening in browser…\n'));
+      console.log(chalk.hex('#a68a2a')('  Opening in browser…\n'));
       openDashboard(outPath);
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
@@ -1712,7 +1711,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const { planStore } = await import('../orchestration/plan-store.js');
     const plans = await planStore.list();
     if (!plans.length) {
-      console.log(chalk.hex('#8a7768')('\n  No execution plans found.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No execution plans found.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Execution plans:\n'));
       for (const p of plans.slice(0, 15)) {
@@ -1722,7 +1721,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         console.log(
           `  ${chalk.hex(statusColor)(p.status.padEnd(8))} ` +
           `${chalk.hex('#cc785c')(p.id.slice(0, 12).padEnd(14))} ` +
-          `${chalk.hex('#ede0cc')(p.goal.slice(0, 50).padEnd(51))} ` +
+          `${chalk.hex('#d4af37')(p.goal.slice(0, 50).padEnd(51))} ` +
           `${chalk.hex('#4e3d30')(`${p.steps.length}s · ${dur} · ${created}`)}`,
         );
       }
@@ -1732,7 +1731,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':graph refresh') {
-    console.log(chalk.hex('#8a7768')('\n  Refreshing codebase graph...\n'));
+    console.log(chalk.hex('#a68a2a')('\n  Refreshing codebase graph...\n'));
     const { execSync } = await import('child_process');
     try {
       execSync(
@@ -1748,7 +1747,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (c.ctx.graphSummary) {
       console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
     } else {
-      console.log(chalk.hex('#8a7768')('  No graph.json found after refresh. Run graphify extract first.\n'));
+      console.log(chalk.hex('#a68a2a')('  No graph.json found after refresh. Run graphify extract first.\n'));
     }
     return { handled: true };
   }
@@ -1771,7 +1770,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       // The wizard saves to the global config, but a project .aura.json model
       // outranks it on the next startup — warn so the switch doesn't appear lost.
       if (fileConfig.model && fileConfig.model !== cfg.model) {
-        console.log(chalk.hex('#8a7768')(
+        console.log(chalk.hex('#a68a2a')(
           `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
           `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
         ));
@@ -1787,7 +1786,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       return acc;
     }, {});
     for (const [provider, models] of Object.entries(byProvider)) {
-      console.log(chalk.hex('#8a7768')(`\n  ${provider}`));
+      console.log(chalk.hex('#a68a2a')(`\n  ${provider}`));
       for (const m of models) {
         console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
       }
@@ -1844,7 +1843,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === '/stats' || input === '/usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
-    console.log(chalk.hex('#8a7768')([
+    console.log(chalk.hex('#a68a2a')([
       '',
       `  Session usage:`,
       `    Turns:        ${u.turns}`,
@@ -1872,7 +1871,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':workflows') {
     const workflows = await listWorkflows();
     if (workflows.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved workflows.\n'));
+      console.log(chalk.hex('#a68a2a')('\n  No saved workflows.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
@@ -1882,7 +1881,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
         console.log(
           `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex('#ede0cc')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex('#d4af37')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
           `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
         );
@@ -1955,7 +1954,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
       console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex('#8a7768')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex('#a68a2a')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
     return { handled: true };
@@ -2004,7 +2003,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
       console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex('#8a7768')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex('#a68a2a')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
     return { handled: true };
@@ -2131,14 +2130,14 @@ async function runArchitectPlan(
 
   // Display result
   console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-  console.log(chalk.hex('#ede0cc')(`  Task: ${blueprint.task}`));
+  console.log(chalk.hex('#d4af37')(`  Task: ${blueprint.task}`));
   console.log(chalk.hex('#4e3d30')(`  ID: ${blueprint.id}\n`));
 
   if (blueprint.files.length > 0) {
     console.log(chalk.hex('#cc785c').bold('  Files:\n'));
     for (const f of blueprint.files) {
       console.log(`    ${chalk.hex('#cc785c')(f.path)}`);
-      console.log(`      ${chalk.hex('#8a7768')(f.purpose)}`);
+      console.log(`      ${chalk.hex('#a68a2a')(f.purpose)}`);
       if (f.exports.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
       if (f.interfaces.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
     }
@@ -2147,14 +2146,14 @@ async function runArchitectPlan(
   if (blueprint.dataModels.length > 0) {
     console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
     for (const dm of blueprint.dataModels) {
-      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#8a7768')(dm.description)}`);
+      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#a68a2a')(dm.description)}`);
     }
   }
 
   if (blueprint.risks.length > 0) {
     console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
     for (const risk of blueprint.risks) {
-      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#8a7768')(risk)}`);
+      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#a68a2a')(risk)}`);
     }
   }
 
@@ -2266,13 +2265,13 @@ async function speakSummary(text: string): Promise<void> {
 
 function printHelp() {
   console.log(`
-${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: model-agnostic AI coding agent")}
+${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#a68a2a')("— Aura Code: model-agnostic AI coding agent")}
 
   ${chalk.hex('#4e3d30')('Usage:')}
-    aura ${chalk.hex('#8a7768')('"<task>"')}                           Run a single task
-    aura ${chalk.hex('#8a7768')('serve')}                              Start the HTTP API server
-    aura ${chalk.hex('#8a7768')('--interactive')}                      Start interactive REPL
-    aura ${chalk.hex('#8a7768')('--models')}                           List available models
+    aura ${chalk.hex('#a68a2a')('"<task>"')}                           Run a single task
+    aura ${chalk.hex('#a68a2a')('serve')}                              Start the HTTP API server
+    aura ${chalk.hex('#a68a2a')('--interactive')}                      Start interactive REPL
+    aura ${chalk.hex('#a68a2a')('--models')}                           List available models
 
   ${chalk.hex('#4e3d30')('Options:')}
     --model, -m <id>         Model to use (default: from ~/.config/aura-code/config.json)
