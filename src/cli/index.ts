@@ -42,8 +42,7 @@ import type { Blueprint } from '../architect/types.js';
 import { renderBanner, buildBannerLines } from './diamond.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
-import { HELP_TEXT, findCommand } from './help-data.js';
-import { loadAllPlugins } from '../plugins/loader.js';
+import { HELP_TEXT } from './help-data.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -967,21 +966,15 @@ async function main() {
     resolved.model ?? 'gpt-4o',
     resolved.model ?? 'gpt-4o',
   );
-  // ── Right-panel content: commands / skills / suggestions ────────────────
-  // Commands are looked up in HELP_TEXT (via findCommand) rather than
-  // re-typed here, so a rename/removal there just drops the entry instead
-  // of leaving a stale copy in the panel.
-  const QUICK_COMMANDS = [':dream', ':rem', ':machina', ':council', ':q', ':btw', ':doctor', '/context'];
-  const panelCommands = QUICK_COMMANDS
-    .map(name => findCommand(name))
-    .filter((c): c is NonNullable<typeof c> => c !== undefined)
-    .map(c => ({ cmd: c.cmd, desc: c.desc }));
-  const panelSkills = loadAllPlugins().flatMap(p => p.skills.map(s => s.name));
+  // ── Right-panel content: "Try" suggestions only ─────────────────────────
+  // The panel deliberately carries no Commands/Skills listings — the
+  // command list lives in :help and doesn't need permanent sidebar space
+  // next to the input.
   const panelSuggestions = [
     activeChatHistory.length === 0 ? ':help — see all commands' : ':doctor — scan for issues',
     ctx.language ? `run: ${ctx.language === 'TypeScript' || ctx.language === 'JavaScript' ? 'npm test' : ':graph'}` : ':viz — memory dashboard',
   ];
-  setPanelContent({ commands: panelCommands, skills: panelSkills, suggestions: panelSuggestions });
+  setPanelContent({ suggestions: panelSuggestions });
   // Unboxed metadata line under the input box, mirroring the reference's
   // "Build · <model> · <mode>" line under its own input box.
   setStatusLine([provider.name, runtimeConfig.model, permissionLevel].filter(Boolean).join(' · '));
