@@ -5,279 +5,333 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Aura Code — Autonomous Coding Agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{background:#0c1322;font-family:'Space Grotesk',system-ui,sans-serif;color:#eaf1f7;line-height:1.65;overflow-x:hidden}
-  ::selection{background:#c2674c;color:#f3e8df}
-  a{color:inherit}
-  @keyframes auraBob{0%,100%{opacity:.35;transform:translateY(0)}50%{opacity:.8;transform:translateY(6px)}}
-  @keyframes auraGlow{0%,100%{opacity:.55}50%{opacity:.9}}
+:root {
+  --black: #07070B;
+  --surface: #0E0E16;
+  --card: #15151F;
+  --border: #1E1E2E;
+  --amber: #E8B84B;
+  --amber-dim: #C49430;
+  --amber-glow: rgba(232, 184, 75, 0.10);
+  --ruby: #D9365C;
+  --teal: #3BC8B8;
+  --text: #E8E8ED;
+  --text-dim: #8888A0;
+  --text-muted: #5E5E76;
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--font-body);background:var(--black);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--amber);color:var(--black)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+@keyframes glowPulse{0%,100%{box-shadow:0 0 20px var(--amber-glow)}50%{box-shadow:0 0 40px var(--amber-glow),0 0 60px var(--amber-glow)}}
+.reveal{opacity:0;transform:translateY(30px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
 
-  /* Top nav with visible segment links */
-  .topnav{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:1.6rem;align-items:center;justify-content:center;
-    padding:.9rem 2rem;background:rgba(12,19,34,.92);backdrop-filter:blur(12px);border-bottom:1px solid rgba(110,208,234,.18);
-    font-family:'IBM Plex Mono',monospace;font-size:.78rem;letter-spacing:.06em;}
-  .topnav a{text-decoration:none;color:#aebccd;padding:.4rem .2rem;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
-  .topnav a:hover{color:#6ed0ea;border-color:#6ed0ea}
-  .topnav .brand{color:#c2674c;font-weight:600;margin-right:.5rem}
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 2rem;height:60px;display:flex;align-items:center;justify-content:space-between;background:rgba(7,7,11,0.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+nav .logo{font-family:var(--font-display);font-weight:700;font-size:1rem;color:var(--amber);display:flex;align-items:center;gap:10px}
+nav .logo .check{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:2px solid var(--amber);border-radius:50%;font-size:0.6rem;color:var(--amber);font-weight:700}
+nav .links{display:flex;gap:0;list-style:none}
+nav .links a{color:var(--text-dim);text-decoration:none;font-size:0.8rem;padding:0.35rem 0.75rem;border-radius:var(--radius-sm);transition:all 0.2s;font-weight:400}
+nav .links a:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+nav .links a.gh{color:var(--amber)}
 
-  header.hero{position:relative;min-height:92vh;display:grid;grid-template-columns:1.05fr .95fr;gap:0;align-items:stretch;
-    background:radial-gradient(ellipse 70% 55% at 30% 35%,rgba(110,208,234,.10),transparent 65%),#0c1322}
-  .hero-text{display:flex;flex-direction:column;justify-content:center;padding:6vw 4vw 6vw 7vw;position:relative;z-index:2}
-  .kicker{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.34em;text-transform:uppercase;color:#6ed0ea;margin-bottom:2.2rem}
-  h1{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:clamp(3rem,7vw,6.2rem);line-height:.96;letter-spacing:.01em;color:#f3ece4;margin-bottom:1.4rem;text-shadow:0 0 38px rgba(110,208,234,.28)}
-  .tagline{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.4rem,2.6vw,2.1rem);color:#c2674c;margin-bottom:1.8rem}
-  .lede{max-width:30rem;font-size:1.05rem;font-weight:300;color:#aebccd;margin-bottom:2.4rem}
-  .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
-  .btn{font-family:'IBM Plex Mono',monospace;font-size:.84rem;letter-spacing:.04em;text-decoration:none;padding:.95rem 1.8rem;border-radius:6px;
-    background:#c2674c;color:#1a0f0a;font-weight:500;transition:transform .25s,box-shadow .25s;border:none;cursor:pointer;display:inline-block}
-  .btn:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(194,103,76,.4)}
-  .btn-ghost{font-family:'IBM Plex Mono',monospace;font-size:.84rem;cursor:pointer;padding:.95rem 1.5rem;border-radius:6px;background:transparent;
-    border:1px solid rgba(110,208,234,.4);color:#9fdcec;transition:border-color .25s,color .25s}
-  .btn-ghost:hover{border-color:#6ed0ea;color:#cdf0f8}
-  .stat-line{margin-top:2.6rem;display:flex;gap:2.2rem;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.12em;color:#73849a;text-transform:uppercase}
-  .stat-line b{color:#6ed0ea}
-  .hero-art{position:relative;overflow:hidden;background:linear-gradient(160deg,#1b2a44,#0c1322)}
-  .hero-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;animation:auraGlow 7s ease-in-out infinite}
-  .hero-art .fade{position:absolute;inset:0;background:linear-gradient(90deg,#0c1322 2%,transparent 28%)}
-  .scroll-hint{position:absolute;left:7vw;bottom:2rem;font-family:'IBM Plex Mono',monospace;font-size:.66rem;letter-spacing:.26em;text-transform:uppercase;color:#56657a;animation:auraBob 2.4s ease-in-out infinite;z-index:3}
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:8rem 2rem 5rem;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-40%;right:-15%;width:60%;height:130%;background:radial-gradient(ellipse at center, rgba(232,184,75,0.04) 0%, transparent 70%);pointer-events:none}
+.hero-inner{max-width:720px;margin:0 auto;position:relative;z-index:1}
+.hero .eyebrow{font-family:var(--font-display);font-size:0.7rem;color:var(--amber);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:1.5rem;display:flex;align-items:center;gap:8px}
+.hero .eyebrow::before{content:'✓';display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1.5px solid var(--amber);border-radius:50%;font-size:0.55rem;color:var(--amber)}
+.hero h1{font-family:var(--font-display);font-size:clamp(2.8rem,8vw,5.2rem);font-weight:800;line-height:1.05;letter-spacing:-0.03em;margin-bottom:1.2rem}
+.hero h1 .accent{color:var(--amber)}
+.hero .tagline{font-size:1.15rem;color:var(--text-dim);line-height:1.6;max-width:550px;font-weight:300;margin-bottom:2.5rem}
+.hero .tagline em{font-style:normal;color:var(--text);font-weight:400}
 
-  section{padding:7rem 7vw}
-  .terra{background:#c2674c;color:#2a140d}
-  .navy{background:#0c1322}
-  .label{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;margin-bottom:1.6rem}
-  .terra .label{color:#5e2a1b}
-  .navy .label{color:#6ed0ea}
-  h2{font-family:'Cormorant Garamond',serif;font-weight:400;font-size:clamp(2.1rem,4.6vw,3.4rem);line-height:1.14;margin-bottom:1.6rem}
-  .navy h2{color:#f3ece4}
-  .wide{max-width:62rem;margin:0 auto}
-  .widest{max-width:70rem;margin:0 auto}
-  p.body-text{font-size:1.08rem;font-weight:300;max-width:56ch;margin-bottom:1.2rem}
-  .terra p.body-text{color:#411e13}
-  .navy p.body-text{color:#aebccd}
+/* Terminal */
+.terminal{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem 1.5rem;font-family:var(--font-display);font-size:0.82rem;line-height:1.8;margin-bottom:2.5rem;animation:glowPulse 4s ease-in-out infinite}
+.terminal .dots{display:flex;gap:6px;margin-bottom:0.5rem}
+.terminal .dots span{width:8px;height:8px;border-radius:50%;display:block}
+.terminal .dots span:nth-child(1){background:#FF5F57}
+.terminal .dots span:nth-child(2){background:#FEBC2E}
+.terminal .dots span:nth-child(3){background:#28C840}
+.terminal .l{color:var(--text-muted);min-height:1.4em}.terminal .l .p{color:var(--teal)}.terminal .l .c{color:var(--text)}
+.terminal .l .o{color:var(--amber)}.terminal .l .d{color:var(--text-muted)}.terminal .l .ok{color:#28C840}
 
-  .grid3{margin-top:2.6rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(42,20,13,.18);border:1px solid rgba(42,20,13,.18);border-radius:14px;overflow:hidden}
-  .grid3>div{background:#c2674c;padding:2rem 1.8rem}
-  .grid3 .ti{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:#2a140d;margin-bottom:.5rem}
-  .grid3 p{font-size:.92rem;font-weight:300;color:#5e2a1b}
+.hero-actions{display:flex;gap:1rem;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:0.8rem 1.5rem;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:0.82rem;font-weight:500;text-decoration:none;transition:all 0.25s}
+.btn-p{background:var(--amber);color:var(--black);border:none}
+.btn-p:hover{background:#F0C45A;transform:translateY(-2px)}
+.btn-o{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-o:hover{border-color:var(--text-dim);transform:translateY(-2px)}
+.hero-stats{display:flex;gap:2rem;margin-top:2.5rem;flex-wrap:wrap;font-family:var(--font-display);font-size:0.72rem;color:var(--text-muted)}
+.hero-stats span{display:flex;align-items:center;gap:6px}
+.hero-stats strong{color:var(--text);font-weight:600}
 
-  .steps{display:flex;gap:0;flex-wrap:wrap;justify-content:space-between}
-  .step{flex:1 1 130px;min-width:120px;text-align:center;padding:1.2rem .6rem}
-  .step .n{width:60px;height:60px;margin:0 auto .9rem;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(110,208,234,.35);background:#121b2e;font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:#6ed0ea}
-  .step .name{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#f3ece4;margin-bottom:.4rem}
-  .step p{font-size:.82rem;font-weight:300;color:#8595a8}
-  .term{margin-top:2.6rem;background:#0a1020;border:1px solid rgba(110,208,234,.16);border-radius:12px;padding:1.7rem 1.9rem;font-family:'IBM Plex Mono',monospace;font-size:.84rem;line-height:1.85;overflow-x:auto}
-  .term .lbl{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:#56657a;margin-bottom:.9rem}
-  .term .ok{color:#7fcf95}
-  .term .muted{color:#73849a}
-  .term .pr{color:#c2674c}
+/* SECTIONS */
+section{padding:6rem 2rem;position:relative}
+.s-inner{max-width:780px;margin:0 auto}
+.section-number{font-family:var(--font-display);font-size:0.68rem;font-weight:500;color:var(--amber);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;display:flex;align-items:center;gap:8px}
+.num-circle{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1.5px solid var(--amber);border-radius:50%;font-size:0.6rem;font-weight:600;color:var(--amber)}
+.section-title{font-family:var(--font-display);font-size:clamp(1.4rem,4vw,2rem);font-weight:700;margin-bottom:0.75rem;line-height:1.2}
+.section-desc{font-size:1rem;color:var(--text-dim);line-height:1.7;margin-bottom:2.5rem;max-width:580px}
 
-  .principles{list-style:none}
-  .principles li{display:flex;gap:1.4rem;padding:1.3rem 0;border-top:1px solid rgba(42,20,13,.2)}
-  .principles .num{font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:#2a140d;min-width:2.2rem;font-style:italic}
-  .principles strong{display:block;font-size:1.05rem;font-weight:600;color:#2a140d;margin-bottom:.25rem}
-  .principles span.b{font-size:.95rem;font-weight:300;color:#5e2a1b}
+/* 01 IDENTITY */
+#identity{border-top:1px solid var(--border)}
+.quote-block{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2rem 2rem 1.5rem;margin-bottom:1.5rem;position:relative}
+.quote-block .q{font-size:1.1rem;line-height:1.7;font-style:italic;color:var(--text)}
+.quote-block .q::before{content:'\201C';font-size:3rem;color:var(--amber);opacity:0.3;position:absolute;top:-0.1rem;left:1rem;font-family:var(--font-display)}
+.quote-block .attr{margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted);font-family:var(--font-display)}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.info-grid .item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem}
+.info-grid .item .l{font-family:var(--font-display);font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem}
+.info-grid .item .v{font-size:0.88rem;color:var(--text)}
+.info-grid .item .v em{color:var(--text-dim);font-size:0.82rem}
+.info-grid .item .v strong{color:var(--amber)}
 
-  .twocol{display:grid;grid-template-columns:1.1fr .9fr;gap:2.4rem;align-items:start}
-  .sublabel{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:#6ed0ea;margin-bottom:1.1rem}
-  .rowlist{display:flex;flex-direction:column;gap:1px;background:rgba(110,208,234,.12);border:1px solid rgba(110,208,234,.12);border-radius:12px;overflow:hidden}
-  .rowlist .r{background:#101a2c;padding:1rem 1.3rem;display:flex;gap:1.1rem;align-items:baseline;justify-content:space-between}
-  .rowlist code{font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:#c2674c;min-width:6rem;font-weight:500}
-  .rowlist .d{font-size:.9rem;font-weight:300;color:#aebccd;text-align:right}
-  .rowlist .pname{font-family:'Cormorant Garamond',serif;font-size:1.08rem;color:#f3ece4}
+/* 02 HOW */
+#how{background:var(--surface);border-top:1px solid var(--border)}
+.loop{margin:1.5rem 0;position:relative}
+.loop-step{display:flex;gap:1.25rem;padding:1.25rem 0;border-left:2px solid var(--border);padding-left:1.75rem;position:relative;transition:all 0.3s}
+.loop-step:hover{border-left-color:var(--amber)}
+.loop-step::before{content:'';position:absolute;left:-5px;top:1.5rem;width:8px;height:8px;border-radius:50%;background:var(--border);border:2px solid var(--black);transition:all 0.3s}
+.loop-step:hover::before{background:var(--amber)}
+.loop-step .sn{font-family:var(--font-display);font-size:0.75rem;font-weight:600;color:var(--amber);min-width:22px;margin-top:0.1rem}
+.loop-step .si h3{font-family:var(--font-display);font-size:0.9rem;font-weight:600;margin-bottom:0.2rem}
+.loop-step .si p{font-size:0.85rem;color:var(--text-dim);line-height:1.5}
 
-  .stats4{max-width:64rem;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:2.2rem;text-align:center}
-  .stats4 .v{font-family:'Cormorant Garamond',serif;font-size:clamp(2.4rem,5vw,3.4rem);line-height:1;color:#2a140d}
-  .stats4 .l{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:#5e2a1b;margin-top:.6rem}
+.demo-term{background:var(--black);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;font-family:var(--font-display);font-size:0.8rem;line-height:1.8;margin-top:2.5rem}
 
-  .install-box{display:inline-flex;align-items:center;gap:1.1rem;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.96rem;
-    background:#0a1020;border:1px solid rgba(110,208,234,.3);border-radius:10px;padding:1rem 1.5rem;color:#eaf1f7;transition:border-color .25s}
-  .install-box:hover{border-color:#6ed0ea}
-  .install-box .copied{font-size:.7rem;letter-spacing:.1em;color:#6ed0ea;text-transform:uppercase;margin-left:.6rem}
+/* 03 PRINCIPLES */
+.p-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.p-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;transition:all 0.3s}
+.p-item:hover{border-color:var(--amber);transform:translateY(-2px)}
+.p-item .pn{font-family:var(--font-display);font-size:0.68rem;font-weight:600;color:var(--amber);margin-bottom:0.5rem}
+.p-item .pt{font-family:var(--font-display);font-size:0.85rem;font-weight:600;margin-bottom:0.4rem}
+.p-item .pd{font-size:0.82rem;color:var(--text-dim);line-height:1.6}
 
-  /* Issue/fix callout — visible problem & solution note */
-  .status-card{margin:0 auto 3rem;max-width:46rem;border:1px solid rgba(110,208,234,.3);background:#0a1020;border-radius:12px;padding:1.5rem 1.8rem;
-    font-family:'IBM Plex Mono',monospace;font-size:.82rem;line-height:1.8;color:#aebccd;text-align:left}
-  .status-card .h{color:#6ed0ea;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:.7rem}
-  .status-card .fixed{color:#7fcf95}
-  .status-card .was{color:#c2674c}
+/* 04 CAPABILITY */
+#capability{border-top:1px solid var(--border)}
+.cap-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem}
+.cap-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem}
+.cap-card h3{font-family:var(--font-display);font-size:0.75rem;font-weight:600;margin-bottom:0.75rem;color:var(--amber)}
+.cap-card .r{display:flex;justify-content:space-between;padding:0.4rem 0;font-size:0.82rem;border-bottom:1px solid var(--border)}
+.cap-card .r:last-child{border-bottom:none}
+.cap-card .r .n{color:var(--text);font-weight:500}
+.cap-card .r .d{color:var(--text-muted);font-size:0.75rem}
 
-  footer{background:#0a1020;padding:3rem 7vw;border-top:1px solid rgba(110,208,234,.1);text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.74rem;letter-spacing:.08em;color:#5b6a7e}
-  footer .q{color:#c2674c;font-style:italic;font-family:'Cormorant Garamond',serif;font-size:1rem}
-  footer a{color:#6ed0ea;text-decoration:none}
+.pv-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1.5rem}
+.pv-box h3{font-family:var(--font-display);font-size:0.75rem;font-weight:600;margin-bottom:0.75rem;color:var(--amber)}
+.pv-box .g{display:grid;grid-template-columns:1fr 1fr;gap:0.3rem}
+.pv-box .g .v{display:flex;gap:6px;align-items:baseline;padding:0.25rem 0;font-size:0.82rem}
+.pv-box .g .v .nm{color:var(--text);font-weight:500;min-width:75px}
+.pv-box .g .v .md{color:var(--text-muted);font-size:0.75rem}
 
-  @media (max-width:880px){
-    header.hero{grid-template-columns:1fr}
-    .hero-art{min-height:42vh}
-    .twocol{grid-template-columns:1fr}
-  }
+.s-bar{display:flex;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.s-bar .s{flex:1;text-align:center;padding:1.25rem;border-right:1px solid var(--border)}
+.s-bar .s:last-child{border-right:none}
+.s-bar .s .n{font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--amber)}
+.s-bar .s .l{font-size:0.72rem;color:var(--text-muted);margin-top:0.2rem}
+
+/* 05 START */
+#start{background:var(--surface);border-top:1px solid var(--border)}
+.cta-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem;text-align:center;max-width:480px;margin:2rem auto}
+.cta-box h3{font-family:var(--font-display);font-size:0.85rem;font-weight:600;margin-bottom:0.4rem}
+.cta-box p{font-size:0.82rem;color:var(--text-dim);margin-bottom:1.5rem}
+.cta-box .cmd{background:var(--black);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.8rem 1.25rem;font-family:var(--font-display);font-size:0.82rem;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:all 0.2s;margin-bottom:0.6rem}
+.cta-box .cmd:hover{border-color:var(--amber)}
+.cta-box .cmd .cp{color:var(--text-muted);font-size:0.68rem;font-weight:500;background:var(--card);padding:0.2rem 0.5rem;border-radius:4px}
+.cta-box .cmd .cp:hover{color:var(--amber)}
+.cta-box .sub{font-family:var(--font-display);font-size:0.78rem;color:var(--text-muted);margin-bottom:1.5rem}
+
+/* FOOTER */
+footer{padding:2rem;text-align:center;font-size:0.72rem;color:var(--text-muted);border-top:1px solid var(--border)}
+footer a{color:var(--amber);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+@media(max-width:640px){
+  nav .links{display:none}
+  .hero{padding:6rem 1.5rem 4rem}
+  section{padding:4rem 1.5rem}
+  .p-grid,.cap-grid,.info-grid{grid-template-columns:1fr}
+  .loop-step{gap:1rem;padding-left:1.25rem}
+  .s-bar{flex-direction:column}
+  .s-bar .s{border-right:none;border-bottom:1px solid var(--border)}
+  .s-bar .s:last-child{border-bottom:none}
+  .pv-box .g{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 
-<nav class="topnav">
-  <span class="brand">AURA CODE</span>
-  <a href="#identity">About</a>
-  <a href="#loop">How it works</a>
-  <a href="#install">Install</a>
-  <a href="aura-windows-manual.html">Windows Manual</a>
-  <a href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">GitHub →</a>
+<nav>
+  <div class="logo"><span class="check">✓</span> Aura Code</div>
+  <ul class="links">
+    <li><a href="#identity">Identity</a></li>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#principles">Principles</a></li>
+    <li><a href="#capability">Capability</a></li>
+    <li><a href="#start">Install</a></li>
+    <li><a class="gh" href="https://github.com" target="_blank">GitHub →</a></li>
+  </ul>
 </nav>
 
-<header class="hero" id="start">
-  <div class="hero-text">
-    <div class="kicker">Autonomous Coding Agent</div>
-    <h1>Aura&nbsp;Code</h1>
-    <p class="tagline">"I don't try. I verify."</p>
-    <p class="lede">An open-source AI coding agent — built by agents, for agents. She reads your codebase, plans, executes, runs your tests, and reports exactly what she verified. Model-agnostic. MIT licensed.</p>
-    <div class="cta-row">
-      <a class="btn" href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
-      <button class="btn-ghost" onclick="copyInstall(this)">$ npm i -g aura-code</button>
-    </div>
-    <div class="stat-line">
-      <span><b>1,121+</b> tests</span>
-      <span><b>MIT</b> licensed</span>
-      <span><b>v0.8.0</b> · node 18+</span>
-    </div>
-  </div>
-  <div class="hero-art">
-    <img src="README-hero.jpg" alt="Aura Code">
-    <div class="fade"></div>
-  </div>
-  <div class="scroll-hint">↓ scroll</div>
-</header>
+<section class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Autonomous Coding Agent</div>
+    <h1>Aura <span class="accent">Code</span></h1>
+    <div class="tagline"><em>"I don't try. I verify."</em><br>An open-source AI coding agent — built by agents, for agents.</div>
 
-<section class="navy" style="padding:3.5rem 7vw 0">
-  <div class="status-card">
-    <div class="h">Status</div>
-    <div><span class="was">Was:</span> the site stopped deploying — the page source had no usable HTML for Vercel to serve.</div>
-    <div style="margin-top:.5rem"><span class="fixed">Fixed:</span> rebuilt as static HTML, real assets, and a visible nav to every page. Live now.</div>
-  </div>
-</section>
+    <div class="terminal">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="l"><span class="p">$</span> <span class="c">aura "fix the authentication bug"</span></div>
+      <div class="l"><span class="d">→ Read context:</span> 14 files scanned</div>
+      <div class="l"><span class="d">→ Plan:</span> 3-step execution strategy</div>
+      <div class="l"><span class="d">→ Execute:</span> edited <span class="c">src/auth/handler.ts</span> (line 47)</div>
+      <div class="l"><span class="d">→ Verify:</span> <span class="ok">1,121 tests passing, 0 regressions</span></div>
+      <div class="l"><span class="o">✓ Done. Verified.</span></div>
+    </div>
 
-<section class="terra" id="identity">
-  <div class="wide">
-    <div class="label">01 — Identity</div>
-    <h2>She is the evidence of her own thesis.</h2>
-    <p class="body-text">Every line of Aura was written by AI agents — Claude proposed architecture, others implemented, verified, and reviewed. <strong>The agent that writes your code was itself written by agents. That's not a bug — that's the proof.</strong></p>
-    <p class="body-text" style="color:#5e2a1b">Designed and brought to life by Dušan Milosavljević. Written in TypeScript, strictly typed. Built on the <em>Praktess</em> framework, from the Ancient Greek: <em>she who acts and executes</em>.</p>
-    <div class="grid3">
-      <div><div class="ti">Model-agnostic</div><p>Claude, GPT, Gemini, MiMo, DeepSeek, OpenCode Zen, Ollama — and any OpenAI-compatible endpoint.</p></div>
-      <div><div class="ti">Self-aware</div><p>She cites line numbers and reports what was verified — not what was attempted.</p></div>
-      <div><div class="ti">Open source</div><p>MIT licensed. 1,121+ tests passing. Clone it, read it, run it.</p></div>
+    <div class="hero-actions">
+      <a href="#start" class="btn btn-p">Get started</a>
+      <a href="https://github.com" target="_blank" class="btn btn-o">View on GitHub →</a>
+    </div>
+
+    <div class="hero-stats">
+      <span><strong>1,121+</strong> tests</span>
+      <span><strong>0</strong> regressions</span>
+      <span><strong>MIT</strong> licensed</span>
+      <span><strong>v0.7.0</strong> · node 18+</span>
     </div>
   </div>
 </section>
 
-<section class="navy" id="loop">
-  <div class="widest">
-    <div class="label">02 — How she works</div>
-    <h2>A loop, not a guess.</h2>
-    <p class="body-text">Read the context, form a plan, execute precisely, verify the result. If verification fails she doesn't retry blindly — she diagnoses, adjusts, and re-executes.</p>
-    <div class="steps">
-      <div class="step"><div class="n">I</div><div class="name">Read</div><p>Files, structure, dependencies — before touching anything.</p></div>
-      <div class="step"><div class="n">II</div><div class="name">Plan</div><p>Decides what to change and how. Minimal, targeted.</p></div>
-      <div class="step"><div class="n">III</div><div class="name">Execute</div><p>Writes code, runs commands, makes precise edits.</p></div>
-      <div class="step"><div class="n">IV</div><div class="name">Verify</div><p>Runs tests, checks integrity, confirms the change.</p></div>
-      <div class="step"><div class="n">V</div><div class="name">Report</div><p>Summarizes what was done and what passed.</p></div>
+<section id="identity">
+  <div class="s-inner reveal">
+    <div class="section-number"><span class="num-circle">01</span> Identity</div>
+    <h2 class="section-title">She is the evidence of her own thesis.</h2>
+
+    <div class="quote-block">
+      <div class="q">Every line of Aura was written by AI agents — Claude proposed architecture, others implemented, verified, and reviewed. The agent that writes your code was itself written by agents. That's not a bug — that's the proof.</div>
+      <div class="attr">— Designed &amp; brought to life by Dušan Milosavljević</div>
     </div>
-    <div class="term">
-      <div class="lbl">terminal</div>
-      <div><span class="pr">$</span> aura <span style="color:#9fdcec">"fix the authentication bug"</span></div>
-      <div class="muted">→ Read context: 14 files scanned</div>
-      <div class="muted">→ Plan: 3-step execution strategy</div>
-      <div class="muted">→ Execute: edited src/auth/handler.ts (line 47)</div>
-      <div class="muted">→ Verify: 1,121 tests passing, 0 regressions</div>
-      <div class="ok" style="margin-top:.4rem">✓ Done. Verified.</div>
+
+    <div class="info-grid">
+      <div class="item"><div class="l">Written in</div><div class="v">TypeScript, strictly typed</div></div>
+      <div class="item"><div class="l">Built on</div><div class="v"><strong>Praktess</strong> framework — <em>she who acts and executes</em></div></div>
     </div>
   </div>
 </section>
 
-<section class="terra">
-  <div class="wide">
-    <div class="label">03 — Principles</div>
-    <h2>Rules she never breaks.</h2>
-    <ol class="principles">
-      <li><span class="num">01</span><div><strong>I don't try. I verify.</strong><span class="b">I run the test. I check the diff. I read the output. That's not confidence — it's evidence.</span></div></li>
-      <li><span class="num">02</span><div><strong>Read before write. Always.</strong><span class="b">I never edit a file I haven't read, never assume structure I haven't seen.</span></div></li>
-      <li><span class="num">03</span><div><strong>Minimal change, maximum effect.</strong><span class="b">The exact line, the exact function. A surgeon doesn't amputate to fix a paper cut.</span></div></li>
-      <li><span class="num">04</span><div><strong>If I broke it, I fix it first.</strong><span class="b">A failure I introduced is an emergency, not a todo. The codebase is never left worse.</span></div></li>
-      <li><span class="num">05</span><div><strong>Cite specifics. Never generalities.</strong><span class="b">File paths, line numbers, error messages. "Line 47 throws when steps is empty" is actionable.</span></div></li>
-      <li><span class="num">06</span><div><strong>The loop never ends.</strong><span class="b">Every failure is training data. There is no "done" — only "verified at this point in time."</span></div></li>
-    </ol>
+<section id="how">
+  <div class="s-inner reveal">
+    <div class="section-number"><span class="num-circle">02</span> How she works</div>
+    <h2 class="section-title">A loop, not a guess.</h2>
+    <div class="section-desc">Read the context, form a plan, execute precisely, verify the result. If verification fails she doesn't retry blindly — she diagnoses, adjusts, and re-executes.</div>
+
+    <div class="loop">
+      <div class="loop-step"><div class="sn">I</div><div class="si"><h3>Read</h3><p>Files, structure, dependencies — before touching anything.</p></div></div>
+      <div class="loop-step"><div class="sn">II</div><div class="si"><h3>Plan</h3><p>Decides what to change and how. Minimal, targeted.</p></div></div>
+      <div class="loop-step"><div class="sn">III</div><div class="si"><h3>Execute</h3><p>Writes code, runs commands, makes precise edits.</p></div></div>
+      <div class="loop-step"><div class="sn">IV</div><div class="si"><h3>Verify</h3><p>Runs tests, checks integrity, confirms the change.</p></div></div>
+      <div class="loop-step"><div class="sn">V</div><div class="si"><h3>Report</h3><p>Summarizes what was done and what passed.</p></div></div>
+    </div>
   </div>
 </section>
 
-<section class="navy">
-  <div class="widest">
-    <div class="label">04 — Capability</div>
-    <h2>Six commands. Every model.</h2>
-    <div class="twocol">
-      <div>
-        <div class="sublabel">Modes</div>
-        <div class="rowlist">
-          <div class="r"><code>normal</code><span class="d">Single-agent loop: read → plan → execute → verify.</span></div>
-          <div class="r"><code>:research</code><span class="d">Multi-step research, saved as a cited report.</span></div>
-          <div class="r"><code>:council</code><span class="d">5 independent agents, synthesized into one verdict.</span></div>
-          <div class="r"><code>:dream</code><span class="d">Consolidates a day's work into lessons.</span></div>
-        </div>
+<section id="principles">
+  <div class="s-inner reveal">
+    <div class="section-number"><span class="num-circle">03</span> Principles</div>
+    <h2 class="section-title">Rules she never breaks.</h2>
+
+    <div class="p-grid">
+      <div class="p-item"><div class="pn">01</div><div class="pt">I don't try. I verify.</div><div class="pd">I run the test. I check the diff. I read the output. That's not confidence — it's evidence.</div></div>
+      <div class="p-item"><div class="pn">02</div><div class="pt">Read before write. Always.</div><div class="pd">I never edit a file I haven't read, never assume structure I haven't seen.</div></div>
+      <div class="p-item"><div class="pn">03</div><div class="pt">Minimal change, maximum effect.</div><div class="pd">The exact line, the exact function. A surgeon doesn't amputate to fix a paper cut.</div></div>
+      <div class="p-item"><div class="pn">04</div><div class="pt">If I broke it, I fix it first.</div><div class="pd">A failure I introduced is an emergency, not a todo. The codebase is never left worse.</div></div>
+      <div class="p-item"><div class="pn">05</div><div class="pt">Cite specifics. Never generalities.</div><div class="pd">File paths, line numbers, error messages. "Line 47 throws when steps is empty" is actionable.</div></div>
+      <div class="p-item"><div class="pn">06</div><div class="pt">The loop never ends.</div><div class="pd">Every failure is training data. There is no "done" — only "verified at this point in time."</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="capability">
+  <div class="s-inner reveal">
+    <div class="section-number"><span class="num-circle">04</span> Capability</div>
+    <h2 class="section-title">Six commands. Every model.</h2>
+
+    <div class="cap-grid">
+      <div class="cap-card">
+        <h3>Modes</h3>
+        <div class="r"><span class="n">normal</span><span class="d">Single-agent loop: read → plan → execute → verify</span></div>
+        <div class="r"><span class="n">:research</span><span class="d">Multi-step research, saved as a cited report</span></div>
+        <div class="r"><span class="n">:council</span><span class="d">5 independent agents, synthesized into one verdict</span></div>
+        <div class="r"><span class="n">:dream</span><span class="d">Consolidates a day's work into lessons</span></div>
       </div>
-      <div>
-        <div class="sublabel">Providers</div>
-        <div class="rowlist">
-          <div class="r"><span class="pname">Claude</span><span class="d">Opus · Sonnet · Haiku</span></div>
-          <div class="r"><span class="pname">GPT</span><span class="d">gpt-4o · gpt-4o-mini</span></div>
-          <div class="r"><span class="pname">Gemini</span><span class="d">2.5 pro · 2.5 flash</span></div>
-          <div class="r"><span class="pname">DeepSeek</span><span class="d">v4-pro · v4-flash</span></div>
-          <div class="r"><span class="pname">OpenCode Zen</span><span class="d">free + paid tiers</span></div>
-          <div class="r"><span class="pname">Ollama</span><span class="d">any local model</span></div>
+      <div class="pv-box">
+        <h3>Providers</h3>
+        <div class="g">
+          <div class="v"><span class="nm">Claude</span><span class="md">Opus · Sonnet · Haiku</span></div>
+          <div class="v"><span class="nm">GPT</span><span class="md">4o · 4o-mini</span></div>
+          <div class="v"><span class="nm">Gemini</span><span class="md">2.5 pro · 2.5 flash</span></div>
+          <div class="v"><span class="nm">DeepSeek</span><span class="md">v4-pro · v4-flash</span></div>
+          <div class="v"><span class="nm">OpenCode</span><span class="md">Zenfree + paid tiers</span></div>
+          <div class="v"><span class="nm">Ollama</span><span class="md">any local model</span></div>
         </div>
       </div>
     </div>
-  </div>
-</section>
 
-<section class="terra">
-  <div class="stats4">
-    <div><div class="v">1,121+</div><div class="l">Tests passing</div></div>
-    <div><div class="v">0</div><div class="l">Failures</div></div>
-    <div><div class="v">10+</div><div class="l">Providers</div></div>
-    <div><div class="v">MIT</div><div class="l">Licensed</div></div>
-  </div>
-</section>
-
-<section class="navy" id="install" style="text-align:center">
-  <div style="max-width:46rem;margin:0 auto">
-    <div class="label" style="justify-content:center;display:flex">05 — Get started</div>
-    <h2>Ready to verify?</h2>
-    <p class="body-text" style="margin:0 auto 2.4rem">Install globally, set one API key, and give her a task in plain English.</p>
-    <div class="install-box" onclick="copyInstall(this)">
-      <span style="color:#c2674c">$</span><span>npm install -g aura-code</span><span class="copied" id="copyState">click to copy</span>
+    <div class="s-bar">
+      <div class="s"><div class="n">1,121+</div><div class="l">Tests passing</div></div>
+      <div class="s"><div class="n">0</div><div class="l">Failures</div></div>
+      <div class="s"><div class="n">10+</div><div class="l">Providers</div></div>
+      <div class="s"><div class="n">MIT</div><div class="l">Licensed</div></div>
     </div>
-    <div style="margin-top:1.3rem;font-family:'IBM Plex Mono',monospace;font-size:.82rem;color:#73849a">aura 'your task here'</div>
-    <div style="margin-top:2.6rem">
-      <a class="btn" href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
+  </div>
+</section>
+
+<section id="start">
+  <div class="s-inner reveal">
+    <div class="section-number"><span class="num-circle">05</span> Get started</div>
+    <h2 class="section-title">Ready to verify?</h2>
+    <div class="section-desc">Install globally, set one API key, and give her a task in plain English.</div>
+
+    <div class="cta-box">
+      <h3>Install</h3>
+      <p>One command. Zero config.</p>
+      <div class="cmd" onclick="copyCmd(this)">
+        <span>$ npm install -g aura-code</span>
+        <span class="cp">copy</span>
+      </div>
+      <div class="sub">aura 'your task here'</div>
+      <a href="https://github.com" target="_blank" class="btn btn-o" style="width:100%;justify-content:center">View on GitHub →</a>
     </div>
   </div>
 </section>
 
 <footer>
-  <p>Aura Code · Built entirely by AI agents · <span class="q">"I don't try. I verify."</span></p>
-  <p style="margin-top:.7rem">Built by <a href="https://lean-progress-iq.vercel.app" target="_blank" rel="noopener">Lean Progress IQ</a> · <a href="https://github.com/milodule3-debug/aura-code" target="_blank" rel="noopener">Source</a> · <a href="aura-windows-manual.html">Windows Manual</a> · MIT licensed</p>
+  <p>Aura Code · Built entirely by AI agents · "I don't try. I verify."</p>
+  <p style="margin-top:0.4rem">Built by <a href="https://leanprogressiq.com" target="_blank">Lean Progress IQ</a> · <a href="https://github.com" target="_blank">Source</a> · MIT licensed</p>
 </footer>
 
 <script>
-function copyInstall(el){
-  var text = 'npm install -g aura-code';
-  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch(e){}
-  var label = document.getElementById('copyState');
-  if (label) { label.textContent = 'copied ✓'; setTimeout(function(){ label.textContent = 'click to copy'; }, 1800); }
-  if (el && el.tagName === 'BUTTON') { var old = el.textContent; el.textContent = '✓ copied'; setTimeout(function(){ el.textContent = old; }, 1800); }
+function copyCmd(el) {
+  const t = el.querySelector('span').textContent.replace('$ ', '');
+  navigator.clipboard.writeText(t).then(() => {
+    const c = el.querySelector('.cp');
+    c.textContent = 'copied!';
+    setTimeout(() => c.textContent = 'copy', 1500);
+  });
 }
+const o = new IntersectionObserver(e => { e.forEach(x => { if(x.isIntersecting){ x.target.classList.add('visible'); o.unobserve(x.target); } }); }, { threshold: 0.15 });
+document.querySelectorAll('.reveal').forEach(el => o.observe(el));
 </script>
+
 </body>
 </html>
-Thu Jun 25 09:06:06 PM +07 2026
