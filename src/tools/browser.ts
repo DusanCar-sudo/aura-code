@@ -92,13 +92,15 @@ function findChrome(): string | null {
     'google-chrome-stable',
     'chromium-browser',
     'chromium',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
   ];
   for (const cmd of candidates) {
     try {
-      execSync(`which ${cmd}`, { stdio: 'pipe' });
-      return cmd;
+      const resolved = execSync(`which ${cmd}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      if (resolved) {
+        // Resolve symlinks to get the real executable path (Puppeteer needs it)
+        const real = execSync(`readlink -f "${resolved}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+        return real || resolved;
+      }
     } catch {
       // not found, try next
     }
