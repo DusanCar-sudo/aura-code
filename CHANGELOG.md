@@ -2,6 +2,81 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.9.0] — 2026-07-09
+
+The arc of this release: a week-long audit found six complete, tested
+subsystems that had never been wired into anything. All six are now live,
+the safety layer they exposed a hole in is patched, and the self-checking
+spec that kept false-failing on line drift is fixed at the root.
+
+### Added
+- **MCP client — Aura can connect to any MCP server.** `src/tools/mcp.ts`
+  (a full stdio MCP client: `connect`/`disconnect`/`list_tools`/
+  `call_tool`/`list_servers`) existed, tested, but was absent from the tool
+  registry. Now registered: any MCP-ecosystem server (GitHub, databases,
+  Puppeteer/Playwright browser automation, …) becomes callable mid-task
+  with no integration code. Safety model: `connect` requires y/N
+  confirmation in normal mode (like `run_shell`), dangerous spawn patterns
+  are blocked in **all** modes including `--auto`, read-only mode blocks
+  `mcp` entirely, and the trust boundary is the connection — an approved
+  server's tools run via `call_tool` without further per-call prompts.
+- **`:ecclesia <topic> [--panel <model>] [--seats <n>]`** — the 5-agent
+  independent research council (`src/research/council.ts`): N agents
+  research a topic without seeing each other's findings, one synthesis
+  call reconciles them into convergent/contested/minority/verdict, saved
+  to `council/*.md|.html`. Live-tested end-to-end (the first runs caught
+  two real bugs — see Fixed).
+- **`:mine [--refine]`** — experience mining (`src/mining/`): zero-LLM
+  keyword clustering over `episodes/*.json` (Baby Ruby), with `--refine`
+  running one local-model judgment per qualifying concept (Papa Ruby) and
+  appending accepted lessons to `training-data/<date>.jsonl`.
+- **`npm run repair-anchors`** — explicit, deliberate re-anchoring of the
+  `:machina` AAM spec's line numbers (never a side effect of verification).
+- **TUI rebuild** — vim-style modal scrollback on an isolated alt screen
+  (INSERT/SCROLL modes, mode indicator), 5-row input box, Try-only sidebar.
+- **Skills catalog** — AntV chart/infographic skills (antv-s2-expert,
+  chart-visualization, infographic-creator) and the website-design stack
+  (frontend-design, webapp-testing, accesslint-{scan,diff,audit},
+  theme-factory).
+
+### Fixed
+- **`mcp connect` bypassed the permission system.** `PermissionSystem`
+  special-cased only `run_shell`/`write_file`; every other tool fell
+  through to default-allow — so spawning an arbitrary MCP server process
+  needed no confirmation in normal mode and skipped the dangerous-pattern
+  screen even in `--auto`. Now gated with the same screening as
+  `run_shell` plus an unconditional confirm at connect.
+- **AAM claims false-failed on pure line shifts** (three times in one
+  week). Line anchors are now lookup hints: content found elsewhere in the
+  file reports as `drifted` (passing, with recorded → actual line);
+  only content genuinely missing from the file fails.
+- **Ecclesia panel agents all hit 401s** — panel model resolution fell
+  back to the provider instance's prefix-stripped model id
+  (`deepseek-v4-flash`), which re-resolved through the generic
+  OpenAI-compatible provider (wrong endpoint). The session's configured
+  routing id is now threaded through.
+- **Ecclesia synthesis fabricated a council from nothing** — agents that
+  hit their turn cap returned "Loop ended after 6 turns." as their
+  findings, and the synthesis model invented agent positions and sources
+  from those five empty markers. The panel now salvages each agent's last
+  real message, and agents with no output are reported honestly.
+- **`findChrome()` returned symlinks** (`/usr/bin/google-chrome`) that
+  Puppeteer can't launch — now resolved via `readlink -f`.
+- **`dic` hung on some OpenAI-compatible endpoints** (e.g. Xiaomi MiMo
+  Token Plan) — the SDK's default keep-alive agent is replaced with a
+  plain `https.Agent({ keepAlive: false })`.
+
+### Changed
+- **Repo hygiene** — the repo root now contains only aura-code itself.
+  Personal/utility material (presentations, one-off pages, video projects,
+  the tracked `miscellaneous/` snapshot dump, zero-byte artifacts) moved
+  out to a sibling `projects/` tree; standing rule established that new
+  non-aura work never lands in the repo root.
+
+### Tests
+- Full suite: **1331 passing, 0 failures** (95 files), up from 1317 —
+  +6 for the mcp permission gate, +8 for AAM anchor drift/repair.
+
 ## [0.8.0] — 2026-07-07
 
 ### Added

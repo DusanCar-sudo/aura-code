@@ -23,7 +23,9 @@ always available. Status: **shipped** (`src/mining/extract.ts`).
 
 **Papa Ruby = reasoning.** Local LLM (Ollama), takes Baby Ruby's concepts as
 input, produces `TrainingExample[]` (the type already exists in
-`src/ruby/types.ts`). Status: **not yet built — this document is the spec.**
+`src/ruby/types.ts`). Status: **shipped** (`src/mining/refine.ts`) — run the
+whole pipeline via `:mine --refine`; accepted lessons append to
+`training-data/<date>.jsonl`.
 
 ## What Baby Ruby produces (already shipped)
 

@@ -12,7 +12,7 @@ command line. Given a natural-language task, it reads a codebase, plans a
 strategy, executes changes (editing files, running commands), verifies the
 result (tests, integrity checks), and reports what it did.
 
-- **Package:** `aura-code` (v0.3.0), CLI binary `aura`
+- **Package:** `aura-code` (v0.9.0), CLI binary `aura`
 - **Language:** TypeScript (strict), CommonJS, Node ≥ 18
 - **Framework name:** *Praktess* ("she who acts and executes")
 - **License:** MIT
@@ -107,7 +107,9 @@ Defined in `src/tools/` and registered in `src/tools/index.ts`:
 `read_file`, `list_dir`, `edit_file`, `write_file`, `search_code`, `run_shell`,
 `run_tests`, `git` (status/diff), `spawn_task` (sub-agents), `web_fetch`,
 `web_search`, `browser`, `http_request`, `memory`, `clipboard`, `notify`,
-`image_read`, `email`, `calendar`, `telegram`, `whatsapp`, `cron`.
+`image_read`, `email`, `calendar`, `telegram`, `whatsapp`, `cron`, `mcp`
+(MCP client — connect/disconnect/list_tools/call_tool/list_servers; `connect`
+is permission-gated like `run_shell`).
 
 ---
 
