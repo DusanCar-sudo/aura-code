@@ -6,21 +6,23 @@ import { verifyAamClaims, resolveAuraRepoRoot } from '../../src/machina/verify.j
 import { AAM_CLAIMS } from '../../src/machina/spec.js';
 
 describe('verifyAamClaims against the real, current source tree', () => {
-  it('every claim in AAM_CLAIMS verifies against the actual aura-code repo', () => {
+  it('every claim in AAM_CLAIMS holds against the actual aura-code repo', () => {
     // This is the test that matters most: it catches the exact failure mode
-    // the old (never self-checking) AAM-SPEC.md had — claims that quietly
-    // drift from the code as it changes. Run against the real repo root.
+    // the old (never self-checking) AAM-SPEC.md had — claims whose content
+    // quietly disappears from the code. Stale line anchors (status 'drifted')
+    // do NOT fail here: pure line churn is noise, and re-anchoring is a
+    // deliberate `npm run repair-anchors`, not a test failure.
     const repoRoot = resolveAuraRepoRoot();
     const report = verifyAamClaims(repoRoot);
 
-    if (report.drifted.length > 0 || report.missing.length > 0) {
-      const details = [...report.drifted, ...report.missing]
-        .map(r => `  [${r.status}] ${r.id} — ${r.file}:${r.line} expected "${r.mustContain}", found "${r.actualLine ?? '(missing)'}"`)
+    if (report.missing.length > 0) {
+      const details = report.missing
+        .map(r => `  [missing] ${r.id} — ${r.file}:${r.line} expected "${r.mustContain}", found "${r.actualLine ?? '(file missing)'}"`)
         .join('\n');
-      throw new Error(`AAM claims have drifted from source:\n${details}`);
+      throw new Error(`AAM claims are genuinely false against source:\n${details}`);
     }
 
-    expect(report.verifiedCount).toBe(AAM_CLAIMS.length);
+    expect(report.verifiedCount + report.drifted.length).toBe(AAM_CLAIMS.length);
   });
 });
 
@@ -62,24 +64,44 @@ describe('verifyAamClaims against a controlled fixture tree', () => {
     expect(result.status).toBe('verified');
   });
 
-  it('marks a claim "drifted" when the line exists but content changed (the code moved)', () => {
+  it('marks a claim "drifted" (still passing) when an unrelated line above shifts it', () => {
+    // The exact false-positive that bit three times in one week: an edit
+    // ABOVE the claimed line shifts every anchor below it. The content is
+    // still true — it just moved. That must report drifted + foundLine, not
+    // a failure.
     const mainLoopClaim = AAM_CLAIMS.find(c => c.id === 'main-loop')!;
-    // Build the fixture from every claim that shares mainLoopClaim.file, so
-    // claims at OTHER lines in the same file stay correctly "verified" and
-    // don't incidentally register as drifted noise in this test.
+    const sameFileClaims = AAM_CLAIMS.filter(c => c.file === mainLoopClaim.file);
+    const totalLines = Math.max(...sameFileClaims.map(c => c.line));
+    const lines = Array.from({ length: totalLines }, (_, i) => `// filler line ${i + 1}`);
+    for (const c of sameFileClaims) lines[c.line - 1] = c.mustContain;
+    lines.unshift('// an unrelated new import, say');   // the one-line shift
+    writeFixtureFile(mainLoopClaim.file, lines);
+
+    const report = verifyAamClaims(repoRoot);
+    for (const c of sameFileClaims) {
+      const r = report.results.find(x => x.id === c.id)!;
+      expect(r.status).toBe('drifted');
+      expect(r.foundLine).toBe(c.line + 1);
+    }
+    // Drifted is a passing state: nothing is missing, nothing failed.
+    expect(report.missing.filter(r => r.file === mainLoopClaim.file)).toHaveLength(0);
+  });
+
+  it('marks a claim "missing" when the content is nowhere in the file (genuine drift)', () => {
+    const mainLoopClaim = AAM_CLAIMS.find(c => c.id === 'main-loop')!;
     const sameFileClaims = AAM_CLAIMS.filter(c => c.file === mainLoopClaim.file);
     const totalLines = Math.max(...sameFileClaims.map(c => c.line));
     const lines = Array.from({ length: totalLines }, (_, i) => `// filler line ${i + 1}`);
     for (const c of sameFileClaims) {
       lines[c.line - 1] = c.id === mainLoopClaim.id
-        ? '  for (let t = 0; t < maxTurns; t++) {' // the one claim under test: drifted
+        ? '  for (let t = 0; t < maxTurns; t++) {' // content genuinely replaced
         : c.mustContain; // every other co-located claim: correct, stays verified
     }
     writeFixtureFile(mainLoopClaim.file, lines);
 
     const report = verifyAamClaims(repoRoot);
     const mainResult = report.results.find(r => r.id === mainLoopClaim.id)!;
-    expect(mainResult.status).toBe('drifted');
+    expect(mainResult.status).toBe('missing');
     expect(mainResult.actualLine).toContain('for (let t = 0');
 
     for (const c of sameFileClaims) {
@@ -87,26 +109,33 @@ describe('verifyAamClaims against a controlled fixture tree', () => {
       expect(report.results.find(r => r.id === c.id)?.status).toBe('verified');
     }
 
-    expect(report.drifted).toHaveLength(1);
+    expect(report.drifted).toHaveLength(0);
   });
 
   it('reports a per-claim mix of verified/drifted/missing independently', () => {
     const mainLoopClaim = AAM_CLAIMS.find(c => c.id === 'main-loop')!;
     const oracleClaim = AAM_CLAIMS.find(c => c.id === 'oracle-call')!;
-    // All claims sharing loop.ts get filled correctly except oracle-call,
-    // which gets deliberately wrong content -> drifted. Every claim in a
-    // DIFFERENT file is left missing (never created).
+    // All claims sharing loop.ts get filled correctly except oracle-call:
+    // its content is placed at the WRONG line -> drifted (still passing).
+    // Every claim in a DIFFERENT file is left missing (never created).
     const sameFileClaims = AAM_CLAIMS.filter(c => c.file === mainLoopClaim.file);
-    const totalLines = Math.max(...sameFileClaims.map(c => c.line));
+    const totalLines = Math.max(...sameFileClaims.map(c => c.line)) + 1;
     const lines = Array.from({ length: totalLines }, (_, i) => `// filler line ${i + 1}`);
     for (const c of sameFileClaims) {
-      lines[c.line - 1] = c.id === oracleClaim.id ? '  const stream = somethingElse();' : c.mustContain;
+      if (c.id === oracleClaim.id) {
+        lines[c.line - 1] = '  const stream = somethingElse();';
+        lines[totalLines - 1] = c.mustContain; // moved, not gone
+      } else {
+        lines[c.line - 1] = c.mustContain;
+      }
     }
     writeFixtureFile(mainLoopClaim.file, lines);
 
     const report = verifyAamClaims(repoRoot);
     expect(report.results.find(r => r.id === 'main-loop')?.status).toBe('verified');
-    expect(report.results.find(r => r.id === 'oracle-call')?.status).toBe('drifted');
+    const oracleResult = report.results.find(r => r.id === 'oracle-call')!;
+    expect(oracleResult.status).toBe('drifted');
+    expect(oracleResult.foundLine).toBe(totalLines);
     expect(report.drifted.map(r => r.id)).toEqual(['oracle-call']);
     expect(report.verifiedCount).toBe(sameFileClaims.length - 1);
     expect(report.missing.length).toBe(AAM_CLAIMS.length - sameFileClaims.length);
