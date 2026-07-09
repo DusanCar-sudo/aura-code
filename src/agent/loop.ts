@@ -448,5 +448,9 @@ async function persist(path: string | undefined, history: HistoryMessage[]): Pro
 function formatCallForConfirmation(call: ToolCall): string {
   if (call.name === 'run_shell') return `$ ${call.input.command}`;
   if (call.name === 'write_file') return `overwrite ${call.input.path}`;
+  if (call.name === 'mcp' && call.input.action === 'connect') {
+    const args = Array.isArray(call.input.args_list) ? (call.input.args_list as string[]).join(' ') : '';
+    return `spawn MCP server '${call.input.server}': ${call.input.command} ${args}`.trim();
+  }
   return `${call.name}(${JSON.stringify(call.input).slice(0, 80)})`;
 }

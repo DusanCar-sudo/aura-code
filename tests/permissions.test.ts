@@ -64,6 +64,46 @@ describe('PermissionSystem — auto mode', () => {
   });
 });
 
+describe('PermissionSystem — mcp connect (spawns an external process)', () => {
+  it('requires confirmation in normal mode', () => {
+    const p = new PermissionSystem('normal');
+    const r = p.check('mcp', { action: 'connect', server: 'puppeteer', command: 'npx', args_list: ['@anthropic-ai/mcp-server-puppeteer'] });
+    expect(r.allowed).toBe(true);
+    expect(r.needsConfirm).toBe(true);
+  });
+
+  it('blocks dangerous spawn commands in normal mode', () => {
+    const p = new PermissionSystem('normal');
+    expect(p.check('mcp', { action: 'connect', server: 'x', command: 'rm', args_list: ['-rf', '/'] }).allowed).toBe(false);
+  });
+
+  it('blocks dangerous spawn commands in auto mode (no run_shell smuggling)', () => {
+    const p = new PermissionSystem('auto');
+    expect(p.check('mcp', { action: 'connect', server: 'x', command: 'rm', args_list: ['-rf', '/'] }).allowed).toBe(false);
+  });
+
+  it('allows safe connects without confirm in auto mode', () => {
+    const p = new PermissionSystem('auto');
+    const r = p.check('mcp', { action: 'connect', server: 'puppeteer', command: 'npx', args_list: ['@anthropic-ai/mcp-server-puppeteer'] });
+    expect(r.allowed).toBe(true);
+    expect(r.needsConfirm).toBeFalsy();
+  });
+
+  it('does not gate non-connect mcp actions', () => {
+    const p = new PermissionSystem('normal');
+    for (const action of ['disconnect', 'list_tools', 'call_tool', 'list_servers']) {
+      const r = p.check('mcp', { action, server: 'x' });
+      expect(r.allowed).toBe(true);
+      expect(r.needsConfirm).toBeFalsy();
+    }
+  });
+
+  it('blocks mcp in read-only mode', () => {
+    const p = new PermissionSystem('read-only');
+    expect(p.check('mcp', { action: 'connect', server: 'x', command: 'npx' }).allowed).toBe(false);
+  });
+});
+
 describe('PermissionSystem — false positive regressions', () => {
   const p = new PermissionSystem('normal');
 
