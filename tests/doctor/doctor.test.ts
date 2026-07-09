@@ -33,7 +33,10 @@ describe('Aura Doctor — real repo', () => {
     expect(cats.has('env')).toBe(true);
     expect(cats.has('version')).toBe(true);
     expect(cats.has('memory')).toBe(true);
-    expect(report.version).toBe('0.8.0');
+    // Compare against the real package.json rather than a hardcoded literal —
+    // a version bump must not fail this test.
+    const pkgVersion = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version;
+    expect(report.version).toBe(pkgVersion);
     expect(report.summary.ok).toBeGreaterThan(0);
   });
 

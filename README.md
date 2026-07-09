@@ -67,9 +67,9 @@ See [docs/MEMORY.md](docs/MEMORY.md) and [examples/](examples/) for the full pic
 
 ---
 
-### Context compaction (new)
+### Context compaction
 
-Long sessions now auto-summarize older turns to stay within the model's
+Long sessions auto-summarize older turns to stay within the model's
 context window instead of growing unbounded. This is recently added and
 still being hardened against edge cases in unusual tool-call sequences —
 if you hit a session that loses track of something it already did, that's
@@ -142,6 +142,40 @@ attempt 4 kinds of auto-repair with `--doctor --fix`.
 
 ---
 
+## MCP — plug any MCP server into a task
+
+New in 0.9.0: Aura is an **MCP client**. The `mcp` tool (actions:
+`connect`, `disconnect`, `list_tools`, `call_tool`, `list_servers`) spawns
+an external Model Context Protocol server over stdio and makes its tools
+callable mid-task — no integration code, no restart.
+
+What that unlocks in practice: anything in the MCP ecosystem becomes a tool
+Aura can reach for while working — GitHub servers, database servers
+(Postgres, SQLite), browser automation (Puppeteer/Playwright servers),
+Slack, filesystem sandboxes. Aura can decide mid-task "I need a real
+browser for this", connect `npx @anthropic-ai/mcp-server-puppeteer`, and
+keep going.
+
+**The safety model** (deliberate design, so you understand it rather than
+discover it):
+
+- `connect` **requires a y/N confirmation in normal mode**, exactly like a
+  non-safe `run_shell` command — the prompt shows the full spawn command
+  (`spawn MCP server 'puppeteer': npx @anthropic-ai/mcp-server-puppeteer`).
+- Dangerous spawn patterns are **blocked in every mode, including
+  `--auto`** — wrapping a destructive command in `mcp connect` cannot
+  bypass the `run_shell` screen.
+- **Read-only mode blocks `mcp` entirely.**
+- **The trust boundary is the connection.** Once a server is approved and
+  connected, its tools run via `call_tool` *without further per-call
+  prompts* — approve a server the way you'd approve running its binary.
+  (A live 5-agent [`:ecclesia` review of this design](council/2026-07-09-mcp-server-trust-boundaries-in-ai-coding-agents-is-confirm-a.md)
+  concluded connect-time confirmation is the dominant deployed model across
+  MCP clients — the protocol defines no per-call authorization — but
+  recommends per-call prompts for destructive tools as a hardening step.)
+
+---
+
 ## Interactive Commands (REPL)
 
 Run `aura --interactive` (or just `aura` with no task) to drop into the REPL.
@@ -153,6 +187,9 @@ Run `aura --interactive` (or just `aura` with no task) to drop into the REPL.
 | `:rem` | Show the reconciled memory projection, or the latest dream if none exists yet. |
 | `:machina <task>` | Run a task with self-verification and automatic retry on failure. |
 | `:council <task>` | 2-3 parallel read-only domain specialists, then a synthesis pass. |
+| `:ecclesia <topic>` | 5 independent research agents (none sees the others' work) + a synthesis verdict — convergent/contested/minority — saved to `council/*.md\|.html`. `--panel <model>`, `--seats <n>`. |
+| `:mine` / `:mine --refine` | Mine `episodes/*.json` for recurring patterns — zero-LLM clustering. `--refine` judges each concept with the local Ruby model and appends training rows to `training-data/*.jsonl`. |
+| `:confess` / `:confessions` | Auto-detect and write up an anomalous high-token episode; list past confessions. |
 | `:q add / list / run / drop / clear` | Persistent task queue — enqueue prompts, run them later, one at a time. |
 | `:btw <question>` | Quick side question, read-only, doesn't pollute the current conversation history. |
 | `:research <topic>` | Multi-step research pass, saved to `research/*.md`. |
@@ -189,12 +226,27 @@ registering a custom provider in `.aura.json`.
 
 ---
 
+## Known Limitations
+
+- **RubyAlternator** (small-model-first task routing) is implemented and
+  tested but not yet routing live tasks — exercising it end-to-end needs
+  local inference hardware. It appears on the kanban pipeline view only.
+- **Context compaction** — a rare edge case with back-to-back
+  assistant-role messages at the compaction boundary is still being
+  hardened (see 0.8.0 notes).
+- **TUI on very narrow terminals** (< ~60 columns) can crash with a
+  layout `RangeError` — resize wider until fixed.
+- **MCP `call_tool`** runs without per-call prompts once a server is
+  connected (see the MCP safety model above) — connect servers you trust.
+
+---
+
 ## Stats
 
 | Metric | Value |
 |--------|-------|
-| Tests | 1317 passing, 0 failures (94 files) |
-| Version | v0.8.0 |
+| Tests | 1331 passing, 0 failures (95 files) |
+| Version | v0.9.0 |
 | Language | TypeScript (strict) |
 | License | MIT |
 
