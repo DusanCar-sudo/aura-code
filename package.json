@@ -14,7 +14,8 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "repair-anchors": "tsc && node dist/machina/repair.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

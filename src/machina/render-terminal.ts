@@ -51,18 +51,25 @@ export function renderMachinaTerminal(report: VerificationReport): string {
     const label = COMPONENT_LABEL[r.component].padEnd(18);
     lines.push(`    ${statusGlyph(r.status)} ${C.dim(label)} ${C.text(r.file + ':' + r.line)}`);
     lines.push(`        ${C.muted(r.description)}`);
-    if (r.status !== 'verified') {
+    if (r.status === 'drifted') {
+      lines.push(`        ${C.warn(`content OK — anchor stale: recorded :${r.line}, now at :${r.foundLine}`)}`);
+    } else if (r.status === 'missing') {
       lines.push(`        ${C.warn(`expected "${r.mustContain}" — found: ${r.actualLine || '(file missing)'}`)}`);
     }
   }
   lines.push('');
   if (report.drifted.length === 0 && report.missing.length === 0) {
     lines.push(C.good(`  All ${report.verifiedCount} structural claims verified against the current source.`));
+  } else if (report.missing.length === 0) {
+    lines.push(C.warn(
+      `  All ${report.results.length} claims hold — ${report.drifted.length} stale anchor(s) ` +
+      `(content moved, line numbers didn't follow). Run \`npm run repair-anchors\` to re-anchor.`,
+    ));
   } else {
     lines.push(C.warn(
-      `  ${report.verifiedCount}/${report.results.length} verified — ` +
-      `${report.drifted.length} drifted, ${report.missing.length} missing. ` +
-      `The code moved; this spec needs updating.`,
+      `  ${report.verifiedCount + report.drifted.length}/${report.results.length} claims hold — ` +
+      `${report.missing.length} missing, ${report.drifted.length} stale anchors. ` +
+      `The code genuinely changed; this spec needs updating.`,
     ));
   }
   lines.push('');

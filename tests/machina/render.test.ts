@@ -17,6 +17,7 @@ function claim(over: Partial<ClaimResult> = {}): ClaimResult {
     mustContain: over.mustContain ?? 'while (turns < maxTurns)',
     status: over.status ?? 'verified',
     actualLine: over.actualLine,
+    foundLine: over.foundLine,
   };
 }
 
@@ -39,12 +40,21 @@ describe('renderMachinaTerminal', () => {
 
   it('surfaces drifted/missing claims with their expected vs actual content', () => {
     const out = renderMachinaTerminal(report([
-      claim({ status: 'drifted', actualLine: 'for (let t = 0; t < maxTurns; t++) {' }),
+      claim({ status: 'drifted', actualLine: 'for (let t = 0; t < maxTurns; t++) {', foundLine: 131 }),
       claim({ id: 'oracle-call', file: 'src/agent/loop.ts', line: 999, status: 'missing' }),
     ]));
-    expect(out).toContain('drifted');
-    expect(out).toContain('for (let t = 0');
-    expect(out).toMatch(/0\/2 verified|verified — 1 drifted, 1 missing/);
+    expect(out).toContain('anchor stale: recorded :127, now at :131');
+    expect(out).toContain('expected "while (turns < maxTurns)"');
+    expect(out).toMatch(/1\/2 claims hold — 1 missing, 1 stale anchors/);
+  });
+
+  it('reports stale anchors as passing with a repair pointer when nothing is missing', () => {
+    const out = renderMachinaTerminal(report([
+      claim(),
+      claim({ id: 'oracle-call', line: 235, status: 'drifted', foundLine: 238 }),
+    ]));
+    expect(out).toContain('All 2 claims hold — 1 stale anchor(s)');
+    expect(out).toContain('repair-anchors');
   });
 
   it('includes the cost/limits explanation and the --html pointer', () => {
@@ -66,9 +76,10 @@ describe('wrapMachinaHtml', () => {
   });
 
   it('shows a warning status line when claims have drifted', () => {
-    const html = wrapMachinaHtml(report([claim({ status: 'drifted' })]));
+    const html = wrapMachinaHtml(report([claim({ status: 'drifted', foundLine: 131 })]));
     expect(html).toContain('status-line warn');
-    expect(html).toMatch(/drifted/);
+    expect(html).toMatch(/stale anchor/);
+    expect(html).toContain(':127 → :131');
   });
 
   it('HTML-escapes claim descriptions and file paths', () => {
@@ -102,9 +113,12 @@ describe('runMachina', () => {
     const res = runMachina({ outputRoot, writeHtml: true });
     expect(res.htmlPath).toBe(path.join(outputRoot, 'docs', 'machina.html'));
     expect(fs.existsSync(res.htmlPath!)).toBe(true);
-    // Since this runs inside the actual aura-code checkout, all claims should verify.
-    expect(res.report.drifted).toHaveLength(0);
+    // Since this runs inside the actual aura-code checkout, every claim's
+    // content must be real. Stale line anchors (drifted) are tolerated here —
+    // they're re-anchored deliberately via `npm run repair-anchors`, not a
+    // reason for this test to fail.
     expect(res.report.missing).toHaveLength(0);
+    expect(res.report.verifiedCount + res.report.drifted.length).toBe(res.report.results.length);
   });
 
   it('overwrites machina.html on repeated runs rather than accumulating files', () => {

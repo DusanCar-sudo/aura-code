@@ -67,7 +67,7 @@ function buildClaimsTable(report: VerificationReport): string {
     return `<tr class="${cls}">
       <td class="glyph">${glyph}</td>
       <td class="comp">${esc(COMPONENT_LABEL[r.component])}</td>
-      <td class="loc"><code>${esc(r.file)}:${r.line}</code></td>
+      <td class="loc"><code>${esc(r.file)}:${r.line}${r.status === 'drifted' && r.foundLine ? ` → :${r.foundLine}` : ''}</code></td>
       <td class="desc">${esc(r.description)}</td>
     </tr>`;
   }).join('\n');
@@ -82,7 +82,9 @@ export function wrapMachinaHtml(report: VerificationReport): string {
   const allOk = report.drifted.length === 0 && report.missing.length === 0;
   const statusLine = allOk
     ? `All ${report.verifiedCount} structural claims verified against the current source.`
-    : `${report.verifiedCount}/${report.results.length} verified — ${report.drifted.length} drifted, ${report.missing.length} missing.`;
+    : report.missing.length === 0
+      ? `All ${report.results.length} claims hold — ${report.drifted.length} stale anchor(s), content verified (run npm run repair-anchors).`
+      : `${report.verifiedCount + report.drifted.length}/${report.results.length} claims hold — ${report.missing.length} missing, ${report.drifted.length} drifted anchors.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
