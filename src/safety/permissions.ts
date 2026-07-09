@@ -35,7 +35,25 @@ export class PermissionSystem {
           return { allowed: false, reason: `Dangerous command blocked: ${cmd}` };
         }
       }
+      if (toolName === 'mcp' && String(input.action ?? '') === 'connect') {
+        const cmd = this.mcpConnectCommand(input);
+        if (this.isDangerous(cmd)) {
+          return { allowed: false, reason: `Dangerous command blocked: ${cmd}` };
+        }
+      }
       return { allowed: true };
+    }
+
+    // mcp 'connect' spawns an arbitrary external server process — the same
+    // trust boundary as run_shell, so it gets the same dangerous-pattern
+    // screen plus an unconditional confirm (a server spawn is never on the
+    // safe list; once connected, its tools run without further prompts).
+    if (toolName === 'mcp' && String(input.action ?? '') === 'connect') {
+      const cmd = this.mcpConnectCommand(input);
+      if (this.isDangerous(cmd)) {
+        return { allowed: false, reason: `Dangerous command blocked: ${cmd}` };
+      }
+      return { allowed: true, needsConfirm: true };
     }
 
     // Normal mode: safe ops auto-approved, destructive need confirm
@@ -76,6 +94,11 @@ export class PermissionSystem {
    */
   setLevel(level: PermissionLevel): void {
     this.level = level;
+  }
+
+  private mcpConnectCommand(input: Record<string, unknown>): string {
+    const args = Array.isArray(input.args_list) ? input.args_list.join(' ') : '';
+    return `${String(input.command ?? '')} ${args}`.trim();
   }
 
   private isDangerous(cmd: string): boolean {
