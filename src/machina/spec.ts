@@ -112,7 +112,7 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
     component: 'P',
     description: 'P — the finite, enumerable set of tool primitives the machine can invoke.',
     file: 'src/tools/index.ts',
-    line: 29,
+    line: 30,
     mustContain: 'export const TOOL_DEFINITIONS',
   },
 ];
