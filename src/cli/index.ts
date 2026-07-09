@@ -1481,6 +1481,41 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     return { handled: true };
   }
+  // ── :mine — Baby Ruby experience mining (src/mining/). The base pass is
+  // zero-LLM (pure clustering over episodes/*.json); --refine additionally
+  // runs Papa Ruby, one local-model call per qualifying concept, appending
+  // accepted lessons to training-data/<date>.jsonl.
+  if (input === ':mine' || input === ':mine --refine') {
+    const refine = input.endsWith('--refine');
+    const { mineExperience } = await import('../mining/extract.js');
+    const mined = await mineExperience(c.ctx.root);
+    if (mined.episodeCount === 0) {
+      c.display.warning('No episodes to mine yet — run some tasks first.');
+      return { handled: true };
+    }
+    console.log(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
+    for (const con of mined.concepts.slice(0, 15)) {
+      console.log(chalk.hex('#a68a2a')(`  ${con.concept}`) + chalk.hex('#4e3d30')(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
+      if (con.keywords.length > 0) console.log(chalk.hex('#4e3d30')(`    keywords: ${con.keywords.join(', ')}`));
+    }
+    if (mined.concepts.length > 15) {
+      console.log(chalk.hex('#4e3d30')(`  … and ${mined.concepts.length - 15} more.`));
+    }
+    if (refine) {
+      console.log(chalk.hex('#a68a2a')('\n  Refining with the local Ruby model (Papa Ruby)…'));
+      const { refineConcepts } = await import('../mining/refine.js');
+      const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
+      if (res.accepted.length > 0) {
+        console.log(chalk.hex('#5a9e6e')(`  ✓ ${res.accepted.length} training example(s) appended: ${res.outputPath}`));
+        console.log(chalk.hex('#4e3d30')(`    ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.\n`));
+      } else {
+        c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
+      }
+    } else if (mined.concepts.length > 0) {
+      console.log(chalk.hex('#4e3d30')('\n  :mine --refine judges these with the local Ruby model and writes training-data/*.jsonl\n'));
+    }
+    return { handled: true };
+  }
 
   if (input === ':doctor' || input.startsWith(':doctor')) {
     const fix = input.includes('--fix');
@@ -1544,6 +1579,42 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       printUsageFooter(c.display, councilResult.usage, councilResult.costUsd);
     } else {
       c.display.error(councilResult.summary);
+    }
+    return { handled: true };
+  }
+  // ── :ecclesia — 5-agent independent research council (research/council.ts).
+  // Distinct from :council above (mixture-of-agents over the current task):
+  // the Ecclesia runs N agents that research a topic WITHOUT seeing each
+  // other's findings, then one synthesis call reconciles them into a verdict.
+  if (input.startsWith(':ecclesia ') || input === ':ecclesia') {
+    let topic = input.slice(':ecclesia '.length).trim();
+    if (!topic) {
+      c.display.warning('Usage: :ecclesia <topic> [--panel <model>] [--seats <n>] -- N independent research agents (default 5) + a synthesis verdict, saved to council/*.md|.html.');
+      return { handled: true };
+    }
+    let panelModel: string | undefined;
+    let panelSize: number | undefined;
+    const panelMatch = topic.match(/\s--panel\s+(\S+)/);
+    if (panelMatch) { panelModel = panelMatch[1]; topic = topic.replace(panelMatch[0], '').trim(); }
+    const seatsMatch = topic.match(/\s--seats\s+(\d+)/);
+    if (seatsMatch) { panelSize = Number(seatsMatch[1]); topic = topic.replace(seatsMatch[0], '').trim(); }
+    console.log(chalk.hex('#a68a2a')(`\n  Convening the Ecclesia on "${topic}"…\n`));
+    try {
+      const { runCouncil } = await import('../research/council.js');
+      const res = await runCouncil({
+        projectRoot: c.ctx.root, topic,
+        synthesisProvider: buildProvider(c.display),
+        context: c.ctx, permissions: c.permissions, display: c.display,
+        panelSize, panelModel,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict written: ${res.path}`));
+      console.log(chalk.hex('#5a9e6e')(`    HTML: ${res.htmlPath}`));
+      console.log(chalk.hex('#a68a2a')(`  ${res.panelSize} seats on ${res.panelModel}.`));
+      if (res.agentFailures > 0) {
+        c.display.warning(`${res.agentFailures} of ${res.panelSize} panel agent(s) failed — verdict is based on the rest.`);
+      }
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
