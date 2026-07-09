@@ -177,13 +177,23 @@ export interface CouncilResult {
  * passing `undefined` to `createProvider` (which historically produced
  * opaque "400 Not supported model" errors).
  */
-function resolvePanelModel(synthesisProvider: LLMProvider, override?: string): string {
+function resolvePanelModel(
+  synthesisProvider: LLMProvider,
+  override?: string,
+  configuredModel?: string,
+): string {
   if (override && override.trim()) return override.trim();
 
   const env = process.env.AURA_PANEL_MODEL;
   if (env && env.trim()) return env.trim();
 
-  // LLMProvider.model — the configured model id for that provider instance.
+  // The caller's configured routing id (e.g. "deepseek/deepseek-v4-flash").
+  // Preferred over the provider instance's `.model`, which has the provider
+  // prefix stripped ("deepseek-v4-flash") and therefore re-resolves through
+  // the generic OpenAI-compatible provider — the wrong endpoint entirely
+  // (this produced five identical 401s on the first live Ecclesia run).
+  if (configuredModel && configuredModel.trim()) return configuredModel.trim();
+
   const fromProvider = (synthesisProvider as unknown as { model?: string }).model;
   if (fromProvider && fromProvider.trim()) return fromProvider.trim();
 
@@ -207,12 +217,14 @@ export async function runCouncil(opts: {
   display: Display;
   panelSize?: number;
   panelModel?: string;
+  /** The session's configured routing model id (e.g. "deepseek/deepseek-v4-flash"). */
+  configuredModel?: string;
 }): Promise<CouncilResult> {
   const {
     projectRoot, topic, synthesisProvider, context, permissions, display,
   } = opts;
   const panelSize = Math.max(1, opts.panelSize ?? DEFAULT_PANEL_SIZE);
-  const panelModel = resolvePanelModel(synthesisProvider, opts.panelModel);
+  const panelModel = resolvePanelModel(synthesisProvider, opts.panelModel, opts.configuredModel);
 
   const findings: string[] = [];
   let agentFailures = 0;
@@ -231,7 +243,33 @@ export async function runCouncil(opts: {
         maxTurns: 6,
         disableSpawn: true,
       });
-      const text = (res.summary ?? '').trim();
+      let text = (res.summary ?? '').trim();
+      if (!res.success || /^Loop (ended|stalled)/i.test(text)) {
+        // The agent hit its turn cap (or stalled) before a final answer, so
+        // summary is just the loop-end marker. Salvage its last real message
+        // instead — feeding "Loop ended after 6 turns." to the synthesis
+        // makes the model fabricate an entire council from nothing (observed
+        // live: invented "3 of 5 agents" splits and fictional sources).
+        const lastAssistant = [...res.history].reverse().find(
+          (m): m is { role: 'assistant'; content: string } =>
+            m.role === 'assistant' && typeof m.content === 'string' && m.content.trim().length > 0,
+        );
+        text = lastAssistant?.content.trim() ?? '';
+      }
+      if (!text) {
+        // Tool-happy models (observed: DeepSeek) spend every turn on tool
+        // calls and never write prose, so there is nothing to salvage.
+        // Convert the research they DID gather into findings with one
+        // tool-less completion over their own history.
+        const wrap = await panelProvider.complete(
+          'Your tool budget is exhausted. Using ONLY what you already gathered in this conversation, ' +
+          'write the findings now in the requested format: 4-8 specific bullet points with sources in ' +
+          'parentheses, then one line "Stance: <bottom-line take>". Do not call tools. No preamble.',
+          [...res.history, { role: 'user', content: 'Tool budget exhausted — write your findings list and stance NOW.' }],
+          [],
+        );
+        text = (wrap.text ?? '').trim();
+      }
       findings.push(text || `(Agent ${seat} returned no findings.)`);
     } catch (err) {
       agentFailures++;

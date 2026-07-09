@@ -1606,6 +1606,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         synthesisProvider: buildProvider(c.display),
         context: c.ctx, permissions: c.permissions, display: c.display,
         panelSize, panelModel,
+        configuredModel: c.providerConfig.model,
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict written: ${res.path}`));
       console.log(chalk.hex('#5a9e6e')(`    HTML: ${res.htmlPath}`));
