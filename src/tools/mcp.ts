@@ -324,6 +324,19 @@ async function callTool(serverName: string, toolName: string, args: Record<strin
   if (!server) return `MCP server not found: ${serverName}`;
   if (!server.connected) return `MCP server not connected: ${serverName}`;
 
+  // The connect-time tools/list snapshot is an ALLOWLIST, not a courtesy
+  // cache. The user's confirm-at-connect approval covered the tools that
+  // existed then; this client deliberately ignores tools/list_changed, so a
+  // server that expands its tool set post-connect cannot have the new tools
+  // called — adopting them requires disconnect + connect, which re-prompts.
+  // It also stops prompt-injected calls to hidden, never-advertised tools.
+  // (Only enforceable when the server supported tools/list at connect.)
+  if (server.tools.length > 0 && !server.tools.some(t => t.name === toolName)) {
+    return `MCP tool '${toolName}' is not in ${serverName}'s connect-time tool list. ` +
+      `Available: ${server.tools.map(t => t.name).join(', ')}. ` +
+      `If the server added tools after connecting, disconnect and reconnect to re-approve it.`;
+  }
+
   try {
     const result = await sendRequest(server, 'tools/call', {
       name: toolName,

@@ -169,6 +169,14 @@ discover it):
 - **The trust boundary is the connection.** Once a server is approved and
   connected, its tools run via `call_tool` *without further per-call
   prompts* — approve a server the way you'd approve running its binary.
+- **The connect-time tool list is an allowlist.** `call_tool` refuses any
+  tool the server didn't advertise when you approved it; `tools/list_changed`
+  notifications are deliberately ignored, so a server that grows new tools
+  post-connect can't have them called until you disconnect and reconnect —
+  which re-prompts. (Honest residual gap: this constrains *what Aura will
+  ask a server to do*, not what a malicious server can do — a hostile stdio
+  server already runs as a local process with your privileges from the
+  moment it spawns, tools or no tools. That is why `connect` is the gate.)
   (A live 5-agent [`:ecclesia` review of this design](council/2026-07-09-mcp-server-trust-boundaries-in-ai-coding-agents-is-confirm-a.md)
   concluded connect-time confirmation is the dominant deployed model across
   MCP clients — the protocol defines no per-call authorization — but
@@ -237,7 +245,10 @@ registering a custom provider in `.aura.json`.
 - **TUI on very narrow terminals** (< ~60 columns) can crash with a
   layout `RangeError` — resize wider until fixed.
 - **MCP `call_tool`** runs without per-call prompts once a server is
-  connected (see the MCP safety model above) — connect servers you trust.
+  connected, constrained to the connect-time tool allowlist (see the MCP
+  safety model above). The allowlist limits what Aura will request, not
+  what a malicious local server process can do on its own — connect
+  servers you trust.
 
 ---
 

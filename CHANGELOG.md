@@ -46,6 +46,14 @@ spec that kept false-failing on line drift is fixed at the root.
   needed no confirmation in normal mode and skipped the dangerous-pattern
   screen even in `--auto`. Now gated with the same screening as
   `run_shell` plus an unconditional confirm at connect.
+- **`mcp call_tool` accepted tool names the server never advertised.**
+  Follow-up to the live `:ecclesia` review's minority signal (servers can
+  expand their tool list post-connect via `tools/list_changed` with no
+  re-prompt): the connect-time `tools/list` snapshot is now enforced as an
+  allowlist — unadvertised or later-added tools are refused client-side,
+  and adopting a server's new tools requires disconnect + reconnect, which
+  re-prompts. Documented residual gap: this constrains what Aura will
+  request, not what a hostile local server process can do on its own.
 - **AAM claims false-failed on pure line shifts** (three times in one
   week). Line anchors are now lookup hints: content found elsewhere in the
   file reports as `drifted` (passing, with recorded → actual line);
