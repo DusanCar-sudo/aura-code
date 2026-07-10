@@ -60,13 +60,25 @@ function identitySection(maxChars: number): string {
   const keys = Object.keys(store);
   if (keys.length === 0) return '';
 
+  // Most-recently-updated entries first: identity.json only grows, and a
+  // budget-capped walk in raw insertion order silently drops whatever was
+  // added most recently once older entries fill the budget — which is
+  // exactly backwards, since a newly-added entry is usually a standing rule
+  // or current fact, while old entries are stable background bio. A missing
+  // `updated` sorts last (oldest-equivalent), not first.
+  const ordered = [...keys].sort((a, b) => {
+    const ta = Date.parse(store[a]?.updated ?? '') || 0;
+    const tb = Date.parse(store[b]?.updated ?? '') || 0;
+    return tb - ta;
+  });
+
   const lines: string[] = [];
   let used = 0;
-  for (const k of keys) {
+  for (const k of ordered) {
     const v = store[k]?.value ?? '';
     if (!v) continue;
     const line = `- **${k}**: ${v}`;
-    if (used + line.length > maxChars) break;
+    if (used + line.length > maxChars) continue; // skip, don't stop — a later (older) entry may still fit
     lines.push(line);
     used += line.length;
   }
