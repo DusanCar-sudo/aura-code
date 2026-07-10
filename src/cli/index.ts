@@ -40,6 +40,7 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderBanner, buildBannerLines } from './diamond.js';
+import { isProviderChange, apiKeyEnvForModelSwitch } from './model-select.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
@@ -1190,11 +1191,29 @@ function envNameForModel(model: string): string | undefined {
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
   const prevModel = runtimeConfig.model;
   const prevResolved = resolved.model;
+  const prevApiKey = runtimeConfig.apiKey;
+  const prevBaseUrl = runtimeConfig.baseUrl;
+  const prevResolvedBaseUrl = resolved.baseUrl;
   runtimeConfig.model = newModel;
   resolved.model = newModel; // buildProvider reads resolved.model — keep in sync
+  const crossing = isProviderChange(prevModel ?? prevResolved, newModel);
+  if (crossing) {
+    // The old provider's key/baseUrl must not follow the model across a
+    // provider boundary — createProvider gives config.apiKey priority over
+    // the per-provider env fallback, so a stale key would be sent to the
+    // NEW provider's endpoint. Clear both so the factory falls through to
+    // the new provider's own getApiKey()/default-endpoint chain.
+    runtimeConfig.apiKey = undefined;
+    runtimeConfig.baseUrl = undefined;
+    resolved.baseUrl = undefined;
+  }
   try {
     const test = buildProvider(c.display);
     c.providerConfig.model = newModel;
+    if (crossing) {
+      c.providerConfig.apiKey = undefined;
+      c.providerConfig.baseUrl = undefined;
+    }
     console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
     // Remember the choice for the next session. The saved baseUrl belongs to
     // the wizard-configured model — keep it only when switching back to that
@@ -1203,8 +1222,11 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
       saveGlobalConfig({
         provider: globalCfg?.provider ?? test.name,
         // loadGlobalConfig treats an empty apiKeyEnv as "not configured", so
-        // derive it from the model to keep the saved choice loadable.
-        apiKeyEnv: envNameForModel(newModel) ?? globalCfg?.apiKeyEnv ?? 'AURA_API_KEY',
+        // resolve from the NEW model's provider — never inherit the old
+        // provider's env name across a provider change (a silently wrong
+        // apiKeyEnv on disk pairs the wrong key with the model on the next
+        // startup).
+        apiKeyEnv: apiKeyEnvForModelSwitch(newModel, prevModel ?? prevResolved, globalCfg?.apiKeyEnv),
         defaultModel: newModel,
         baseUrl: savedProvider && newModel === savedProvider.model ? savedProvider.baseUrl : undefined,
       });
@@ -1213,6 +1235,9 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
   } catch (e) {
     runtimeConfig.model = prevModel;  // rollback on error
     resolved.model = prevResolved;
+    runtimeConfig.apiKey = prevApiKey;
+    runtimeConfig.baseUrl = prevBaseUrl;
+    resolved.baseUrl = prevResolvedBaseUrl;
     return { ok: false, err: String(e) };
   }
 }
