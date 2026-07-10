@@ -48,3 +48,8 @@ graphify-out/enriched.json
 # Downloaded tooling (reinstallable — must never be committed)
 google-cloud-sdk/
 google-cloud-cli-*.tar.gz
+# .env files (except .env.example template)
+.env
+.env.local
+.env.*.local
+.env!.example
