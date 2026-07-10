@@ -608,10 +608,63 @@ const AGENT_MAX_STEPS = 4;
 interface PendingApproval {
   resolve: (approved: boolean) => void;
   command: string;
+  chatId: string;
   createdAt: number;
 }
 const pendingApprovals = new Map<string, PendingApproval>();
 const APPROVAL_TIMEOUT_MS = 5 * 60_000;
+
+// ── Running-task registry (for /stop and /status) ────────────────────────────
+// Message handlers are detached tasks, so several agentic runs can be in
+// flight at once — even in the same chat. /stop aborts everything registered
+// for that chat; the loop in chatWithLLM checks the signal between steps and
+// races it against in-flight LLM calls so the stop lands promptly.
+interface RunningTask {
+  abort: AbortController;
+  task: string;
+  startedAt: number;
+}
+const runningTasks = new Map<string, Set<RunningTask>>();
+
+function registerTask(chatId: string, entry: RunningTask): void {
+  let set = runningTasks.get(chatId);
+  if (!set) { set = new Set(); runningTasks.set(chatId, set); }
+  set.add(entry);
+}
+
+function unregisterTask(chatId: string, entry: RunningTask): void {
+  const set = runningTasks.get(chatId);
+  if (!set) return;
+  set.delete(entry);
+  if (set.size === 0) runningTasks.delete(chatId);
+}
+
+const ABORTED = Symbol('aborted');
+
+/** Race a promise against an abort signal. On abort the caller moves on
+ *  immediately; the losing in-flight call finishes in the background and its
+ *  result is discarded (Promise.race keeps its rejection observed). */
+function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
+  if (signal.aborted) return Promise.resolve(ABORTED);
+  return Promise.race([
+    p,
+    new Promise<typeof ABORTED>((resolve) =>
+      signal.addEventListener('abort', () => resolve(ABORTED), { once: true })),
+  ]);
+}
+
+/** Resolve every pending approval for a chat. Returns how many were flushed. */
+function flushApprovals(chatId: string, approved: boolean): number {
+  let n = 0;
+  for (const [id, p] of pendingApprovals) {
+    if (p.chatId === chatId) {
+      pendingApprovals.delete(id);
+      p.resolve(approved);
+      n++;
+    }
+  }
+  return n;
+}
 
 /** Ask Dušan to approve a command; resolves true/false (false on timeout). */
 async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
@@ -629,7 +682,7 @@ async function requestApproval(chatId: string | number, label: string, command: 
     reply_markup: keyboard,
   });
   return new Promise<boolean>((resolve) => {
-    pendingApprovals.set(id, { resolve, command, createdAt: Date.now() });
+    pendingApprovals.set(id, { resolve, command, chatId: String(chatId), createdAt: Date.now() });
     setTimeout(() => {
       const p = pendingApprovals.get(id);
       if (p) { pendingApprovals.delete(id); p.resolve(false); }
@@ -665,10 +718,23 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
   await pushToHistory(String(chatId), { role: 'user', content: userMessage });
 
   const ts0 = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+  // Register this run so /stop can abort it (per-chat; several runs may be
+  // in flight since message handlers are detached).
+  const runEntry: RunningTask = {
+    abort: new AbortController(),
+    task: userMessage.slice(0, 120),
+    startedAt: Date.now(),
+  };
+  registerTask(chatId, runEntry);
+  const signal = runEntry.abort.signal;
   try {
     let finalReply = '';
     for (let step = 0; step < AGENT_MAX_STEPS; step++) {
-      const response = await provider.complete(systemPrompt, history, []);
+      const response = await raceAbort(provider.complete(systemPrompt, history, []), signal);
+      if (response === ABORTED) {
+        finalReply = '⏹ Stopped.';
+        break;
+      }
       const text = (response.text || '').trim();
 
       // Which action does the model want? RUN (shell), SEND (a file), CAM (webcam).
@@ -686,6 +752,14 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       }
       const verb = action[1];
       const arg = (action[2] || '').trim().replace(/`+$/, '').trim();
+
+      // /stop between the LLM deciding an action and us executing it — don't
+      // run the action (a shell command may be destructive; the wait for an
+      // approval tap resolves false on /stop and lands here too).
+      if (signal.aborted) {
+        finalReply = '⏹ Stopped.';
+        break;
+      }
 
       let toolOut: string;
       try {
@@ -736,8 +810,10 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       history.push({ role: 'user', content: `[result]\n${toolOut}` });
 
       if (step === AGENT_MAX_STEPS - 1) {
-        const wrap = await provider.complete(systemPrompt, history, []);
-        finalReply = (wrap.text || '').replace(/^(RUN|SEND|CAM):.*$/m, '').trim() || '(done)';
+        const wrap = await raceAbort(provider.complete(systemPrompt, history, []), signal);
+        finalReply = wrap === ABORTED
+          ? '⏹ Stopped.'
+          : (wrap.text || '').replace(/^(RUN|SEND|CAM):.*$/m, '').trim() || '(done)';
       }
     }
     await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });
@@ -745,6 +821,8 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
   } catch (e: any) {
     console.error(`[${ts0()}] LLM error: ${e?.message || String(e)}`);
     return `❌ AI greška: ${e?.message || 'Nepoznata greška'}. Probaj /help.`;
+  } finally {
+    unregisterTask(chatId, runEntry);
   }
 }
 
@@ -846,6 +924,10 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/cam — Snimi i pošalji sliku sa kamere (nadzor)`,
       `/git — Git status`,
       ``,
+      `🎛 Kontrola zadatka:`,
+      `/stop — Prekini zadatak koji trenutno radi u ovom chatu`,
+      `/approve-all — ⚠️ Odobri SVE potvrde koje trenutno čekaju (uključujući destruktivne komande, bez ponovnog prikaza). Jednokratno — NE prebacuje u auto režim, sledeće akcije opet pitaju.`,
+      ``,
       `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
       `💡 Možeš da tražiš fajlove sa tvog računara i šaljiš ih sebi!`,
       ``,
@@ -854,6 +936,54 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   if (lower === '/ping') return '🏓 Pong! Aura je živa i radi.';
+
+  // ── /stop — abort the running task(s) for THIS chat ──────────────────────
+  // Same semantics as the CLI's Esc/:stop abort: the agentic loop checks the
+  // signal between steps and races it against in-flight LLM calls. Pending
+  // approval prompts are denied so awaited steps unblock instead of hanging
+  // until their 5-minute timeout.
+  if (lower === '/stop') {
+    const denied = flushApprovals(String(chatId), false);
+    const set = runningTasks.get(String(chatId));
+    if (!set || set.size === 0) {
+      return denied > 0
+        ? `⏹ Nothing running — but denied ${denied} stale pending approval(s).`
+        : '⏹ Nothing is running in this chat.';
+    }
+    const lines: string[] = [];
+    for (const t of set) {
+      t.abort.abort();
+      const secs = Math.round((Date.now() - t.startedAt) / 1000);
+      lines.push(`  • "${t.task}" (running ${secs}s)`);
+    }
+    return [
+      `⏹ Stopping ${set.size} task(s):`,
+      ...lines,
+      ...(denied > 0 ? [`Also denied ${denied} pending approval(s).`] : []),
+      `Note: a shell command already executing finishes its (≤30s) run; nothing further happens after it.`,
+    ].join('\n');
+  }
+
+  // ── /approve-all — one-time flush of pending confirmations ───────────────
+  // ⚠️ Trust escalation: approves EVERYTHING currently waiting for a ✅/❌ tap,
+  // including destructive operations, sight unseen. It does NOT change the
+  // permission mode — the very next mutating command will ask again.
+  if (lower === '/approve-all') {
+    const n = flushApprovals(String(chatId), true);
+    if (n === 0) {
+      return [
+        '✅ No approvals were pending.',
+        '',
+        '⚠️ /approve-all approves everything pending right now, including',
+        'destructive operations, without showing them again. One-time flush —',
+        'it does not switch to auto-approve; future actions still ask.',
+      ].join('\n');
+    }
+    return [
+      `✅ Approved ${n} pending confirmation(s) — including any destructive operations that were waiting.`,
+      `This was a one-time flush; the permission mode is unchanged and future actions will still ask.`,
+    ].join('\n');
+  }
 
   if (lower === '/time') return `🕐 ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`;
 
