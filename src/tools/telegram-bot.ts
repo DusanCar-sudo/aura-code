@@ -11,6 +11,10 @@ import { exec, execSync, execFileSync } from 'child_process';
 import { createProvider, registerCustomProviders } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
+import {
+  normalizeAudioMode, shouldSendAudio, stripForSpeech, DEFAULT_AUDIO_MIN_CHARS,
+  type AudioReplyMode,
+} from './telegram-audio-policy.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
@@ -27,6 +31,12 @@ interface TelegramConfig {
   /** Telegram user IDs allowed to use the bot. If set, everyone else is
    *  refused (the bot can run shell commands, so this gate is mandatory). */
   allowed_user_ids?: string | string[];
+  /** Voice-note replies: 'off' | 'voice-only' | 'auto' (default) | 'always'.
+   *  'auto' = text always, plus a voice note for voice-in messages and for
+   *  substantial conversational replies (≥ audio_min_chars). */
+  audio_replies?: string;
+  /** Reply length (chars) at which 'auto' mode adds a voice note. Default 500. */
+  audio_min_chars?: number;
 }
 
 function loadConfig(): TelegramConfig {
@@ -55,6 +65,13 @@ const ALLOWED_USER_IDS: string[] = (() => {
   if (!raw) return [];
   return (Array.isArray(raw) ? raw : [raw]).map(String);
 })();
+
+// ── Audio replies: when to attach a voice note alongside the text reply ──────
+const AUDIO_MODE: AudioReplyMode = normalizeAudioMode(config.audio_replies);
+const AUDIO_MIN_CHARS: number =
+  Number.isFinite(config.audio_min_chars) && (config.audio_min_chars as number) > 0
+    ? (config.audio_min_chars as number)
+    : DEFAULT_AUDIO_MIN_CHARS;
 
 function isAuthorized(userId: string | number | undefined): boolean {
   if (ALLOWED_USER_IDS.length === 0) return true; // no allowlist configured → open (logged as a warning at startup)
@@ -796,6 +813,13 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
   }
 }
 
+/** Bare text that handleCommand executes directly as a shell command
+ *  (no leading slash). Shared with the reply path so shell output — like
+ *  /-command output — is never read aloud as a voice note. */
+function isDirectShellText(lowerText: string): boolean {
+  return /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lowerText);
+}
+
 async function handleCommand(chatId: number, text: string, from: string): Promise<string> {
   const lower = text.toLowerCase().trim();
 
@@ -1039,8 +1063,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   // Default: try to interpret as a shell command if it looks like one
-  const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
-  if (looksLikeCommand) {
+  if (isDirectShellText(lower)) {
     const result = await execShell(text);
     const output = result.stdout || result.stderr || '(no output)';
     const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
@@ -1180,12 +1203,23 @@ async function poll(): Promise<void> {
             if (!text) return;
             if (!cameFromVoice) console.log(`[${ts()}] 📩 [${from}]: ${text}`);
 
+            const lower = text.toLowerCase().trim();
+            const conversational = !lower.startsWith('/') && !isDirectShellText(lower);
             const response = await handleCommand(chatId, text, from);
             await sendMessage(chatId, response);
-            if (cameFromVoice) {
+            // Voice note alongside the text, per the audio-reply policy:
+            // voice-in always speaks back; 'auto' also speaks substantial
+            // conversational replies (task summaries), never command output.
+            if (shouldSendAudio({
+              mode: AUDIO_MODE, cameFromVoice, conversational,
+              length: response.length, minChars: AUDIO_MIN_CHARS,
+            })) {
               try {
-                const wav = await synthesizeSpeech(response.slice(0, 1000));
-                await sendVoice(chatId, wav);
+                const spoken = stripForSpeech(response);
+                if (spoken) {
+                  const wav = await synthesizeSpeech(spoken);
+                  await sendVoice(chatId, wav);
+                }
               } catch (e: any) {
                 console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
               }
