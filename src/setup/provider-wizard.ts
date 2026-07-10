@@ -36,8 +36,11 @@ export interface ProviderConfig {
  * Run the full 4-step provider wizard.
  *
  * Returns the chosen config on success, or null if the user cancelled.
+ *
+ * @param existingRl - Optional readline interface (for non-TUI mode)
+ * @param askInputFn - Optional askInput function (for TUI mode)
  */
-export async function runProviderWizard(existingRl?: readline.Interface): Promise<ProviderConfig | null> {
+export async function runProviderWizard(existingRl?: readline.Interface, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderConfig | null> {
   const rl = existingRl || readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -65,7 +68,7 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
       console.log(chalk.hex('#cc785c')('\n  Which GLM plan are you using?\n'));
       console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Coding Plan')} ${chalk.hex('#5a4a3a')('(subscription quota)')}`);
       console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('Pay-as-you-go')} ${chalk.hex('#5a4a3a')('(general API key)')}`);
-      const planChoice = await askInput(rl, '  ▸ Choose (1 or 2): ');
+      const planChoice = await askInput(rl, '  ▸ Choose (1 or 2): ', askInputFn);
       if (planChoice.trim() === '1') {
         effectiveModel = `zhipu-coding/${model}`;
       }
@@ -329,7 +332,13 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig): Prom
  * first/last character right at the paste boundary. Well-behaved
  * terminals are unaffected either way.
  */
-function askInput(rl: readline.Interface, prompt: string): Promise<string> {
+function askInput(rl: readline.Interface, prompt: string, askInputFn?: (prompt: string) => Promise<string>): Promise<string> {
+  // Use TUI's askInput function if provided (running in TUI mode)
+  if (askInputFn) {
+    return askInputFn(prompt);
+  }
+
+  // Fall back to default readline behavior
   const canToggle = process.stdout.isTTY;
   if (canToggle) process.stdout.write('\x1b[?2004l'); // disable bracketed paste
   return new Promise(resolve => {

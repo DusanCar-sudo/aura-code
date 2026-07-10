@@ -18,7 +18,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines } from './tui.js';
+import { initTui, startInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, askInput, enterAltScreen, setBannerLines } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -1248,7 +1248,11 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
 
   const answer = await new Promise<string>(resolve => {
         const promptRl = c.rl;
-    if (!promptRl) { resolve('y'); return; }
+    if (!promptRl) {
+      // In TUI mode, use the TUI's askInput function to avoid input leakage
+      askInput(chalk.hex('#cc785c')('  ▸ ')).then(resolve);
+      return;
+    }
     promptRl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
   });
   const choice = answer.trim();
@@ -1819,7 +1823,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   // ── Provider wizard command ────────────────────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    const cfg = await runProviderWizard(c.rl ?? undefined);
+    // When in TUI mode (c.rl === null), pass the TUI's askInput function to avoid input leakage
+    const cfg = await runProviderWizard(c.rl ?? undefined, c.rl === null ? askInput : undefined);
     if (cfg) {
       // Update current session's provider without restart
       runtimeConfig.model = cfg.model;
