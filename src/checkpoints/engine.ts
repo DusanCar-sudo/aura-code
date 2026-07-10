@@ -88,8 +88,69 @@ function newId(): string {
 }
 
 /**
+ * Common secret patterns that should never be captured in checkpoints.
+ * These patterns match files that contain API keys, tokens, or other secrets.
+ */
+const SECRET_PATTERNS = [
+  // Environment variable style: TOKEN=, API_KEY=, etc.
+  /^(?:TOKEN|API_KEY|SECRET|PASSWORD|AUTH|KEY|BEARER)\s*=/i,
+  // JSON style: "api_key": "sk_...", "token": "ghp_..."
+  /["'](?:api_key|token|secret|password|auth_key|bearer|access_token)["']?\s*:\s*["']?(?:sk_|pk_|ghp_|gho_|ghu_|glpat-|ey|Bearer)/i,
+  // Common API key patterns (more lenient)
+  /(?:sk_|pk_|ghp_|gho_|ghu_|glpat-)[a-zA-Z0-9_]{10,}/i,
+  // Bearer tokens
+  /Bearer\s+[a-zA-Z0-9_\-\.]{10,}/i,
+  // Private keys
+  /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----/,
+  // Generic long base64-like strings (likely tokens)
+  /[a-zA-Z0-9_\-\.]{32,}/,
+];
+
+/**
+ * Check if a file contains potential secrets by scanning its content.
+ * Returns true if any secret pattern is matched.
+ */
+function fileContainsSecrets(content: string): boolean {
+  for (const pattern of SECRET_PATTERNS) {
+    if (pattern.test(content)) return true;
+  }
+  return false;
+}
+
+/**
+ * Get list of files in the temporary index that should be excluded from checkpoints
+ * due to containing secrets.
+ */
+async function getSecretFilesFromIndex(root: string, env: Record<string, string>): Promise<string[]> {
+  const secretFiles: string[] = [];
+  try {
+    // Get all files in the temporary index (tracked + staged untracked files)
+    const out = await git(root, ['ls-files', '-z'], env);
+    const files = out.split('\0').filter(Boolean);
+
+    for (const file of files) {
+      const absPath = path.join(root, file);
+      try {
+        // Only check text-based files that might contain credentials
+        if (/\.(json|js|ts|mjs|env|config|sh|py|ya?ml|toml|ini|conf|txt|md)$/.test(file)) {
+          const content = fs.readFileSync(absPath, 'utf8');
+          if (fileContainsSecrets(content)) {
+            secretFiles.push(file);
+          }
+        }
+      } catch (e) { /* skip files we can't read */ }
+    }
+  } catch (e) { /* if git ls-files fails, return empty array */ }
+  return secretFiles;
+}
+
+/**
  * Snapshot the working tree into the object store through a temporary index.
  * Returns the tree hash. Never touches the user's real index.
+ *
+ * SECURITY: Excludes files containing secrets to prevent credential leakage
+ * into checkpoint refs. This is a critical safety measure since checkpoint refs
+ * live outside normal branches and won't be caught by standard secret scanning.
  */
 async function writeShadowTree(root: string, gitDir: string): Promise<string> {
   const tmpIndex = path.join(gitDir, `aura-checkpoint-index-${process.pid}`);
@@ -98,7 +159,18 @@ async function writeShadowTree(root: string, gitDir: string): Promise<string> {
     // Seed from HEAD when it exists so `add -A` computes a minimal update.
     try { await git(root, ['read-tree', 'HEAD'], env); }
     catch { await git(root, ['read-tree', '--empty'], env); }
+
+    // Add all files, respecting .gitignore (git add -A behavior)
     await git(root, ['add', '-A', '--', '.'], env);
+
+    // CRITICAL: Remove any files that contain secrets (check AFTER adding to index)
+    const secretFiles = await getSecretFilesFromIndex(root, env);
+    if (secretFiles.length > 0) {
+      // Remove files with secrets from the index
+      await git(root, ['rm', '--cached', '--', ...secretFiles], env);
+      console.warn(`[checkpoint] Excluded ${secretFiles.length} file(s) containing secrets from checkpoint`);
+    }
+
     return (await git(root, ['write-tree'], env)).trim();
   } finally {
     try { fs.unlinkSync(tmpIndex); } catch { /* already gone */ }
