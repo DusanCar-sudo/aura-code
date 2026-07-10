@@ -130,6 +130,10 @@ let onStop: (() => void) | null = null;
 let currentAbort: AbortController | null = null;
 /** Set while askConfirm() is awaiting an answer — the next Enter resolves it instead of dispatching a task. */
 let pendingConfirm: ((answer: string) => void) | null = null;
+/** Set while askInput() is awaiting multi-line text input — all Enter presses are captured until user sends Ctrl-D. */
+let pendingInput: ((text: string) => void) | null = null;
+/** Buffer for accumulating multi-line input during pendingInput. */
+let inputAccumulator: string[] = [];
 
 // ── Status footer ──────────────────────────────────────────────────────────
 //
@@ -726,10 +730,25 @@ export function askConfirm(message: string): Promise<boolean> {
   });
 }
 
+/**
+ * Prompt for multi-line text input within the TUI without conflicting with the main input handler.
+ * This allows wizards and other interactive prompts to work within TUI mode.
+ * User enters their text, then presses Ctrl-D to signal completion.
+ */
+export function askInput(prompt: string): Promise<string> {
+  return new Promise(resolve => {
+    writeOutput(chalk.hex('#cc785c')(prompt));
+    pendingInput = (text: string) => {
+      resolve(text);
+    };
+    inputAccumulator = [];
+  });
+}
+
 // ── Input handling ─────────────────────────────────────────────────────────
 
 function handleChar(ch: string): void {
-  if (ch === '\x03') {
+  if (ch === '\x03') { // Ctrl-C
     if (pendingConfirm) {
       const resolve = pendingConfirm;
       pendingConfirm = null;
@@ -737,6 +756,17 @@ function handleChar(ch: string): void {
       cursorPos = 0;
       writeOutput(GOLD_DIM('❯ n (cancelled)'));
       resolve('n');
+      return;
+    }
+    if (pendingInput) {
+      const resolve = pendingInput;
+      pendingInput = null;
+      inputAccumulator = [];
+      inputBuffer = '';
+      cursorPos = 0;
+      writeOutput(GOLD_DIM('❯ (cancelled)'));
+      drawPromptTop();
+      resolve('');
       return;
     }
     if (currentAbort && !currentAbort.signal.aborted) {
@@ -751,6 +781,21 @@ function handleChar(ch: string): void {
     process.exit(0);
   }
 
+  if (ch === '\x04') { // Ctrl-D - end multi-line input
+    if (pendingInput) {
+      const resolve = pendingInput;
+      pendingInput = null;
+      const finalText = inputAccumulator.join('\n');
+      inputAccumulator = [];
+      inputBuffer = '';
+      cursorPos = 0;
+      writeOutput(GOLD_DIM('❯ (end of input)'));
+      drawPromptTop();
+      resolve(finalText);
+      return;
+    }
+  }
+
   if (ch === '\r' || ch === '\n') {
     const line = inputBuffer.trim();
 
@@ -762,6 +807,15 @@ function handleChar(ch: string): void {
       cursorPos = 0;
       drawPromptTop();
       resolve(line);
+      return;
+    }
+
+    if (pendingInput) {
+      // Accumulate line for multi-line input (Enter adds to accumulator)
+      inputAccumulator.push(inputBuffer); // Use non-trimmed buffer to preserve formatting
+      inputBuffer = '';
+      cursorPos = 0;
+      drawPromptTop();
       return;
     }
 
