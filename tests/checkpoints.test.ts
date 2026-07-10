@@ -193,4 +193,87 @@ describe('checkpoints engine', () => {
     await restoreCheckpoint(root, cp!.id);
     expect(fs.readFileSync(path.join(root, 'my file.txt'), 'utf8')).toBe('spaced\n');
   });
+
+  it('excludes files containing secrets from checkpoints', async () => {
+    // Create a file with fake secrets
+    const secretFile = path.join(root, 'config-with-secrets.json');
+    fs.writeFileSync(secretFile, JSON.stringify({
+      api_key: 'sk-1234567890abcdef1234567890abcdef',
+      token: 'ghp_fake_token_for_testing_only',
+      database_url: 'postgresql://user:SECRET_PASSWORD@localhost/db'
+    }, null, 2));
+
+    // Create a checkpoint - should exclude the secret file
+    const cp = await createCheckpoint(root, 'with secrets');
+    expect(cp).not.toBeNull();
+
+    // Verify the secret file still exists in working directory
+    expect(fs.existsSync(secretFile)).toBe(true);
+
+    // Delete the secret file and restore from checkpoint
+    fs.rmSync(secretFile);
+    await restoreCheckpoint(root, cp!.id);
+
+    // CRITICAL: The secret file should NOT be restored because it was excluded
+    expect(fs.existsSync(secretFile)).toBe(false);
+
+    // Clean up (file may not exist, so use force: true)
+    try { fs.rmSync(secretFile); } catch { /* already gone */ }
+  });
+
+  it('excludes .env files with secrets', async () => {
+    const envFile = path.join(root, '.env');
+    fs.writeFileSync(envFile, 'API_KEY=sk_test_12345\nSECRET=super_secret_value\nTOKEN=abc123\n');
+
+    const cp = await createCheckpoint(root, 'with .env');
+    expect(cp).not.toBeNull();
+
+    // Remove .env file and restore
+    fs.rmSync(envFile);
+    await restoreCheckpoint(root, cp!.id);
+
+    // .env file should not be restored
+    expect(fs.existsSync(envFile)).toBe(false);
+
+    // Clean up (file may not exist, so use force: true)
+    try { fs.rmSync(envFile); } catch { /* already gone */ }
+  });
+
+  it('excludes files with bearer tokens', async () => {
+    const tokenFile = path.join(root, 'auth-config.sh');
+    fs.writeFileSync(tokenFile, '#!/bin/bash\nexport AUTH_BEARER="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"\n');
+
+    const cp = await createCheckpoint(root, 'with bearer token');
+    expect(cp).not.toBeNull();
+
+    fs.rmSync(tokenFile);
+    await restoreCheckpoint(root, cp!.id);
+
+    // Token file should not be restored
+    expect(fs.existsSync(tokenFile)).toBe(false);
+
+    // Clean up (file may not exist, so use force: true)
+    try { fs.rmSync(tokenFile); } catch { /* already gone */ }
+  });
+
+  it('allows files without secret patterns', async () => {
+    const normalFile = path.join(root, 'normal-config.json');
+    fs.writeFileSync(normalFile, JSON.stringify({
+      name: 'test-app',
+      version: '1.0.0',
+      description: 'Normal configuration without secrets'
+    }, null, 2));
+
+    const cp = await createCheckpoint(root, 'normal files only');
+    expect(cp).not.toBeNull();
+
+    fs.rmSync(normalFile);
+    await restoreCheckpoint(root, cp!.id);
+
+    // Normal file should be restored normally
+    expect(fs.existsSync(normalFile)).toBe(true);
+    expect(fs.readFileSync(normalFile, 'utf8')).toContain('test-app');
+
+    fs.rmSync(normalFile);
+  });
 });
