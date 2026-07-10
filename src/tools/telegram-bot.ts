@@ -906,7 +906,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `💎 Aura Bot — Online`,
       ``,
       `Komande:`,
-      `/status — Status sistema`,
+      `/status — Šta trenutno radi u ovom chatu (zadatak, trajanje, potvrde na čekanju) + status sistema`,
       `/tools — Lista dostupnih alata`,
       `/memory — Pregled memorije`,
       `/history — Pregled istorije razgovora`,
@@ -936,6 +936,47 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   if (lower === '/ping') return '🏓 Pong! Aura je živa i radi.';
+
+  // ── /status — what's running in THIS chat, then bot health ───────────────
+  // Pairs with /stop and /approve-all: when a task runs unattended for a
+  // while, this shows what it is, how long it's been going, and whether it's
+  // blocked waiting on an approval tap. The bot-health block that /status
+  // always showed follows below the live-task section.
+  if (lower === '/status') {
+    const lines: string[] = [];
+    const set = runningTasks.get(String(chatId));
+    const waiting = [...pendingApprovals.values()].filter(p => p.chatId === String(chatId));
+    if (set && set.size > 0) {
+      lines.push(`🏃 Running task(s): ${set.size}`);
+      for (const t of set) {
+        const secs = Math.round((Date.now() - t.startedAt) / 1000);
+        const mins = Math.floor(secs / 60);
+        const dur = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        lines.push(`  • "${t.task}" — running ${dur}`);
+      }
+    } else {
+      lines.push('💤 No task running in this chat.');
+    }
+    if (waiting.length > 0) {
+      lines.push(`⏳ Waiting for your ✅/❌ approval: ${waiting.length}`);
+      for (const p of waiting) lines.push(`  • ${p.command.slice(0, 120)}`);
+      lines.push(`(/approve-all flushes these — including destructive ones; /stop denies them.)`);
+    }
+    const uptime = process.uptime();
+    const hours = Math.floor(uptime / 3600);
+    const mins = Math.floor((uptime % 3600) / 60);
+    const mem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    lines.push(
+      ``,
+      `📊 Aura Status`,
+      `Uptime: ${hours}h ${mins}m`,
+      `Memory: ${mem}MB`,
+      `Node: ${process.version}`,
+      `Bot: @Aura_Code_bot`,
+      `Status: ✅ Active`,
+    );
+    return lines.join('\n');
+  }
 
   // ── /stop — abort the running task(s) for THIS chat ──────────────────────
   // Same semantics as the CLI's Esc/:stop abort: the agentic loop checks the
@@ -998,22 +1039,6 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Alati: 22`,
       `Testovi: 838+ passing`,
       `Verzija: v0.7.2 (Aura)`,
-    ].join('\n');
-  }
-
-  if (lower === '/status') {
-    const uptime = process.uptime();
-    const hours = Math.floor(uptime / 3600);
-    const mins = Math.floor((uptime % 3600) / 60);
-    const mem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    return [
-      `📊 Aura Status`,
-      `Uptime: ${hours}h ${mins}m`,
-      `Memory: ${mem}MB`,
-      `Node: ${process.version}`,
-      `Bot: @Aura_Code_bot`,
-      `Status: ✅ Active`,
-      `Version: v0.7.2`,
     ].join('\n');
   }
 
