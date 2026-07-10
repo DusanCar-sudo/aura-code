@@ -40,7 +40,7 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderBanner, buildBannerLines } from './diamond.js';
-import { isProviderChange, apiKeyEnvForModelSwitch } from './model-select.js';
+import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount } from './model-select.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
@@ -1254,26 +1254,17 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
   const wasInputActive = inputActive;
   if (wasInputActive) stopInput();
   try {
-    const allModels = getAllModels();
-
-    // Build flat numbered list grouped by provider
-    const entries: { id: string; label: string; provider: string }[] = [];
-    let currentProvider = '';
-    for (const m of allModels) {
-      if (m.provider !== currentProvider) {
-        currentProvider = m.provider;
-        entries.push({ id: '', label: chalk.hex('#a68a2a').bold(`  ── ${currentProvider} ──`), provider: currentProvider });
-      }
-      entries.push({
-        id: m.id,
-        label: `    ${chalk.hex('#cc785c')(String(entries.length + 1).padStart(2))}. ${chalk.hex('#d4af37')(m.name.padEnd(30))} ${chalk.hex('#4e3d30')(m.speed)}`,
-        provider: m.provider,
-      });
-    }
+    // Grouped list where section headers are display-only: they carry no
+    // number, so numbering is gap-free and a header can never be selected.
+    const rows = buildModelRows(getAllModels());
 
     console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
-    for (const e of entries) {
-      console.log(e.label);
+    for (const r of rows) {
+      if (r.kind === 'header') {
+        console.log(chalk.hex('#a68a2a').bold(`  ── ${r.provider} ──`));
+      } else {
+        console.log(`    ${chalk.hex('#cc785c')(String(r.num).padStart(2))}. ${chalk.hex('#d4af37')(r.name.padEnd(30))} ${chalk.hex('#4e3d30')(r.speed)}`);
+      }
     }
     console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
     console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
@@ -1296,15 +1287,10 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
       return;
     }
 
-    // Try as a number
+    // Try as a number — every listed number is a real, selectable model
     const num = parseInt(choice, 10);
-    if (!isNaN(num) && num >= 1 && num <= entries.length) {
-      const selected = entries[num - 1];
-      if (selected.id) {
-        trySetModel(c, selected.id);
-      } else {
-        console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
-      }
+    if (!isNaN(num) && num >= 1 && num <= modelCount(rows)) {
+      trySetModel(c, modelIdForNumber(rows, num)!);
       return;
     }
 
