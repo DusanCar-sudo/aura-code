@@ -18,7 +18,8 @@ export type Category =
   | 'git'      // repo state
   | 'env'      // API keys
   | 'version'  // up-to-date check
-  | 'memory';  // episodes, dreams
+  | 'memory'   // episodes, dreams
+  | 'hygiene'; // stray non-aura files/dirs in the repo root
 
 export interface Finding {
   category: Category;

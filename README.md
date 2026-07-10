@@ -137,7 +137,7 @@ aura --analyze                                           # analyze
 ```
 
 `--doctor` is a sixth, standalone mode: `aura --doctor` scans Aura's own
-install (build, config, deps, env, git) across 10 check categories and can
+install (build, config, deps, env, git, repo hygiene) across 11 check categories and can
 attempt 4 kinds of auto-repair with `--doctor --fix`.
 
 ---
