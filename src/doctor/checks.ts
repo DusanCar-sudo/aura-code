@@ -441,6 +441,42 @@ export function checkMemory(root: string): Finding[] {
   return out;
 }
 
+// ── 11. Repo-root hygiene ────────────────────────────────────────────────────
+// Standing rule: aura-code's repo root holds only aura-code source — personal
+// / utility work (dashboards, cron scripts, one-off captures) belongs in the
+// sibling projects/ directory. Interactive sessions launched from the repo
+// root have repeatedly written stray files here anyway (identity.json memory
+// alone hasn't reliably prevented it — see repo-hygiene-projects-dir), so
+// this is the active-guard half: flag any new untracked, non-gitignored
+// top-level entry so it surfaces in every `aura --doctor` run instead of only
+// being caught by a manual `git status --short` sweep.
+export function checkHygiene(root: string): Finding[] {
+  const out: Finding[] = [];
+  const isRepo = sh('git rev-parse --is-inside-work-tree', root);
+  if (isRepo !== 'true') {
+    return out; // checkGit already reports "not a git repo"; nothing more to say here
+  }
+
+  const status = sh('git status --porcelain', root);
+  const strays = status.split('\n')
+    .filter(l => l.startsWith('?? '))
+    .map(l => l.slice(3).split('/')[0])
+    .filter((v, i, arr) => v && arr.indexOf(v) === i); // unique top-level names
+
+  if (strays.length === 0) {
+    out.push({ category: 'hygiene', name: 'repo root', severity: 'ok', message: 'No untracked non-aura files in the repo root.', fixable: false });
+    return out;
+  }
+
+  out.push({
+    category: 'hygiene', name: 'stray root files', severity: 'warn',
+    message: `${strays.length} untracked top-level item(s) in the repo root that git doesn't recognize: ${strays.join(', ')}.`,
+    detail: 'If these are personal/utility work (not aura-code source), move them to /mnt/bigdata/aura/projects/<name>/ — see the repo-hygiene standing rule.',
+    fixable: false,
+  });
+  return out;
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const ALL_CHECKS: Array<{ category: Category; run: (root: string, offline?: boolean) => Finding[] }> = [
@@ -454,4 +490,5 @@ export const ALL_CHECKS: Array<{ category: Category; run: (root: string, offline
   { category: 'env', run: (r) => checkEnv(r) },
   { category: 'version', run: (r, o) => checkVersion(r, o) },
   { category: 'memory', run: (r) => checkMemory(r) },
+  { category: 'hygiene', run: (r) => checkHygiene(r) },
 ];

@@ -118,7 +118,7 @@ const SEVERITY_COLOR: Record<Severity, (s: string) => string> = {
 const CATEGORY_LABEL: Record<string, string> = {
   build: 'Build', config: 'Config', source: 'Source', assets: 'Assets',
   skills: 'Skills', deps: 'Dependencies', git: 'Git', env: 'Environment',
-  version: 'Version', memory: 'Memory',
+  version: 'Version', memory: 'Memory', hygiene: 'Repo Hygiene',
 };
 
 export function formatDoctorReport(report: DoctorReport): string {
