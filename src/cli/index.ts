@@ -10,7 +10,7 @@ import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
 process.on('unhandledRejection', (reason) => {
-  console.error(chalk.hex('#b15439')('  ✗ Unhandled rejection: ' + String(reason)));
+  console.error(chalk.hex('#b15439')('  \u2717 Unhandled rejection: ' + String(reason)));
 });
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
@@ -954,7 +954,7 @@ async function main() {
   setBannerLines(buildBannerLines(tuiBannerInfo));
 
   // Use the TUI display for output
-
+  
   const tuiDisplay = createTuiDisplay();
   // Shared context-health tracker: the loop records compaction events and
   // per-turn snapshots into it; the /context command reads it back. The
@@ -1136,7 +1136,7 @@ let abortController: AbortController | null = null;
     }
     } catch (err) {
       const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-      writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error after task completed: ' + msg));
+      writeOutput(chalk.hex('#b15439')('  \u2717 Unhandled error after task completed: ' + msg));
     }
   }
 
