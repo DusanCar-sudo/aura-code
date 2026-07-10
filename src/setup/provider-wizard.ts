@@ -82,7 +82,7 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
       console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Singapore')} ${chalk.hex('#5a4a3a')('(default)')}`);
       console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('China')}`);
       console.log(`  ${chalk.hex('#8a7768')('3.')} ${chalk.hex('#e8d5b7')('Amsterdam')}`);
-      const regionChoice = (await askInput(rl, '  ▸ Choose (1, 2, or 3) [1]: ')).trim();
+      const regionChoice = (await askInput(rl, '  ▸ Choose (1, 2, or 3) [1]: ', askInputFn)).trim();
       if (regionChoice === '2') xiaomiRegion = 'cn';
       else if (regionChoice === '3') xiaomiRegion = 'ams';
     }
@@ -97,7 +97,7 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     if (defaultBase) {
       baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(defaultBase)}]: `;
     }
-    const enteredUrl = await askInput(rl, baseUrlPrompt);
+    const enteredUrl = await askInput(rl, baseUrlPrompt, askInputFn);
     let baseUrl = enteredUrl.trim() || defaultBase || provider.baseUrl || '';
     // Normalize user-typed URLs (trailing slash, pasted /chat/completions path).
     if (baseUrl) {
@@ -147,7 +147,7 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
 // Step 1: Provider Selection
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function selectProvider(rl: readline.Interface): Promise<ProviderEntry | null> {
+async function selectProvider(rl: readline.Interface, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderEntry | null> {
   console.log(chalk.hex('#cc785c')('  Step 1: Select your AI provider\n'));
 
   const items = PROVIDER_REGISTRY.map((p, i) => {
@@ -160,7 +160,7 @@ async function selectProvider(rl: readline.Interface): Promise<ProviderEntry | n
   }
   console.log();
 
-  const choice = await askInput(rl, '  ▸ Choose a number: ');
+  const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
   const idx = parseInt(choice, 10) - 1;
   if (idx < 0 || idx >= PROVIDER_REGISTRY.length || !Number.isFinite(idx)) {
     console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
@@ -173,11 +173,11 @@ async function selectProvider(rl: readline.Interface): Promise<ProviderEntry | n
 // Step 2: Model Selection
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function selectModel(rl: readline.Interface, provider: ProviderEntry): Promise<string | null> {
+async function selectModel(rl: readline.Interface, provider: ProviderEntry, askInputFn?: (prompt: string) => Promise<string>): Promise<string | null> {
   // Custom endpoint — user types model ID
   if (provider.name === 'Custom endpoint') {
     console.log(chalk.hex('#cc785c')('\n  Step 2: Enter model ID\n'));
-    const modelId = await askInput(rl, '  ▸ Model ID: ');
+    const modelId = await askInput(rl, '  ▸ Model ID: ', askInputFn);
     if (!modelId) {
       console.log(chalk.hex('#b15439')('  ✗ Model ID is required.'));
       return null;
@@ -203,7 +203,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry): Pro
       console.log(`  ${num} ${name}`);
     }
     console.log();
-    const choice = await askInput(rl, '  ▸ Choose a number: ');
+    const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
     const idx = parseInt(choice, 10) - 1;
     if (idx < 0 || idx >= ollamaModels.length || !Number.isFinite(idx)) {
       console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
@@ -222,7 +222,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry): Pro
     console.log(`  ${num} ${label}${speed}`);
   }
   console.log();
-  const choice = await askInput(rl, '  ▸ Choose a number: ');
+  const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
   const idx = parseInt(choice, 10) - 1;
   if (idx < 0 || idx >= provider.models.length || !Number.isFinite(idx)) {
     console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
