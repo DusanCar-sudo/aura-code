@@ -18,7 +18,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, askInput, enterAltScreen, setBannerLines, inputActive } from './tui.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -1222,60 +1222,72 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
  * lets the user pick by number or type a custom model ID.
  */
 async function showModelSelector(c: ReplCtx): Promise<void> {
-  const allModels = getAllModels();
+  // Same stdin-collision fix as :provider (see handleReplCommand): the TUI's
+  // raw-mode stdin handler competes with any prompt for keystrokes, so stop
+  // TUI input entirely (this also hides the main input box), let a plain
+  // readline own stdin, then restart TUI input once the selector exits.
+  const wasInputActive = inputActive;
+  if (wasInputActive) stopInput();
+  try {
+    const allModels = getAllModels();
 
-  // Build flat numbered list grouped by provider
-  const entries: { id: string; label: string; provider: string }[] = [];
-  let currentProvider = '';
-  for (const m of allModels) {
-    if (m.provider !== currentProvider) {
-      currentProvider = m.provider;
-      entries.push({ id: '', label: chalk.hex('#a68a2a').bold(`  ── ${currentProvider} ──`), provider: currentProvider });
+    // Build flat numbered list grouped by provider
+    const entries: { id: string; label: string; provider: string }[] = [];
+    let currentProvider = '';
+    for (const m of allModels) {
+      if (m.provider !== currentProvider) {
+        currentProvider = m.provider;
+        entries.push({ id: '', label: chalk.hex('#a68a2a').bold(`  ── ${currentProvider} ──`), provider: currentProvider });
+      }
+      entries.push({
+        id: m.id,
+        label: `    ${chalk.hex('#cc785c')(String(entries.length + 1).padStart(2))}. ${chalk.hex('#d4af37')(m.name.padEnd(30))} ${chalk.hex('#4e3d30')(m.speed)}`,
+        provider: m.provider,
+      });
     }
-    entries.push({
-      id: m.id,
-      label: `    ${chalk.hex('#cc785c')(String(entries.length + 1).padStart(2))}. ${chalk.hex('#d4af37')(m.name.padEnd(30))} ${chalk.hex('#4e3d30')(m.speed)}`,
-      provider: m.provider,
+
+    console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
+    for (const e of entries) {
+      console.log(e.label);
+    }
+    console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
+    console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
+
+    const answer = await new Promise<string>(resolve => {
+      const promptRl = c.rl;
+      if (!promptRl) {
+        // TUI mode: TUI input is stopped above, so a temporary readline can
+        // own stdin without the two-readers-one-stream conflict.
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(chalk.hex('#cc785c')('  ▸ '), ans => { rl.close(); resolve(ans); });
+        return;
+      }
+      promptRl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
     });
-  }
+    const choice = answer.trim();
 
-  console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
-  for (const e of entries) {
-    console.log(e.label);
-  }
-  console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
-  console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
-
-  const answer = await new Promise<string>(resolve => {
-        const promptRl = c.rl;
-    if (!promptRl) {
-      // In TUI mode, use the TUI's askInput function to avoid input leakage
-      askInput(chalk.hex('#cc785c')('  ▸ ')).then(resolve);
+    if (!choice) {
+      console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
       return;
     }
-    promptRl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
-  });
-  const choice = answer.trim();
 
-  if (!choice) {
-    console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
-    return;
-  }
-
-  // Try as a number
-  const num = parseInt(choice, 10);
-  if (!isNaN(num) && num >= 1 && num <= entries.length) {
-    const selected = entries[num - 1];
-    if (selected.id) {
-      trySetModel(c, selected.id);
-    } else {
-      console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
+    // Try as a number
+    const num = parseInt(choice, 10);
+    if (!isNaN(num) && num >= 1 && num <= entries.length) {
+      const selected = entries[num - 1];
+      if (selected.id) {
+        trySetModel(c, selected.id);
+      } else {
+        console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
+      }
+      return;
     }
-    return;
-  }
 
-  // Treat as a raw model ID
-  trySetModel(c, choice);
+    // Treat as a raw model ID
+    trySetModel(c, choice);
+  } finally {
+    if (wasInputActive) startInput();
+  }
 }
 
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
