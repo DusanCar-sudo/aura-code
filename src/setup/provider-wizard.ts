@@ -51,15 +51,15 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     console.log(chalk.hex('#8a7768')('  Configure your AI provider in 3 easy steps.\n'));
 
     // ── Step 1: Select Provider ─────────────────────────────────────────────
-    const provider = await selectProvider(rl);
+    const provider = await selectProvider(rl, askInputFn);
     if (!provider) return null;
 
     // ── Step 2: Select Model ────────────────────────────────────────────────
-    const model = await selectModel(rl, provider);
+    const model = await selectModel(rl, provider, askInputFn);
     if (!model) return null;
 
     // ── Step 3: API Key ─────────────────────────────────────────────────────
-    const apiKey = await configureApiKey(rl, provider);
+    const apiKey = await configureApiKey(rl, provider, askInputFn);
     if (apiKey === null && provider.envKey !== null) return null; // Cancelled (needed key but got null)
 
     let effectiveModel = model;
@@ -134,7 +134,7 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     };
 
     // ── Step 4: Test Connection ─────────────────────────────────────────────
-    const saved = await testAndSave(rl, config);
+    const saved = await testAndSave(rl, config, askInputFn);
     return saved;
   } finally {
     if (!existingRl) {
@@ -238,7 +238,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry, askI
 /**
  * Returns the API key string, empty string for local providers, or null if cancelled.
  */
-async function configureApiKey(rl: readline.Interface, provider: ProviderEntry): Promise<string | null> {
+async function configureApiKey(rl: readline.Interface, provider: ProviderEntry, askInputFn?: (prompt: string) => Promise<string>): Promise<string | null> {
   // No key needed for Ollama / local
   if (!provider.envKey) {
     return '';
@@ -282,7 +282,7 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry):
 // Step 4: Test Connection & Save
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function testAndSave(rl: readline.Interface, config: ProviderConfig): Promise<ProviderConfig | null> {
+async function testAndSave(rl: readline.Interface, config: ProviderConfig, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderConfig | null> {
   console.log(chalk.hex('#cc785c')(`\n  Testing connection to ${config.provider}...`));
 
   const result = await testProviderConnection({
@@ -304,12 +304,12 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig): Prom
   console.log(chalk.hex('#8a7768')('   1. Re-enter API key'));
   console.log(chalk.hex('#8a7768')('   2. Skip test and save anyway'));
   console.log(chalk.hex('#8a7768')('   3. Cancel\n'));
-  const choice = await askInput(rl, '  ▸ Choose (1, 2, or 3): ');
+  const choice = await askInput(rl, '  ▸ Choose (1, 2, or 3): ', askInputFn);
   if (choice === '1') {
     const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
     if (!newKey) return null;
     config.apiKey = newKey;
-    return testAndSave(rl, config); // Recursive retry
+    return testAndSave(rl, config, askInputFn); // Recursive retry
   }
   if (choice === '2') {
     saveProviderConfig(config);

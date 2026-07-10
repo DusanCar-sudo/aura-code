@@ -10,7 +10,7 @@ import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
 process.on('unhandledRejection', (reason) => {
-  console.error(chalk.hex('#b15439')('  \u2717 Unhandled rejection: ' + String(reason)));
+  console.error(chalk.hex('#b15439')('  ✗ Unhandled rejection: ' + String(reason)));
 });
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
@@ -18,7 +18,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, askInput, enterAltScreen, setBannerLines } from './tui.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, askInput, enterAltScreen, setBannerLines, inputActive } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -954,7 +954,7 @@ async function main() {
   setBannerLines(buildBannerLines(tuiBannerInfo));
 
   // Use the TUI display for output
-  
+
   const tuiDisplay = createTuiDisplay();
   // Shared context-health tracker: the loop records compaction events and
   // per-turn snapshots into it; the /context command reads it back. The
@@ -1136,7 +1136,7 @@ let abortController: AbortController | null = null;
     }
     } catch (err) {
       const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-      writeOutput(chalk.hex('#b15439')('  \u2717 Unhandled error after task completed: ' + msg));
+      writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error after task completed: ' + msg));
     }
   }
 
@@ -1823,28 +1823,32 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   // ── Provider wizard command ────────────────────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    // When in TUI mode (c.rl === null), pass the TUI's askInput function to avoid input leakage
-    const cfg = await runProviderWizard(c.rl ?? undefined, c.rl === null ? askInput : undefined);
-    if (cfg) {
-      // Update current session's provider without restart
-      runtimeConfig.model = cfg.model;
-      runtimeConfig.baseUrl = cfg.baseUrl;
-      runtimeConfig.apiKey = cfg.apiKey;
-      c.providerConfig.model = cfg.model;
-      c.providerConfig.baseUrl = cfg.baseUrl;
-      c.providerConfig.apiKey = cfg.apiKey;
-      // Keep resolved in sync
-      resolved.model = cfg.model;
-      resolved.baseUrl = cfg.baseUrl;
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
-      // The wizard saves to the global config, but a project .aura.json model
-      // outranks it on the next startup — warn so the switch doesn't appear lost.
-      if (fileConfig.model && fileConfig.model !== cfg.model) {
-        console.log(chalk.hex('#a68a2a')(
-          `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
-          `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
-        ));
+    // Fullscreen prompt approach was unreliable — wizard's readline and TUI's
+    // stdin handler collide. Instead, stop TUI input, let readline own stdin
+    // completely, then restart TUI input.
+    const wasInputActive = inputActive;
+    if (wasInputActive) stopInput();
+    try {
+      const cfg = await runProviderWizard(undefined, undefined);
+      if (cfg) {
+        runtimeConfig.model = cfg.model;
+        runtimeConfig.baseUrl = cfg.baseUrl;
+        runtimeConfig.apiKey = cfg.apiKey;
+        c.providerConfig.model = cfg.model;
+        c.providerConfig.baseUrl = cfg.baseUrl;
+        c.providerConfig.apiKey = cfg.apiKey;
+        resolved.model = cfg.model;
+        resolved.baseUrl = cfg.baseUrl;
+        writeOutput(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
+        if (fileConfig.model && fileConfig.model !== cfg.model) {
+          writeOutput(chalk.hex('#a68a2a')(
+            `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
+            `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
+          ));
+        }
       }
+    } finally {
+      if (wasInputActive) startInput();
     }
     return { handled: true };
   }
