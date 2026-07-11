@@ -762,7 +762,19 @@ export async function synthesizeSpeech(text: string, voice?: string): Promise<Bu
   });
   const audioData: string | undefined = (response.choices[0]?.message as any)?.audio?.data;
   if (!audioData) throw new Error('No audio data in TTS response');
-  return Buffer.from(audioData, 'base64');
+  return stripWavPrefix(Buffer.from(audioData, 'base64'));
+}
+
+/**
+ * Strip a stray CRLF (0x0D 0x0A) prefix that the MiMo TTS API occasionally
+ * prepends before the WAV RIFF header, which corrupts the file. Only strips
+ * the exact \r\n signature to stay safe if the API ever fixes this upstream.
+ */
+export function stripWavPrefix(buf: Buffer): Buffer {
+  if (buf.length >= 2 && buf[0] === 0x0D && buf[1] === 0x0A) {
+    return buf.subarray(2);
+  }
+  return buf;
 }
 
 /**
