@@ -32,8 +32,8 @@ export class AnthropicProvider implements LLMProvider {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: this.maxTokens,
-      system,
-      tools: tools.map(toAnthropicTool),
+      system: toCachedSystem(system),
+      tools: toCachedTools(tools),
       messages,
     });
     return fromAnthropicResponse(response);
@@ -48,8 +48,8 @@ export class AnthropicProvider implements LLMProvider {
     const stream = this.client.messages.stream({
       model: this.model,
       max_tokens: this.maxTokens,
-      system,
-      tools: tools.map(toAnthropicTool),
+      system: toCachedSystem(system),
+      tools: toCachedTools(tools),
       messages,
     });
 
@@ -105,6 +105,13 @@ export class AnthropicProvider implements LLMProvider {
         if (event.usage?.output_tokens !== undefined) outputTokens = event.usage.output_tokens;
       } else if (event.type === 'message_start') {
         if (event.message?.usage?.input_tokens !== undefined) inputTokens = event.message.usage.input_tokens;
+        if (process.env.AURA_DEBUG_CACHE && event.message?.usage) {
+          const u = event.message.usage as Anthropic.Usage & {
+            cache_creation_input_tokens?: number;
+            cache_read_input_tokens?: number;
+          };
+          console.error(`[cache] creation=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens}`);
+        }
       }
     }
 
@@ -121,6 +128,32 @@ export class AnthropicProvider implements LLMProvider {
 }
 
 // ── Conversion helpers ──────────────────────────────────────────────────────
+
+// cache_control is GA on the Messages API but missing from SDK 0.32.1's
+// non-beta types, hence the intersection casts below.
+type CacheControl = { cache_control: { type: 'ephemeral' } };
+
+// System prompt and tool definitions are static per session (built once in
+// loop.ts; compaction only rewrites history), so mark both as cache
+// breakpoints: everything up to and including a marked block is cached.
+export function toCachedSystem(system: string): Anthropic.TextBlockParam[] {
+  return [{
+    type: 'text',
+    text: system,
+    cache_control: { type: 'ephemeral' },
+  } as Anthropic.TextBlockParam & CacheControl];
+}
+
+export function toCachedTools(tools: ToolDefinition[]): Anthropic.Tool[] {
+  const out = tools.map(toAnthropicTool);
+  if (out.length > 0) {
+    out[out.length - 1] = {
+      ...out[out.length - 1],
+      cache_control: { type: 'ephemeral' },
+    } as Anthropic.Tool & CacheControl;
+  }
+  return out;
+}
 
 function toAnthropicTool(t: ToolDefinition): Anthropic.Tool {
   return {
