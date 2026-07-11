@@ -107,7 +107,7 @@ export async function runMixtureOfAgents(opts: MixtureOptions): Promise<LoopResu
       success: false,
       summary: `Perspective failed: ${String(e)}`,
       turns: 0, toolCallCount: 0,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 },
       costUsd: 0, history: [], toolCallLog: [],
     })),
   ));
@@ -120,7 +120,8 @@ export async function runMixtureOfAgents(opts: MixtureOptions): Promise<LoopResu
     inputTokens: acc.inputTokens + r.usage.inputTokens,
     outputTokens: acc.outputTokens + r.usage.outputTokens,
     totalTokens: acc.totalTokens + r.usage.totalTokens,
-  }), { inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+    cachedTokens: acc.cachedTokens + (r.usage.cachedTokens ?? 0),
+  }), { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 });
   const turns = runs.reduce((n, r) => n + r.turns, 0);
   const toolCallCount = runs.reduce((n, r) => n + r.toolCallCount, 0);
   let costUsd = runs.reduce((c, r) => c + r.costUsd, 0);
@@ -143,12 +144,13 @@ export async function runMixtureOfAgents(opts: MixtureOptions): Promise<LoopResu
     { role: 'user', content: `Original task: ${task}\n\n${reports}` },
   ], []);
 
-  const su = (synthesis as { usage?: { inputTokens?: number; outputTokens?: number } }).usage;
+  const su = (synthesis as { usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }).usage;
   if (su) {
     usage.inputTokens += su.inputTokens ?? 0;
     usage.outputTokens += su.outputTokens ?? 0;
     usage.totalTokens += (su.inputTokens ?? 0) + (su.outputTokens ?? 0);
-    costUsd += costFor(opts.pricingModel ?? provider.model, su.inputTokens ?? 0, su.outputTokens ?? 0);
+    usage.cachedTokens += su.cachedTokens ?? 0;
+    costUsd += costFor(opts.pricingModel ?? provider.model, su.inputTokens ?? 0, su.outputTokens ?? 0, su.cachedTokens);
   }
 
   return {

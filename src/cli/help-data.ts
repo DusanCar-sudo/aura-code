@@ -60,6 +60,7 @@ export const HELP_TEXT = [
   '  :approve off            Re-enable confirmation for destructive commands',
   '',
   '  ── Context / Stats ──────────────────────────────',
+  '  :compact, :compress     Force compaction now (reuses auto-compaction logic)',
   '  :context                Show loaded project context',
   '  :graph                  Show codebase knowledge graph summary',
   '  :graph refresh          Reload graph from graphify-out/graph.json',

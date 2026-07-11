@@ -29,12 +29,12 @@ import chalk from 'chalk';
 import type { Display } from './display.js';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
 import { formatContextBar, formatContextDashboard } from './context-health.js';
-import { gradient, gradientStopFor, GOLD_HEX, GOLD_DIM_HEX, RUBY_ACCENT } from './diamond.js';
+import { gradient, gradientStopFor, TEXT_HEX, TEXT_DIM_HEX, BG_HEX, CHROME_DIM, RUBY_ACCENT } from './diamond.js';
 import { PALETTE_COMMANDS, filterCommands, renderPalette, type PaletteCommand } from './command-palette.js';
 import { renderMarkdown } from './markdown.js';
 
-const GOLD = chalk.hex(GOLD_HEX);
-const GOLD_DIM = chalk.hex(GOLD_DIM_HEX);
+const TEXT = chalk.hex(TEXT_HEX);
+const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 const ACCENT = chalk.hex('#cc785c');
 const RUBY = RUBY_ACCENT;
 
@@ -110,7 +110,7 @@ function startToolSpinner(name: string): void {
       // Write spinner on the last output line (inside scroll region)
       cursorCol(1);
       clearEol();
-      rawWrite(ACCENT(`  ${s} ${activeTool.name}`) + GOLD_DIM(`  ${elapsed}s`));
+      rawWrite(ACCENT(`  ${s} ${activeTool.name}`) + TEXT_DIM(`  ${elapsed}s`));
       cursorCol(1);
     }, 100);
   }
@@ -179,10 +179,17 @@ function hideCursor(): void { rawWrite('\x1b[?25l'); }
 function showCursor(): void { rawWrite('\x1b[?25h'); }
 
 let altScreenActive = false;
-export function enterAltScreen(): void { altScreenActive = true; rawWrite('\x1b[?1049h'); }
+export function enterAltScreen(): void {
+  altScreenActive = true;
+  rawWrite('\x1b[?1049h');
+  // OSC 11: set the terminal's default background to the palette's bluish
+  // dark. Restored via OSC 111 on leave — no per-line bg painting needed.
+  rawWrite(`\x1b]11;${BG_HEX}\x07`);
+}
 export function leaveAltScreen(): void {
   if (!altScreenActive) return;
   altScreenActive = false;
+  rawWrite('\x1b]111\x07'); // OSC 111: reset background to terminal default
   rawWrite('\x1b[?1049l');
 }
 
@@ -303,7 +310,7 @@ function buildBottomRows(): string[] {
   const rows: string[] = [];
 
   // Status line
-  rows.push(' '.repeat(LEAD) + padVisible(modeTag + agentTag + GOLD_DIM(` ${statusLineText}`), boxWidth));
+  rows.push(' '.repeat(LEAD) + padVisible(modeTag + agentTag + TEXT_DIM(` ${statusLineText}`), boxWidth));
 
   // Input box
   for (let row = 0; row < HEADER_ROWS; row++) {
@@ -311,12 +318,12 @@ function buildBottomRows(): string[] {
     if (row === 0) {
       const dashes = Math.max(0, boxWidth - label.length - 2);
       boxPart = focused
-        ? gradient('╭') + GOLD_DIM(label) + gradient('─'.repeat(dashes)) + gradient('╮')
-        : GOLD_DIM('╭' + label + '─'.repeat(dashes) + '╮');
+        ? gradient('╭') + TEXT_DIM(label) + gradient('─'.repeat(dashes)) + gradient('╮')
+        : CHROME_DIM('╭' + label + '─'.repeat(dashes) + '╮');
     } else if (row === HEADER_ROWS - 1) {
       boxPart = focused
         ? gradient('╰' + '─'.repeat(boxWidth - 2) + '╯')
-        : GOLD_DIM('╰' + '─'.repeat(boxWidth - 2) + '╯');
+        : CHROME_DIM('╰' + '─'.repeat(boxWidth - 2) + '╯');
     } else {
       const contentRow = row - 1;
       const text = wrapped.rows[contentRow] ?? '';
@@ -324,16 +331,16 @@ function buildBottomRows(): string[] {
       const showPlaceholder = inputBuffer.length === 0 && contentRow === 0;
       let inner: string;
       if (showPlaceholder) {
-        inner = GOLD_DIM('type a task, :btw, :q, :help...') + cursorChar;
+        inner = TEXT_DIM('type a task, :btw, :q, :help...') + cursorChar;
         inner = padVisible(inner, innerWidth);
       } else if (isCursorRow && focused) {
-        const before = GOLD(text.slice(0, wrapped.cursorCol));
-        const after = GOLD(text.slice(wrapped.cursorCol));
+        const before = TEXT(text.slice(0, wrapped.cursorCol));
+        const after = TEXT(text.slice(wrapped.cursorCol));
         inner = padVisible(before + cursorChar + after, innerWidth);
       } else {
-        inner = padVisible((focused ? GOLD : GOLD_DIM)(text), innerWidth);
+        inner = padVisible((focused ? TEXT : TEXT_DIM)(text), innerWidth);
       }
-      const border = focused ? gradientStopFor(row, HEADER_ROWS)('│') : GOLD_DIM('│');
+      const border = focused ? gradientStopFor(row, HEADER_ROWS)('│') : CHROME_DIM('│');
       boxPart = border + ' ' + inner + ' ' + border;
     }
     rows.push(' '.repeat(LEAD) + boxPart);
@@ -473,8 +480,8 @@ export function writeStream(text: string): void {
 
 function echoUserLine(line: string): void {
   const bar = RUBY('│ ');
-  writeOutput(bar + GOLD(line));
-  writeOutput(bar + GOLD_DIM(formatTime(new Date())));
+  writeOutput(bar + TEXT(line));
+  writeOutput(bar + TEXT_DIM(formatTime(new Date())));
 }
 
 function formatTime(d: Date): string {
@@ -534,7 +541,7 @@ function renderScrollView(): void {
   const bottom = start + visible.length;
   const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, scrollBuffer.length)) * 100)}%`;
   const indicator = ACCENT.bold(' -- SCROLL -- ')
-    + GOLD_DIM(`${start + 1}-${bottom}/${scrollBuffer.length} ${pos} · j/k · ^d/^u · gg/G · i/Enter/Esc insert`);
+    + TEXT_DIM(`${start + 1}-${bottom}/${scrollBuffer.length} ${pos} · j/k · ^d/^u · gg/G · i/Enter/Esc insert`);
   rawWrite(`\x1b[${sr};1H`);
   rawWrite(truncVisible(indicator, width));
 }
@@ -632,7 +639,7 @@ function handleChar(ch: string): void {
       pendingConfirm = null;
       inputBuffer = '';
       cursorPos = 0;
-      writeOutput(GOLD_DIM('❯ n (cancelled)'));
+      writeOutput(TEXT_DIM('❯ n (cancelled)'));
       resolve('n');
       return;
     }
@@ -642,7 +649,7 @@ function handleChar(ch: string): void {
       inputAccumulator = [];
       inputBuffer = '';
       cursorPos = 0;
-      writeOutput(GOLD_DIM('❯ (cancelled)'));
+      writeOutput(TEXT_DIM('❯ (cancelled)'));
       drawPromptBottom();
       resolve('');
       return;
@@ -668,7 +675,7 @@ function handleChar(ch: string): void {
       inputAccumulator = [];
       inputBuffer = '';
       cursorPos = 0;
-      writeOutput(GOLD_DIM('❯ (end of input)'));
+      writeOutput(TEXT_DIM('❯ (end of input)'));
       drawPromptBottom();
       resolve(finalText);
       return;
@@ -693,7 +700,7 @@ function handleChar(ch: string): void {
     if (pendingConfirm) {
       const resolve = pendingConfirm;
       pendingConfirm = null;
-      writeOutput(GOLD_DIM(`❯ ${line || 'n'}`));
+      writeOutput(TEXT_DIM(`❯ ${line || 'n'}`));
       inputBuffer = '';
       cursorPos = 0;
       drawPromptBottom();
@@ -982,9 +989,14 @@ export function createTuiDisplay(): Display {
         const s = spinners[(thinkingFrame++) % spinners.length];
         cursorCol(1);
         clearEol();
-        rawWrite(GOLD_DIM(`  ${s} thinking`));
+        rawWrite(TEXT_DIM(`  ${s} thinking`));
         cursorCol(1);
       }, 100);
+    },
+
+    stopThinking() {
+      if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+      if (!scrollMode) { cursorCol(1); clearEol(); }
     },
 
     toolStart(name: string) {
@@ -997,12 +1009,13 @@ export function createTuiDisplay(): Display {
       if (!inStream) {
         inStream = true;
         stopToolSpinner();
+        if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
         if (!scrollMode) {
           cursorCol(1);
           clearEol();
         }
       }
-      writeStream(GOLD(text));
+      writeStream(TEXT(text));
     },
 
     streamEnd() {
@@ -1022,25 +1035,25 @@ export function createTuiDisplay(): Display {
       const icon = toolIcon(name);
       const label = chalk.hex('#cc785c').bold(`${icon} ${name}`);
       const detail = fmtIn(name, input);
-      writeOutput(`  ${label}  ${GOLD_DIM(detail)}`);
+      writeOutput(`  ${label}  ${TEXT_DIM(detail)}`);
     },
 
     toolResult(name: string, result: string, elapsedMs: number) {
       stopToolSpinner();
       const lines = result.split('\n');
       const preview = lines.length > 8
-        ? lines.slice(0, 8).join('\n') + GOLD_DIM(`\n  ... (${lines.length - 8} more lines)`)
+        ? lines.slice(0, 8).join('\n') + TEXT_DIM(`\n  ... (${lines.length - 8} more lines)`)
         : result;
-      const elapsed = GOLD_DIM(`${elapsedMs}ms`);
+      const elapsed = TEXT_DIM(`${elapsedMs}ms`);
       const isError = result.startsWith('Error:') || result.startsWith('Tool error');
       if (isError) {
-        writeOutput('  ' + chalk.hex('#b15439')('✗ ') + GOLD_DIM(preview.replace(/\n/g, '\n    ')));
+        writeOutput('  ' + chalk.hex('#b15439')('✗ ') + TEXT_DIM(preview.replace(/\n/g, '\n    ')));
       } else {
         const fl = lines[0] ?? '';
         if (lines.length <= 3) {
-          writeOutput('  ' + chalk.hex('#5a9e6e')('✓ ') + GOLD_DIM(result));
+          writeOutput('  ' + chalk.hex('#5a9e6e')('✓ ') + TEXT_DIM(result));
         } else {
-          writeOutput('  ' + chalk.hex('#5a9e6e')('✓ ') + GOLD_DIM(`${fl}`) + GOLD_DIM(` (+${lines.length - 1} lines) ${elapsed}`));
+          writeOutput('  ' + chalk.hex('#5a9e6e')('✓ ') + TEXT_DIM(`${fl}`) + TEXT_DIM(` (+${lines.length - 1} lines) ${elapsed}`));
         }
       }
     },
@@ -1066,7 +1079,7 @@ export function createTuiDisplay(): Display {
       const l = sep();
       writeOutput('\n' + l);
       writeOutput(chalk.hex('#cc785c').bold(`  ${title}`));
-      if (subtitle) writeOutput(GOLD_DIM(`  ${subtitle}`));
+      if (subtitle) writeOutput(TEXT_DIM(`  ${subtitle}`));
       writeOutput(l);
     },
 
@@ -1074,7 +1087,7 @@ export function createTuiDisplay(): Display {
       const l = sep();
       writeOutput('\n' + l);
       writeOutput(chalk.hex('#5a9e6e').bold('  ✓ Done'));
-      writeOutput(GOLD_DIM(`  ${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`));
+      writeOutput(TEXT_DIM(`  ${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`));
       if (text) {
         const mdLines = renderMarkdown(text);
         writeOutput('');
@@ -1088,14 +1101,14 @@ export function createTuiDisplay(): Display {
       const idxMap = new Map<string, number>(plan.steps.map((s, i) => [s.id, i + 1]));
       writeOutput('\n' + l);
       writeOutput(chalk.hex('#cc785c').bold('  Execution Plan'));
-      writeOutput(GOLD_DIM(`  Goal: ${plan.goal}`));
+      writeOutput(TEXT_DIM(`  Goal: ${plan.goal}`));
       writeOutput(l);
       plan.steps.forEach((s, i) => {
-        const num  = GOLD_DIM(`${i + 1}.`);
+        const num  = TEXT_DIM(`${i + 1}.`);
         const spec = chalk.hex('#cc785c').bold(`[${s.specialist}]`);
-        const task = GOLD(s.task.length > 55 ? s.task.slice(0, 52) + '…' : s.task);
+        const task = TEXT(s.task.length > 55 ? s.task.slice(0, 52) + '…' : s.task);
         const deps = s.dependsOn.length > 0
-          ? GOLD_DIM(` ← ${s.dependsOn.map(d => idxMap.get(d) ?? '?').join(', ')}`)
+          ? TEXT_DIM(` ← ${s.dependsOn.map(d => idxMap.get(d) ?? '?').join(', ')}`)
           : '';
         writeOutput(`  ${num} ${spec} ${task}${deps}`);
       });
@@ -1104,14 +1117,14 @@ export function createTuiDisplay(): Display {
 
     stepStarted(step: PlanStep) {
       const spec = chalk.hex('#d4903a').bold(`[${step.specialist}]`);
-      const task = GOLD_DIM(step.task.length > 70 ? step.task.slice(0, 67) + '…' : step.task);
+      const task = TEXT_DIM(step.task.length > 70 ? step.task.slice(0, 67) + '…' : step.task);
       writeOutput('\n' + chalk.hex('#d4903a')('  →') + ` ${spec} ${task}`);
     },
 
     stepCompleted(step: PlanStep, _result: string) {
       const spec = chalk.hex('#5a9e6e').bold(`[${step.specialist}]`);
       const ms   = step.durationMs != null ? `${step.durationMs}ms` : '?ms';
-      writeOutput(chalk.hex('#5a9e6e')('  ✓') + ` ${spec} ${GOLD_DIM(`done (${ms})`)}`);
+      writeOutput(chalk.hex('#5a9e6e')('  ✓') + ` ${spec} ${TEXT_DIM(`done (${ms})`)}`);
     },
 
     retry(info) {

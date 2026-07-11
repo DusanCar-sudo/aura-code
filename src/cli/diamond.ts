@@ -12,23 +12,41 @@ const shadow = chalk.hex('#6d1322');
 export const RUBY_HEX = '#9b1b30';
 export const RUBY_ACCENT = ruby;
 
-// Body/UI text (task output, command list, panel labels) — exact hex per
-// design direction: #8c7662.
-export const GOLD_HEX = '#8c7662';
-// Muted variant for secondary/de-emphasized text — #8c7662 scaled ~28% darker,
-// same hue, quieter than GOLD_HEX.
-export const GOLD_DIM_HEX = '#655547';
-export const GOLD = chalk.hex(GOLD_HEX);
-export const GOLD_DIM = chalk.hex(GOLD_DIM_HEX);
-const dim = GOLD_DIM;
+// ── Palette v3: bluish-dark background, terracotta chrome, white text ──────
+// Terminal background, set via OSC 11 on TUI start (desaturated dark navy).
+export const BG_HEX = '#0f1724';
+// Elevated panel background (code/log blocks) — one step lighter than BG_HEX.
+export const PANEL_BG_HEX = '#1c2739';
+// Tool/UI chrome — the terracotta already used for tool labels and mode
+// indicators across the CLI. Everything that is "the tooling talking to you".
+export const TERRACOTTA_HEX = '#cc785c';
+// Primary text (user input, assistant replies, body copy) — near-white for
+// maximum readability on the bluish background.
+export const TEXT_HEX = '#e8e6e3';
+// Secondary/de-emphasized text — desaturated blue-gray, quieter than TEXT_HEX
+// but still readable on BG_HEX.
+export const TEXT_DIM_HEX = '#8a94a6';
+// Faintest text (rules, timings, ellipses) — visible but receding on BG_HEX.
+export const FAINT_HEX = '#4a5568';
+export const TEXT = chalk.hex(TEXT_HEX);
+export const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
+export const FAINT = chalk.hex(FAINT_HEX);
+// Muted terracotta for unfocused/quiet chrome (e.g. blurred panel borders).
+export const CHROME_DIM = chalk.hex('#8a5a48');
+const dim = TEXT_DIM;
 
 /**
- * The four ruby stops, dark end → bright end. Used for every line that
- * separates fields/panels/sections (box borders, rules, column dividers) —
- * per the fixed palette rule, dividers get this same four-stop gradient
- * rather than a single flat hue.
+ * The four terracotta stops, dark end → bright end, centered on
+ * TERRACOTTA_HEX. Used for every line that separates fields/panels/sections
+ * (box borders, rules, column dividers) — per the fixed palette rule,
+ * dividers get this same four-stop gradient rather than a single flat hue.
+ * (The ruby stops above remain for the gem/logo branding only.)
  */
-const GRADIENT_STOPS = [shadow, ruby, mid, light] as const;
+const chromeShadow = chalk.hex('#7a4636');
+const chromeMid    = chalk.hex('#a05a44');
+const chromeBase   = chalk.hex(TERRACOTTA_HEX);
+const chromeLight  = chalk.hex('#e29a80');
+const GRADIENT_STOPS = [chromeShadow, chromeMid, chromeBase, chromeLight] as const;
 
 /**
  * Color a run of identical border/rule characters with the four-stop ruby

@@ -2,6 +2,67 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.10.1] — 2026-07-11
+
+### Fixed
+- **Anthropic prompt cache stat propagation.** `toCachedSystem` and `toCachedTools`
+  already marked system prompt and tool definitions with `cache_control: ephemeral`,
+  but the provider silently discarded `cache_read_input_tokens` from API responses.
+  Both the non-streaming (`fromAnthropicResponse`) and streaming paths now extract
+  `cachedTokens` into `LLMResponse.usage`, so `costFor()` applies the discounted
+  cache-hit rate on subsequent turns. `AURA_DEBUG_CACHE` logging now covers both
+  paths. 3 new tests cover: cache read extraction, zero-cache omission, and
+  absent-field omission.
+
+### Added
+- **Getting started guides** (English + Vietnamese): `Aura_Code_Getting_Started_EN.pdf`,
+  `Aura_Code_Getting_Started_VI.pdf`.
+
+## [0.10.0] — 2026-07-10
+
+The headliner: TUI v2, Anthropic prompt caching, and a batch of model-selector
+and Telegram fixes that make the daily workflow noticeably smoother.
+
+### Added
+- **TUI v2** — bottom-input layout with command palette, diff view, and
+  inline markdown renderer. Vim-style modal scrollback (INSERT/SCROLL modes)
+  on an isolated alt screen with a 5-row input box.
+- **Anthropic prompt caching.** System prompt and tool definitions are wrapped
+  with `cache_control: ephemeral` breakpoints so subsequent turns in the same
+  session reuse the cached prefix (cost stat propagation deferred to 0.10.1).
+- **Telegram `/status`** — shows the chat's live tasks and pending approvals.
+- **Telegram `/stop` and `/approve-all`** — abort a running task, flush
+  pending confirmations in one command.
+- **Telegram voice-note replies** — audio policy: text always, audio for
+  substantial answers.
+- **Doctor: repo-root hygiene guard** — detects and warns about stray files
+  that don't belong in the aura-code root.
+- **Checkpoint safety** — files containing secrets are now excluded from
+  checkpoint snapshots.
+- **Relevance-gated tool definitions** — conditional tool definitions reduce
+  per-request token cost by only emitting tools the model is likely to need.
+
+### Fixed
+- **Model selector: section headers no longer consume selector numbers.**
+  Choosing a model from a section with a header line now resolves correctly.
+- **Model selector: stale `apiKey`/`baseUrl` persisted across provider
+  switch.** Cross-provider `:model` changes now clear old credentials and
+  persist the correct `apiKeyEnv`.
+- **TUI: input leaked during `:model`/`:provider` wizard.** Keystrokes now
+  reach the wizard prompt instead of the main input.
+- **Telegram TTS: stray CRLF prefix corrupted audio output.** Voice replies
+  are now clean.
+- **Display: improved contrast for code/log block text.**
+- **Benchmark: scratch directory moved outside the repo** with git-isolated
+  workdirs.
+- **Memory: recently-updated identity entries prioritised** when truncating.
+- **Setup wizard: `askInputFn` param** added to `selectProvider`/`selectModel`
+  signatures for TUI integration.
+- **Agent loop: sync final 3-line diff** from share copy port.
+
+### Removed
+- **Learnlight module** — broken/unused workflow abstraction, deleted.
+
 ## [0.9.0] — 2026-07-09
 
 The arc of this release: a week-long audit found six complete, tested

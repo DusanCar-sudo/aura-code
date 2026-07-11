@@ -70,9 +70,10 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cachedTokens: number;
 }
 
-const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
+const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number }> = {
   'claude-opus-4-5-20251001':   { in: 15,  out: 75  },
   'claude-sonnet-4-5-20251001': { in: 3,   out: 15  },
   'claude-haiku-4-5-20251001':  { in: 0.8, out: 4   },
@@ -88,11 +89,17 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
   'mimo-v2.5-pro':              { in: 1,   out: 4   },
   'mimo-v2.5':                  { in: 0.5, out: 2   },
   'mimo-v2-flash':              { in: 0.1, out: 0.4 },
+  // DeepSeek V4 — cache hits billed at 1/10th of standard input rate.
+  'deepseek-v4-flash':          { in: 0.14, out: 0.28, cachedIn: 0.014 },
+  'deepseek-v4-pro':            { in: 0.435, out: 0.87, cachedIn: 0.0435 },
 };
 
-export function costFor(model: string, input: number, output: number): number {
+export function costFor(model: string, input: number, output: number, cachedTokens?: number): number {
   const p = PRICING_USD_PER_MTOK[model] ?? PRICING_USD_PER_MTOK[Object.keys(PRICING_USD_PER_MTOK).find(k => model.includes(k.split('-')[1] ?? '') && k.startsWith(model.split('-')[0] ?? '')) ?? ''] ?? { in: 0, out: 0 };
-  return (input / 1_000_000) * p.in + (output / 1_000_000) * p.out;
+  const cached = Math.min(cachedTokens ?? 0, input);
+  const billable = input - cached;
+  const cachedRate = p.cachedIn ?? p.in / 10;
+  return (billable / 1_000_000) * p.in + (cached / 1_000_000) * cachedRate + (output / 1_000_000) * p.out;
 }
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
@@ -109,7 +116,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
   let turns = 0;
   let toolCallCount = 0;
-  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 };
 
   if (!opts.disableSpawn) {
     registerSpawner(makeDefaultSpawner(context, opts.spawnConfig ?? {}, display));
@@ -120,6 +127,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   try {
     return await runLoopBody({ opts, provider, system, history, profile, pricingModel, display, permissions, turns, toolCallCount, usage });
   } finally {
+    display.stopThinking?.();
     clearSpawner();
   }
 }
@@ -255,13 +263,15 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             if (chunk.response.toolCalls.length > 0 && responseToolCalls.length === 0) {
               responseToolCalls.push(...chunk.response.toolCalls);
             }
-            const u = (chunk.response as { usage?: { inputTokens?: number; outputTokens?: number } }).usage;
+            const u = (chunk.response as { usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }).usage;
             if (u) {
               const inT = u.inputTokens ?? 0;
               const outT = u.outputTokens ?? 0;
+              const cachedT = u.cachedTokens ?? 0;
               usage.inputTokens += inT;
               usage.outputTokens += outT;
               usage.totalTokens += inT + outT;
+              usage.cachedTokens += cachedT;
             }
             break;
         }
@@ -273,7 +283,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         success: false,
         summary: `Provider error on turn ${turns}: ${String(e)}`,
         turns, toolCallCount, usage, history, toolCallLog,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
     }
 
@@ -301,7 +311,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         success: false,
         summary: 'Provider returned empty response after 4 attempts — likely rate-limited or filtered',
         turns, toolCallCount, usage, history, toolCallLog,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
     }
 
@@ -312,7 +322,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         success: true,
         summary: responseText,
         turns, toolCallCount, usage, history, toolCallLog,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
     }
 
@@ -429,7 +439,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,
     turns, toolCallCount, usage, history, toolCallLog,
-    costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
+    costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
   };
 }
 

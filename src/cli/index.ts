@@ -18,7 +18,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive } from './tui.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -39,7 +39,7 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner, buildBannerLines } from './diamond.js';
+import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
 import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount } from './model-select.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
@@ -104,14 +104,14 @@ if (argv.models) {
     return acc;
   }, {});
   for (const [provider, models] of Object.entries(byProvider)) {
-    console.log(chalk.hex('#a68a2a')(`  ${provider}`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  ${provider}`));
     for (const m of models) {
-      console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
+      console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex(FAINT_HEX)(m.speed)}`);
     }
   }
-  console.log(chalk.hex('#4e3d30')('\n  Use --model <id> or set AURA_MODEL env var'));
-  console.log(chalk.hex('#4e3d30')('  For Ollama: --model ollama/llama3.2'));
-  console.log(chalk.hex('#4e3d30')('  For OpenRouter: --model openrouter/<provider>/<name>\n'));
+  console.log(chalk.hex(FAINT_HEX)('\n  Use --model <id> or set AURA_MODEL env var'));
+  console.log(chalk.hex(FAINT_HEX)('  For Ollama: --model ollama/llama3.2'));
+  console.log(chalk.hex(FAINT_HEX)('  For OpenRouter: --model openrouter/<provider>/<name>\n'));
   process.exit(0);
 }
 
@@ -119,7 +119,7 @@ if (argv['list-sessions']) {
   const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
   const sessions = sessionStore.listSessions(root);
   if (sessions.length === 0) {
-    console.log(chalk.hex('#a68a2a')('\n  No saved sessions for this project.\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions for this project.\n'));
   } else {
     console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
     for (const s of sessions) {
@@ -127,8 +127,8 @@ if (argv['list-sessions']) {
       const turns = Math.floor(s.history.length / 2);
       console.log(
         `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-        `${chalk.hex('#d4af37')(s.title.slice(0, 45).padEnd(46))} ` +
-        `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}`,
+        `${chalk.hex(TEXT_HEX)(s.title.slice(0, 45).padEnd(46))} ` +
+        `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}`,
       );
     }
     console.log();
@@ -140,23 +140,23 @@ if (argv.analyze) {
   const report = mineWeaknesses();
   const outPath = saveReport(report);
   console.log(chalk.hex('#cc785c').bold('\n  Weakness Analysis Report\n'));
-  console.log(chalk.hex('#a68a2a')(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
-  console.log(chalk.hex('#a68a2a')(`  Report saved to: ${outPath}\n`));
+  console.log(chalk.hex(TEXT_DIM_HEX)(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
+  console.log(chalk.hex(TEXT_DIM_HEX)(`  Report saved to: ${outPath}\n`));
 
   if (report.patterns.length === 0) {
     console.log(chalk.hex('#5a9e6e')('  ✓ No recurring weakness patterns detected. Agent behavior looks healthy.\n'));
   } else {
     for (const p of report.patterns) {
       console.log(chalk.hex('#b15439').bold(`  ✗ ${p.pattern} (${p.frequency} occurrences)`));
-      console.log(chalk.hex('#a68a2a')(`    ${p.description}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`    ${p.description}`));
       if (p.occurrences[0]) {
-        console.log(chalk.hex('#4e3d30')(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
-        console.log(chalk.hex('#4e3d30')(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
+        console.log(chalk.hex(FAINT_HEX)(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
+        console.log(chalk.hex(FAINT_HEX)(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
       }
       console.log(chalk.hex('#cc785c')(`    Suggestion: ${p.promptPatch.slice(0, 120)}...`));
       console.log();
     }
-    console.log(chalk.hex('#a68a2a')(`  ${report.summary}\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  ${report.summary}\n`));
   }
   process.exit(0);
 }
@@ -174,7 +174,7 @@ if (argv.doctor === true) {
 if (argv['propose-harness']) {
   // Ensure a weakness report exists — mine if needed
   if (!fs.existsSync(reportPath())) {
-    console.log(chalk.hex('#a68a2a')('\n  No weakness report found — mining sessions first...\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  No weakness report found — mining sessions first...\n'));
     const report = mineWeaknesses();
     saveReport(report);
   }
@@ -186,13 +186,13 @@ if (argv['propose-harness']) {
     console.log(chalk.hex('#cc785c').bold('\n  Harness Proposals\n'));
     for (const p of proposals) {
       console.log(chalk.hex('#cc785c')(`  ${p.id}`));
-      console.log(chalk.hex('#a68a2a')(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
-      console.log(chalk.hex('#a68a2a')(`    Section:  ${p.targetSection}`));
-      console.log(chalk.hex('#4e3d30')(`    Patch:    ${p.patchText.slice(0, 80)}...`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`    Section:  ${p.targetSection}`));
+      console.log(chalk.hex(FAINT_HEX)(`    Patch:    ${p.patchText.slice(0, 80)}...`));
       console.log();
     }
     console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
-    console.log(chalk.hex('#a68a2a')('  Apply with: ruby --apply-harness <id>\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('  Apply with: ruby --apply-harness <id>\n'));
   }
   process.exit(0);
 }
@@ -215,7 +215,7 @@ if (argv.workflows) {
   (async () => {
     const workflows = await listWorkflows();
     if (workflows.length === 0) {
-      console.log(chalk.hex('#a68a2a')('\n  No saved workflows.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
@@ -225,9 +225,9 @@ if (argv.workflows) {
         const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
         console.log(
           `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex('#d4af37')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
-          `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
+          `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
         );
       }
       console.log();
@@ -241,7 +241,7 @@ if (argv.blueprints) {
   (async () => {
     const bps = await listArchitectBlueprints();
     if (bps.length === 0) {
-      console.log(chalk.hex('#a68a2a')('\n  No saved blueprints.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved blueprints.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved blueprints:\n'));
       for (const bp of bps) {
@@ -252,8 +252,8 @@ if (argv.blueprints) {
         console.log(
           `  ${chalk.hex(statusColor)(bp.status.padEnd(10))} ` +
           `${chalk.hex('#cc785c')(bp.id.slice(0, 16).padEnd(18))} ` +
-          `${chalk.hex('#d4af37')(bp.task.slice(0, 40).padEnd(41))} ` +
-          `${chalk.hex('#4e3d30')(`${builtCount}/${totalFiles} files · ${created}`)}`,
+          `${chalk.hex(TEXT_HEX)(bp.task.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex(FAINT_HEX)(`${builtCount}/${totalFiles} files · ${created}`)}`,
         );
       }
       console.log();
@@ -273,12 +273,12 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
 
     const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
     console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-    console.log(`  ${chalk.hex('#a68a2a')('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
-    console.log(`  ${chalk.hex('#a68a2a')('Task:')}    ${chalk.hex('#d4af37')(bp.task)}`);
-    console.log(`  ${chalk.hex('#a68a2a')('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
-    console.log(`  ${chalk.hex('#a68a2a')('Steps:')}   ${bp.estimatedSteps}`);
-    console.log(`  ${chalk.hex('#a68a2a')('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
-    if (bp.builtAt) console.log(`  ${chalk.hex('#a68a2a')('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Task:')}    ${chalk.hex(TEXT_HEX)(bp.task)}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Steps:')}   ${bp.estimatedSteps}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
+    if (bp.builtAt) console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
 
     if (bp.files.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Files:\n'));
@@ -287,12 +287,12 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
         console.log(
           `    ${chalk.hex(fileStatusColor)(f.status.padEnd(8))} ${chalk.hex('#cc785c')(f.path)}`,
         );
-        console.log(`            ${chalk.hex('#a68a2a')(f.purpose)}`);
+        console.log(`            ${chalk.hex(TEXT_DIM_HEX)(f.purpose)}`);
         if (f.exports.length > 0) {
-          console.log(`            ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
+          console.log(`            ${chalk.hex(FAINT_HEX)(`exports: ${f.exports.join(', ')}`)}`);
         }
         if (f.interfaces.length > 0) {
-          console.log(`            ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
+          console.log(`            ${chalk.hex(FAINT_HEX)(`interfaces: ${f.interfaces.join(', ')}`)}`);
         }
       }
     }
@@ -300,9 +300,9 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.dataModels.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
       for (const dm of bp.dataModels) {
-        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#a68a2a')(dm.description)}`);
+        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
         for (const field of dm.fields) {
-          console.log(`      ${chalk.hex('#4e3d30')(field)}`);
+          console.log(`      ${chalk.hex(FAINT_HEX)(field)}`);
         }
       }
     }
@@ -310,14 +310,14 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.dependencies.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Dependencies:\n'));
       for (const dep of bp.dependencies) {
-        console.log(`    ${chalk.hex('#4e3d30')(dep)}`);
+        console.log(`    ${chalk.hex(FAINT_HEX)(dep)}`);
       }
     }
 
     if (bp.risks.length > 0) {
       console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
       for (const risk of bp.risks) {
-        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#a68a2a')(risk)}`);
+        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
       }
     }
 
@@ -325,7 +325,7 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
       console.log(chalk.hex('#cc9e5c').bold('\n  Deviations:\n'));
       for (const dev of bp.deviations) {
         const time = new Date(dev.recordedAt).toLocaleString();
-        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex('#a68a2a')(dev.description)} ${chalk.hex('#4e3d30')(`(${time})`)}`);
+        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex(TEXT_DIM_HEX)(dev.description)} ${chalk.hex(FAINT_HEX)(`(${time})`)}`);
       }
     }
 
@@ -497,8 +497,8 @@ async function main() {
     // hang. Skip with a helpful message instead.
     if (process.stdin.isTTY !== true && !process.stdin.readable) {
       console.error(chalk.hex('#b15439')('\n  ✗ No interactive input available.'));
-      console.error(chalk.hex('#a68a2a')('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
-      console.error(chalk.hex('#a68a2a')('  or pass --api-key <key> --model <id> on the command line,\n'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  or pass --api-key <key> --model <id> on the command line,\n'));
       process.exit(1);
     }
     // Full provider wizard: pick provider + model, detect/enter key, and
@@ -528,9 +528,9 @@ async function main() {
   // ── Guard: we need a model before we can build a provider ─────────────────
   if (!resolved.model) {
     console.error(chalk.hex('#b15439')('\n  ✗ No model configured.'));
-    console.error(chalk.hex('#a68a2a')('  Run `aura` with no args in a TTY to launch the setup wizard,'));
-    console.error(chalk.hex('#a68a2a')('  or pass --model <id> --api-key <key> on the command line,'));
-    console.error(chalk.hex('#a68a2a')('  or set the model in .aura.json (`"model": "..."`).'));
+    console.error(chalk.hex(TEXT_DIM_HEX)('  Run `aura` with no args in a TTY to launch the setup wizard,'));
+    console.error(chalk.hex(TEXT_DIM_HEX)('  or pass --model <id> --api-key <key> on the command line,'));
+    console.error(chalk.hex(TEXT_DIM_HEX)('  or set the model in .aura.json (`"model": "..."`).'));
     process.exit(1);
   }
 
@@ -621,8 +621,8 @@ async function main() {
     }
 
     display.header('Architect Builder', `Building from blueprint: ${bp.id}`);
-    console.log(chalk.hex('#a68a2a')(`  Task: ${bp.task}`));
-    console.log(chalk.hex('#a68a2a')(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  Task: ${bp.task}`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
 
     await updateBlueprintStatus(bp.id, 'building');
 
@@ -687,7 +687,7 @@ async function main() {
     const stepTasks = argv._.map(String);
     if (stepTasks.length === 0) {
       console.error(chalk.hex('#b15439')('\n  ✗ No step tasks provided.'));
-      console.error(chalk.hex('#a68a2a')('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
       process.exit(1);
     }
 
@@ -735,11 +735,11 @@ async function main() {
     }
 
     const totalTokens = finalState.totalTokens ?? 0;
-    console.log(chalk.hex('#4e3d30')(
+    console.log(chalk.hex(FAINT_HEX)(
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex('#a68a2a')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -789,11 +789,11 @@ async function main() {
     }
 
     const totalTokens = finalState.totalTokens ?? 0;
-    console.log(chalk.hex('#4e3d30')(
+    console.log(chalk.hex(FAINT_HEX)(
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex('#a68a2a')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -802,7 +802,7 @@ async function main() {
   // ── Single task mode: aura "fix the bug" ──────────────────────────────────────
   if (argv._.length > 0) {
     const task = argv._.join(' ');
-    console.log(chalk.hex('#a68a2a')(`\n  Task: ${chalk.hex('#d4af37')(task)}\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Task: ${chalk.hex(TEXT_HEX)(task)}\n`));
 
     // --architect: plan-only — decompose and display, then exit (no execution)
     if (argv.architect === true) {
@@ -991,7 +991,7 @@ async function main() {
   // row" invariant initTui() establishes; calling it any earlier corrupts
   // that baseline.
   if (activeChatHistory.length > 0) {
-    writeOutput(chalk.hex('#a68a2a')('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
+    writeOutput(chalk.hex(TEXT_DIM_HEX)('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
   }
 
   // Buffer for :btw and :stop typed during the agent loop
@@ -1131,7 +1131,7 @@ let abortController: AbortController | null = null;
       pendingBtw = null;
       abortController = new AbortController();
       const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
-      writeOutput(chalk.hex('#4e3d30')('  Side question: "' + q + '"'));
+      writeOutput(chalk.hex(FAINT_HEX)('  Side question: "' + q + '"'));
       const btwResult = await runBtwQuery(q, buildProvider(tuiDisplay), ctx);
       writeOutput(renderBtwAnswer(btwResult.answer, btwResult.tokens));
     }
@@ -1141,7 +1141,7 @@ let abortController: AbortController | null = null;
     }
   }
 
-  writeOutput(chalk.hex('#a68a2a')('  Type a task, or :help for commands.'));
+  writeOutput(chalk.hex(TEXT_DIM_HEX)('  Type a task, or :help for commands.'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1215,6 +1215,8 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
       c.providerConfig.baseUrl = undefined;
     }
     console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
+    // Update the TUI status line so the model change is immediately visible.
+    setStatusLine([test.name, newModel, permissionLevel].filter(Boolean).join(' · '));
     // Remember the choice for the next session. The saved baseUrl belongs to
     // the wizard-configured model — keep it only when switching back to that
     // model, otherwise the factory's per-provider default applies.
@@ -1251,8 +1253,11 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
   // raw-mode stdin handler competes with any prompt for keystrokes, so stop
   // TUI input entirely (this also hides the main input box), let a plain
   // readline own stdin, then restart TUI input once the selector exits.
+  // enterFullscreenPrompt resets the scroll region so the selector's output
+  // isn't crammed into the small scroll area (numbers were invisible because
+  // the bottom block was overwriting them).
   const wasInputActive = inputActive;
-  if (wasInputActive) stopInput();
+  if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
   try {
     // Grouped list where section headers are display-only: they carry no
     // number, so numbering is gap-free and a header can never be selected.
@@ -1261,13 +1266,13 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
     console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
     for (const r of rows) {
       if (r.kind === 'header') {
-        console.log(chalk.hex('#a68a2a').bold(`  ── ${r.provider} ──`));
+        console.log(chalk.hex(TEXT_DIM_HEX).bold(`  ── ${r.provider} ──`));
       } else {
-        console.log(`    ${chalk.hex('#cc785c')(String(r.num).padStart(2))}. ${chalk.hex('#d4af37')(r.name.padEnd(30))} ${chalk.hex('#4e3d30')(r.speed)}`);
+        console.log(`    ${chalk.hex('#cc785c')(String(r.num).padStart(2))}. ${chalk.hex(TEXT_HEX)(r.name.padEnd(30))} ${chalk.hex(FAINT_HEX)(r.speed)}`);
       }
     }
-    console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
-    console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
+    console.log(chalk.hex(FAINT_HEX)(`\n  Current: ${runtimeConfig.model}`));
+    console.log(chalk.hex(FAINT_HEX)('  Type a number, model ID, or press Enter to cancel:\n'));
 
     const answer = await new Promise<string>(resolve => {
       const promptRl = c.rl;
@@ -1283,7 +1288,7 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
     const choice = answer.trim();
 
     if (!choice) {
-      console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
+      console.log(chalk.hex(FAINT_HEX)('  Cancelled.\n'));
       return;
     }
 
@@ -1297,7 +1302,7 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
     // Treat as a raw model ID
     trySetModel(c, choice);
   } finally {
-    if (wasInputActive) startInput();
+    if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
   }
 }
 
@@ -1346,9 +1351,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       }
       c.display.success(`Queue item #${n}: ${result.success ? 'done' : 'failed'}`);
       if (result.output) {
-        console.log(chalk.hex('#d4af37')(`  ${result.output.slice(0, 240)}`));
+        console.log(chalk.hex(TEXT_HEX)(`  ${result.output.slice(0, 240)}`));
       }
-      console.log(chalk.hex('#4e3d30')(`  ${result.turns} turn(s) · ${result.toolCalls} tool call(s).\n`));
+      console.log(chalk.hex(FAINT_HEX)(`  ${result.turns} turn(s) · ${result.toolCalls} tool call(s).\n`));
       return { handled: true };
     }
 
@@ -1437,7 +1442,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       c.display.warning('Usage: :research <topic> -- runs a multi-step research pass and saves to research/*.md.');
       return { handled: true };
     }
-    console.log(chalk.hex('#a68a2a')(`\n  Researching "${topic}"…\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Researching "${topic}"…\n`));
     try {
       const { runResearch } = await import('../research/research.js');
       const res = await runResearch({
@@ -1449,7 +1454,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         display: c.display,
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
-      console.log(chalk.hex('#a68a2a')(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
@@ -1459,12 +1464,12 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const { listConfessions } = await import('../agent/confess.js');
     const confs = listConfessions();
     if (confs.length === 0) {
-      console.log(chalk.hex('#a68a2a')('\n  No confessions yet. Run :confess after a high-token episode.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No confessions yet. Run :confess after a high-token episode.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold(`\n  ${confs.length} confession(s):\n`));
       for (const c of confs) {
-        console.log(chalk.hex('#a68a2a')(`  ${c.file}`));
-        console.log(chalk.hex('#4e3d30')(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
+        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${c.file}`));
+        console.log(chalk.hex(FAINT_HEX)(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
       }
       console.log('');
     }
@@ -1477,7 +1482,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#cc9e5c')('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
       return { handled: true };
     }
-    console.log(chalk.hex('#a68a2a')(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
     try {
       // Use a different model than the one that made the mistake
       const confessorModel = targetEp.model.startsWith('deepseek') ? 'glm-5.2' : 'deepseek/deepseek-chat';
@@ -1489,9 +1494,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         provider,
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Confession written: ${result.path}`));
-      console.log(chalk.hex('#a68a2a')(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
       console.log(chalk.hex('#cc9e6c')('  Permanent lesson:'));
-      console.log(chalk.hex('#d4af37')(`  "${result.lesson}"\n`));
+      console.log(chalk.hex(TEXT_HEX)(`  "${result.lesson}"\n`));
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
@@ -1503,7 +1508,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (!res) {
       c.display.warning('No dreams yet. Run :dream first.');
     } else {
-      console.log(chalk.hex('#a68a2a')(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
       console.log(res.content);
     }
     return { handled: true };
@@ -1522,24 +1527,24 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     console.log(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
     for (const con of mined.concepts.slice(0, 15)) {
-      console.log(chalk.hex('#a68a2a')(`  ${con.concept}`) + chalk.hex('#4e3d30')(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
-      if (con.keywords.length > 0) console.log(chalk.hex('#4e3d30')(`    keywords: ${con.keywords.join(', ')}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${con.concept}`) + chalk.hex(FAINT_HEX)(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
+      if (con.keywords.length > 0) console.log(chalk.hex(FAINT_HEX)(`    keywords: ${con.keywords.join(', ')}`));
     }
     if (mined.concepts.length > 15) {
-      console.log(chalk.hex('#4e3d30')(`  … and ${mined.concepts.length - 15} more.`));
+      console.log(chalk.hex(FAINT_HEX)(`  … and ${mined.concepts.length - 15} more.`));
     }
     if (refine) {
-      console.log(chalk.hex('#a68a2a')('\n  Refining with the local Ruby model (Papa Ruby)…'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refining with the local Ruby model (Papa Ruby)…'));
       const { refineConcepts } = await import('../mining/refine.js');
       const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
       if (res.accepted.length > 0) {
         console.log(chalk.hex('#5a9e6e')(`  ✓ ${res.accepted.length} training example(s) appended: ${res.outputPath}`));
-        console.log(chalk.hex('#4e3d30')(`    ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.\n`));
+        console.log(chalk.hex(FAINT_HEX)(`    ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.\n`));
       } else {
         c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
       }
     } else if (mined.concepts.length > 0) {
-      console.log(chalk.hex('#4e3d30')('\n  :mine --refine judges these with the local Ruby model and writes training-data/*.jsonl\n'));
+      console.log(chalk.hex(FAINT_HEX)('\n  :mine --refine judges these with the local Ruby model and writes training-data/*.jsonl\n'));
     }
     return { handled: true };
   }
@@ -1625,7 +1630,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (panelMatch) { panelModel = panelMatch[1]; topic = topic.replace(panelMatch[0], '').trim(); }
     const seatsMatch = topic.match(/\s--seats\s+(\d+)/);
     if (seatsMatch) { panelSize = Number(seatsMatch[1]); topic = topic.replace(seatsMatch[0], '').trim(); }
-    console.log(chalk.hex('#a68a2a')(`\n  Convening the Ecclesia on "${topic}"…\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Convening the Ecclesia on "${topic}"…\n`));
     try {
       const { runCouncil } = await import('../research/council.js');
       const res = await runCouncil({
@@ -1637,7 +1642,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict written: ${res.path}`));
       console.log(chalk.hex('#5a9e6e')(`    HTML: ${res.htmlPath}`));
-      console.log(chalk.hex('#a68a2a')(`  ${res.panelSize} seats on ${res.panelModel}.`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.panelSize} seats on ${res.panelModel}.`));
       if (res.agentFailures > 0) {
         c.display.warning(`${res.agentFailures} of ${res.panelSize} panel agent(s) failed — verdict is based on the rest.`);
       }
@@ -1661,7 +1666,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':help' || input === '/help') {
-    console.log(chalk.hex('#a68a2a')(HELP_TEXT.join('\n')));
+    console.log(chalk.hex(TEXT_DIM_HEX)(HELP_TEXT.join('\n')));
     return { handled: true };
   }
 
@@ -1670,11 +1675,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':id') {
     const cs = c.chatState;
     if (cs.activeChatId) {
-      console.log(chalk.hex('#a68a2a')(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
-      if (cs.activeChatTitle) console.log(chalk.hex('#a68a2a')(`  Title:   ${cs.activeChatTitle}`));
-      console.log(chalk.hex('#4e3d30')(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
+      if (cs.activeChatTitle) console.log(chalk.hex(TEXT_DIM_HEX)(`  Title:   ${cs.activeChatTitle}`));
+      console.log(chalk.hex(FAINT_HEX)(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
     } else {
-      console.log(chalk.hex('#a68a2a')('\n  No active session (--no-session mode).\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No active session (--no-session mode).\n'));
     }
     return { handled: true };
   }
@@ -1682,7 +1687,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':sessions') {
     const sessions = sessionStore.listSessions(c.chatState.projectRoot);
     if (sessions.length === 0) {
-      console.log(chalk.hex('#a68a2a')('\n  No saved sessions.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
       for (const s of sessions) {
@@ -1691,8 +1696,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
         console.log(
           `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-          `${chalk.hex('#d4af37')(s.title.slice(0, 40).padEnd(41))} ` +
-          `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}${marker}`,
+          `${chalk.hex(TEXT_HEX)(s.title.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}${marker}`,
         );
       }
       console.log();
@@ -1703,7 +1708,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':resume' || input === ':resume ') {
     const latest = sessionStore.findLatestSession(c.chatState.projectRoot);
     if (!latest) {
-      console.log(chalk.hex('#a68a2a')('\n  No saved sessions to resume.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions to resume.\n'));
       return { handled: true };
     }
     console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
@@ -1729,7 +1734,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   if (input === ':history') {
     const turns = Math.floor(c.chatState.activeChatHistory.length / 2);
-    console.log(chalk.hex('#a68a2a')(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
     return { handled: true };
   }
 
@@ -1742,7 +1747,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const title = input.startsWith(':save ') ? input.slice(':save '.length).trim() : undefined;
     const cs = c.chatState;
     if (!cs.activeChatId) {
-      console.log(chalk.hex('#a68a2a')('\n  No active session to save (--no-session mode).\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No active session to save (--no-session mode).\n'));
       return { handled: true };
     }
     const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
@@ -1757,7 +1762,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
       if (id === c.chatState.activeChatId) {
         const newId = sessionStore.generateId();
-        console.log(chalk.hex('#a68a2a')(`  Starting new session: ${newId}\n`));
+        console.log(chalk.hex(TEXT_DIM_HEX)(`  Starting new session: ${newId}\n`));
         return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
       }
     } else {
@@ -1768,30 +1773,60 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   // ── Model / API commands ─────────────────────────────────────────────────
 
+  if (input === ':compact' || input === ':compress') {
+    const { compactHistory, estimateContextTokens, getRecapGeneration } = await import('../agent/compactor.js');
+    const { getContextWindow } = await import('../providers/factory.js');
+    const history = c.chatState.activeChatHistory;
+    if (history.length <= 1) {
+      console.log(chalk.hex('#d4903a')('\n  Nothing to compact — history is empty or has only the task.\n'));
+      return { handled: true };
+    }
+    const model = c.providerConfig.model;
+    const beforeTokens = estimateContextTokens('', history);
+    const window = getContextWindow(model) ?? 128_000;
+    const generation = getRecapGeneration(history);
+    // Force compaction by passing totalTokens = Infinity so the threshold check is bypassed.
+    const compacted = compactHistory(history, Infinity, model);
+    if (!compacted) {
+      console.log(chalk.hex('#d4903a')('\n  Compaction had no effect — history is already minimal.\n'));
+      return { handled: true };
+    }
+    const afterTokens = estimateContextTokens('', history);
+    const saved = beforeTokens > 0 ? ((1 - afterTokens / beforeTokens) * 100).toFixed(0) : '0';
+    const newGen = getRecapGeneration(history);
+    console.log(chalk.hex('#5a9e6e')(
+      `\n  ✓ Context compacted: ${beforeTokens.toLocaleString()} → ${afterTokens.toLocaleString()} tokens ` +
+      chalk.hex('#5a9e6e')(`(-${saved}%)`) +
+      ` · gen ${generation}→${newGen} · window ${(window / 1000).toFixed(0)}k\n`,
+    ));
+    c.healthTracker.recordCompaction(beforeTokens, afterTokens, newGen);
+    return { handled: true, newHistory: [...history] };
+  }
+
   if (input === ':context') {
-    console.log(chalk.hex('#a68a2a')(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
-    console.log(chalk.hex('#4e3d30')(`  Root: ${c.ctx.root}\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
+    console.log(chalk.hex(FAINT_HEX)(`  Root: ${c.ctx.root}\n`));
     return { handled: true };
   }
 
   if (input === ':graph') {
     const summary = loadGraphSummary(c.ctx.root);
     if (!summary) {
-      console.log(chalk.hex('#a68a2a')('\n  No graph.json found. Run :graph refresh to extract.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No graph.json found. Run :graph refresh to extract.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
-      console.log(chalk.hex('#a68a2a')(summary));
+      console.log(chalk.hex(TEXT_DIM_HEX)(summary));
       console.log();
     }
     return { handled: true };
   }
 
   if (input === ':viz' || input === ':dashboard') {
-    console.log(chalk.hex('#a68a2a')('\n  Generating dashboard…\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  Generating dashboard…\n'));
     try {
       const outPath = generateDashboard(c.ctx.root);
       console.log(chalk.hex('#5a9e6e')(`  ✓ Dashboard written to ${outPath}`));
-      console.log(chalk.hex('#a68a2a')('  Opening in browser…\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('  Opening in browser…\n'));
       openDashboard(outPath);
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
@@ -1803,7 +1838,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const { planStore } = await import('../orchestration/plan-store.js');
     const plans = await planStore.list();
     if (!plans.length) {
-      console.log(chalk.hex('#a68a2a')('\n  No execution plans found.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No execution plans found.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Execution plans:\n'));
       for (const p of plans.slice(0, 15)) {
@@ -1813,8 +1848,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         console.log(
           `  ${chalk.hex(statusColor)(p.status.padEnd(8))} ` +
           `${chalk.hex('#cc785c')(p.id.slice(0, 12).padEnd(14))} ` +
-          `${chalk.hex('#d4af37')(p.goal.slice(0, 50).padEnd(51))} ` +
-          `${chalk.hex('#4e3d30')(`${p.steps.length}s · ${dur} · ${created}`)}`,
+          `${chalk.hex(TEXT_HEX)(p.goal.slice(0, 50).padEnd(51))} ` +
+          `${chalk.hex(FAINT_HEX)(`${p.steps.length}s · ${dur} · ${created}`)}`,
         );
       }
       console.log();
@@ -1823,7 +1858,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':graph refresh') {
-    console.log(chalk.hex('#a68a2a')('\n  Refreshing codebase graph...\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refreshing codebase graph...\n'));
     const { execSync } = await import('child_process');
     try {
       execSync(
@@ -1839,7 +1874,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (c.ctx.graphSummary) {
       console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
     } else {
-      console.log(chalk.hex('#a68a2a')('  No graph.json found after refresh. Run graphify extract first.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('  No graph.json found after refresh. Run graphify extract first.\n'));
     }
     return { handled: true };
   }
@@ -1848,9 +1883,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':provider' || input === '/provider') {
     // Fullscreen prompt approach was unreliable — wizard's readline and TUI's
     // stdin handler collide. Instead, stop TUI input, let readline own stdin
-    // completely, then restart TUI input.
+    // completely, then restart TUI input. enterFullscreenPrompt resets the
+    // scroll region so the wizard's output isn't crammed into the small scroll
+    // area (numbers were invisible because the bottom block was overwriting them).
     const wasInputActive = inputActive;
-    if (wasInputActive) stopInput();
+    if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
     try {
       const cfg = await runProviderWizard(undefined, undefined);
       if (cfg) {
@@ -1863,15 +1900,17 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         resolved.model = cfg.model;
         resolved.baseUrl = cfg.baseUrl;
         writeOutput(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
+        // Update the TUI status line so the provider/model change is immediately visible.
+        setStatusLine([cfg.provider, cfg.model, permissionLevel].filter(Boolean).join(' · '));
         if (fileConfig.model && fileConfig.model !== cfg.model) {
-          writeOutput(chalk.hex('#a68a2a')(
+          writeOutput(chalk.hex(TEXT_DIM_HEX)(
             `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
             `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
           ));
         }
       }
     } finally {
-      if (wasInputActive) startInput();
+      if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
     }
     return { handled: true };
   }
@@ -1883,9 +1922,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       return acc;
     }, {});
     for (const [provider, models] of Object.entries(byProvider)) {
-      console.log(chalk.hex('#a68a2a')(`\n  ${provider}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  ${provider}`));
       for (const m of models) {
-        console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
+        console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex(FAINT_HEX)(m.speed)}`);
       }
     }
     console.log();
@@ -1940,7 +1979,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === '/stats' || input === '/usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
-    console.log(chalk.hex('#a68a2a')([
+    console.log(chalk.hex(TEXT_DIM_HEX)([
       '',
       `  Session usage:`,
       `    Turns:        ${u.turns}`,
@@ -1968,7 +2007,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':workflows') {
     const workflows = await listWorkflows();
     if (workflows.length === 0) {
-      console.log(chalk.hex('#a68a2a')('\n  No saved workflows.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
@@ -1978,9 +2017,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
         console.log(
           `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex('#d4af37')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
-          `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
+          `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
         );
       }
       console.log();
@@ -2051,7 +2090,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
       console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex('#a68a2a')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
     return { handled: true };
@@ -2100,7 +2139,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
       console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex('#a68a2a')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
     return { handled: true };
@@ -2227,30 +2266,30 @@ async function runArchitectPlan(
 
   // Display result
   console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-  console.log(chalk.hex('#d4af37')(`  Task: ${blueprint.task}`));
-  console.log(chalk.hex('#4e3d30')(`  ID: ${blueprint.id}\n`));
+  console.log(chalk.hex(TEXT_HEX)(`  Task: ${blueprint.task}`));
+  console.log(chalk.hex(FAINT_HEX)(`  ID: ${blueprint.id}\n`));
 
   if (blueprint.files.length > 0) {
     console.log(chalk.hex('#cc785c').bold('  Files:\n'));
     for (const f of blueprint.files) {
       console.log(`    ${chalk.hex('#cc785c')(f.path)}`);
-      console.log(`      ${chalk.hex('#a68a2a')(f.purpose)}`);
-      if (f.exports.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
-      if (f.interfaces.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
+      console.log(`      ${chalk.hex(TEXT_DIM_HEX)(f.purpose)}`);
+      if (f.exports.length > 0) console.log(`      ${chalk.hex(FAINT_HEX)(`exports: ${f.exports.join(', ')}`)}`);
+      if (f.interfaces.length > 0) console.log(`      ${chalk.hex(FAINT_HEX)(`interfaces: ${f.interfaces.join(', ')}`)}`);
     }
   }
 
   if (blueprint.dataModels.length > 0) {
     console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
     for (const dm of blueprint.dataModels) {
-      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#a68a2a')(dm.description)}`);
+      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
     }
   }
 
   if (blueprint.risks.length > 0) {
     console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
     for (const risk of blueprint.risks) {
-      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#a68a2a')(risk)}`);
+      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
     }
   }
 
@@ -2294,7 +2333,7 @@ async function runOrchestratedTask(
     });
 
     if (!approved) {
-      console.log(chalk.hex('#4e3d30')('  Plan cancelled.\n'));
+      console.log(chalk.hex(FAINT_HEX)('  Plan cancelled.\n'));
       process.exit(0);
     }
   }
@@ -2320,7 +2359,7 @@ async function runOrchestratedTask(
   }
 
   const totalTokens = executedPlan.totalTokens ?? 0;
-  console.log(chalk.hex('#4e3d30')(
+  console.log(chalk.hex(FAINT_HEX)(
     `  ↳ ${totalTokens.toLocaleString()} tokens · ${executedPlan.steps.length} steps · status: ${executedPlan.status}`,
   ));
 }
@@ -2331,7 +2370,7 @@ function printUsageFooter(
   costUsd: number,
 ): void {
   const total = usage.inputTokens + usage.outputTokens;
-  console.log(chalk.hex('#4e3d30')(
+  console.log(chalk.hex(FAINT_HEX)(
     `  ↳ ${total.toLocaleString()} tokens (${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out) · est. $${costUsd.toFixed(4)}`,
   ));
 }
@@ -2362,15 +2401,15 @@ async function speakSummary(text: string): Promise<void> {
 
 function printHelp() {
   console.log(`
-${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#a68a2a')("— Aura Code: model-agnostic AI coding agent")}
+${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code: model-agnostic AI coding agent")}
 
-  ${chalk.hex('#4e3d30')('Usage:')}
-    aura ${chalk.hex('#a68a2a')('"<task>"')}                           Run a single task
-    aura ${chalk.hex('#a68a2a')('serve')}                              Start the HTTP API server
-    aura ${chalk.hex('#a68a2a')('--interactive')}                      Start interactive REPL
-    aura ${chalk.hex('#a68a2a')('--models')}                           List available models
+  ${chalk.hex(FAINT_HEX)('Usage:')}
+    aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
+    aura ${chalk.hex(TEXT_DIM_HEX)('--interactive')}                      Start interactive REPL
+    aura ${chalk.hex(TEXT_DIM_HEX)('--models')}                           List available models
 
-  ${chalk.hex('#4e3d30')('Options:')}
+  ${chalk.hex(FAINT_HEX)('Options:')}
     --model, -m <id>         Model to use (default: from ~/.config/aura-code/config.json)
     --api-key <key>          API key (overrides env var)
     --base-url <url>         Custom API endpoint (for Ollama, proxies, etc.)
@@ -2413,7 +2452,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#a68a2a')("— Aura Code: mo
     --fallback <model>       Fallback model if primary exhausts retries (repeatable)
     --verify                 Enable post-task verification with automatic retries
 
-  ${chalk.hex('#4e3d30')('Resilience:')}
+  ${chalk.hex(FAINT_HEX)('Resilience:')}
     All API calls automatically:
     1. Honour Retry-After / Google's retryDelay on 429s
     2. Back off with exponential + jitter (capped at 60s)
@@ -2421,7 +2460,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#a68a2a')("— Aura Code: mo
     4. Fail over to the next --fallback model if retries exhaust
     5. Pace requests when --rate-limit-rpm / --rate-limit-tpm is set
 
-  ${chalk.hex('#4e3d30')('Project config (.aura.json):')}
+  ${chalk.hex(FAINT_HEX)('Project config (.aura.json):')}
     {
       "model": "claude-sonnet-4-5-20251001",
       "mode":  "auto",
@@ -2447,13 +2486,13 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#a68a2a')("— Aura Code: mo
     CLI flags always override .aura.json.
     Custom providers are OpenAI-compatible endpoints.
 
-  ${chalk.hex('#4e3d30')('Model examples:')}
+  ${chalk.hex(FAINT_HEX)('Model examples:')}
     aura -m claude-opus-4-5-20251001  "refactor auth"
     aura -m gpt-4o                    "add unit tests"
     aura -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
     aura -m ollama/llama3.2           "local model, no API key needed"
 
-  ${chalk.hex('#4e3d30')('API keys (set as env vars):')}
+  ${chalk.hex(FAINT_HEX)('API keys (set as env vars):')}
     ANTHROPIC_API_KEY    Claude models
     OPENAI_API_KEY       GPT models
     GOOGLE_API_KEY       Gemini models

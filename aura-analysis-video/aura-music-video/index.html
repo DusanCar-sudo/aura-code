@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Aura — The AI Coding Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;700&display=swap');
+
+  body, html { margin:0; padding:0; background:#0f1724; overflow:hidden; width:1080px; height:1920px; }
+
+  #stage {
+    position:relative; width:1080px; height:1920px;
+    background:#0f1724;
+    overflow:hidden;
+  }
+
+  /* Base glow */
+  #bg-glow {
+    position:absolute; inset:0; z-index:1;
+    background:
+      radial-gradient(ellipse 60% 35% at 50% 25%, rgba(155,27,48,.15) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 50% 75%, rgba(204,120,92,.08) 0%, transparent 60%);
+  }
+
+  /* ── Aurora particles ── */
+  .particle {
+    position:absolute; border-radius:50%; pointer-events:none;
+    background:radial-gradient(circle, rgba(204,120,92,.3) 0%, transparent 70%);
+  }
+
+  /* ── Keyframes ── */
+  @keyframes fadeIn  { from { opacity:0; transform:scale(.97) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }
+  @keyframes fadeOut { from { opacity:1; } to { opacity:0; } }
+  @keyframes pulseGlow {
+    0%, 100% { opacity:.3; transform:scale(1); }
+    50%      { opacity:.6; transform:scale(1.05); }
+  }
+  @keyframes floatUp {
+    0%   { transform:translateY(0); opacity:0; }
+    20%  { opacity:.15; }
+    100% { transform:translateY(-400px); opacity:0; }
+  }
+  @keyframes slideUp  { from { opacity:0; transform:translateY(40px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes slideDn  { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(40px); } }
+  @keyframes scaleIn  { from { opacity:0; transform:scale(.7); } to { opacity:1; transform:scale(1); } }
+
+  /* ── Scene containers ── */
+  .scene {
+    position:absolute; inset:0; z-index:5;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    opacity:0;
+  }
+
+  /* ── Typography ── */
+  .gem { font-size:80px; line-height:1; margin-bottom:10px; }
+  .title { font-family:'Playfair Display',serif; font-size:96px; font-weight:900; color:#e8e6e3; text-align:center; line-height:1.05; letter-spacing:-0.03em; }
+  .title-sm { font-family:'Playfair Display',serif; font-size:68px; font-weight:700; color:#e8e6e3; text-align:center; line-height:1.1; }
+  .subtitle { font-family:'Playfair Display',serif; font-size:32px; font-weight:400; color:rgba(232,230,227,.5); text-align:center; margin-top:20px; }
+  .body-text { font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:300; color:rgba(232,230,227,.65); text-align:center; line-height:1.5; max-width:800px; }
+  .accent { color:#cc785c; }
+  .ruby  { color:#9b1b30; }
+  .gold  { color:#e0b860; }
+  .green { color:#5a9e6e; }
+
+  /* ── Feature cards ── */
+  .card-row { display:flex; gap:20px; margin-top:30px; flex-wrap:wrap; justify-content:center; }
+  .card {
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px;
+    padding:20px 18px; width:260px; text-align:center;
+  }
+  .card .icon { font-size:36px; margin-bottom:6px; }
+  .card .name { font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; color:#cc785c; }
+  .card .desc { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:300; color:rgba(232,230,227,.5); margin-top:4px; line-height:1.4; }
+
+  /* ── Pipeline boxes ── */
+  .pipe-row { display:flex; gap:16px; margin-top:30px; }
+  .pipe {
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:14px;
+    padding:22px 16px; width:180px; text-align:center;
+  }
+  .pipe .num { font-family:'Playfair Display',serif; font-size:40px; font-weight:700; color:#cc785c; }
+  .pipe .name { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:#e8e6e3; margin-top:4px; }
+  .pipe .desc { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:300; color:rgba(232,230,227,.45); margin-top:6px; line-height:1.3; }
+
+  /* ── Stat blocks ── */
+  .stat-row { display:flex; gap:36px; margin-top:28px; justify-content:center; }
+  .stat { text-align:center; }
+  .stat .val { font-family:'Playfair Display',serif; font-size:60px; font-weight:700; color:#e0b860; line-height:1; }
+  .stat .lbl { font-family:'JetBrains Mono',monospace; font-size:14px; color:rgba(232,230,227,.4); margin-top:4px; }
+
+  /* ── Quote ── */
+  .quote { font-family:'Playfair Display',serif; font-size:40px; font-style:italic; color:#e8e6e3; text-align:center; line-height:1.4; max-width:750px; }
+  .quote .cite { font-size:24px; font-style:normal; color:rgba(232,230,227,.4); margin-top:16px; display:block; }
+
+  /* ── Divider rule ── */
+  .rule {
+    width:200px; height:2px; margin:16px 0;
+    background:linear-gradient(90deg, transparent, #cc785c, transparent);
+  }
+  .rule-dark {
+    width:200px; height:1px; margin:16px 0;
+    background:linear-gradient(90deg, transparent, rgba(204,120,92,.2), transparent);
+  }
+
+  /* ── Hidden duration marker ── */
+  #__duration { display:none; }
+</style>
+</head>
+<body>
+
+<div id="__duration">179</div>
+<div id="stage">
+  <div id="bg-glow"></div>
+
+  <!-- Floating particles (purely cosmetic, no data-enter needed) -->
+  <div class="particle" style="width:400px;height:400px;top:10%;left:-10%;animation:pulseGlow 6s ease-in-out infinite;"></div>
+  <div class="particle" style="width:300px;height:300px;bottom:5%;right:-5%;animation:pulseGlow 8s ease-in-out infinite 2s;"></div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 0 — Opening Title (0s → 18s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-0" class="scene"
+       data-enter="0" data-exit="18" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="gem">💎</div>
+    <div class="title">AURA<br><span class="accent">CODE</span></div>
+    <div class="subtitle">Model-agnostic AI coding agent</div>
+    <div class="rule"></div>
+    <div class="body-text" style="margin-top:12px; font-size:20px;">
+      Read &bull; Plan &bull; Execute &bull; Verify
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 1 — What Aura Is (18s → 42s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-1" class="scene"
+       data-enter="18" data-exit="42" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="title-sm"><span class="accent">A</span>utonomous<br><span class="accent">A</span>gent</div>
+    <div class="rule-dark"></div>
+    <div class="body-text">
+      Natural-language task → read codebase<br>
+      → plan → execute → verify → report
+    </div>
+    <div class="card-row">
+      <div class="card">
+        <div class="icon">🔍</div>
+        <div class="name">Reads</div>
+        <div class="desc">Full codebase understanding, graph-based context</div>
+      </div>
+      <div class="card">
+        <div class="icon">✏️</div>
+        <div class="name">Edits</div>
+        <div class="desc">Precise surgical changes, never full rewrites</div>
+      </div>
+      <div class="card">
+        <div class="icon">🧪</div>
+        <div class="name">Verifies</div>
+        <div class="desc">Self-verification with auto-retry on failure</div>
+      </div>
+    </div>
+    <div class="body-text" style="font-size:20px; margin-top:16px;">
+      <span class="gold">Open source</span> · <span class="green">MIT license</span>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 2 — Provider Agnostic (42s → 68s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-2" class="scene"
+       data-enter="42" data-exit="68" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="title-sm" style="font-size:58px;">Model-<span class="accent">Agnostic</span></div>
+    <div class="rule-dark"></div>
+    <div class="body-text">
+      One agent. Every major provider.
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="val" style="font-size:36px; color:#cc785c;">Anthropic</div><div class="lbl">Claude Opus/Sonnet/Haiku</div></div>
+    </div>
+    <div class="stat-row" style="margin-top:10px;">
+      <div class="stat"><div class="val" style="font-size:36px; color:#5a9e6e;">OpenAI</div><div class="lbl">GPT-4o &amp; Mini</div></div>
+      <div class="stat"><div class="val" style="font-size:36px; color:#e0b860;">Google</div><div class="lbl">Gemini 2.5 Pro/Flash</div></div>
+    </div>
+    <div class="stat-row" style="margin-top:10px;">
+      <div class="stat"><div class="val" style="font-size:36px; color:#8a94a6;">DeepSeek</div><div class="lbl">V4 Flash &amp; Pro</div></div>
+      <div class="stat"><div class="val" style="font-size:36px; color:#8a94a6;">Zhipu</div><div class="lbl">GLM-5.x</div></div>
+      <div class="stat"><div class="val" style="font-size:36px; color:#8a94a6;">Xiaomi</div><div class="lbl">MiMo V2.5</div></div>
+    </div>
+    <div class="body-text" style="font-size:18px; margin-top:20px;">
+      + Ollama &bull; LM Studio &bull; OpenCode &bull; Custom endpoints
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 3 — The Philosophy (68s → 92s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-3" class="scene"
+       data-enter="68" data-exit="92" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="title-sm" style="font-size:54px;">Human &amp; AI<br><span class="accent">as a Team</span></div>
+    <div class="rule"></div>
+    <div class="quote">
+      "AI, agents and humans are a team — always."
+    </div>
+    <div class="rule-dark"></div>
+    <div class="body-text">
+      Rejecting the narrative that AI replaces jobs.<br>
+      Building a better tomorrow — together.
+    </div>
+    <div class="card-row" style="margin-top:24px;">
+      <div class="card" style="width:220px;">
+        <div class="icon">🤝</div>
+        <div class="name">Collaboration</div>
+        <div class="desc">Human-guided multi-agent construction</div>
+      </div>
+      <div class="card" style="width:220px;">
+        <div class="icon">🌿</div>
+        <div class="name">Purpose</div>
+        <div class="desc">Software that serves humanity &amp; nature</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 4 — Features: TUI + Telegram + Memory (92s → 118s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-4" class="scene"
+       data-enter="92" data-exit="118" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="title-sm">Surface <span class="accent">Everywhere</span></div>
+    <div class="rule-dark"></div>
+    <div class="card-row">
+      <div class="card" style="width:280px;">
+        <div class="icon">⌨️</div>
+        <div class="name">TUI Mode</div>
+        <div class="desc">Full terminal UI · Command palette · Diff view · Scroll mode</div>
+      </div>
+      <div class="card" style="width:280px;">
+        <div class="icon">✈️</div>
+        <div class="name">Telegram Bot</div>
+        <div class="desc">Voice commands · File ops · PC control on the go</div>
+      </div>
+    </div>
+    <div class="card-row" style="margin-top:0;">
+      <div class="card" style="width:280px;">
+        <div class="icon">🧠</div>
+        <div class="name">Adaptive Memory</div>
+        <div class="desc">Event-sourced pipeline · Episodes → Dreams → Reconcile → Inject</div>
+      </div>
+      <div class="card" style="width:280px;">
+        <div class="icon">🛡️</div>
+        <div class="name">Safety First</div>
+        <div class="desc">Path jail · SSRF guard · Permission system · Circuit breakers</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 5 — Memory Pipeline (118s → 138s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-5" class="scene"
+       data-enter="118" data-exit="138" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="title-sm" style="font-size:58px;">Memory <span class="accent">Pipeline</span></div>
+    <div class="rule"></div>
+    <div class="body-text" style="font-size:20px;">
+      Event-sourced memory, four layers deep
+    </div>
+    <div class="pipe-row">
+      <div class="pipe">
+        <div class="num">1</div>
+        <div class="name">EPISODE</div>
+        <div class="desc">Auto-recorded<br>Zero LLM calls</div>
+      </div>
+      <div class="pipe">
+        <div class="num">2</div>
+        <div class="name">DREAM</div>
+        <div class="desc">One LLM call<br>Consolidate</div>
+      </div>
+      <div class="pipe">
+        <div class="num">3</div>
+        <div class="name">RECONCILE</div>
+        <div class="desc">Pure stats<br>No AI guess</div>
+      </div>
+      <div class="pipe">
+        <div class="num">4</div>
+        <div class="name">INJECT</div>
+        <div class="desc">System prompt<br>Every session</div>
+      </div>
+    </div>
+    <div class="body-text" style="font-size:18px; margin-top:22px;">
+      Shared across <span class="accent">CLI</span> and <span class="accent">Telegram</span><br>
+      <span style="color:rgba(232,230,227,.35); font-size:16px;">Forgetting is a feature, not a bug.</span>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 6 — Built by Agents (138s → 158s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-6" class="scene"
+       data-enter="138" data-exit="158" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="title-sm" style="font-size:52px;">Built by <span class="accent">Agents</span><br>Building <span class="accent">Herself</span></div>
+    <div class="rule"></div>
+    <div class="body-text">
+      Aura Code is constructed by multi-agent orchestration —<br>
+      a <span class="gold">Researcher</span>, <span class="accent">Coder</span>, and <span class="green">Reviewer</span><br>
+      working together on every task.
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="val">10+</div><div class="lbl">design systems</div></div>
+      <div class="stat"><div class="val">80+</div><div class="lbl">specialist agents</div></div>
+      <div class="stat"><div class="val">100%</div><div class="lbl">agent-built</div></div>
+    </div>
+    <div class="body-text" style="font-size:18px; margin-top:16px;">
+      Human-guided · Self-improving · Open
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       SCENE 7 — Closing / Mission (158s → 179s)
+       ════════════════════════════════════════════════════ -->
+  <div id="sc-7" class="scene"
+       data-enter="158" data-exit="179" data-dur="1.5" data-enter-anim="fadeIn" data-exit-anim="fadeOut">
+    <div class="gem">💎</div>
+    <div class="quote" style="font-size:44px;">
+      "I don't try.<br>I <span class="accent">verify</span>."
+    </div>
+    <div class="rule"></div>
+    <div class="body-text" style="font-size:22px;">
+      Aura Code v0.10<br>
+      <span style="color:rgba(232,230,227,.3); font-size:16px;">
+        Model-agnostic · Autonomous · Open Source
+      </span>
+    </div>
+    <div class="body-text" style="font-size:18px; margin-top:24px; color:rgba(232,230,227,.3);">
+      github.com/praktess/aura-code
+    </div>
+    <div class="subtitle" style="margin-top:20px; font-size:22px;">
+      <span class="accent">Built</span> by agents.<br>
+      <span class="accent">Building</span> a better tomorrow.
+    </div>
+  </div>
+
+</div><!-- /stage -->
+
+</body>
+</html>

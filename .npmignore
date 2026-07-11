@@ -2,6 +2,27 @@
 src/
 tests/
 
+# Secrets/config that leaked before
+.claude/
+.vercel/
+.rubycode.json
+.vercel/
+.aura/
+
+# Non-source directories
+dreams/
+research/
+site/
+council/
+benchmark/fixtures/
+aura-analysis-video/
+
+# Config/service files
+vercel.json
+aura.service
+rclone-gdrive.service
+patch-installed-registry.mjs
+
 # Build config
 tsconfig.json
 vitest.config.ts
@@ -35,6 +56,7 @@ packaging/
 *.sh
 *.pptx
 *.pdf
+*.mp3
 *.mp4
 *.html
 *.md
