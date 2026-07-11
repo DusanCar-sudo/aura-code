@@ -11,7 +11,11 @@ import { GOLD_HEX, GOLD_DIM_HEX, RUBY_ACCENT } from './diamond.js';
 const GOLD = chalk.hex(GOLD_HEX);
 const GOLD_DIM = chalk.hex(GOLD_DIM_HEX);
 const RUBY = RUBY_ACCENT;
-const CODE_BG = chalk.hex('#3d3027');
+// chalk.hex() sets FOREGROUND — #3d3027 as fg rendered code nearly
+// invisible on dark terminals. Keep the dark panel as an actual
+// background and give the text itself a bright, readable foreground
+// matching normal scrollback brightness.
+const CODE_BG = chalk.bgHex('#3d3027').hex('#e8d5b7');
 const HEADING = chalk.hex('#cc785c');
 
 /**
