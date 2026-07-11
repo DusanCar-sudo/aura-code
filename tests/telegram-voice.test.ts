@@ -40,6 +40,8 @@ import {
   transcribeVoiceMessage,
 } from '../src/tools/telegram-voice.js';
 
+import { stripWavPrefix } from '../src/tools/dictate.js';
+
 const FAKE_TOKEN = 'fake-bot-token';
 
 /** Queues one exec() call's result. Mirrors Node's (err, stdout, stderr) callback. */
@@ -102,6 +104,40 @@ describe('downloadTelegramFile', () => {
       cb(null, '', '');
     });
     await expect(downloadTelegramFile(FAKE_TOKEN, 'file-id-3')).rejects.toThrow(/empty/);
+  });
+});
+
+describe('stripWavPrefix', () => {
+
+  it('strips leading CRLF (0x0D 0x0A) from a corrupted WAV buffer', () => {
+    const clean = Buffer.from('RIFF....WAVE....', 'utf8');
+    const corrupted = Buffer.concat([Buffer.from([0x0D, 0x0A]), clean]);
+    const result = stripWavPrefix(corrupted);
+    expect(result).toEqual(clean);
+    expect(result.length).toBe(clean.length);
+  });
+
+  it('passes a clean buffer through unchanged', () => {
+    const buf = Buffer.from('RIFF....WAVE....', 'utf8');
+    const result = stripWavPrefix(buf);
+    expect(result).toEqual(buf);
+  });
+
+  it('passes a buffer with only a single 0x0D (no 0x0A) through unchanged', () => {
+    const buf = Buffer.from([0x0D, ...Buffer.from('RIFF', 'utf8')]);
+    const result = stripWavPrefix(buf);
+    expect(result).toEqual(buf);
+  });
+
+  it('handles empty buffer without error', () => {
+    const result = stripWavPrefix(Buffer.alloc(0));
+    expect(result).toEqual(Buffer.alloc(0));
+  });
+
+  it('handles a 1-byte buffer without error', () => {
+    const buf = Buffer.from([0x0D]);
+    const result = stripWavPrefix(buf);
+    expect(result).toEqual(buf);
   });
 });
 
