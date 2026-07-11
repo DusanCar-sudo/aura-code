@@ -57,7 +57,7 @@ function emptyLoopResult(summary: string): LoopResult {
     summary,
     turns: 0,
     toolCallCount: 0,
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 },
     costUsd: 0,
     history: [],
     toolCallLog: [],

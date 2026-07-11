@@ -3,13 +3,13 @@
  * like `git diff` but with Aura's palette.
  */
 import chalk from 'chalk';
-import { GOLD_DIM_HEX, RUBY_ACCENT } from './diamond.js';
+import { TEXT_DIM_HEX, FAINT_HEX, RUBY_ACCENT } from './diamond.js';
 
-const GOLD_DIM = chalk.hex(GOLD_DIM_HEX);
+const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 const RUBY = RUBY_ACCENT;
 const ADDED = chalk.hex('#5a9e6e');
 const REMOVED = chalk.hex('#b15439');
-const HUNK_HEADER = chalk.hex('#4e3d30');
+const HUNK_HEADER = chalk.hex(FAINT_HEX);
 const FILE_HEADER = chalk.hex('#cc785c');
 
 export interface DiffLine {
@@ -83,7 +83,7 @@ export function renderDiff(diff: DiffLine[], maxLines = 30): string[] {
     if (shown >= maxLines && d.type !== 'hunk' && d.type !== 'file') {
       const remaining = totalChanges - changeCount;
       if (remaining > 0) {
-        lines.push(GOLD_DIM(`  … ${remaining} more changes`));
+        lines.push(TEXT_DIM(`  … ${remaining} more changes`));
       }
       break;
     }
@@ -97,7 +97,7 @@ export function renderDiff(diff: DiffLine[], maxLines = 30): string[] {
         lines.push(REMOVED(`  - ${d.content}`));
         break;
       case 'context':
-        lines.push(GOLD_DIM(`  ${d.content}`));
+        lines.push(TEXT_DIM(`  ${d.content}`));
         break;
     }
   }
@@ -114,7 +114,7 @@ export function diffPreview(oldText: string, newText: string, filePath: string):
   const removed = diff.filter(d => d.type === 'remove').length;
 
   const lines: string[] = [
-    FILE_HEADER.bold(`  📝 ${filePath}`) + GOLD_DIM(`  +${added} -${removed}`),
+    FILE_HEADER.bold(`  📝 ${filePath}`) + TEXT_DIM(`  +${added} -${removed}`),
   ];
 
   return [...lines, ...renderDiff(diff, 15)];

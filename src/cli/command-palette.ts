@@ -7,13 +7,12 @@
  * keys to navigate, Enter to execute, Esc to cancel.
  */
 import chalk from 'chalk';
-import { GOLD_HEX, GOLD_DIM_HEX, RUBY_ACCENT } from './diamond.js';
+import { TEXT_HEX, TEXT_DIM_HEX, RUBY_ACCENT } from './diamond.js';
 
-const GOLD = chalk.hex(GOLD_HEX);
-const GOLD_DIM = chalk.hex(GOLD_DIM_HEX);
+const TEXT = chalk.hex(TEXT_HEX);
+const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 const RUBY = RUBY_ACCENT;
 const HIGHLIGHT = chalk.hex('#cc785c');
-const SELECTED_BG = chalk.hex('#3d3027');
 
 export interface PaletteCommand {
   id: string;       // e.g. ":model"
@@ -61,6 +60,8 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':q', label: 'Quit', description: 'Exit Aura', category: 'System' },
   { id: ':context', label: 'Context health', description: 'Token usage dashboard', category: 'System' },
   { id: ':doctor', label: 'Doctor', description: 'Run health checks', category: 'System' },
+  { id: ':compact', label: 'Force compact', description: 'Manual context compaction (alias: :compress)', category: 'System' },
+  { id: ':compress', label: 'Force compress', description: 'Manual context compaction (alias: :compact)', category: 'System' },
 ];
 
 /**
@@ -121,8 +122,8 @@ export function renderPalette(
   const lines: string[] = [];
 
   // Header
-  lines.push(GOLD_DIM('  ┌─ command palette ' + '─'.repeat(Math.max(0, width - 21)) + '┐'));
-  lines.push(GOLD_DIM('  │ ') + RUBY(query) + GOLD_DIM('_'.repeat(Math.max(0, width - query.length - 6)) + ' │'));
+  lines.push(TEXT_DIM('  ┌─ command palette ' + '─'.repeat(Math.max(0, width - 21)) + '┐'));
+  lines.push(TEXT_DIM('  │ ') + RUBY(query) + TEXT_DIM('_'.repeat(Math.max(0, width - query.length - 6)) + ' │'));
 
   const visible = commands.slice(0, maxVisible);
   const actualSelected = Math.min(selectedIdx, visible.length - 1);
@@ -131,19 +132,19 @@ export function renderPalette(
     const cmd = visible[i];
     const isSelected = i === actualSelected;
     const prefix = isSelected ? RUBY('▸ ') : '  ';
-    const label = isSelected ? HIGHLIGHT.bold(cmd.label) : GOLD(cmd.label);
-    const desc = GOLD_DIM(`  ${cmd.description}`);
-    const cat = GOLD_DIM(` [${cmd.category}]`);
+    const label = isSelected ? HIGHLIGHT.bold(cmd.label) : TEXT(cmd.label);
+    const desc = TEXT_DIM(`  ${cmd.description}`);
+    const cat = TEXT_DIM(` [${cmd.category}]`);
     const content = `${prefix}${label}${desc}${cat}`;
     const truncContent = content.length > width - 4
       ? content.slice(0, width - 5) + '…'
       : content;
-    lines.push(GOLD_DIM('  │ ') + truncContent + GOLD_DIM(' │'));
+    lines.push(TEXT_DIM('  │ ') + truncContent + TEXT_DIM(' │'));
   }
 
   // Footer
-  lines.push(GOLD_DIM('  └' + '─'.repeat(width - 4) + '┘'));
-  lines.push(GOLD_DIM('  ↑↓ navigate · Enter select · Esc cancel'));
+  lines.push(TEXT_DIM('  └' + '─'.repeat(width - 4) + '┘'));
+  lines.push(TEXT_DIM('  ↑↓ navigate · Enter select · Esc cancel'));
 
   return lines;
 }

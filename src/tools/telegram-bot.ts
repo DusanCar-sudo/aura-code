@@ -15,6 +15,8 @@ import {
   normalizeAudioMode, shouldSendAudio, stripForSpeech, DEFAULT_AUDIO_MIN_CHARS,
   type AudioReplyMode,
 } from './telegram-audio-policy.js';
+import { textToSpeech, sendVoiceMessage } from './telegram-voice.js';
+import { getApiKey } from '../util/env.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
@@ -1369,14 +1371,39 @@ async function poll(): Promise<void> {
               mode: AUDIO_MODE, cameFromVoice, conversational,
               length: response.length, minChars: AUDIO_MIN_CHARS,
             })) {
-              try {
-                const spoken = stripForSpeech(response);
-                if (spoken) {
-                  const wav = await synthesizeSpeech(spoken);
-                  await sendVoice(chatId, wav);
+              const spoken = stripForSpeech(response);
+              if (spoken) {
+                let voiceSent = false;
+                let voiceError = '';
+                // Path 1: Groq playai-tts via curl — returns OGG natively (no
+                // ffmpeg step needed). This is the tested, reliable path.
+                const groqKey = getApiKey('GROQ_API_KEY', 'groq_api_key');
+                if (groqKey) {
+                  try {
+                    const ogg = await textToSpeech(spoken, groqKey);
+                    await sendVoiceMessage(TOKEN, chatId, ogg);
+                    voiceSent = true;
+                  } catch (e: any) {
+                    voiceError = e?.message || String(e);
+                    console.error(`[${ts()}] ⚠️ Groq TTS failed: ${voiceError}`);
+                  }
                 }
-              } catch (e: any) {
-                console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
+                // Path 2 (fallback): MiMo TTS → WAV → ffmpeg Opus.
+                if (!voiceSent) {
+                  try {
+                    const wav = await synthesizeSpeech(spoken);
+                    await sendVoice(chatId, wav);
+                    voiceSent = true;
+                  } catch (e: any) {
+                    voiceError = voiceError || (e?.message || String(e));
+                    console.error(`[${ts()}] ⚠️ MiMo TTS failed: ${voiceError}`);
+                  }
+                }
+                if (!voiceSent) {
+                  // Tell the user why there's no voice note instead of
+                  // silently swallowing the failure.
+                  console.error(`[${ts()}] ⚠️ Voice reply failed entirely: ${voiceError}`);
+                }
               }
             }
             console.log(`[${ts()}] 📤 Replied to ${from}`);

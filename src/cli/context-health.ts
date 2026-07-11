@@ -4,6 +4,7 @@
  * modifies history or triggers compaction.
  */
 import chalk from 'chalk';
+import { TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
 import type { HistoryMessage } from '../providers/types.js';
 import { estimateContextTokens, countMessage, countText, getRecapGeneration } from '../agent/compactor.js';
 import { getContextWindow } from '../providers/factory.js';
@@ -150,9 +151,9 @@ export function formatContextDashboard(h: ContextHealth): string {
 
   const lines: string[] = [
     '',
-    chalk.hex('#4e3d30')(line),
+    chalk.hex(FAINT_HEX)(line),
     chalk.hex('#cc785c').bold('  Context Health Dashboard'),
-    chalk.hex('#4e3d30')(line),
+    chalk.hex(FAINT_HEX)(line),
     '',
     '  Window:    ' + chalk.hex('#c8b5a0')(h.contextWindow.toLocaleString()) + ' tokens',
     '  Used:      ' + chalk.hex('#c8b5a0')(h.estimatedTokens.toLocaleString()) + ' tokens (' + chalk.bold(h.usagePercent.toFixed(1) + '%') + ') ' + barColor(bar),
@@ -183,11 +184,11 @@ export function formatContextDashboard(h: ContextHealth): string {
     lines.push('', chalk.hex('#cc785c').bold('  Largest messages'));
     for (const m of h.largestMessages) {
       const idx = m.index === -1 ? 'sys' : '#' + m.index;
-      lines.push('    ' + chalk.hex('#4e3d30')(idx.padEnd(4)) + ' ' + chalk.hex('#8a7768')(m.role.padEnd(12)) + ' ' + m.preview + ' ' + chalk.hex('#d4903a')(m.tokens.toLocaleString() + ' tok'));
+      lines.push('    ' + chalk.hex(FAINT_HEX)(idx.padEnd(4)) + ' ' + chalk.hex(TEXT_DIM_HEX)(m.role.padEnd(12)) + ' ' + m.preview + ' ' + chalk.hex('#d4903a')(m.tokens.toLocaleString() + ' tok'));
     }
   }
 
-  lines.push('', chalk.hex('#4e3d30')(line), '');
+  lines.push('', chalk.hex(FAINT_HEX)(line), '');
   return lines.join('\n');
 }
 
@@ -196,7 +197,7 @@ function formatLadder(generation: number): string {
     const pct = (r * 100).toFixed(0) + '%';
     if (i < generation) return chalk.hex('#5a9e6e')(pct + ' \u2713');
     if (i === generation) return chalk.hex('#d4903a')(pct + ' pending');
-    return chalk.hex('#4e3d30')(pct);
+    return chalk.hex(FAINT_HEX)(pct);
   });
   const flush = chalk.hex('#6d8fb3')('flush');
   return rungs.join(' \u2192 ') + ' \u2192 ' + flush;

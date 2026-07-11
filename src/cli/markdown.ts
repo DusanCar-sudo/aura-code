@@ -3,19 +3,18 @@
  * terminal output. Supports: headings, code blocks (fenced + inline),
  * lists, bold/italic, horizontal rules, and links.
  *
- * Uses Aura's ruby/gold palette from diamond.ts.
+ * Uses Aura's palette from diamond.ts.
  */
 import chalk from 'chalk';
-import { GOLD_HEX, GOLD_DIM_HEX, RUBY_ACCENT } from './diamond.js';
+import { TEXT_HEX, TEXT_DIM_HEX, PANEL_BG_HEX, RUBY_ACCENT } from './diamond.js';
 
-const GOLD = chalk.hex(GOLD_HEX);
-const GOLD_DIM = chalk.hex(GOLD_DIM_HEX);
+const TEXT = chalk.hex(TEXT_HEX);
+const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 const RUBY = RUBY_ACCENT;
-// chalk.hex() sets FOREGROUND — #3d3027 as fg rendered code nearly
-// invisible on dark terminals. Keep the dark panel as an actual
-// background and give the text itself a bright, readable foreground
-// matching normal scrollback brightness.
-const CODE_BG = chalk.bgHex('#3d3027').hex('#e8d5b7');
+// chalk.hex() sets FOREGROUND — keep the elevated panel as an actual
+// background (bgHex) and give the text itself a bright, readable
+// foreground, matching normal scrollback brightness (Bug 5 fix).
+const CODE_BG = chalk.bgHex(PANEL_BG_HEX).hex('#dfe3ea');
 const HEADING = chalk.hex('#cc785c');
 
 /**
@@ -37,10 +36,10 @@ export function renderMarkdown(text: string): string[] {
       if (!inCodeBlock) {
         inCodeBlock = true;
         codeLang = fenceMatch[1] || '';
-        out.push(GOLD_DIM(`  ┌─ ${codeLang || 'code'} ─────`));
+        out.push(TEXT_DIM(`  ┌─ ${codeLang || 'code'} ─────`));
       } else {
         inCodeBlock = false;
-        out.push(GOLD_DIM('  └─────────────'));
+        out.push(TEXT_DIM('  └─────────────'));
       }
       continue;
     }
@@ -52,7 +51,7 @@ export function renderMarkdown(text: string): string[] {
 
     // Horizontal rule
     if (/^---+$/.test(line.trim()) || /^\*\*\*+$/.test(line.trim())) {
-      out.push(GOLD_DIM('  ' + '─'.repeat(40)));
+      out.push(TEXT_DIM('  ' + '─'.repeat(40)));
       continue;
     }
 
@@ -64,7 +63,7 @@ export function renderMarkdown(text: string): string[] {
       if (level === 1) {
         out.push('');
         out.push(HEADING.bold(`  ${text}`));
-        out.push(GOLD_DIM('  ' + '─'.repeat(Math.min(text.length + 2, 60))));
+        out.push(TEXT_DIM('  ' + '─'.repeat(Math.min(text.length + 2, 60))));
       } else if (level === 2) {
         out.push('');
         out.push(HEADING.bold(`  ${text}`));
@@ -79,7 +78,7 @@ export function renderMarkdown(text: string): string[] {
     if (ulMatch) {
       const indent = ulMatch[1].length;
       const item = ulMatch[2];
-      out.push(GOLD('  ' + '  '.repeat(indent) + '• ') + renderInline(item));
+      out.push(TEXT('  ' + '  '.repeat(indent) + '• ') + renderInline(item));
       continue;
     }
 
@@ -95,7 +94,7 @@ export function renderMarkdown(text: string): string[] {
 
     // Blockquote
     if (line.startsWith('>')) {
-      out.push(GOLD_DIM('  │ ') + renderInline(line.slice(1).trim()));
+      out.push(TEXT_DIM('  │ ') + renderInline(line.slice(1).trim()));
       continue;
     }
 
@@ -122,8 +121,8 @@ function renderInline(text: string): string {
   result = result.replace(/`([^`]+)`/g, (_, code) => CODE_BG(code));
 
   // Bold — **text** or __text__
-  result = result.replace(/\*\*([^*]+)\*\*/g, (_, t) => GOLD.bold(t));
-  result = result.replace(/__([^_]+)__/g, (_, t) => GOLD.bold(t));
+  result = result.replace(/\*\*([^*]+)\*\*/g, (_, t) => TEXT.bold(t));
+  result = result.replace(/__([^_]+)__/g, (_, t) => TEXT.bold(t));
 
   // Italic — *text* or _text_
   result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, t) => chalk.italic(t));
@@ -131,7 +130,7 @@ function renderInline(text: string): string {
 
   // Links — [text](url)
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-    return HEADING.underline(label) + GOLD_DIM(` (${url})`);
+    return HEADING.underline(label) + TEXT_DIM(` (${url})`);
   });
 
   return result;

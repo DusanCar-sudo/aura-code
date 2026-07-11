@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
+import { FAINT_HEX } from './diamond.js';
 import { dictate, speakText, listVoices, listDevices, dictationLoop, toggleDictation } from '../tools/dictate.js';
 import minimist from 'minimist';
 
@@ -51,7 +52,7 @@ if (sub === 'toggle') {
   console.log(`
   ${chalk.hex('#cc785c').bold('dic')} ${chalk.hex('#8a7768')('— speech-to-text & text-to-speech')}
 
-  ${chalk.hex('#4e3d30')('Usage:')}
+  ${chalk.hex(FAINT_HEX)('Usage:')}
     ${chalk.hex('#8a7768')('dic')}                               Record → transcribe → copy + type into focused window
     ${chalk.hex('#8a7768')('dic --no-inject')}                   Record → transcribe → clipboard only (no typing)
     ${chalk.hex('#8a7768')('dic toggle')}                        Hotkey mode: 1st press records, 2nd press sends (types + Enter)
@@ -64,13 +65,13 @@ if (sub === 'toggle') {
     ${chalk.hex('#8a7768')('dic speak <text> --voice Chloe')}    Speak with a specific voice
     ${chalk.hex('#8a7768')('dic voices')}                        List available TTS voices
 
-  ${chalk.hex('#4e3d30')('API keys:')}
+  ${chalk.hex(FAINT_HEX)('API keys:')}
     PARAKEET_BASE_URL Local NVIDIA Parakeet ASR (self-hosted, no key)
     XIAOMI_API_KEY    MiMo ASR (STT) + MiMo TTS — free tier available
     OPENAI_API_KEY    OpenAI Whisper (STT fallback)
     GROQ_API_KEY      Groq Whisper (STT fallback, very fast)
 
-  ${chalk.hex('#4e3d30')('Notes:')}
+  ${chalk.hex(FAINT_HEX)('Notes:')}
     - STT prioritizes PARAKEET_BASE_URL > XIAOMI_API_KEY > OPENAI_API_KEY > GROQ_API_KEY
     - TTS requires XIAOMI_API_KEY (limited-time free)
     - Transcriptions are automatically copied to clipboard
