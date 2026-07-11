@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { toCachedSystem, toCachedTools } from '../../src/providers/anthropic.js';
+import { toCachedSystem, toCachedTools, fromAnthropicResponse } from '../../src/providers/anthropic.js';
 import type { ToolDefinition } from '../../src/providers/types.js';
+import type Anthropic from '@anthropic-ai/sdk';
 
 const tools: ToolDefinition[] = [
   { name: 'read_file', description: 'read', parameters: { type: 'object', properties: {} } },
@@ -38,5 +39,38 @@ describe('anthropic prompt caching', () => {
 
   it('handles empty tool list without adding markers', () => {
     expect(toCachedTools([])).toEqual([]);
+  });
+});
+
+describe('anthropic cache stats extraction', () => {
+  // Helper to build a minimal Anthropic.Message with custom usage fields
+  function fakeMessage(usage: Record<string, unknown>) {
+    return {
+      id: 'msg_test',
+      type: 'message' as const,
+      role: 'assistant' as const,
+      model: 'claude-sonnet-4-5-20251001',
+      stop_reason: 'end_turn' as const,
+      content: [{ type: 'text' as const, text: 'ok' }],
+      usage: usage as Anthropic.Usage,
+    };
+  }
+
+  it('extracts cache_read_input_tokens as cachedTokens', () => {
+    const msg = fakeMessage({ input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 800 });
+    const res = fromAnthropicResponse(msg);
+    expect(res.usage).toEqual({ inputTokens: 1000, outputTokens: 50, cachedTokens: 800 });
+  });
+
+  it('omits cachedTokens when cache_read_input_tokens is 0', () => {
+    const msg = fakeMessage({ input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 0 });
+    const res = fromAnthropicResponse(msg);
+    expect(res.usage).toEqual({ inputTokens: 1000, outputTokens: 50 });
+  });
+
+  it('omits cachedTokens when cache fields are absent', () => {
+    const msg = fakeMessage({ input_tokens: 1000, output_tokens: 50 });
+    const res = fromAnthropicResponse(msg);
+    expect(res.usage).toEqual({ inputTokens: 1000, outputTokens: 50 });
   });
 });

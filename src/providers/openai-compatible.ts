@@ -81,10 +81,27 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
       if (chunk.usage) {
+        // DeepSeek reports cache stats via prompt_cache_hit_tokens /
+        // prompt_cache_miss_tokens in the usage object. The OpenAI SDK
+        // passes unknown fields through, so we can read them here.
+        const raw = chunk.usage as OpenAI.CompletionUsage & {
+          prompt_cache_hit_tokens?: number;
+          prompt_cache_miss_tokens?: number;
+        };
+        const cacheHit = raw.prompt_cache_hit_tokens ?? 0;
+        const cacheMiss = raw.prompt_cache_miss_tokens ?? 0;
         usage = {
           inputTokens: chunk.usage.prompt_tokens ?? 0,
           outputTokens: chunk.usage.completion_tokens ?? 0,
+          // Only set cachedTokens when the provider actually reports them
+          // (DeepSeek). Other OpenAI-compatible providers don't set these
+          // fields, so cachedTokens stays undefined and costFor uses the
+          // standard rate for all input tokens.
+          ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
         };
+        if (process.env.AURA_DEBUG_CACHE && (cacheHit > 0 || cacheMiss > 0)) {
+          console.error(`[cache] hit=${cacheHit} miss=${cacheMiss} input=${chunk.usage.prompt_tokens ?? 0}`);
+        }
       }
 
       const choice = chunk.choices[0];
@@ -197,10 +214,20 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
     choice.finish_reason === 'tool_calls' ? 'tools' :
     choice.finish_reason === 'length' ? 'limit' : 'done';
 
-  const u = response.usage;
+  const u = response.usage as OpenAI.CompletionUsage & {
+    prompt_cache_hit_tokens?: number;
+    prompt_cache_miss_tokens?: number;
+  } | undefined;
+  if (!u) return { text, toolCalls, stopReason };
+
+  const cacheHit = u.prompt_cache_hit_tokens ?? 0;
   return {
     text, toolCalls, stopReason,
-    usage: u ? { inputTokens: u.prompt_tokens ?? 0, outputTokens: u.completion_tokens ?? 0 } : undefined,
+    usage: {
+      inputTokens: u.prompt_tokens ?? 0,
+      outputTokens: u.completion_tokens ?? 0,
+      ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
+    },
   };
 }
 
