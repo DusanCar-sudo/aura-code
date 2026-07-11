@@ -38,6 +38,8 @@ import {
   textToSpeech,
   sendVoiceMessage,
   transcribeVoiceMessage,
+  isOggOpus,
+  toOggOpus,
 } from '../src/tools/telegram-voice.js';
 
 import { stripWavPrefix } from '../src/tools/dictate.js';
@@ -154,8 +156,8 @@ describe('textToSpeech', () => {
     expect(result).toEqual(fakeAudio);
 
     const sentCmd = execMock.mock.calls[0][0] as string;
-    expect(sentCmd).toContain('playai-tts');
-    expect(sentCmd).toContain('"response_format":"ogg"');
+    expect(sentCmd).toContain('canopylabs/orpheus-v1-english');
+    expect(sentCmd).toContain('"response_format":"wav"');
   });
 
   it('truncates text longer than the cap before sending', async () => {
@@ -188,18 +190,78 @@ describe('textToSpeech', () => {
   });
 });
 
-describe('sendVoiceMessage', () => {
-  it('writes the buffer to a temp file and uploads it via curl -F', async () => {
-    let uploadedFilePath = '';
+/** A minimal buffer that passes the Ogg/Opus sniff: OggS page + OpusHead codec tag. */
+function fakeOggOpus(payload: Buffer = Buffer.from([1, 2, 3])): Buffer {
+  return Buffer.concat([Buffer.from('OggS'), Buffer.alloc(24), Buffer.from('OpusHead'), payload]);
+}
+
+describe('isOggOpus', () => {
+  it('accepts an Ogg container with an OpusHead codec header', () => {
+    expect(isOggOpus(fakeOggOpus())).toBe(true);
+  });
+
+  it('rejects a WAV buffer', () => {
+    expect(isOggOpus(Buffer.from('RIFF....WAVEfmt ....................', 'utf8'))).toBe(false);
+  });
+
+  it('rejects Ogg/Vorbis (right container, wrong codec)', () => {
+    const vorbis = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(24), Buffer.from('\x01vorbis'), Buffer.alloc(8)]);
+    expect(isOggOpus(vorbis)).toBe(false);
+  });
+
+  it('rejects buffers too short to carry a codec header', () => {
+    expect(isOggOpus(Buffer.from('OggS'))).toBe(false);
+  });
+});
+
+describe('toOggOpus', () => {
+  it('passes an already-Ogg/Opus buffer through without invoking ffmpeg', async () => {
+    const ogg = fakeOggOpus();
+    const result = await toOggOpus(ogg);
+    expect(result).toEqual(ogg);
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it('transcodes a WAV buffer to Ogg/Opus at 48 kHz mono via ffmpeg', async () => {
+    const transcoded = fakeOggOpus(Buffer.from([7, 7]));
+    let ffmpegCmd = '';
     execMock.mockImplementationOnce((cmd: string, _opts: any, cb: any) => {
-      const match = cmd.match(/voice=@([^\s"]+)/);
+      ffmpegCmd = cmd;
+      const match = cmd.match(/voip "([^"]+)"/);
+      fs.writeFileSync(match![1], transcoded);
+      cb(null, '', '');
+    });
+
+    const result = await toOggOpus(Buffer.from('RIFF....WAVE....', 'utf8'));
+    expect(result).toEqual(transcoded);
+    expect(result.subarray(0, 4).toString('latin1')).toBe('OggS');
+    expect(ffmpegCmd).toContain('ffmpeg');
+    expect(ffmpegCmd).toContain('-c:a libopus');
+    expect(ffmpegCmd).toContain('-ac 1');
+    expect(ffmpegCmd).toContain('-ar 48000');
+  });
+});
+
+describe('sendVoiceMessage', () => {
+  it('uploads an Ogg/Opus buffer via curl -F with an explicit audio/ogg part type', async () => {
+    const ogg = fakeOggOpus();
+    let uploadedFilePath = '';
+    let curlCmd = '';
+    execMock.mockImplementationOnce((cmd: string, _opts: any, cb: any) => {
+      curlCmd = cmd;
+      const match = cmd.match(/voice=@([^\s";]+)/);
       uploadedFilePath = match![1];
       expect(fs.existsSync(uploadedFilePath)).toBe(true);
-      expect(fs.readFileSync(uploadedFilePath)).toEqual(Buffer.from([1, 2, 3]));
+      expect(fs.readFileSync(uploadedFilePath)).toEqual(ogg);
       cb(null, JSON.stringify({ ok: true, result: {} }), '');
     });
 
-    await sendVoiceMessage(FAKE_TOKEN, 12345, Buffer.from([1, 2, 3]));
+    await sendVoiceMessage(FAKE_TOKEN, 12345, ogg);
+
+    // Without ;type=audio/ogg curl labels the part application/octet-stream
+    // and Telegram renders a file download instead of an inline voice bubble.
+    expect(curlCmd).toContain(';type=audio/ogg');
+    expect(curlCmd).toContain('/sendVoice');
 
     // cleanup uses a fire-and-forget fs.rm callback, deliberately not
     // awaited so a slow filesystem can't block the response — give it a
@@ -208,11 +270,31 @@ describe('sendVoiceMessage', () => {
     expect(fs.existsSync(uploadedFilePath)).toBe(false);
   });
 
+  it('transcodes a non-Opus buffer before uploading (WAV never reaches Telegram)', async () => {
+    const transcoded = fakeOggOpus(Buffer.from([4, 4]));
+    // First exec: ffmpeg
+    execMock.mockImplementationOnce((cmd: string, _opts: any, cb: any) => {
+      expect(cmd).toContain('ffmpeg');
+      const match = cmd.match(/voip "([^"]+)"/);
+      fs.writeFileSync(match![1], transcoded);
+      cb(null, '', '');
+    });
+    // Second exec: curl upload — must carry the transcoded Ogg bytes
+    execMock.mockImplementationOnce((cmd: string, _opts: any, cb: any) => {
+      const match = cmd.match(/voice=@([^\s";]+)/);
+      expect(fs.readFileSync(match![1])).toEqual(transcoded);
+      cb(null, JSON.stringify({ ok: true, result: {} }), '');
+    });
+
+    await sendVoiceMessage(FAKE_TOKEN, 12345, Buffer.from('RIFF....WAVE....', 'utf8'));
+    expect(execMock).toHaveBeenCalledTimes(2);
+  });
+
   it('throws on a Telegram-level error response', async () => {
     execMock.mockImplementationOnce((_cmd: string, _opts: any, cb: any) => {
       cb(null, JSON.stringify({ ok: false, description: 'chat not found', error_code: 400 }), '');
     });
-    await expect(sendVoiceMessage(FAKE_TOKEN, 1, Buffer.from([1]))).rejects.toThrow(/chat not found/);
+    await expect(sendVoiceMessage(FAKE_TOKEN, 1, fakeOggOpus())).rejects.toThrow(/chat not found/);
   });
 });
 

@@ -26,7 +26,7 @@ import { promisify } from 'util';
 import { getApiKey } from '../util/env.js';
 
 const execAsync = promisify(exec);
-const VOICE_TTS_CHAR_LIMIT = 800; // conservative cap; full text always still sent separately as a regular message
+const VOICE_TTS_CHAR_LIMIT = 200; // Orpheus model limit
 
 /** Shell-escapes a string for safe embedding inside single quotes in a curl command. */
 function shellEscape(value: string): string {
@@ -70,10 +70,9 @@ export async function downloadTelegramFile(token: string, fileId: string): Promi
 }
 
 /**
- * Calls Groq's text-to-speech endpoint and returns raw audio bytes.
- * Requests 'ogg' specifically — that's the one format both Groq supports
- * as a response_format AND Telegram's sendVoice expects natively for the
- * round voice-bubble UI, so no local transcoding/ffmpeg step is needed.
+ * Calls Groq's text-to-speech endpoint (Orpheus) and returns raw audio bytes.
+ * Orpheus only outputs 'wav'; the toOggOpus() helper transcodes to Ogg/Opus
+ * for Telegram's inline voice bubble rendering.
  */
 export async function textToSpeech(text: string, apiKey: string): Promise<Buffer> {
   const truncated = text.length > VOICE_TTS_CHAR_LIMIT
@@ -81,13 +80,13 @@ export async function textToSpeech(text: string, apiKey: string): Promise<Buffer
     : text;
 
   const body = JSON.stringify({
-    model: 'playai-tts',
-    voice: 'Fritz-PlayAI',
+    model: 'canopylabs/orpheus-v1-english',
+    voice: 'troy',
     input: truncated,
-    response_format: 'ogg',
+    response_format: 'wav',
   });
 
-  const outPath = path.join(os.tmpdir(), `tts-out-${randomUUID()}.ogg`);
+  const outPath = path.join(os.tmpdir(), `tts-out-${randomUUID()}.wav`);
   const errPath = path.join(os.tmpdir(), `tts-err-${randomUUID()}.json`);
   try {
     // -f makes curl exit non-zero on an HTTP error instead of writing the
@@ -124,14 +123,56 @@ export async function textToSpeech(text: string, apiKey: string): Promise<Buffer
   return audio;
 }
 
-/** Sends a voice reply (ogg/opus audio) to a chat via Telegram's sendVoice. */
+/**
+ * True when the buffer is an Ogg container carrying an Opus stream — the ONLY
+ * combination Telegram renders as an inline voice bubble. Ogg pages start
+ * with 'OggS'; the first logical stream's codec header follows on the first
+ * page, 'OpusHead' for Opus (Vorbis would carry '\x01vorbis' there instead).
+ */
+export function isOggOpus(buffer: Buffer): boolean {
+  if (buffer.length < 36 || buffer.toString('latin1', 0, 4) !== 'OggS') return false;
+  return buffer.includes('OpusHead', 0, 'latin1');
+}
+
+/**
+ * Normalizes arbitrary TTS output (WAV, MP3, Ogg/Vorbis, …) to Ogg/Opus via
+ * ffmpeg, using the same encoder settings as telegram-bot.ts's WAV path
+ * (48 kHz mono voip — anything else can render as a 0:00 empty note).
+ * Buffers already in Ogg/Opus pass through untouched.
+ */
+export async function toOggOpus(audioBuffer: Buffer): Promise<Buffer> {
+  if (isOggOpus(audioBuffer)) return audioBuffer;
+  const inPath = path.join(os.tmpdir(), `voice-in-${randomUUID()}`);
+  const outPath = path.join(os.tmpdir(), `voice-out-${randomUUID()}.ogg`);
+  fs.writeFileSync(inPath, audioBuffer);
+  try {
+    await execAsync(
+      `ffmpeg -y -i "${inPath}" -ac 1 -ar 48000 -c:a libopus -b:a 24k -application voip "${outPath}"`,
+      { timeout: 20_000 },
+    );
+    const out = fs.readFileSync(outPath);
+    if (out.length === 0) throw new Error('ffmpeg produced an empty file');
+    return out;
+  } finally {
+    fs.rm(inPath, () => {});
+    fs.rm(outPath, () => {});
+  }
+}
+
+/** Sends a voice reply to a chat via Telegram's sendVoice, as an inline voice bubble. */
 export async function sendVoiceMessage(token: string, chatId: string | number, audioBuffer: Buffer): Promise<void> {
+  // Telegram only renders the inline bubble for Ogg/Opus — transcode
+  // anything else rather than trusting the TTS provider's format label.
+  const ogg = await toOggOpus(audioBuffer);
   const tempPath = path.join(os.tmpdir(), `voice-reply-${randomUUID()}.ogg`);
-  fs.writeFileSync(tempPath, audioBuffer);
+  fs.writeFileSync(tempPath, ogg);
   try {
     const url = `https://api.telegram.org/bot${token}/sendVoice`;
+    // ;type=audio/ogg is load-bearing: without it curl labels the part
+    // application/octet-stream and Telegram falls back to file-download
+    // rendering (see the same note on telegram-bot.ts sendVoice).
     const { stdout } = await execAsync(
-      `curl -s -X POST -F "chat_id=${String(chatId)}" -F "voice=@${tempPath}" "${url}"`,
+      `curl -s -X POST -F "chat_id=${String(chatId)}" -F "voice=@${tempPath};type=audio/ogg" "${url}"`,
       { timeout: 30_000 },
     );
     const parsed = JSON.parse(stdout);
