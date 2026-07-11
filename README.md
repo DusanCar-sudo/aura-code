@@ -1,56 +1,72 @@
-# Her Rubyness — Aura Code
+# Aura Code
 
-> The Ruby-powered AI coding agent for the terminal-first developer.
+> Model-agnostic autonomous coding agent. Natural-language task → read codebase → plan → execute → verify → report.
 
 ```bash
 npm install -g aura-code
-aura --help
+aura 'fix the login bug'
 ```
 
-## Project Structure
-
-```
-aura-code/
-├── src/
-│   ├── index.js          # CLI entry point (aura command)
-│   ├── wizard.js          # Interactive setup / model selection
-│   ├── repl.js            # REPL loop
-│   ├── api.js             # API provider abstraction
-│   └── providers/         # Per-provider implementations
-│       ├── openai.js
-│       ├── anthropic.js
-│       ├── openrouter.js
-│       ├── local.js       # Ollama / LM Studio
-│       └── index.js
-├── assets/
-│   └── logo.txt           # ASCII logo
-├── docs/
-│   └── ARCHITECTURE.md
-├── package.json
-└── README.md
-```
-
-## Getting Started
+## Quick Start
 
 ```bash
-npm install
-npm link   # symlink 'aura' CLI globally
-aura       # launch REPL
+# Install
+npm install -g aura-code
+
+# Run (requires at least one provider API key)
+export ANTHROPIC_API_KEY=sk-...   # or OPENAI_API_KEY, GOOGLE_API_KEY, etc.
+aura 'add a logout button'
 ```
 
-## Environment Variables
+## Providers (model-agnostic)
 
-| Variable | Description | Default |
-|---|---|---|
-| `AURA_MODEL` | Preferred model (provider/model-id) | guided by wizard |
-| `AURA_PROVIDER` | API provider (openai, anthropic, openrouter, local) | wizard picks |
-| `AURA_API_KEY` | API key for chosen provider | prompted on first run |
-| `AURA_SYSTEM_PROMPT` | Custom system prompt | built-in |
+| Provider | Models |
+|----------|--------|
+| Claude (Anthropic) | Opus, Sonnet, Haiku |
+| GPT (OpenAI) | gpt-4o, gpt-4o-mini |
+| Gemini (Google) | gemini-2.5-pro, gemini-2.5-flash |
+| GLM (Zhipu / Z.ai) | glm-5.2, glm-5.1, glm-5 |
+| MiMo (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 |
+| Ollama | any local model |
+| OpenCode Go | Anthropic-compatible endpoint |
 
-## Brand
+Run `aura` without arguments for the interactive setup wizard.
 
-- **Name:** Her Rubyness (the agent persona), Aura Code (the tool)
-- **Aesthetic:** Terminal-native, void-black, ruby-red accent
-- **Colors:** `#0a0a0a` bg, `#c43c3c` accent, `#e8e4df` ink
-- **Fonts:** Space Grotesk (UI), IBM Plex Mono (terminal), Instrument Serif (headings)
-- **Owner:** Dusan Milosavljevic
+## Features
+
+- **Autonomous execution** — reads files, edits code, runs commands, verifies results
+- **Multi-provider fallback** — resilient API handling with circuit breakers
+- **TUI mode** — full terminal UI with command palette, diff view, markdown rendering
+- **Telegram bot** — voice replies, PC control, file sending
+- **Benchmark harness** — reproducible coding tasks with verified outcomes
+- **Context compaction** — adaptive memory for long sessions
+
+## CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--auto` | Fully autonomous (no confirmations) |
+| `--model <id>` | Specific model (e.g. `claude-sonnet-4`) |
+| `--provider <name>` | Force provider |
+| `--orchestrate` | Multi-agent mode (Researcher → Coder → Reviewer) |
+| `--verify` | Post-task checks with auto-retry |
+| `--readonly` | Read-only analysis |
+| `--doctor` | Run self-diagnostic checks |
+
+## Configuration
+
+- `.aura.json` — project-level model/provider config
+- Global config via first-run wizard
+- Environment overrides: `AURA_MODEL`, `AURA_FALLBACK_MODEL`, `AURA_MAX_RETRIES`
+
+## Development
+
+```bash
+npm run build     # tsc → dist/
+npm run dev       # ts-node src/cli/index.ts
+npm test          # vitest
+```
+
+## License
+
+MIT
