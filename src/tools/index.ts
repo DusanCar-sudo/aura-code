@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../providers/types.js';
+import type { ToolDefinition, HistoryMessage } from '../providers/types.js';
 import { readFile } from './read-file.js';
 import { listDir } from './list-dir.js';
 import { editFile } from './edit-file.js';
@@ -154,6 +154,69 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   CRON_DEFINITION,
   MCP_DEFINITION,
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Relevance gate — conditional tools are only sent to the model when the task
+// or conversation mentions their domain. Same mechanic as the plugin-skill
+// keyword gate in system-prompt.ts. Triggers are deliberately generous: a
+// false positive costs a few hundred tokens, a false negative breaks the task.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
+  telegram:     /telegram|\btg\b|\bbot\b|send me|message me|text me|ping me|notify me/,
+  browser:      /browser|chrome|website|webpage|web page|screenshot|click|navigate|scrape|open .{0,20}page|\burl\b/,
+  http_request: /\bhttp\b|\bapi\b|endpoint|curl|webhook|\brest\b|\brequest\b|post to/,
+  calendar:     /calendar|\bevents?\b|meeting|appointment|schedule|remind/,
+  cron:         /\bcron\b|schedule|recurring|daily|weekly|hourly|\bevery\b|periodically/,
+  whatsapp:     /whatsapp|\bwa\b|send me|message me/,
+  email:        /e-?mail|\bmail\b|inbox|gmail|smtp/,
+  notify:       /notify|notification|alert|when done|ping|desktop/,
+  image_read:   /image|screenshot|png|jpe?g|photo|picture|webcam/,
+  clipboard:    /clipboard|copy to|paste/,
+};
+
+/** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy). */
+function gateText(task: string, history: HistoryMessage[]): string {
+  const parts = [task];
+  for (const msg of history) {
+    if (msg.role === 'user') parts.push(msg.content);
+    else if (msg.role === 'assistant' && msg.content) parts.push(msg.content);
+  }
+  return parts.join('\n').toLowerCase();
+}
+
+/**
+ * Select the tool definitions to send this turn: all CORE tools plus any
+ * conditional tool whose trigger matches the task or conversation so far.
+ *
+ * `included` is a sticky per-session set: once a conditional tool is
+ * triggered it stays for the rest of the session, even if compaction later
+ * rewrites the keyword out of history. Additive-only also means the
+ * Anthropic prompt-cache prefix (tools block) is busted at most once per
+ * newly triggered tool instead of thrashing.
+ *
+ * Call once per turn — mid-session pivots ("actually send this via
+ * telegram") land in history as user messages, so the tool is present
+ * before the model responds to them.
+ */
+export function selectTools(
+  task: string,
+  history: HistoryMessage[],
+  included: Set<string> = new Set(),
+): ToolDefinition[] {
+  const text = gateText(task, history);
+  for (const [name, trigger] of Object.entries(CONDITIONAL_TOOL_TRIGGERS)) {
+    if (!included.has(name) && trigger.test(text)) included.add(name);
+  }
+  const selected = TOOL_DEFINITIONS.filter(
+    t => !(t.name in CONDITIONAL_TOOL_TRIGGERS) || included.has(t.name),
+  );
+  if (process.env.AURA_DEBUG_TOOLS) {
+    const chars = JSON.stringify(selected).length;
+    console.error(`[tools] sent=${selected.length}/${TOOL_DEFINITIONS.length} chars=${chars}`);
+  }
+  return selected;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool executor — dispatches to the right implementation

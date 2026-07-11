@@ -1,6 +1,6 @@
 import * as path from 'path';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
-import { TOOL_DEFINITIONS, executeTool } from '../tools/index.js';
+import { selectTools, executeTool } from '../tools/index.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
@@ -167,6 +167,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
   // Mutable bag for per-loop state (empty-response retry counter, etc.).
   const loopState: Record<string, number> = {};
+
+  // Sticky set of triggered conditional tools — survives history compaction.
+  const includedTools = new Set<string>();
   
 
   while (true) {
@@ -232,7 +235,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     let finalResponse: { stopReason: 'done' | 'tools' | 'limit' } | null = null;
 
     try {
-      const stream = provider.stream(system, history, TOOL_DEFINITIONS);
+      const stream = provider.stream(system, history, selectTools(opts.task, history, includedTools));
       for await (const chunk of stream) {
         switch (chunk.type) {
           case 'text':
