@@ -24,7 +24,7 @@ export interface GmailInput {
 export const GMAIL_DEFINITION: ToolDefinition = {
   name: 'gmail',
   description:
-    'Read and write emails via Gmail API. Uses OAuth from ~/.hermes/google_token.json. ' +
+    'Read and write emails via Gmail API. Uses OAuth from ~/.aura/google_token.json. ' +
     'Actions: list, read, send (require an existing token — use setup_status to check). ' +
     'setup (step 1: takes client_id + client_secret, returns a URL for the user to open and ' +
     'approve, never echoes secrets back). setup_finish (step 2: takes the "code" from the ' +
@@ -48,8 +48,8 @@ export const GMAIL_DEFINITION: ToolDefinition = {
   },
 };
 
-const TOKEN_PATH = path.join(os.homedir(), '.hermes', 'google_token.json');
-const SETUP_STATE_PATH = path.join(os.homedir(), '.hermes', '.gmail_setup_state.json');
+const TOKEN_PATH = path.join(os.homedir(), '.aura', 'google_token.json');
+const SETUP_STATE_PATH = path.join(os.homedir(), '.aura', '.gmail_setup_state.json');
 const REDIRECT_URI = 'http://localhost:8080/';
 const SETUP_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',

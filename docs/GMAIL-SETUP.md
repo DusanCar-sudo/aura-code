@@ -10,7 +10,7 @@ file that has to exist beforehand.
 The tool reads OAuth2 credentials from one fixed location:
 
 ```
-~/.hermes/google_token.json
+~/.aura/google_token.json
 ```
 
 That path is **not** an `aura-code` convention — it's left over from an earlier,
@@ -20,17 +20,17 @@ is sitting there and refreshes it when it expires. There is currently no `:gmail
 command or setup wizard in Aura itself.
 
 **What this means in practice:**
-- If `~/.hermes/google_token.json` already exists (e.g. because Hermes was set up on
+- If `~/.aura/google_token.json` already exists (e.g. because Hermes was set up on
   this machine before) → the tool should work immediately, no setup needed.
 - If it does **not** exist → the tool will fail every time with
-  `Gmail error: Google token not found at /home/<you>/.hermes/google_token.json`,
+  `Gmail error: Google token not found at /home/<you>/.aura/google_token.json`,
   because there is nothing in `aura-code` that can create it. You have to create it
   yourself, once, using Google's own OAuth flow (steps below).
 
 ## Checking whether you already have a token
 
 ```bash
-cat ~/.hermes/google_token.json
+cat ~/.aura/google_token.json
 ```
 
 If that prints JSON with `token`, `refresh_token`, `client_id`, `client_secret` — you're
@@ -57,7 +57,7 @@ Then run the standard Google OAuth "installed app" flow to get a `refresh_token`
 the simplest way is a short script, since `aura-code` doesn't ship one:
 
 ```bash
-mkdir -p ~/.hermes
+mkdir -p ~/.aura
 python3 -c "
 import json, urllib.parse, webbrowser
 
@@ -115,9 +115,9 @@ token_file = {
     'scopes': tok.get('scope', '').split(),
     'email': 'your-gmail-address@gmail.com',
 }
-with open('/root/.hermes/google_token.json' if False else __import__('os').path.expanduser('~/.hermes/google_token.json'), 'w') as f:
+with open('/root/.aura/google_token.json' if False else __import__('os').path.expanduser('~/.aura/google_token.json'), 'w') as f:
     json.dump(token_file, f, indent=2)
-print('Saved ~/.hermes/google_token.json')
+print('Saved ~/.aura/google_token.json')
 "
 ```
 
@@ -154,14 +154,14 @@ stored `refresh_token` whenever a call returns `401`, and re-saves the refreshed
 token back to the same file. You should never need to redo the setup above unless:
 - The `refresh_token` itself is revoked (e.g. you removed app access in your Google
   account's permissions page), or
-- You're moving to a new machine without copying `~/.hermes/google_token.json` over.
+- You're moving to a new machine without copying `~/.aura/google_token.json` over.
 
 ## Known gaps (being upfront about this)
 
 - **No setup wizard exists in `aura-code` itself.** Every other provider
   (`:provider`) walks you through configuration; Gmail does not. The steps above are
   manual because nothing in the codebase automates them yet.
-- **The `.hermes` path is a naming leftover**, not a deliberate `aura-code` choice. If
+- **The `.aura` path is a naming leftover**, not a deliberate `aura-code` choice. If
   you want this cleaned up (e.g. moved to `~/.config/aura-code/google_token.json`),
   that's a real code change to `gmail-tool.ts`, not just a config tweak — say so and
   it can be done.
