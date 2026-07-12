@@ -376,10 +376,17 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   }
 
   // ── DeepSeek ──────────────────────────────────────────────────────────────
-  if (model.startsWith('deepseek/')) {
+  // Bare `deepseek-*` (e.g. "deepseek-v4-flash") is DeepSeek's own API model
+  // name, not just a routing shorthand — apiKeyEnvVarForModel and
+  // isModelConfigured above already recognize it unprefixed. This branch used
+  // to require the `deepseek/` slash prefix, so a caller resolving to the
+  // bare name (tiered-context.ts's resolveSummaryModel) fell through every
+  // branch to the OpenAI-compatible default and 401'd on a missing
+  // OPENAI_API_KEY instead of reaching DeepSeek.
+  if (model.startsWith('deepseek/') || model.startsWith('deepseek-')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('deepseek/', ''),
+      model: model.replace(/^deepseek\//, ''),
       baseUrl: config.baseUrl ?? 'https://api.deepseek.com/v1',
       apiKey: config.apiKey ?? getApiKey('DEEPSEEK_API_KEY'),
     }, 'DeepSeek');
