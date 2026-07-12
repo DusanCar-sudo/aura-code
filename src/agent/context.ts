@@ -9,6 +9,7 @@ export interface ProjectContext {
   language: string;      // primary language detected
   framework: string;     // framework detected (React, Django, etc.)
   readme: string;        // README contents (truncated)
+  auraRules: string;     // AURA.md standing rules (truncated), if present
   tree: string;          // directory tree
   config: string;        // package.json / requirements.txt / Cargo.toml
   recentCommits: string; // last 5 git commits
@@ -26,6 +27,7 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     language,
     framework,
     readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
+    auraRules:     readTruncated(root, ['AURA.md'], 2000, 'AURA.md'),
     tree:          buildTree(root),
     config:        readConfig(root),
     recentCommits: readGitLog(root),
@@ -92,7 +94,7 @@ function detectStack(root: string): { language: string; framework: string } {
   return { language: 'Unknown', framework: 'Unknown' };
 }
 
-function readTruncated(root: string, names: string[], maxChars: number): string {
+function readTruncated(root: string, names: string[], maxChars: number, notFoundLabel = 'README'): string {
   for (const name of names) {
     const p = path.join(root, name);
     if (fs.existsSync(p)) {
@@ -104,7 +106,7 @@ function readTruncated(root: string, names: string[], maxChars: number): string 
       } catch { /* next */ }
     }
   }
-  return '(no README found)';
+  return `(no ${notFoundLabel} found)`;
 }
 
 function buildTree(root: string): string {
