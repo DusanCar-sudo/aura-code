@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
 import { exec, execSync, execFileSync } from 'child_process';
-import { createProvider, registerCustomProviders } from '../providers/factory.js';
+import { createProvider, registerCustomProviders, getAllModels, isModelConfigured } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
 import {
@@ -411,7 +411,9 @@ const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
 const CHAT_HISTORY_MAX = 50; // keep last N messages per chat for context
 const SESSION_DIR = path.join(os.homedir(), '.aura', 'sessions', 'telegram');
 
-let _chatProvider: LLMProvider | null = null;
+// Per-chat provider instances — one Telegram user's /provider switch MUST NOT
+// affect another user's messages. Map<chatId, provider>.
+const chatProviders = new Map<string, LLMProvider>();
 let _identityBlock = ''; // loaded from memory on startup
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -552,12 +554,13 @@ async function pushToHistory(chatId: string, msg: HistoryMessage): Promise<void>
   dirtySessions.delete(chatId);
 }
 
-function getChatProvider(): LLMProvider {
-  if (!_chatProvider) {
-    _chatProvider = createProvider({ model: DEFAULT_CHAT_MODEL, temperature: 0.7, maxTokens: 4096 });
-    console.log(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]   Chat model: ${DEFAULT_CHAT_MODEL} (${_chatProvider.name})`);
+function getChatProvider(chatId: string): LLMProvider {
+  if (!chatProviders.has(chatId)) {
+    const provider = createProvider({ model: DEFAULT_CHAT_MODEL, temperature: 0.7, maxTokens: 4096 });
+    chatProviders.set(chatId, provider);
+    console.log(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]   Chat ${chatId} model: ${DEFAULT_CHAT_MODEL} (${provider.name})`);
   }
-  return _chatProvider;
+  return chatProviders.get(chatId)!;
 }
 
 /** Block only truly catastrophic commands; everything else is allowed. Shared
@@ -693,7 +696,7 @@ async function requestApproval(chatId: string | number, label: string, command: 
 }
 
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
-  const provider = getChatProvider();
+  const provider = getChatProvider(String(chatId));
   // Agentic system prompt: the model may run real shell commands on Dušan's PC
   // by emitting a line `RUN: <command>`. The bot executes it and feeds the
   // output back so the model can answer from real data (processes, files, etc).
@@ -910,6 +913,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Komande:`,
       `/status — Šta trenutno radi u ovom chatu (zadatak, trajanje, potvrde na čekanju) + status sistema`,
       `/tools — Lista dostupnih alata`,
+      `/provider [model] — Lista AI modelova ili prebaci na drugi model (ova sesija)`,
       `/memory — Pregled memorije`,
       `/history — Pregled istorije razgovora`,
       `/clear — Obriši istoriju razgovora`,
@@ -1029,6 +1033,47 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   if (lower === '/time') return `🕐 ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`;
+
+  // ── /provider — switch AI model for this chat ─────────────────────────────
+  if (lower === '/provider' || lower.startsWith('/provider ')) {
+    const arg = text.slice(9).trim();
+
+    // No argument: list current + available configured models
+    if (!arg) {
+      const currentProvider = chatProviders.get(String(chatId));
+      const currentModel = currentProvider ? currentProvider.name : DEFAULT_CHAT_MODEL;
+      const allModels = getAllModels().filter(m => isModelConfigured(m.id));
+
+      const lines: string[] = [
+        `🤖 Current: ${currentModel}`,
+        ``,
+        `Available models (configured with API keys):`,
+      ];
+
+      for (const m of allModels) {
+        lines.push(`• ${m.id} — ${m.provider} (${m.speed})`);
+      }
+
+      lines.push(``, `💡 Use /provider <model_id> to switch (session-scoped to this chat)`);
+      return lines.join('\n');
+    }
+
+    // With argument: switch to that model
+    const newModel = arg;
+    if (!isModelConfigured(newModel)) {
+      return `❌ Model not configured or missing API key: ${newModel}\n\n💡 Use /provider to see available models.`;
+    }
+
+    // Detect cost tier for hint
+    const isPremium = /opus|claude-sonnet-4-5|gpt-4/i.test(newModel);
+    const tierHint = isPremium ? ` ⚠️ Premium tier (higher cost)` : '';
+
+    const newProvider = createProvider({ model: newModel, temperature: 0.7, maxTokens: 4096 });
+    chatProviders.set(String(chatId), newProvider);
+
+    console.log(`[${ts()}] 🔄 Chat ${chatId} switched model: ${newModel} (${newProvider.name})`);
+    return `✅ Switched to ${newModel}${tierHint}`;
+  }
 
   if (lower === '/whoami') {
     return [
