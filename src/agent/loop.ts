@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
 import { selectTools, executeTool } from '../tools/index.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -15,6 +16,7 @@ import { DEFAULTS } from '../config/defaults.js';
 import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
 import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } from './compactor.js';
 import { maybeRollover } from './generational-flush.js';
+import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.js';
 import { detectFrustration } from './affect.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 
@@ -209,6 +211,25 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         executiveDigest: execQueue.size > 0 ? execQueue.digest() : undefined,
         affectHint: detectFrustration(history) ?? undefined,
       };
+      if (isTieredStrategyEnabled()) {
+        // Tiered strategy (ANCHOR + FACT LOG + TAIL) — see tiered-context.ts.
+        // No rollover step: the fact log stays lightweight bullets rather
+        // than a growing prose recap, so it doesn't need the dream-store
+        // flush the default strategy relies on to bound recap size.
+        const estimated = estimateContextTokens(system, history);
+        const { compacted, metrics } = await compactHistoryTiered(
+          history, estimated, provider.model, opts.sessionPath, compactionExtras,
+        );
+        if (compacted && metrics) {
+          health.recordCompaction(metrics.beforeTokens, metrics.afterTokens, metrics.compactionCount);
+          display.compactionEvent?.({
+            beforeTokens: metrics.beforeTokens, afterTokens: metrics.afterTokens,
+            generation: metrics.compactionCount, threshold: metrics.beforeTokens,
+          });
+          logContextMetrics(opts.context.root, { ...metrics });
+          await persist(opts.sessionPath, history);
+        }
+      } else
       // The ladder in compactHistory escalates its own trigger per recap
       // generation; once a recap has been recompacted ROLLOVER_AT_GENERATION
       // times, a further in-place pass would just be lossy recompaction —
@@ -221,6 +242,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           const generation = getRecapGeneration(history);
           health.recordCompaction(beforeTokens, afterTokens, generation);
           display.compactionEvent?.({ beforeTokens, afterTokens, generation, threshold: beforeTokens });
+          logContextMetrics(opts.context.root, { strategy: 'default-rollover', beforeTokens, afterTokens, generation });
           await persist(opts.sessionPath, history);
         }
       } else {
@@ -231,6 +253,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           const generation = getRecapGeneration(history);
           health.recordCompaction(estimated, afterTokens, generation);
           display.compactionEvent?.({ beforeTokens: estimated, afterTokens, generation, threshold: estimated });
+          logContextMetrics(opts.context.root, { strategy: 'default', beforeTokens: estimated, afterTokens, generation });
           await persist(opts.sessionPath, history);
         }
       }
@@ -456,6 +479,22 @@ async function persist(path: string | undefined, history: HistoryMessage[]): Pro
   if (!path) return;
   try { await sessionStore.save(path, history); }
   catch { /* persistence is best-effort */ }
+}
+
+/**
+ * Appends one JSON line per compaction event to <root>/.aura/context-metrics.jsonl,
+ * tagged by strategy, so old-vs-new (default vs AURA_CONTEXT_STRATEGY=tiered)
+ * runs can be diffed after the fact independent of the live display.
+ */
+function logContextMetrics(root: string, entry: Record<string, unknown>): void {
+  try {
+    const dir = path.join(root, '.aura');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(
+      path.join(dir, 'context-metrics.jsonl'),
+      JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + '\n',
+    );
+  } catch { /* metrics logging is best-effort */ }
 }
 
 function formatCallForConfirmation(call: ToolCall): string {
