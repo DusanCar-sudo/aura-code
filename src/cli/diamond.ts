@@ -101,35 +101,24 @@ export function gradientStopFor(row: number, total: number): chalk.Chalk {
  * so the point renders cleanly on every terminal font; per-row 3D facet
  * shading is applied at render time by styleGemRow, not baked in here.
  */
-export const GEM = [
-  '   █████    ', // table
-  '  ████████  ', // crown
-  ' ██████████ ', // crown → girdle
-  '████████████', // girdle (widest)
-  ' █████████  ', // pavilion
-  '  ███████   ', // pavilion
-  '   █████    ', // pavilion
-  '    ███     ', // pavilion, narrowing to the point
-  '     █      ', // point
-];
+export const GEM: string[] = [];
 
-/** Column width of one gem row (all rows share the same padded width). */
-export const GEM_WIDTH = GEM[0].length;
+export const GEM_WIDTH = 0;
 
-/** The gem's styled Nth row, or null if out of range — for compositing beside other columns. */
 export function gemRow(i: number): string | null {
-  const row = GEM[i];
-  return row === undefined ? null : styleGemRow(row, FACET_SHADES);
+  return null;
 }
 
 const LOGO = [
-  ' ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░         ░▒▓██████▓▒░  ▒▓██████▓▒░░▒▓███████▓▒░░ ▒▓████████▓ ',
-  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ▒▓█▓▒░      ',
-  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓█▓▒░      ',
-  '░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓████████▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓██████▓▒  ',
-  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░░▒▓█▓▒░▒▓█▓▒░      ',
-  '░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ▒▓█▓▒░      ',
-  '░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░        ░▒▓██████▓▒░ ░▒▓██████▓▒░░▒▓███████▓▒░░ ▒▓████████▓ ',
+  '                                     ██▓▒▒                                      ',
+  '                                    ███▓▒▒▒                                     ',
+  ' █████╗ ██╗   ██╗██████╗  █████╗   ████▓▒▒▒▒    ██████╗ ██████╗ ██████╗ ███████╗',
+  '██╔══██╗██║   ██║██╔══██╗██╔══██╗ █████▓▒▒▒▒▒  ██╔════╝██╔═══██╗██╔══██╗██╔════╝',
+  '███████║██║   ██║██████╔╝███████║  ████▓▒▒▒▒   ██║     ██║   ██║██║  ██║█████╗  ',
+  '██╔══██║██║   ██║██╔══██╗██╔══██║   ███▓▒▒▒    ██║     ██║   ██║██║  ██║██╔══╝  ',
+  '██║  ██║╚██████╔╝██║  ██║██║  ██║    ██▓▒▒     ╚██████╗╚██████╔╝██████╔╝███████╗',
+  '╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝     █▓▒       ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
+  '                                       ▓                                        '
 ];
 
 // Shade zones for 3D faceted diamond: [leftFace, midFace, shadowFace].
@@ -195,6 +184,39 @@ function renderGemBlock(indent: number): void {
   gemBlockLines(indent).forEach(line => console.log(line));
 }
 
+const logoColors = ['#ff8c00', '#ff1493', '#dc143c', '#6d1322'];
+
+function hexToRgb(hex: string) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { r, g, b };
+}
+
+function styleLogoRow(str: string): string {
+  if (str.length === 0) return str;
+  let out = '';
+  const len = str.length;
+  for (let i = 0; i < len; i++) {
+    const progress = i / Math.max(1, len - 1);
+    const scaled = progress * (logoColors.length - 1);
+    const index = Math.floor(scaled);
+    const factor = scaled - index;
+    
+    if (index >= logoColors.length - 1) {
+      out += chalk.hex(logoColors[logoColors.length - 1]).bold(str[i]);
+    } else {
+      const c1 = hexToRgb(logoColors[index]);
+      const c2 = hexToRgb(logoColors[index + 1]);
+      const r = Math.round(c1.r + (c2.r - c1.r) * factor);
+      const g = Math.round(c1.g + (c2.g - c1.g) * factor);
+      const b = Math.round(c1.b + (c2.b - c1.b) * factor);
+      out += chalk.rgb(r, g, b).bold(str[i]);
+    }
+  }
+  return out;
+}
+
 /**
  * The banner's fully-styled lines, one string per terminal row:
  * - Brilliant-cut gem centered above the wordmark, each row faceted
@@ -206,14 +228,17 @@ function renderGemBlock(indent: number): void {
  * from scroll mode) — the alt screen has no scrollback to recover it from.
  */
 export function buildBannerLines(info: BannerInfo): string[] {
-  const lines: string[] = [''];
+  // Push 3 empty strings to move the logo down by 2 extra rows from the top edge
+  const lines: string[] = ['', '', ''];
 
-  const gemIndent = Math.floor((LOGO[0].length - GEM[0].length) / 2);
-  lines.push(...gemBlockLines(gemIndent), '');
+  if (GEM && GEM.length > 0) {
+    const gemIndent = Math.floor((LOGO[0].length - GEM[0].length) / 2);
+    lines.push(...gemBlockLines(gemIndent), '');
+  }
 
   LOGO.forEach(row => {
-    const midPoint = Math.floor(row.length / 2);
-    lines.push(light(row.slice(0, midPoint)) + shadow(row.slice(midPoint)));
+    // Add 2 spaces for left padding
+    lines.push('  ' + styleLogoRow(row));
   });
 
   lines.push('');
