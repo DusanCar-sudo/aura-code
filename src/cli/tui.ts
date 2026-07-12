@@ -107,11 +107,12 @@ function startToolSpinner(name: string): void {
       const spinners = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
       const s = spinners[activeTool.spinnerFrame % spinners.length];
       const elapsed = ((Date.now() - activeTool.startTime) / 1000).toFixed(1);
-      // Write spinner on the last output line (inside scroll region)
+      // Preserve the active output/input cursor while painting status text.
+      saveCursor();
       cursorCol(1);
       clearEol();
       rawWrite(ACCENT(`  ${s} ${activeTool.name}`) + TEXT_DIM(`  ${elapsed}s`));
-      cursorCol(1);
+      restoreCursor();
     }, 100);
   }
 }
@@ -122,8 +123,10 @@ function stopToolSpinner(): void {
     activeTool.intervalHandle = null;
   }
   if (activeTool && !scrollMode) {
+    saveCursor();
     cursorCol(1);
     clearEol();
+    restoreCursor();
   }
   activeTool = null;
 }
@@ -177,6 +180,8 @@ function cursorDown(n: number): void { if (n > 0) rawWrite(`\x1b[${n}B`); }
 function cursorCol(n: number): void { rawWrite(`\x1b[${n}G`); }
 function hideCursor(): void { rawWrite('\x1b[?25l'); }
 function showCursor(): void { rawWrite('\x1b[?25h'); }
+function saveCursor(): void { rawWrite('\x1b[s'); }
+function restoreCursor(): void { rawWrite('\x1b[u'); }
 
 let altScreenActive = false;
 export function enterAltScreen(): void {
@@ -233,9 +238,10 @@ process.on('exit', () => {
 
 // ── Bottom-input layout via DECSTBM ─────────────────────────────────────────
 //
-// The screen is split into two regions using DECSTBM (scroll region):
-//   Rows 1..(sr-FIXED_BOTTOM) — scrollable output region
-//   Rows (sr-FIXED_BOTTOM+1)..sr — fixed bottom block (input box etc.)
+// The screen is split into three regions using DECSTBM (scroll region):
+//   Rows 1..bannerRows                       — fixed top banner
+//   Rows (bannerRows+1)..(sr-FIXED_BOTTOM)  — scrollable output region
+//   Rows (sr-FIXED_BOTTOM+1)..sr            — fixed bottom block (input box etc.)
 //
 // DECSTBM sets the region inside which scrolling/line-feed happens.
 // The cursor jumps to the region's home when set — we account for that.
@@ -253,7 +259,7 @@ const MARGIN = 1;
 
 function computeLayout(): { boxWidth: number } {
   const total = cols();
-  return { boxWidth: Math.min(total - LEAD - MARGIN, 100) };
+  return { boxWidth: Math.max(12, total - LEAD - MARGIN) };
 }
 
 function wrapInput(innerWidth: number): { rows: string[]; cursorRow: number; cursorCol: number } {
@@ -279,6 +285,14 @@ function wrapInput(innerWidth: number): { rows: string[]; cursorRow: number; cur
 function padVisible(s: string, width: number): string {
   const visibleLen = s.replace(/\x1b\[[0-9;]*m/g, '').length;
   return s + ' '.repeat(Math.max(0, width - visibleLen));
+}
+
+function fitVisible(s: string, width: number): string {
+  return padVisible(truncVisible(s, width), width);
+}
+
+function isPrintableText(ch: string): boolean {
+  return ch.length > 0 && !/[\p{C}]/u.test(ch);
 }
 
 function truncVisible(s: string, width: number): string {
@@ -310,7 +324,7 @@ function buildBottomRows(): string[] {
   const rows: string[] = [];
 
   // Status line
-  rows.push(' '.repeat(LEAD) + padVisible(modeTag + agentTag + TEXT_DIM(` ${statusLineText}`), boxWidth));
+  rows.push(' '.repeat(LEAD) + fitVisible(modeTag + agentTag + TEXT_DIM(` ${statusLineText}`), boxWidth));
 
   // Input box
   for (let row = 0; row < HEADER_ROWS; row++) {
@@ -331,14 +345,13 @@ function buildBottomRows(): string[] {
       const showPlaceholder = inputBuffer.length === 0 && contentRow === 0;
       let inner: string;
       if (showPlaceholder) {
-        inner = TEXT_DIM('type a task, :btw, :q, :help...') + cursorChar;
-        inner = padVisible(inner, innerWidth);
+        inner = fitVisible(TEXT_DIM('type a task, :btw, :q, :help...') + cursorChar, innerWidth);
       } else if (isCursorRow && focused) {
         const before = TEXT(text.slice(0, wrapped.cursorCol));
         const after = TEXT(text.slice(wrapped.cursorCol));
-        inner = padVisible(before + cursorChar + after, innerWidth);
+        inner = fitVisible(before + cursorChar + after, innerWidth);
       } else {
-        inner = padVisible((focused ? TEXT : TEXT_DIM)(text), innerWidth);
+        inner = fitVisible((focused ? TEXT : TEXT_DIM)(text), innerWidth);
       }
       const border = focused ? gradientStopFor(row, HEADER_ROWS)('│') : CHROME_DIM('│');
       boxPart = border + ' ' + inner + ' ' + border;
@@ -349,18 +362,37 @@ function buildBottomRows(): string[] {
   return rows;
 }
 
+function visibleBannerRowCount(sr = screenRows()): number {
+  return bannerLines.length > 0 && sr - bannerLines.length - FIXED_BOTTOM - 1 >= 3
+    ? bannerLines.length
+    : 0;
+}
+
+function scrollRegionTopRow(sr = screenRows()): number {
+  return visibleBannerRowCount(sr) + 1;
+}
+
+function scrollRegionBottomRow(sr = screenRows()): number {
+  return sr - FIXED_BOTTOM;
+}
+
+function moveCursorToOutputBase(sr = screenRows()): void {
+  rawWrite(`\x1b[${scrollRegionBottomRow(sr)};1H`);
+}
+
 /**
  * Set the terminal scroll region to exclude the bottom FIXED_BOTTOM rows.
  * After DECSTBM, the cursor moves to the home position of the region.
  */
 function setScrollRegion(): void {
   const sr = screenRows();
-  const scrollEnd = sr - FIXED_BOTTOM;
-  if (scrollEnd < 1) return;
+  const scrollTop = scrollRegionTopRow(sr);
+  const scrollEnd = scrollRegionBottomRow(sr);
+  if (scrollEnd < scrollTop) return;
   // DECSTBM: \x1b[top;bottom;r — set scroll region from row `top` to `bottom`
-  rawWrite(`\x1b[1;${scrollEnd}r`);
+  rawWrite(`\x1b[${scrollTop};${scrollEnd}r`);
   // Move cursor to top of scroll region (DECSTBM homes cursor there)
-  rawWrite(`\x1b[1;1H`);
+  rawWrite(`\x1b[${scrollTop};1H`);
 }
 
 /**
@@ -381,6 +413,7 @@ function drawPromptBottom(): void {
   const sr = screenRows();
   // The bottom block starts at row (sr - FIXED_BOTTOM + 1)
   const startRow = sr - FIXED_BOTTOM + 1;
+  saveCursor();
 
   for (let i = 0; i < rows.length; i++) {
     const row = startRow + i;
@@ -395,11 +428,7 @@ function drawPromptBottom(): void {
     clearEol();
     rawWrite(truncVisible(footerText, Math.max(10, cols() - MARGIN)));
   }
-
-  // Return cursor to the scroll region (where output goes)
-  // Position at the bottom of the scroll region
-  const scrollEnd = sr - FIXED_BOTTOM;
-  rawWrite(`\x1b[${scrollEnd};1H`);
+  restoreCursor();
 }
 
 // ── Fullscreen mode for interactive prompts (wizard etc.) ──────────────────
@@ -419,7 +448,7 @@ export function enterFullscreenPrompt(): void {
     clearEol();
   }
   // Move cursor to where output was
-  rawWrite(`\x1b[${sr - FIXED_BOTTOM};1H`);
+  rawWrite(`\x1b[${scrollRegionBottomRow(sr)};1H`);
 }
 
 export function exitFullscreenPrompt(): void {
@@ -506,7 +535,7 @@ export function setBannerLines(lines: string[]): void {
 // ── Scroll-mode rendering ──────────────────────────────────────────────────
 
 function viewHeight(): number {
-  return Math.max(3, screenRows() - FIXED_BOTTOM - 1);
+  return Math.max(3, screenRows() - FIXED_BOTTOM - visibleBannerRowCount() - 1);
 }
 
 function maxScrollOffset(): number {
@@ -521,11 +550,11 @@ function renderScrollView(): void {
   const visible = scrollBuffer.slice(start, start + vh);
   const width = Math.max(10, cols() - MARGIN);
   const sr = screenRows();
+  const bannerRowCount = visibleBannerRowCount(sr);
 
   rawWrite('\x1b[2J\x1b[H');
   // Banner
-  const withBanner = bannerLines.length > 0 && sr - bannerLines.length - FIXED_BOTTOM - 1 >= 3;
-  if (withBanner) {
+  if (bannerRowCount > 0) {
     bannerLines.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
   }
   visible.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
@@ -564,11 +593,11 @@ function exitScrollMode(): void {
 function redrawLiveView(): void {
   const width = Math.max(10, cols() - MARGIN);
   const sr = screenRows();
+  const bannerRowCount = visibleBannerRowCount(sr);
 
   rawWrite('\x1b[2J\x1b[H');
   // Banner
-  const withBanner = bannerLines.length > 0 && sr - bannerLines.length - FIXED_BOTTOM - 1 >= 3;
-  const banner = withBanner ? bannerLines : [];
+  const banner = bannerRowCount > 0 ? bannerLines : [];
   banner.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
 
   // Output tail
@@ -591,6 +620,10 @@ function redrawLiveView(): void {
     clearEol();
     rawWrite(truncVisible(footerText, Math.max(10, cols() - MARGIN)));
   }
+
+  // Rebuilds must hand the cursor back to the output region, not leave it
+  // parked in the bottom pane where later writes can smear copies upward.
+  moveCursorToOutputBase(sr);
 }
 
 // ── Confirm / Input ─────────────────────────────────────────────────────────
@@ -773,7 +806,7 @@ function handleChar(ch: string): void {
     return;
   }
 
-  if (ch >= ' ' && ch <= '~') {
+  if (isPrintableText(ch)) {
     if (overlay !== 'none') {
       overlayQuery += ch;
       overlaySelected = 0;
@@ -854,7 +887,7 @@ function handleKey(key: string): void {
       return;
     }
   }
-  if (key.length > 1) return;
+  if (key.length > 1 && !isPrintableText(key)) return;
   handleChar(key);
 }
 
@@ -918,7 +951,7 @@ export function initTui(): void {
   // Clear screen, draw banner
   rawWrite('\x1b[2J\x1b[H');
   const width = Math.max(10, cols() - MARGIN);
-  if (bannerLines.length > 0) {
+  if (visibleBannerRowCount() > 0) {
     bannerLines.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
   }
 
@@ -929,7 +962,7 @@ export function initTui(): void {
   drawPromptBottom();
 
   // Divider in the scroll region
-  writeOutput(gradient('─'.repeat(Math.min(cols(), 100))));
+  writeOutput(gradient('─'.repeat(Math.max(10, cols() - MARGIN))));
 }
 
 export function destroyTui(): void {
@@ -971,7 +1004,7 @@ function fmtIn(name: string, input: Record<string, unknown>): string {
 }
 
 function sep(): string {
-  return gradient('─'.repeat(Math.min(cols(), 60)));
+  return gradient('─'.repeat(Math.max(10, cols() - MARGIN)));
 }
 
 export function createTuiDisplay(): Display {
@@ -987,16 +1020,22 @@ export function createTuiDisplay(): Display {
       thinkingInterval = setInterval(() => {
         if (scrollMode) { if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; } return; }
         const s = spinners[(thinkingFrame++) % spinners.length];
+        saveCursor();
         cursorCol(1);
         clearEol();
         rawWrite(TEXT_DIM(`  ${s} thinking`));
-        cursorCol(1);
+        restoreCursor();
       }, 100);
     },
 
     stopThinking() {
       if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
-      if (!scrollMode) { cursorCol(1); clearEol(); }
+      if (!scrollMode) {
+        saveCursor();
+        cursorCol(1);
+        clearEol();
+        restoreCursor();
+      }
     },
 
     toolStart(name: string) {

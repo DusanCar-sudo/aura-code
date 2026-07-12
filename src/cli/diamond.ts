@@ -145,7 +145,7 @@ export function clearToTop(): void {
 
 /** A ruby-gradient horizontal rule spanning the terminal width (capped). */
 function rule(): string {
-  const width = Math.min(process.stdout.columns ?? 80, 100);
+  const width = Math.max(10, process.stdout.columns ?? 80);
   return gradient('─'.repeat(width));
 }
 
