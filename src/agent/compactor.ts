@@ -13,15 +13,19 @@ import { getContextWindow } from '../providers/factory.js';
 const LADDER = [0.55, 0.70, 0.85] as const;
 export const ROLLOVER_AT_GENERATION = 3;
 /** Verbatim recent-history budget kept through compaction, as a share of the
- *  window. 40% preserves interaction nuance over long sequences. */
-const RETENTION_RATIO = 0.40;
-const DEFAULT_WINDOW = 128_000;
+ *  window. 40% preserves interaction nuance over long sequences. Exported so
+ *  the tiered strategy (tiered-context.ts) sizes its tail identically. */
+export const RETENTION_RATIO = 0.40;
+export const DEFAULT_WINDOW = 128_000;
 /** Messages kept when no later user turn exists to anchor the tail. */
 const FALLBACK_KEEP = 3;
 /** Per-tool-result cap applied by the churn guard (see compactHistory). */
 const MAX_RESULT_CHARS = 4_000;
 
-function thresholdRatio(generation: number): number {
+/** Exported so the tiered strategy fires on the same escalating trigger as
+ *  the default strategy — the two are meant to be A/B-comparable, not to
+ *  differ in when they kick in, only in what they do once triggered. */
+export function thresholdRatio(generation: number): number {
   return LADDER[Math.min(generation, LADDER.length - 1)];
 }
 
@@ -123,56 +127,23 @@ export function countMessage(msg: HistoryMessage): number {
   }
 }
 
-/** Generic English + prior-recap boilerplate excluded from term extraction. */
-const RECAP_STOPWORDS = new Set([
-  'the', 'a', 'an', 'is', 'was', 'were', 'be', 'been', 'to', 'of', 'in', 'on',
-  'for', 'and', 'or', 'it', 'this', 'that', 'with', 'not', 'note', 'recent',
-  'user', 'assistant', 'tool', 'results', 'called', 'earlier', 'conversation',
-  'compacted', 'turns', 'removed', 'stay', 'within', 'context', 'limits',
-]);
-
-/** Top-N most frequent non-stopword tokens across a set of lines. Pure stats,
- *  no LLM — same style as dream.ts's topicKey / mining/extract.ts. */
-function extractTopTerms(lines: string[], n: number): string[] {
-  const freq = new Map<string, number>();
-  for (const line of lines) {
-    const words = line.toLowerCase().replace(/[^a-z0-9\s./_-]/g, ' ').split(/\s+/);
-    for (const w of words) {
-      if (w.length <= 3 || RECAP_STOPWORDS.has(w)) continue;
-      freq.set(w, (freq.get(w) ?? 0) + 1);
-    }
-  }
-  return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
-}
-
-/** First non-empty line, truncated to ~8 words — a cheap topic label. */
-function extractConcept(lines: string[]): string {
-  const first = lines.find(l => l.trim().length > 0)?.trim() ?? '(no content)';
-  const words = first.split(/\s+/);
-  return words.length > 8 ? words.slice(0, 8).join(' ') + '…' : first;
-}
+/** Separates the (per-call, regenerated) header/hint/digest lines of a recap
+ *  from its accumulated body of per-turn summary lines. Everything after this
+ *  marker is append-only across compactions — see extractRecapBodyLines. */
+const HISTORY_MARKER = '--- compacted turns ---';
 
 /**
- * Reduce an existing recap to: 1 concept + top 5 terms, plus its LAST body
- * line preserved verbatim ("last thread, pre-compaction"). Replaces
- * summariseMessage's blind slice(0,120) for recap messages specifically —
- * that truncation was destroying the executive digest and prior context on
- * any second compaction in the same run.
+ * Body lines of an existing recap: the accumulated per-turn summaries below
+ * HISTORY_MARKER, verbatim. Older recaps written before this marker existed
+ * (no marker found) fall back to everything after the header line, so a
+ * mid-session upgrade doesn't lose history — but from that point on they
+ * gain the marker and become append-only too.
  */
-function compressRecap(msg: HistoryMessage & { role: 'assistant' }): string {
-  const lines = msg.content.split('\n').filter(l => l.trim().length > 0);
-  const body = lines.slice(1); // drop the "[Earlier conversation compacted...]" header
-  const lastThread = body.length > 0 ? body[body.length - 1] : '';
-  const rest = body.slice(0, -1);
-
-  const concept = extractConcept(rest);
-  const terms = extractTopTerms(rest, 5);
-
-  return [
-    `Concept: ${concept}`,
-    terms.length > 0 ? `Terms: ${terms.join(', ')}` : '',
-    lastThread ? `Last thread: ${lastThread}` : '',
-  ].filter(Boolean).join(' · ');
+function extractRecapBodyLines(msg: HistoryMessage & { role: 'assistant' }): string[] {
+  const lines = msg.content.split('\n');
+  const markerIdx = lines.indexOf(HISTORY_MARKER);
+  if (markerIdx !== -1) return lines.slice(markerIdx + 1);
+  return lines.slice(1).filter(l => l.trim().length > 0);
 }
 
 function summariseMessage(msg: HistoryMessage): string {
@@ -197,10 +168,14 @@ function summariseMessage(msg: HistoryMessage): string {
  * Keeps the first message (task) and a recent tail of up to RETENTION_RATIO
  * of the window verbatim; replaces the middle with a recap that can carry an
  * executive digest and tone hint (see extras). If the middle already
- * contains a prior recap, it's compressed via compressRecap rather than
- * blindly truncated, and the new recap's generation increments — once it
- * would exceed ROLLOVER_AT_GENERATION, callers should flush via
- * generational-flush.ts instead of calling this again.
+ * contains a prior recap, its accumulated body (below HISTORY_MARKER) is
+ * carried forward byte-for-byte and only the newly-aged-out turns are
+ * appended — the header/hint/digest lines are the only part regenerated
+ * each call, so most of the recap's content stays a stable prefix across
+ * compactions (helps any cache breakpoint placed after it survive). The new
+ * recap's generation increments — once it would exceed
+ * ROLLOVER_AT_GENERATION, callers should flush via generational-flush.ts
+ * instead of calling this again.
  *
  * Mutates `history` in place (clears and re-fills) so callers that hold a
  * shared reference see the compacted version without reassignment.
@@ -214,22 +189,15 @@ export interface CompactionExtras {
   affectHint?: string;
 }
 
-export function compactHistory(
-  history: HistoryMessage[],
-  totalTokens: number,
-  model: string,
-  extras?: CompactionExtras,
-): boolean {
-  const generation = getRecapGeneration(history);
-  const window = getContextWindow(model) ?? DEFAULT_WINDOW;
-  const threshold = Math.floor(window * thresholdRatio(generation));
-
-  if (totalTokens < threshold) return false;
-  if (history.length <= 3) return false;
-
-  // Keep-boundary by token budget: walk backward accumulating message sizes
-  // until the verbatim tail would exceed RETENTION_RATIO of the window. The
-  // last message is always kept even if it alone busts the budget.
+/**
+ * Index of the first message to keep verbatim: walk backward from the end of
+ * `history` accumulating message sizes until the tail would exceed
+ * RETENTION_RATIO of the window, then snap to the nearest user-turn start so
+ * the kept slice opens with user context and no tool_use/tool_result pair is
+ * split. Exported so both the default and tiered compaction strategies size
+ * and align their verbatim tail identically (see tiered-context.ts).
+ */
+export function computeTailBoundary(history: HistoryMessage[], window: number): number {
   const retainBudget = Math.floor(window * RETENTION_RATIO);
   let acc = 0;
   let keepFrom = history.length;
@@ -260,7 +228,23 @@ export function compactHistory(
       history[keepFrom].role === 'tool_result'
     ) keepFrom++;
   }
+  return keepFrom;
+}
 
+export function compactHistory(
+  history: HistoryMessage[],
+  totalTokens: number,
+  model: string,
+  extras?: CompactionExtras,
+): boolean {
+  const generation = getRecapGeneration(history);
+  const window = getContextWindow(model) ?? DEFAULT_WINDOW;
+  const threshold = Math.floor(window * thresholdRatio(generation));
+
+  if (totalTokens < threshold) return false;
+  if (history.length <= 3) return false;
+
+  const keepFrom = computeTailBoundary(history, window);
   const toCompact = history.slice(1, keepFrom);
   if (toCompact.length === 0) {
     // Nothing droppable (the over-budget content IS the recent tail) — the
@@ -268,15 +252,24 @@ export function compactHistory(
     return truncateOversizedResults(history, threshold);
   }
 
-  const summaries = toCompact.map(msg => isRecap(msg) ? compressRecap(msg) : summariseMessage(msg));
+  // A prior recap (if any) is always the first entry of toCompact — carry its
+  // body forward unchanged; only the messages after it are freshly summarised.
+  const priorRecap = toCompact.length > 0 && isRecap(toCompact[0]) ? toCompact[0] : undefined;
+  const freshlyCompacted = priorRecap ? toCompact.slice(1) : toCompact;
+  const priorBodyLines = priorRecap ? extractRecapBodyLines(priorRecap) : [];
+  const newBodyLines = freshlyCompacted.map(summariseMessage);
+  const bodyLines = [...priorBodyLines, ...newBodyLines];
+
   const newGeneration = generation + 1;
+  const totalRemoved = (priorRecap ? bodyLines.length : toCompact.length);
   const recap: HistoryMessage = {
     role: 'assistant',
     content: [
-      `${RECAP_MARKER} (gen ${newGeneration}): ${toCompact.length} turns removed to stay within context limits.]`,
+      `${RECAP_MARKER} (gen ${newGeneration}): ${totalRemoved} turns removed to stay within context limits.]`,
       ...(extras?.affectHint ? [extras.affectHint] : []),
       ...(extras?.executiveDigest ? ['', extras.executiveDigest, ''] : []),
-      ...summaries,
+      HISTORY_MARKER,
+      ...bodyLines,
     ].join('\n'),
   };
 

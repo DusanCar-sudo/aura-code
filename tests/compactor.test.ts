@@ -115,12 +115,15 @@ describe('compactHistory', () => {
     expect(getRecapGeneration(h)).toBe(2);
   });
 
-  it('compressRecap reduces a re-compacted recap to concept + terms + last thread, never a blind 120-char cut', () => {
+  it('re-compaction appends to the recap body instead of lossily recompressing it — the prior body survives as a stable prefix', () => {
     const h = bigHistory();
-    compactHistory(h, estimateContextTokens('', h), 'test-model', {
-      executiveDigest: 'Recent state-altering actions already executed (do not repeat):\nwrite_file parser_core.ts',
-    });
+    const digest = 'Recent state-altering actions already executed (do not repeat):\nwrite_file parser_core.ts';
+    compactHistory(h, estimateContextTokens('', h), 'test-model', { executiveDigest: digest });
     expect(getRecapGeneration(h)).toBe(1);
+
+    const gen1Recap = (h[1] as { content: string }).content;
+    const gen1Lines = gen1Recap.split('\n');
+    const gen1BodyLines = gen1Lines.slice(gen1Lines.indexOf('--- compacted turns ---') + 1);
 
     // Grow past the gen-1 threshold so the gen-1 recap itself gets compacted.
     for (let i = 0; i < 4; i++) {
@@ -128,18 +131,23 @@ describe('compactHistory', () => {
       h.push(assistant(`working on follow-up ${i}`, [{ id: `d${i}`, name: 'edit_file', input: { path: `g${i}.ts` } }]));
       h.push(toolResult('edit_file', text(700)));
     }
-    compactHistory(h, estimateContextTokens('', h), 'test-model');
+    compactHistory(h, estimateContextTokens('', h), 'test-model', { executiveDigest: digest });
     expect(getRecapGeneration(h)).toBe(2);
 
-    const recap = (h[1] as { content: string }).content;
-    expect(recap).toContain('Concept:');
-    expect(recap).toContain('Terms:');
-    expect(recap).toContain('Last thread:');
-    // The old digest survives recognizably in the concept line instead of
-    // vanishing behind an unrelated 120-char slice of conversation prose —
-    // it was the first content line in the old recap, so extractConcept
-    // (which takes the first non-empty line) preserves it verbatim.
-    expect(recap.toLowerCase()).toContain('do not repeat');
+    const gen2Recap = (h[1] as { content: string }).content;
+    const gen2Lines = gen2Recap.split('\n');
+    const markerIdx = gen2Lines.indexOf('--- compacted turns ---');
+    expect(markerIdx).toBeGreaterThan(-1);
+    const gen2BodyLines = gen2Lines.slice(markerIdx + 1);
+
+    // The entire gen-1 body is preserved verbatim, in order, as a prefix of
+    // the gen-2 body — nothing lossy happened to already-compacted turns.
+    expect(gen2BodyLines.slice(0, gen1BodyLines.length)).toEqual(gen1BodyLines);
+    // New turns were appended after it.
+    expect(gen2BodyLines.length).toBeGreaterThan(gen1BodyLines.length);
+    // The digest (a header-line extra, not body) still comes through when
+    // the caller passes it again each call, same as loop.ts does per turn.
+    expect(gen2Recap.toLowerCase()).toContain('do not repeat');
   });
 
   it('churn guard truncates oversized tool_result bodies when still over threshold', () => {
