@@ -30,7 +30,7 @@ import { MCP_DEFINITION, mcpTool } from './mcp.js';
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'read_file',
-    description: 'Read the contents of a file. Returns the file with line numbers. Use start_line/end_line to read a specific range in large files.',
+    description: 'Read file contents with line numbers. Use start_line/end_line for ranges.',
     parameters: {
       type: 'object',
       properties: {
@@ -43,12 +43,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'list_dir',
-    description: 'List files and directories in a path. Respects .gitignore. Use recursive=true to see the whole tree.',
+    description: 'List files/directories. Respects .gitignore. recursive=true for full tree.',
     parameters: {
       type: 'object',
       properties: {
         path:      { type: 'string',  description: 'Directory path (default: project root)' },
-        recursive: { type: 'boolean', description: 'Whether to list recursively (default: false)' },
+        recursive: { type: 'boolean', description: 'List recursively (default: false)' },
         depth:     { type: 'number',  description: 'Max depth for recursive listing (default: 3)' },
       },
       required: [],
@@ -56,20 +56,20 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'edit_file',
-    description: 'Edit a file by finding an exact block of text and replacing it. More reliable than rewriting the whole file. If the find block is not found, an error is returned with enough context to retry.',
+    description: 'Replace exact text block in file. Returns error context if block not found.',
     parameters: {
       type: 'object',
       properties: {
         path:    { type: 'string', description: 'Path to the file to edit' },
-        find:    { type: 'string', description: 'The exact block of text to find and replace. Must be unique in the file. Include enough surrounding lines for uniqueness.' },
-        replace: { type: 'string', description: 'The new text to replace the found block with' },
+        find:    { type: 'string', description: 'Exact text block to find and replace. Must be unique in file.' },
+        replace: { type: 'string', description: 'New text to replace the found block with' },
       },
       required: ['path', 'find', 'replace'],
     },
   },
   {
     name: 'write_file',
-    description: 'Write content to a file. Creates the file if it does not exist. For existing files, use edit_file instead unless you need to replace the entire file.',
+    description: 'Write content to file (creates if new). For existing files, prefer edit_file unless replacing entire file.',
     parameters: {
       type: 'object',
       properties: {
@@ -81,7 +81,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'search_code',
-    description: 'Search for a pattern in the codebase using ripgrep (or grep as fallback). Returns matching lines with file paths and line numbers.',
+    description: 'Search codebase with ripgrep/grep. Returns matches with file/line numbers.',
     parameters: {
       type: 'object',
       properties: {
@@ -97,7 +97,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'run_shell',
-    description: 'Run a shell command in the project directory. Use for build commands, package managers, formatters, linters. Avoid destructive commands.',
+    description: 'Run shell command in project directory. Use for build/pkgmgr/fmt/lint. Avoid destructive commands.',
     parameters: {
       type: 'object',
       properties: {
@@ -110,7 +110,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'run_tests',
-    description: 'Run the test suite (or a specific test file). Automatically detects the test framework (Jest, Vitest, pytest, go test, etc.).',
+    description: 'Run test suite or specific file. Auto-detects framework (Jest/Vitest/pytest/go test).',
     parameters: {
       type: 'object',
       properties: {
@@ -121,14 +121,14 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'git_status',
-    description: 'Show the current git status: modified files, staged changes, and recent commits.',
+    description: 'Show git status: modified files, staged changes, recent commits.',
     parameters: {
       type: 'object', properties: {}, required: [],
     },
   },
   {
     name: 'git_diff',
-    description: 'Show the diff for a specific file or all changes.',
+    description: 'Show diff for specific file or all changes.',
     parameters: {
       type: 'object',
       properties: {
