@@ -53,3 +53,4 @@ google-cloud-cli-*.tar.gz
 .env.local
 .env.*.local
 .env!.example
+.aura.json
