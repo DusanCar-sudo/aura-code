@@ -280,14 +280,17 @@ export function resolveTaskModelBaseUrl(opts: {
 export function createProvider(config: ProviderConfig): LLMProvider {
   const model = config.model.toLowerCase();
 
-  // ── OpenCode Go (Anthropic-style models at /v1/messages) ───────────────
+  // ── OpenCode Go (Zen endpoint — OpenAI-compatible /chat/completions) ────
+  // The Zen API speaks the OpenAI wire format; routing these through the
+  // Anthropic provider sent /v1/messages-shaped requests to a
+  // /chat/completions endpoint.
   if (model.startsWith('go-anthropic/')) {
     const goModel = model.replace('go-anthropic/', '');
-    return new AnthropicProvider({
+    return new OpenAICompatibleProvider({
       ...config,
       model: goModel,
-      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/go/v1',
-      apiKey: config.apiKey ?? getApiKey('OPENCODE_GO_API_KEY'),
+      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/v1',
+      apiKey: config.apiKey ?? getApiKey('OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY'),
     }, 'OpenCode Go');
   }
 
