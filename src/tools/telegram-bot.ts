@@ -619,6 +619,12 @@ interface PendingApproval {
 const pendingApprovals = new Map<string, PendingApproval>();
 const APPROVAL_TIMEOUT_MS = 5 * 60_000;
 
+// ── Auto-approve mode (per chat) ─────────────────────────────────────────────
+// /approve-all switches the chat to auto-approve: every requestApproval()
+// resolves true immediately, no button sent. Persists until /new (or /clear)
+// resets the session — mirrors the TUI's accept-all mode, not a one-time flush.
+const autoApproveChats = new Set<string>();
+
 // ── Running-task registry (for /stop and /status) ────────────────────────────
 // Message handlers are detached tasks, so several agentic runs can be in
 // flight at once — even in the same chat. /stop aborts everything registered
@@ -673,6 +679,7 @@ function flushApprovals(chatId: string, approved: boolean): number {
 
 /** Ask Dušan to approve a command; resolves true/false (false on timeout). */
 async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
+  if (autoApproveChats.has(String(chatId))) return true;
   const id = `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   const keyboard = {
     inline_keyboard: [[
@@ -690,7 +697,17 @@ async function requestApproval(chatId: string | number, label: string, command: 
     pendingApprovals.set(id, { resolve, command, chatId: String(chatId), createdAt: Date.now() });
     setTimeout(() => {
       const p = pendingApprovals.get(id);
-      if (p) { pendingApprovals.delete(id); p.resolve(false); }
+      if (p) {
+        pendingApprovals.delete(id);
+        p.resolve(false);
+        // Tell Dušan why the step got denied instead of failing silently —
+        // otherwise the task just reports "blocked" with no explanation.
+        void apiPost('sendMessage', {
+          chat_id: chatId,
+          text: `⏱ Approval timed out (${Math.round(APPROVAL_TIMEOUT_MS / 60_000)}m) — command was denied:\n\`${command.slice(0, 300)}\`\nAsk again to retry, or /approve-all for auto-approve until /new.`,
+          parse_mode: 'Markdown',
+        }).catch(() => {});
+      }
     }, APPROVAL_TIMEOUT_MS);
   });
 }
@@ -932,7 +949,8 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       ``,
       `🎛 Kontrola zadatka:`,
       `/stop — Prekini zadatak koji trenutno radi u ovom chatu`,
-      `/approve-all — ⚠️ Odobri SVE potvrde koje trenutno čekaju (uključujući destruktivne komande, bez ponovnog prikaza). Jednokratno — NE prebacuje u auto režim, sledeće akcije opet pitaju.`,
+      `/approve-all — ⚠️ Auto režim: odobri sve potvrde koje čekaju I sve buduće komande bez pitanja (uključujući destruktivne). Traje dok ne pošalješ /new.`,
+      `/new — Nova sesija: briše istoriju i isključuje auto-approve režim`,
       ``,
       `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
       `💡 Možeš da tražiš fajlove sa tvog računara i šaljiš ih sebi!`,
@@ -950,6 +968,9 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   // always showed follows below the live-task section.
   if (lower === '/status') {
     const lines: string[] = [];
+    if (autoApproveChats.has(String(chatId))) {
+      lines.push('⚡ Auto-approve ON — commands execute without asking (until /new).');
+    }
     const set = runningTasks.get(String(chatId));
     const waiting = [...pendingApprovals.values()].filter(p => p.chatId === String(chatId));
     if (set && set.size > 0) {
@@ -966,7 +987,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     if (waiting.length > 0) {
       lines.push(`⏳ Waiting for your ✅/❌ approval: ${waiting.length}`);
       for (const p of waiting) lines.push(`  • ${p.command.slice(0, 120)}`);
-      lines.push(`(/approve-all flushes these — including destructive ones; /stop denies them.)`);
+      lines.push(`(/approve-all approves these + turns on auto-approve until /new; /stop denies them.)`);
     }
     const uptime = process.uptime();
     const hours = Math.floor(uptime / 3600);
@@ -1011,24 +1032,18 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     ].join('\n');
   }
 
-  // ── /approve-all — one-time flush of pending confirmations ───────────────
-  // ⚠️ Trust escalation: approves EVERYTHING currently waiting for a ✅/❌ tap,
-  // including destructive operations, sight unseen. It does NOT change the
-  // permission mode — the very next mutating command will ask again.
+  // ── /approve-all — auto-approve mode until /new ───────────────────────────
+  // ⚠️ Trust escalation: approves everything currently waiting AND every
+  // future command — including destructive operations, sight unseen — until
+  // /new (or /clear) resets the session. Same semantics as the TUI's
+  // accept-all mode.
   if (lower === '/approve-all') {
+    autoApproveChats.add(String(chatId));
     const n = flushApprovals(String(chatId), true);
-    if (n === 0) {
-      return [
-        '✅ No approvals were pending.',
-        '',
-        '⚠️ /approve-all approves everything pending right now, including',
-        'destructive operations, without showing them again. One-time flush —',
-        'it does not switch to auto-approve; future actions still ask.',
-      ].join('\n');
-    }
     return [
-      `✅ Approved ${n} pending confirmation(s) — including any destructive operations that were waiting.`,
-      `This was a one-time flush; the permission mode is unchanged and future actions will still ask.`,
+      `⚡ Auto-approve ON — all commands execute without asking, including destructive ones.`,
+      ...(n > 0 ? [`Approved ${n} pending confirmation(s) that were waiting.`] : []),
+      `Stays on until /new resets the session.`,
     ].join('\n');
   }
 
@@ -1172,13 +1187,17 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return `📜 Poslednjih 10 poruka (ukupno ${history.length}):\n${lines.join('\n')}\n\n💡 Svi razgovori se čuvaju trajno — pamtim šta si mi rekao čak i ako me resetuješ.`;
   }
 
-  if (lower === '/clear') {
+  if (lower === '/clear' || lower === '/new') {
     chatHistory.delete(String(chatId));
     const filePath = getSessionFile(String(chatId));
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
-    return '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!';
+    const wasAuto = autoApproveChats.delete(String(chatId));
+    return [
+      '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!',
+      ...(wasAuto ? ['🔒 Auto-approve isključen — komande opet traže potvrdu.'] : []),
+    ].join('\n');
   }
 
   // ── File sending from PC ─────────────────────────────────────────────────────
