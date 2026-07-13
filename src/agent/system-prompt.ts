@@ -6,11 +6,13 @@ import { loadAllPlugins } from '../plugins/loader.js';
 
 const WEB_KEYWORDS = /website|webpage|frontend|front-end|ui component|landing page|homepage|web app|portfolio|hero section|marketing page|site design|visual design|html.*css|make.*page|create.*page|build.*site/;
 
+let _cachedMemory: string | null = null;
+
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
   // Unified memory: global identity/facts (shared with the Telegram bot) plus
   // this project's reconciled lessons. Replaces the old dreams-only block.
-  const memoryBlock = loadUnifiedMemory({ projectRoot: ctx.root });
+  const memoryBlock = _cachedMemory ?? (_cachedMemory = loadUnifiedMemory({ projectRoot: ctx.root }));
   // Confessions: permanent lessons extracted from high-cost failures.
   // Loaded separately so they sit above regular memory with elevated priority.
   const confessionsBlock = loadConfessionsSection();
