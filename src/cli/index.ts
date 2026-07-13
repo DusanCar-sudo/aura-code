@@ -29,6 +29,7 @@ import { sessionStore } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
+import { getApiKey } from '../util/env.js';
 import { needsWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
@@ -40,7 +41,7 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
-import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount } from './model-select.js';
+import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, type ModelRow } from './model-select.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
@@ -434,6 +435,17 @@ if (cliProfile === 'local') {
   resolved.baseUrl = 'http://localhost:11434/v1';
   if (!runtimeConfig.apiKey) {
     runtimeConfig.apiKey = 'ollama';
+  }
+}
+
+// ── Profile: remote-coder → remote Ollama (172.16.10.177) ───────────────────
+if (cliProfile === 'remote-coder') {
+  resolved.baseUrl = 'http://172.16.10.177:11434/v1';
+  if (!runtimeConfig.apiKey) {
+    runtimeConfig.apiKey = 'ollama';
+  }
+  if (!resolved.model) {
+    resolved.model = 'deepseek-coder:6.7b';
   }
 }
 
@@ -1245,6 +1257,93 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
 }
 
 /**
+ * After a model switch, make sure the new provider actually has an API key
+ * (env var, key store, or runtime override). If none is configured, prompt
+ * for one and persist it via the key store — same behavior as :apikey.
+ * No-ops for models that need no key (ollama/local, unknown prefixes).
+ */
+async function ensureApiKeyForModel(c: ReplCtx): Promise<void> {
+  const model = resolved.model ?? runtimeConfig.model ?? '';
+  const envName = envNameForModel(model);
+  if (!envName) return;
+  if (runtimeConfig.apiKey || getApiKey(envName)) return;
+
+  // Same stdin-collision dance as showModelSelector; no-ops when the caller
+  // already stopped TUI input (inputActive is false inside the selector).
+  const wasActive = inputActive;
+  if (wasActive) { stopInput(); enterFullscreenPrompt(); }
+  try {
+    console.log(chalk.hex('#d4903a')(`\n  ⚠ No API key configured for this provider (${envName} is not set).`));
+    const answer = await new Promise<string>(resolve => {
+      const promptText = chalk.hex('#cc785c')(`  Enter ${envName} (press Enter to skip): `);
+      if (c.rl) { c.rl.question(promptText, resolve); return; }
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(promptText, ans => { rl.close(); resolve(ans); });
+    });
+    const key = answer.trim();
+    if (!key) {
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Skipped — requests will fail until a key is set (:apikey <key>).\n`));
+      return;
+    }
+    runtimeConfig.apiKey = key;
+    c.providerConfig.apiKey = key;
+    try {
+      const p = saveKey(envName, key);
+      console.log(chalk.hex('#5a9e6e')(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).\n`));
+    } catch (e) {
+      console.log(chalk.hex('#5a9e6e')(`  ✓ API key set for this session (could not persist: ${String(e)}).\n`));
+    }
+  } finally {
+    if (wasActive) { exitFullscreenPrompt(); startInput(); }
+  }
+}
+
+/**
+ * Zhipu GLM is served from two endpoints with separate billing:
+ *   glm-* / zhipu/*     → general API (pay-as-you-go)
+ *   zhipu-coding/*      → Coding Plan (https://api.z.ai/api/coding/paas/v4)
+ * When the user switches to a plain GLM model, ask which plan they are on
+ * and re-route to the zhipu-coding/ prefix if they picked the Coding Plan.
+ */
+async function ensureZhipuPlanChoice(c: ReplCtx): Promise<void> {
+  const model = resolved.model ?? runtimeConfig.model ?? '';
+  const m = model.toLowerCase();
+  if (!(m.startsWith('glm-') || m.startsWith('zhipu/'))) return;
+
+  const wasActive = inputActive;
+  if (wasActive) { stopInput(); enterFullscreenPrompt(); }
+  try {
+    console.log(chalk.hex('#cc785c')('\n  GLM billing plan:'));
+    console.log(`    ${chalk.hex('#cc785c')('1')}. Pay-as-you-go ${chalk.hex(FAINT_HEX)('(general API)')}`);
+    console.log(`    ${chalk.hex('#cc785c')('2')}. Coding Plan   ${chalk.hex(FAINT_HEX)('(api.z.ai coding endpoint)')}`);
+    const answer = await new Promise<string>(resolve => {
+      const promptText = chalk.hex('#cc785c')('  Which plan? [1/2, Enter = 1]: ');
+      if (c.rl) { c.rl.question(promptText, resolve); return; }
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(promptText, ans => { rl.close(); resolve(ans); });
+    });
+    if (answer.trim() === '2') {
+      const glmModel = model.replace(/^zhipu\//, '');
+      const r = trySetModel(c, `zhipu-coding/${glmModel}`);
+      if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+    } else {
+      console.log(chalk.hex(TEXT_DIM_HEX)('  Using pay-as-you-go (general endpoint).\n'));
+    }
+  } finally {
+    if (wasActive) { exitFullscreenPrompt(); startInput(); }
+  }
+}
+
+/**
+ * Post-switch follow-ups shared by every model-switch path: make sure the
+ * new provider has an API key, then provider-specific plan routing.
+ */
+async function postModelSwitch(c: ReplCtx): Promise<void> {
+  await ensureApiKeyForModel(c);
+  await ensureZhipuPlanChoice(c);
+}
+
+/**
  * Interactive model selector — shows all models grouped by provider,
  * lets the user pick by number or type a custom model ID.
  */
@@ -1264,13 +1363,33 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
     const rows = buildModelRows(getAllModels());
 
     console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
+    // Multi-column per provider group — 100+ models in a single column push
+    // the top of the list off-screen (the selector runs outside the scroll
+    // region, so there is no way to scroll back up).
+    const termWidth = process.stdout.columns ?? 80;
+    let group: Extract<ModelRow, { kind: 'model' }>[] = [];
+    const flushGroup = () => {
+      if (group.length === 0) return;
+      const cellWidth = Math.max(...group.map(m => `${String(m.num).padStart(3)}. ${m.name}`.length)) + 3;
+      for (const line of layoutColumns(group, cellWidth, termWidth, 4)) {
+        console.log('    ' + line.map(m => {
+          const plain = `${String(m.num).padStart(3)}. ${m.name}`;
+          return chalk.hex('#cc785c')(String(m.num).padStart(3)) + '. '
+            + chalk.hex(TEXT_HEX)(m.name)
+            + ' '.repeat(cellWidth - plain.length);
+        }).join(''));
+      }
+      group = [];
+    };
     for (const r of rows) {
       if (r.kind === 'header') {
+        flushGroup();
         console.log(chalk.hex(TEXT_DIM_HEX).bold(`  ── ${r.provider} ──`));
       } else {
-        console.log(`    ${chalk.hex('#cc785c')(String(r.num).padStart(2))}. ${chalk.hex(TEXT_HEX)(r.name.padEnd(30))} ${chalk.hex(FAINT_HEX)(r.speed)}`);
+        group.push(r);
       }
     }
+    flushGroup();
     console.log(chalk.hex(FAINT_HEX)(`\n  Current: ${runtimeConfig.model}`));
     console.log(chalk.hex(FAINT_HEX)('  Type a number, model ID, or press Enter to cancel:\n'));
 
@@ -1295,12 +1414,14 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
     // Try as a number — every listed number is a real, selectable model
     const num = parseInt(choice, 10);
     if (!isNaN(num) && num >= 1 && num <= modelCount(rows)) {
-      trySetModel(c, modelIdForNumber(rows, num)!);
+      const r = trySetModel(c, modelIdForNumber(rows, num)!);
+      if (r.ok) await postModelSwitch(c);
       return;
     }
 
     // Treat as a raw model ID
-    trySetModel(c, choice);
+    const r = trySetModel(c, choice);
+    if (r.ok) await postModelSwitch(c);
   } finally {
     if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
   }
@@ -1921,10 +2042,14 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       (acc[m.provider] ??= []).push(m);
       return acc;
     }, {});
+    const listWidth = process.stdout.columns ?? 80;
     for (const [provider, models] of Object.entries(byProvider)) {
       console.log(chalk.hex(TEXT_DIM_HEX)(`\n  ${provider}`));
-      for (const m of models) {
-        console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex(FAINT_HEX)(m.speed)}`);
+      const cellWidth = Math.max(...models.map(m => m.id.length)) + 3;
+      for (const line of layoutColumns(models, cellWidth, listWidth, 4)) {
+        console.log('    ' + line.map(m =>
+          chalk.hex('#cc785c')(m.id) + ' '.repeat(cellWidth - m.id.length),
+        ).join(''));
       }
     }
     console.log();
@@ -1941,6 +2066,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const newModel = input.slice(sep.length).trim();
     const r = trySetModel(c, newModel);
     if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+    else await postModelSwitch(c);
     return { handled: true };
   }
 

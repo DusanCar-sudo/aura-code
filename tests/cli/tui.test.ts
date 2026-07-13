@@ -5,6 +5,7 @@ import {
   destroyTui,
   initTui,
   setBannerLines,
+  setCallbacks,
   setStatusLine,
   startInput,
   stopInput,
@@ -57,7 +58,7 @@ describe('TUI cursor preservation', () => {
     }
   });
 
-  it('wraps prompt redraws in save/restore cursor sequences', () => {
+  it('returns prompt redraws to the output region', () => {
     initTui();
     startInput();
     chunks = [];
@@ -65,7 +66,7 @@ describe('TUI cursor preservation', () => {
     setStatusLine('streaming reply');
 
     const output = chunks.join('');
-    expect(output).toMatch(/\x1b\[s[\s\S]*\x1b\[u/);
+    expect(output).toContain('\x1b[17;1H');
   });
 
   it('renders the thinking spinner without leaving the cursor on the spinner row', () => {
@@ -146,5 +147,137 @@ describe('TUI cursor preservation', () => {
 
     const output = chunks.join('');
     expect(output).toContain('\x1b[17;1H');
+  });
+
+  it('rebuilds the scroll region when the terminal is resized', () => {
+    initTui();
+    startInput();
+    chunks = [];
+
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 100 });
+    Object.defineProperty(process.stdout, 'rows', { configurable: true, value: 30 });
+    process.stdout.emit('resize');
+
+    const output = chunks.join('');
+    expect(output).toContain('\x1b[1;23r');
+    expect(output).toContain('\x1b[2J\x1b[H');
+    expect(output).toContain('\x1b[23;1H');
+  });
+
+  it('preserves in-flight streamed text across a terminal resize redraw', () => {
+    initTui();
+    startInput();
+    const display = createTuiDisplay();
+
+    display.streamText('partial stream');
+    chunks = [];
+
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 90 });
+    Object.defineProperty(process.stdout, 'rows', { configurable: true, value: 28 });
+    process.stdout.emit('resize');
+
+    const plain = stripAnsi(chunks.join(''));
+    expect(plain).toContain('partial stream');
+  });
+
+  it('clears the previous prompt footprint before redrawing the bottom pane', () => {
+    initTui();
+    startInput();
+    chunks = [];
+
+    setStatusLine('first');
+    setStatusLine('second');
+
+    const output = chunks.join('');
+    expect(output).toContain('\x1b[18;1H\x1b[0K');
+    expect(output).toContain('\x1b[24;1H\x1b[0K');
+  });
+
+  it('buffers split escape sequences instead of leaking CSI fragments into the prompt', () => {
+    initTui();
+    startInput();
+    chunks = [];
+
+    process.stdin.emit('data', '\x1b[');
+    process.stdin.emit('data', 'A');
+
+    const output = stripAnsi(chunks.join(''));
+    expect(output).not.toContain('[');
+    expect(output).not.toContain('A');
+  });
+
+  it('collapses a multi-line bracketed paste into a placeholder and expands it on submit', () => {
+    initTui();
+    startInput();
+    let submitted = '';
+    setCallbacks({ onEnter: line => { submitted = line; } });
+    chunks = [];
+
+    const pasted = Array.from({ length: 19 }, (_, i) => `line ${i + 1}`).join('\n');
+    process.stdin.emit('data', `\x1b[200~${pasted}\x1b[201~`);
+
+    const output = stripAnsi(chunks.join(''));
+    expect(output).toContain('[Pasted #');
+    expect(output).toContain('19 lines]');
+    expect(output).not.toContain('line 5\nline 6');
+
+    process.stdin.emit('data', '\r');
+    expect(submitted).toBe(pasted);
+  });
+
+  it('handles a bracketed paste whose end marker arrives in a later chunk', () => {
+    initTui();
+    startInput();
+    let submitted = '';
+    setCallbacks({ onEnter: line => { submitted = line; } });
+
+    process.stdin.emit('data', '\x1b[200~first\nsec');
+    process.stdin.emit('data', 'ond\x1b[20');
+    process.stdin.emit('data', '1~');
+    process.stdin.emit('data', '\r');
+
+    expect(submitted).toBe('first\nsecond');
+  });
+
+  it('inserts short single-line pastes literally without a placeholder', () => {
+    initTui();
+    startInput();
+    let submitted = '';
+    setCallbacks({ onEnter: line => { submitted = line; } });
+    chunks = [];
+
+    process.stdin.emit('data', '\x1b[200~npm run build\x1b[201~');
+
+    const output = stripAnsi(chunks.join(''));
+    expect(output).toContain('npm run build');
+    expect(output).not.toContain('[Pasted');
+
+    process.stdin.emit('data', '\r');
+    expect(submitted).toBe('npm run build');
+  });
+
+  it('does not treat newlines inside a paste as Enter presses', () => {
+    initTui();
+    startInput();
+    const submissions: string[] = [];
+    setCallbacks({ onEnter: line => { submissions.push(line); } });
+
+    process.stdin.emit('data', '\x1b[200~a\nb\nc\x1b[201~');
+
+    expect(submissions).toEqual([]);
+  });
+
+  it('deletes a paste placeholder atomically on backspace', () => {
+    initTui();
+    startInput();
+    let submitted = '';
+    setCallbacks({ onEnter: line => { submitted = line; } });
+
+    process.stdin.emit('data', '\x1b[200~a\nb\nc\x1b[201~');
+    process.stdin.emit('data', '\x7f'); // backspace removes whole placeholder
+    process.stdin.emit('data', 'ok');
+    process.stdin.emit('data', '\r');
+
+    expect(submitted).toBe('ok');
   });
 });

@@ -66,3 +66,24 @@ export function modelIdForNumber(rows: ModelRow[], n: number): string | undefine
 export function modelCount(rows: ModelRow[]): number {
   return rows.reduce((acc, r) => acc + (r.kind === 'model' ? 1 : 0), 0);
 }
+
+/**
+ * Lay items out column-major (numbers read down each column, like `ls`) into
+ * as many columns as fit the terminal. Returns rows of items; the caller
+ * renders each cell padded to cellWidth.
+ */
+export function layoutColumns<T>(items: T[], cellWidth: number, termWidth: number, indent: number): T[][] {
+  const usable = Math.max(cellWidth, termWidth - indent);
+  const cols = Math.max(1, Math.floor(usable / cellWidth));
+  const rowCount = Math.ceil(items.length / cols);
+  const grid: T[][] = [];
+  for (let r = 0; r < rowCount; r++) {
+    const row: T[] = [];
+    for (let c = 0; c < cols; c++) {
+      const idx = c * rowCount + r;
+      if (idx < items.length) row.push(items[idx]);
+    }
+    grid.push(row);
+  }
+  return grid;
+}

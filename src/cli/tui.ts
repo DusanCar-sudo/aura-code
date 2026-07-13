@@ -86,6 +86,8 @@ let scrollBuffer: string[] = [];
 const MAX_SCROLLBACK = 5000;
 let streamAccum = '';
 let bannerLines: string[] = [];
+let lastPromptStartRow: number | null = null;
+let lastPromptScreenRows: number | null = null;
 
 // ── Live tool spinner ──────────────────────────────────────────────────────
 
@@ -184,6 +186,7 @@ function saveCursor(): void { rawWrite('\x1b[s'); }
 function restoreCursor(): void { rawWrite('\x1b[u'); }
 
 let altScreenActive = false;
+let resizeHandlerAttached = false;
 export function enterAltScreen(): void {
   altScreenActive = true;
   rawWrite('\x1b[?1049h');
@@ -231,6 +234,7 @@ function unpatchStdout(): void {
 process.on('exit', () => {
   try {
     rawWrite('\x1b[r');        // reset scroll region
+    rawWrite('\x1b[?2004l');   // disable bracketed paste
     leaveAltScreen();
     unpatchStdout();
   } catch { /* best effort */ }
@@ -380,6 +384,11 @@ function moveCursorToOutputBase(sr = screenRows()): void {
   rawWrite(`\x1b[${scrollRegionBottomRow(sr)};1H`);
 }
 
+function liveScrollLines(): string[] {
+  if (!streamAccum) return scrollBuffer;
+  return scrollBuffer.concat(wrapForTerminal(streamAccum).output.split('\n'));
+}
+
 /**
  * Set the terminal scroll region to exclude the bottom FIXED_BOTTOM rows.
  * After DECSTBM, the cursor moves to the home position of the region.
@@ -413,22 +422,28 @@ function drawPromptBottom(): void {
   const sr = screenRows();
   // The bottom block starts at row (sr - FIXED_BOTTOM + 1)
   const startRow = sr - FIXED_BOTTOM + 1;
-  saveCursor();
+  const clearFrom = Math.max(1, Math.min(lastPromptStartRow ?? startRow, startRow));
+  const clearTo = Math.max(lastPromptScreenRows ?? sr, sr);
+
+  for (let row = clearFrom; row <= clearTo; row++) {
+    rawWrite(`\x1b[${row};1H`);
+    clearEol();
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const row = startRow + i;
     rawWrite(`\x1b[${row};1H`);
-    clearEol();
     rawWrite(rows[i]);
   }
 
   // Footer on the very last row
   if (footerActive) {
     rawWrite(`\x1b[${sr};1H`);
-    clearEol();
     rawWrite(truncVisible(footerText, Math.max(10, cols() - MARGIN)));
   }
-  restoreCursor();
+  lastPromptStartRow = startRow;
+  lastPromptScreenRows = sr;
+  moveCursorToOutputBase(sr);
 }
 
 // ── Fullscreen mode for interactive prompts (wizard etc.) ──────────────────
@@ -545,9 +560,10 @@ function maxScrollOffset(): number {
 function renderScrollView(): void {
   const bottomRows = buildBottomRows();
   const vh = viewHeight();
+  const liveLines = liveScrollLines();
   scrollOffset = Math.max(0, Math.min(scrollOffset, maxScrollOffset()));
-  const start = Math.max(0, scrollBuffer.length - vh - scrollOffset);
-  const visible = scrollBuffer.slice(start, start + vh);
+  const start = Math.max(0, liveLines.length - vh - scrollOffset);
+  const visible = liveLines.slice(start, start + vh);
   const width = Math.max(10, cols() - MARGIN);
   const sr = screenRows();
   const bannerRowCount = visibleBannerRowCount(sr);
@@ -568,9 +584,9 @@ function renderScrollView(): void {
   }
 
   const bottom = start + visible.length;
-  const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, scrollBuffer.length)) * 100)}%`;
+  const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, liveLines.length)) * 100)}%`;
   const indicator = ACCENT.bold(' -- SCROLL -- ')
-    + TEXT_DIM(`${start + 1}-${bottom}/${scrollBuffer.length} ${pos} · j/k · ^d/^u · gg/G · i/Enter/Esc insert`);
+    + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · j/k · ^d/^u · gg/G · i/Enter/Esc insert`);
   rawWrite(`\x1b[${sr};1H`);
   rawWrite(truncVisible(indicator, width));
 }
@@ -594,6 +610,7 @@ function redrawLiveView(): void {
   const width = Math.max(10, cols() - MARGIN);
   const sr = screenRows();
   const bannerRowCount = visibleBannerRowCount(sr);
+  const liveLines = liveScrollLines();
 
   rawWrite('\x1b[2J\x1b[H');
   // Banner
@@ -602,7 +619,7 @@ function redrawLiveView(): void {
 
   // Output tail
   const tailMax = Math.max(0, sr - banner.length - FIXED_BOTTOM);
-  const tail = scrollBuffer.slice(Math.max(0, scrollBuffer.length - tailMax));
+  const tail = liveLines.slice(Math.max(0, liveLines.length - tailMax));
   tail.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
 
   // Bottom block
@@ -626,11 +643,93 @@ function redrawLiveView(): void {
   moveCursorToOutputBase(sr);
 }
 
+function handleResize(): void {
+  if (!inputActive) return;
+  if (fullscreenPrompt) {
+    rawWrite('\x1b[2J\x1b[H');
+    return;
+  }
+  setScrollRegion();
+  if (scrollMode) {
+    renderScrollView();
+    return;
+  }
+  redrawLiveView();
+}
+
+function attachResizeHandler(): void {
+  if (resizeHandlerAttached) return;
+  process.stdout.on('resize', handleResize);
+  resizeHandlerAttached = true;
+}
+
+function detachResizeHandler(): void {
+  if (!resizeHandlerAttached) return;
+  process.stdout.off('resize', handleResize);
+  resizeHandlerAttached = false;
+}
+
 // ── Confirm / Input ─────────────────────────────────────────────────────────
 
 let pendingConfirm: ((answer: string) => void) | null = null;
 let pendingInput: ((text: string) => void) | null = null;
 let inputAccumulator: string[] = [];
+let stdinBuffer = '';
+
+// ── Bracketed paste ─────────────────────────────────────────────────────────
+//
+// With DECSET 2004 enabled, terminals wrap pasted text in \x1b[200~ ... \x1b[201~.
+// The whole paste arrives as one logical event instead of a stream of
+// keystrokes, so newlines inside a paste never trigger the Enter handler and
+// escape sequences inside pasted text are never misread as key presses.
+// Multi-line / long pastes are collapsed to a placeholder in the input box
+// ("[Pasted #1 19 lines]") and expanded back to the full text on submit.
+
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+const PASTE_INLINE_MAX = 80; // single-line pastes up to this length insert literally
+const PASTE_PLACEHOLDER_RE = /\[Pasted #(\d+) \+?\d+ (?:lines|chars)\]/g;
+
+let pasteCollecting = false;
+let pasteAccum = '';
+let pasteCounter = 0;
+const pastes = new Map<number, string>();
+
+function pastePlaceholder(id: number, text: string): string {
+  const lines = text.split('\n').length;
+  return lines > 1 ? `[Pasted #${id} +${lines} lines]` : `[Pasted #${id} +${text.length} chars]`;
+}
+
+export function expandPastes(line: string): string {
+  return line.replace(PASTE_PLACEHOLDER_RE, (m, id) => pastes.get(Number(id)) ?? m);
+}
+
+function clearPastes(): void {
+  pastes.clear();
+}
+
+function commitPaste(raw: string): void {
+  const text = raw.replace(/\r\n?/g, '\n');
+  if (!text) return;
+  if (overlay !== 'none') {
+    overlayQuery += text.replace(/\n/g, ' ');
+    overlaySelected = 0;
+    drawPromptBottom();
+    return;
+  }
+  let insert: string;
+  if (!text.includes('\n') && text.length <= PASTE_INLINE_MAX) {
+    insert = text;
+  } else {
+    pasteCounter++;
+    pastes.set(pasteCounter, text);
+    insert = pastePlaceholder(pasteCounter, text);
+  }
+  inputBuffer = inputBuffer.slice(0, cursorPos) + insert + inputBuffer.slice(cursorPos);
+  cursorPos += insert.length;
+  if (fullscreenPrompt && pendingInput) rawWrite(insert);
+  drawPromptBottom();
+}
 
 export function askConfirm(message: string): Promise<boolean> {
   return new Promise(resolve => {
@@ -746,15 +845,16 @@ function handleChar(ch: string): void {
         // Fullscreen mode: single-line submit on Enter
         const resolve = pendingInput;
         pendingInput = null;
-        const line = inputBuffer;
-        if (line) rawWrite(line + '\n');
+        const line = expandPastes(inputBuffer);
+        if (inputBuffer) rawWrite(inputBuffer + '\n');
         inputBuffer = '';
         cursorPos = 0;
+        clearPastes();
         resolve(line);
         return;
       }
       // Normal TUI mode: accumulate lines, Ctrl-D submits
-      inputAccumulator.push(inputBuffer);
+      inputAccumulator.push(expandPastes(inputBuffer));
       inputBuffer = '';
       cursorPos = 0;
       drawPromptBottom();
@@ -764,10 +864,12 @@ function handleChar(ch: string): void {
     if (line) {
       echoUserLine(line);
     }
+    const expanded = expandPastes(line);
     inputBuffer = '';
     cursorPos = 0;
+    clearPastes();
     drawPromptBottom();
-    if (line && onEnter) onEnter(line);
+    if (expanded && onEnter) onEnter(expanded);
     return;
   }
 
@@ -781,8 +883,17 @@ function handleChar(ch: string): void {
       return;
     }
     if (cursorPos > 0) {
-      inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
-      cursorPos--;
+      // Delete a paste placeholder atomically when the cursor sits right after it.
+      const before = inputBuffer.slice(0, cursorPos);
+      const tail = /\[Pasted #(\d+) \+?\d+ (?:lines|chars)\]$/.exec(before);
+      if (tail) {
+        pastes.delete(Number(tail[1]));
+        inputBuffer = before.slice(0, -tail[0].length) + inputBuffer.slice(cursorPos);
+        cursorPos -= tail[0].length;
+      } else {
+        inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
+        cursorPos--;
+      }
       if (fullscreenPrompt && pendingInput) {
         rawWrite('\b \b');
       }
@@ -795,6 +906,7 @@ function handleChar(ch: string): void {
     if (overlay !== 'none') { overlayQuery = ''; overlaySelected = 0; drawPromptBottom(); return; }
     inputBuffer = '';
     cursorPos = 0;
+    clearPastes();
     drawPromptBottom();
     return;
   }
@@ -892,14 +1004,52 @@ function handleKey(key: string): void {
 }
 
 function rawHandler(data: string): void {
-  let i = 0;
-  while (i < data.length) {
-    if (data[i] === '\x1b' && data[i + 1] === '[') {
-      const m = /^\x1b\[[0-9;]*[A-Za-z~]/.exec(data.slice(i));
-      if (m) { handleKey(m[0]); i += m[0].length; continue; }
+  stdinBuffer += data;
+  for (;;) {
+    if (pasteCollecting) {
+      const endIdx = stdinBuffer.indexOf(PASTE_END);
+      if (endIdx === -1) {
+        // End marker not here yet — keep a tail that could be a split marker.
+        const keep = Math.max(0, stdinBuffer.length - (PASTE_END.length - 1));
+        pasteAccum += stdinBuffer.slice(0, keep);
+        stdinBuffer = stdinBuffer.slice(keep);
+        return;
+      }
+      pasteAccum += stdinBuffer.slice(0, endIdx);
+      stdinBuffer = stdinBuffer.slice(endIdx + PASTE_END.length);
+      pasteCollecting = false;
+      commitPaste(pasteAccum);
+      pasteAccum = '';
+      continue;
     }
-    handleKey(data[i]);
-    i++;
+    let i = 0;
+    let enteredPaste = false;
+    while (i < stdinBuffer.length) {
+      if (stdinBuffer[i] === '\x1b') {
+        if (i + 1 >= stdinBuffer.length) break;
+        if (stdinBuffer[i + 1] === '[') {
+          const m = /^\x1b\[[0-9;]*[A-Za-z~]/.exec(stdinBuffer.slice(i));
+          if (!m) break;
+          if (m[0] === PASTE_START) {
+            stdinBuffer = stdinBuffer.slice(i + m[0].length);
+            pasteCollecting = true;
+            enteredPaste = true;
+            break;
+          }
+          handleKey(m[0]);
+          i += m[0].length;
+          continue;
+        }
+        handleKey('\x1b');
+        i += 1;
+        continue;
+      }
+      handleKey(stdinBuffer[i]);
+      i += 1;
+    }
+    if (enteredPaste) continue;
+    stdinBuffer = stdinBuffer.slice(i);
+    return;
   }
 }
 
@@ -908,9 +1058,13 @@ export function startInput(): void {
   inputActive = true;
   inputBuffer = '';
   cursorPos = 0;
+  stdinBuffer = '';
+  pasteCollecting = false;
+  pasteAccum = '';
   if (process.stdin.isTTY) process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
+  rawWrite('\x1b[?2004h'); // enable bracketed paste
   stdinHandler = rawHandler;
   process.stdin.on('data', stdinHandler);
 }
@@ -918,6 +1072,7 @@ export function startInput(): void {
 export function stopInput(): void {
   if (!inputActive) return;
   inputActive = false;
+  rawWrite('\x1b[?2004l'); // disable bracketed paste
   if (stdinHandler) {
     process.stdin.removeListener('data', stdinHandler);
     stdinHandler = null;
@@ -945,8 +1100,11 @@ export function initTui(): void {
   pendingG = false;
   scrollBuffer = [];
   streamAccum = '';
+  lastPromptStartRow = null;
+  lastPromptScreenRows = null;
   hideCursor();
   patchStdout();
+  attachResizeHandler();
 
   // Clear screen, draw banner
   rawWrite('\x1b[2J\x1b[H');
@@ -968,7 +1126,10 @@ export function initTui(): void {
 export function destroyTui(): void {
   stopToolSpinner();
   scrollMode = false;
+  lastPromptStartRow = null;
+  lastPromptScreenRows = null;
   stopInput();
+  detachResizeHandler();
   resetScrollRegion();
   unpatchStdout();
   leaveAltScreen();

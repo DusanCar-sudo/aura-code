@@ -20,6 +20,18 @@ import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.
 import { detectFrustration } from './affect.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 
+/**
+ * Provider errors can carry entire HTML error pages (e.g. a 404 from a
+ * misconfigured endpoint). Dumping those into the terminal floods the TUI
+ * with kilobytes of markup — keep the status line, drop the page body.
+ */
+export function formatProviderError(e: unknown): string {
+  let msg = String(e).replace(/\s+/g, ' ').trim();
+  const htmlIdx = msg.search(/<!DOCTYPE|<html[\s>]/i);
+  if (htmlIdx !== -1) msg = msg.slice(0, htmlIdx).trim() + ' [HTML error page omitted]';
+  return msg.length > 400 ? msg.slice(0, 400) + '…' : msg;
+}
+
 export interface LoopOptions {
   provider: LLMProvider;
   task: string;
@@ -300,11 +312,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         }
       }
     } catch (e) {
-      display.error(`Provider error: ${String(e)}`);
+      const errMsg = formatProviderError(e);
+      display.error(`Provider error: ${errMsg}`);
       await persist(opts.sessionPath, history);
       return {
         success: false,
-        summary: `Provider error on turn ${turns}: ${String(e)}`,
+        summary: `Provider error on turn ${turns}: ${errMsg}`,
         turns, toolCallCount, usage, history, toolCallLog,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
