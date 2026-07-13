@@ -28,7 +28,7 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     framework,
     readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
     auraRules:     readTruncated(root, ['AURA.md'], 2000, 'AURA.md'),
-    tree:          buildTree(root),
+    tree:          buildTree(root).split('\n').slice(0, 150).join('\n'),
     config:        readConfig(root),
     recentCommits: readGitLog(root),
     graphSummary:  loadGraphSummary(root),
