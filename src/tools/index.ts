@@ -173,6 +173,11 @@ const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
   notify:       /notify|notification|alert|when done|ping|desktop/,
   image_read:   /image|screenshot|png|jpe?g|photo|picture|webcam/,
   clipboard:    /clipboard|copy to|paste/,
+  spawn_task:   /\b(spawn|sub.?agent|parallel|delegate|orchestrat|multi.?agent)\b/i,
+  web_fetch:    /\b(http|https|url|fetch|curl|download|website|webpage|endpoint)\b/i,
+  web_search:   /\b(search|look up|find online|google|latest|current|news|recent)\b/i,
+  memory:       /\b(remember|recall|memory|forget|note|store|what did|last time)\b/i,
+  mcp:          /\b(mcp|tool server|external tool|connect to)\b/i,
 };
 
 /** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy). */
