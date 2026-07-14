@@ -469,7 +469,7 @@ function loadIdentityFromMemory(): string {
   // Unified memory: full global identity/facts (shared with the CLI) plus the
   // global episodic-lessons digest. No projectRoot → the bot isn't tied to one
   // project, so it gets the cross-project lessons summary.
-  return loadUnifiedMemory({ maxChars: 3500 });
+  return loadUnifiedMemory({ maxChars: 800 });
 }
 
 // Build system prompt once on first use — includes user identity from memory
@@ -877,7 +877,7 @@ function readFileTool(filePath: string): string {
     const content = fs.readFileSync(resolved, 'utf8');
     const lines = content.split('\n');
     const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
-    return numbered.length > 3500 ? numbered.slice(0, 3500) + '\n... (truncated)' : numbered;
+    return numbered.length > 800 ? numbered.slice(0, 800) + '\n... (truncated)' : numbered;
   } catch (e: any) {
     return `❌ Error reading: ${e.message}`;
   }
@@ -1151,7 +1151,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
     const result = await execShell(cmd);
     const output = result.stdout || result.stderr || '(no output)';
-    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
+    const truncated = output.length > 800 ? output.slice(0, 800) + '\n... (truncated)' : output;
     return `⚡ ${cmd}\n${result.code === 0 ? '✅' : '❌'} exit ${result.code}\n${truncated}`;
   }
 
@@ -1287,7 +1287,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   if (isDirectShellText(lower)) {
     const result = await execShell(text);
     const output = result.stdout || result.stderr || '(no output)';
-    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
+    const truncated = output.length > 800 ? output.slice(0, 800) + '\n... (truncated)' : output;
     return `⚡ ${text}\n${truncated}`;
   }
 
