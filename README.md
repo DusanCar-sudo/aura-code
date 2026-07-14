@@ -1,5 +1,7 @@
 # Aura
 
+![Aura Code](assets/aura_code_hero.png)
+
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Version](https://img.shields.io/badge/version-v0.10.3-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
@@ -17,6 +19,8 @@
 Aura is a model-agnostic autonomous coding agent. Give it a task in natural language — it reads your codebase, plans, executes, verifies, and reports back.
 
 Built around **persistent memory** — it remembers decisions, lessons, and context across sessions. Runs locally, talks to you via Telegram, works with any LLM provider.
+
+![Aura in action](assets/aura_in_action.png)
 
 ---
 
@@ -53,11 +57,16 @@ aura 'refactor the auth module to use JWT'---
 
 ---
 
-## CLIaura 'your task'           # run a task
+## CLI
+
+```bash
+aura 'your task'           # run a task
 aura                       # interactive TUI
 aura --auto 'task'         # fully autonomous, no confirmations
 aura --readonly 'analyze'  # read-only analysis
 aura --doctor              # self-diagnostic
+```
+
 ---
 
 ## Memory System
