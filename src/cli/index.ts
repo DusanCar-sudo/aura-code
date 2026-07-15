@@ -57,7 +57,8 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
-import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, type ModelRow } from './model-select.js';
+import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
+import { isAuthError } from '../util/errors.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
@@ -1119,8 +1120,24 @@ let abortController: AbortController | null = null;
         });
       }
     } catch (err) {
-      const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-      writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+      if (isAuthError(err)) {
+        // 401/403 from the provider: offer an in-place key update instead of
+        // a bare stack trace. Same stdin dance as the selectors.
+        const wasActive = inputActive;
+        if (wasActive) { stopInput(); enterFullscreenPrompt(); }
+        try {
+          const newKey = await promptAuthKeyUpdate(resolved.model ?? runtimeConfig.model ?? '');
+          if (newKey) {
+            runtimeConfig.apiKey = newKey;
+            writeOutput(chalk.hex('#5a9e6e')('  ✓ Key updated — re-run the task.'));
+          }
+        } finally {
+          if (wasActive) { exitFullscreenPrompt(); startInput(); }
+        }
+      } else {
+        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+        writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+      }
       clearAbortController();
       abortController = null;
       return;
