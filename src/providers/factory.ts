@@ -42,7 +42,7 @@ export function getCustomProviders(): ProviderDef[] {
  * up against registry entries (which store unprefixed ids).
  */
 function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile)\//, '');
+  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini)\//, '');
 }
 
 /**
@@ -86,6 +86,11 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
   if (m.includes('grok') || m.startsWith('xai/')) return 'XAI_API_KEY';
   if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
+  if (m.startsWith('groq/')) return 'GROQ_API_KEY';
+  if (m.startsWith('nvidia/')) return 'NVIDIA_API_KEY';
+  if (m.startsWith('huggingface/')) return 'HUGGINGFACE_API_KEY';
+  if (m.startsWith('kimi/')) return 'MOONSHOT_API_KEY';
+  if (m.startsWith('qwen/')) return 'DASHSCOPE_API_KEY';
   return undefined;
 }
 
@@ -107,11 +112,17 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('mimo-') || m.startsWith('xiaomi/') || m.startsWith('mimo/')) return 'xiaomi';
   if (m.startsWith('glm-') || m.startsWith('zhipu/') || m.startsWith('zhipu-coding/')) return 'zhipu';
   if (m.startsWith('claude-')) return 'anthropic';
-  if (m.startsWith('gemini-')) return 'google';
+  if (m.startsWith('gemini-') || m.startsWith('gemini/')) return 'google';
   if (m.startsWith('openrouter/')) return 'openrouter';
   if (m.startsWith('grok-') || m.startsWith('xai/')) return 'xai';
   if (m.startsWith('opencode/') || m.startsWith('zen/') || m.startsWith('go-anthropic/')) return 'opencode';
   if (m.startsWith('ollama/')) return 'ollama';
+  if (m.startsWith('groq/')) return 'groq';
+  if (m.startsWith('nvidia/')) return 'nvidia';
+  if (m.startsWith('huggingface/')) return 'huggingface';
+  if (m.startsWith('kimi/')) return 'kimi';
+  if (m.startsWith('qwen/')) return 'qwen';
+  if (m.startsWith('lmstudio/') || m.startsWith('local/')) return 'lmstudio';
   return 'openai-compatible';
 }
 
@@ -124,6 +135,11 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   openrouter: 'OPENROUTER_API_KEY',
   xai: 'XAI_API_KEY',
   opencode: 'OPENCODE_API_KEY',
+  groq: 'GROQ_API_KEY',
+  nvidia: 'NVIDIA_API_KEY',
+  huggingface: 'HUGGINGFACE_API_KEY',
+  kimi: 'MOONSHOT_API_KEY',
+  qwen: 'DASHSCOPE_API_KEY',
   'openai-compatible': 'OPENAI_API_KEY',
 };
 
@@ -322,8 +338,72 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   }
 
   // ── Google ─────────────────────────────────────────────────────────────────
-  if (model.startsWith('gemini-')) {
-    return new GoogleProvider(config);
+  // Accept both bare gemini-* and the selector's gemini/<id> prefixed form.
+  if (model.startsWith('gemini-') || model.startsWith('gemini/')) {
+    return new GoogleProvider({ ...config, model: model.replace(/^gemini\//, '') });
+  }
+
+  // ── OpenCode Zen ───────────────────────────────────────────────────────────
+  // zen/* and opencode/* had key resolution (apiKeyEnvVarForModel) but no
+  // routing branch — they fell through to the OpenAI-compatible default and
+  // 401'd against api.openai.com.
+  if (model.startsWith('zen/') || model.startsWith('opencode/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace(/^(zen|opencode)\//, ''),
+      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/v1',
+      apiKey: config.apiKey ?? getApiKey('OPENCODE_API_KEY'),
+    }, 'OpenCode Zen');
+  }
+
+  // ── Groq ───────────────────────────────────────────────────────────────────
+  if (model.startsWith('groq/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('groq/', ''),
+      baseUrl: config.baseUrl ?? 'https://api.groq.com/openai/v1',
+      apiKey: config.apiKey ?? getApiKey('GROQ_API_KEY'),
+    }, 'Groq');
+  }
+
+  // ── NVIDIA NIM ─────────────────────────────────────────────────────────────
+  if (model.startsWith('nvidia/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('nvidia/', ''),
+      baseUrl: config.baseUrl ?? 'https://integrate.api.nvidia.com/v1',
+      apiKey: config.apiKey ?? getApiKey('NVIDIA_API_KEY'),
+    }, 'NVIDIA NIM');
+  }
+
+  // ── Hugging Face Inference Providers ──────────────────────────────────────
+  if (model.startsWith('huggingface/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('huggingface/', ''),
+      baseUrl: config.baseUrl ?? 'https://router.huggingface.co/v1',
+      apiKey: config.apiKey ?? getApiKey('HUGGINGFACE_API_KEY', 'HF_TOKEN'),
+    }, 'Hugging Face');
+  }
+
+  // ── Kimi / Moonshot ────────────────────────────────────────────────────────
+  if (model.startsWith('kimi/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('kimi/', ''),
+      baseUrl: config.baseUrl ?? getEnv('MOONSHOT_BASE_URL') ?? 'https://api.moonshot.ai/v1',
+      apiKey: config.apiKey ?? getApiKey('MOONSHOT_API_KEY'),
+    }, 'Kimi');
+  }
+
+  // ── Qwen / DashScope ───────────────────────────────────────────────────────
+  if (model.startsWith('qwen/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('qwen/', ''),
+      baseUrl: config.baseUrl ?? getEnv('DASHSCOPE_BASE_URL') ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      apiKey: config.apiKey ?? getApiKey('DASHSCOPE_API_KEY'),
+    }, 'Qwen');
   }
 
   // ── OpenRouter ─────────────────────────────────────────────────────────────
