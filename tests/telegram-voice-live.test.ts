@@ -7,6 +7,7 @@ const hasTelegramConfig = fs.existsSync('/home/dusan/.aura/telegram.json');
 
 describe.skipIf(isCI || !hasTelegramConfig)('LIVE voice bubble check', () => {
   it('sends a real inline voice note', async () => {
+    if (!hasTelegramConfig) return;
     const cfg = JSON.parse(fs.readFileSync('/home/dusan/.aura/telegram.json', 'utf8'));
     let groqKey = process.env.GROQ_API_KEY ?? '';
     if (!groqKey) {
