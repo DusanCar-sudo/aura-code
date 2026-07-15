@@ -1,4 +1,20 @@
 #!/usr/bin/env node
+// Auto-load ~/.secrets/agents.env so provider keys work when Aura runs as a binary
+import * as _fs from 'fs';
+import * as _path from 'path';
+import * as _os from 'os';
+const _agentsEnv = _path.join(_os.homedir(), '.secrets', 'agents.env');
+if (_fs.existsSync(_agentsEnv)) {
+  for (const line of _fs.readFileSync(_agentsEnv, 'utf8').split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const eq = t.indexOf('=');
+    if (eq === -1) continue;
+    const k = t.slice(0, eq).trim();
+    const v = t.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+    if (k && !(k in process.env)) process.env[k] = v;
+  }
+}
 import * as path from 'path';
 import * as readline from 'readline';
 import * as fs from 'fs';
@@ -18,7 +34,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt } from './tui.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
 import { startServer } from '../server/index.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
@@ -1012,6 +1028,19 @@ let abortController: AbortController | null = null;
 
   setCallbacks({
     onEnter(line: string) {
+      if (abortController && !abortController.signal.aborted) {
+        const cmd = line.trim();
+        if (cmd === ':stop' || cmd === ':cancel') {
+          writeOutput(chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+          abortController.abort();
+          return;
+        }
+        if (cmd.startsWith(':btw ')) {
+          pendingBtw = cmd.slice(5).trim();
+          writeOutput(chalk.hex(FAINT_HEX)(`  Buffered side question: "${pendingBtw}"`));
+          return;
+        }
+      }
       processLine(line);
     },
     onStop() {
@@ -1044,7 +1073,7 @@ let abortController: AbortController | null = null;
 
     // Run task
     let result;
-    abortController = new AbortController();
+    abortController = createAbortController();
     const abortSignal = abortController.signal;
     try {
       const currentProvider = buildProvider(tuiDisplay);
@@ -1092,7 +1121,8 @@ let abortController: AbortController | null = null;
     } catch (err) {
       const msg = err instanceof Error ? (err.stack || err.message) : String(err);
       writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
-
+      clearAbortController();
+      abortController = null;
       return;
     }
 
@@ -1100,6 +1130,8 @@ let abortController: AbortController | null = null;
     if (abortController?.signal.aborted && !result.success) {
       writeOutput(chalk.hex('#d4903a')('  ⏹ Task cancelled.'));
       // Don't record episode for cancelled tasks
+      clearAbortController();
+      abortController = null;
       return;
     }
 
@@ -1137,15 +1169,20 @@ let abortController: AbortController | null = null;
       tuiDisplay.error(result.summary);
     }
 
+    clearAbortController();
+    abortController = null;
+
     // Process any :btw that was typed during the loop
     if (pendingBtw) {
       const q = pendingBtw;
       pendingBtw = null;
-      abortController = new AbortController();
+      abortController = createAbortController();
       const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
       writeOutput(chalk.hex(FAINT_HEX)('  Side question: "' + q + '"'));
       const btwResult = await runBtwQuery(q, buildProvider(tuiDisplay), ctx);
       writeOutput(renderBtwAnswer(btwResult.answer, btwResult.tokens));
+      clearAbortController();
+      abortController = null;
     }
     } catch (err) {
       const msg = err instanceof Error ? (err.stack || err.message) : String(err);
