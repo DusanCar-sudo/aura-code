@@ -4,7 +4,9 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import { textToSpeech, sendVoiceMessage, isOggOpus } from '../src/tools/telegram-voice.js';
 
-describe('LIVE voice bubble check', () => {
+const isCI = process.env.CI === 'true';
+
+describe.skipIf(isCI)('LIVE voice bubble check', () => {
   it('sends a real inline voice note', async () => {
     const cfg = JSON.parse(fs.readFileSync('/home/dusan/.aura/telegram.json', 'utf8'));
     let groqKey = process.env.GROQ_API_KEY ?? '';

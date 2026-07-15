@@ -47,7 +47,7 @@ function wizardInput(): string {
 
 function runCliWithCleanEnv(input: string, configDir: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('node', [CLI], {
+    const proc = spawn(process.execPath, [CLI], {
       env: {
         PATH: '/usr/bin:/bin',
         HOME: configDir,
@@ -143,7 +143,7 @@ describe('CLI integration: first-run wizard', () => {
   });
 
   it('bypasses the wizard when --no-setup is given (then errors about no model)', async () => {
-    const proc = spawn('node', [CLI, '--no-setup'], {
+    const proc = spawn(process.execPath, [CLI, '--no-setup'], {
       env: { PATH: '/usr/bin:/bin', HOME: tmpConfigDir, XDG_CONFIG_HOME: tmpConfigDir, TERM: 'dumb' },
       cwd: tmpConfigDir, // see runCliWithCleanEnv — avoid the repo's .aura.json
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -158,7 +158,7 @@ describe('CLI integration: first-run wizard', () => {
   });
 
   it('bypasses the wizard when --api-key is given (then tries to use that key)', async () => {
-    const proc = spawn('node', [CLI, '--api-key', 'cli-supplied-key', '--model', 'gpt-4o'], {
+    const proc = spawn(process.execPath, [CLI, '--api-key', 'cli-supplied-key', '--model', 'gpt-4o'], {
       env: { PATH: '/usr/bin:/bin', HOME: tmpConfigDir, XDG_CONFIG_HOME: tmpConfigDir, TERM: 'dumb' },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
