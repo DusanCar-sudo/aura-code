@@ -78,7 +78,7 @@ describe('selectTools relevance gate', () => {
 
   it('selected tools preserve TOOL_DEFINITIONS order and cover all 24 when everything triggers', () => {
     const everything = Object.values({
-      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image',
+      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect',
     }).join(' ');
     const sent = names(everything);
     expect(sent).toEqual(TOOL_DEFINITIONS.map(t => t.name));
