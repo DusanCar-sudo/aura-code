@@ -434,7 +434,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
 
 /**
  * List of well-known model shortcuts for quick selection.
- * Used by `:models` in the REPL and by `--models` on the CLI.
+ * Used by the `:provider`/`:model` selectors and by `--models` on the CLI.
  *
  * NOTE: Anthropic, OpenAI, Google, and OpenRouter entries here are a
  * fallback only — getAllModels() prefers live-fetched lists for these
