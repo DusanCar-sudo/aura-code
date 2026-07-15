@@ -120,6 +120,21 @@ function parseGoogleRetryAfter(
   return undefined;
 }
 
+/**
+ * True when the error is an authentication/authorization failure (401/403) —
+ * used to offer an interactive API-key update instead of a bare error dump.
+ */
+export function isAuthError(e: unknown): boolean {
+  if (e instanceof ApiError) return e.status === 401 || e.status === 403;
+  const err = e as { status?: number; statusCode?: number; message?: string };
+  const status = err?.status ?? err?.statusCode ?? 0;
+  if (status === 401 || status === 403) return true;
+  const msg = err?.message ?? (typeof e === 'string' ? e : '');
+  return /\bHTTP 40[13]\b/.test(msg)
+    || /\b40[13]\b.*(unauthorized|forbidden|invalid[ _-]?(api[ _-]?)?key|authentication)/i.test(msg)
+    || /(unauthorized|invalid[ _-]?(api[ _-]?)?key|authentication[ _-]?(failed|error)).*\b40[13]\b/i.test(msg);
+}
+
 /** Did the error come from Gemini specifically? */
 export function isGoogle(e: unknown): boolean {
   if (e instanceof ApiError) return e.provider === 'Google';

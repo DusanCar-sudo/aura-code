@@ -3,7 +3,8 @@ import chalk from 'chalk';
 import { apiKeyEnvVarForModel, modelProviderFamily, getAllModels } from '../providers/factory.js';
 import { PROVIDER_LIST, fetchLiveModels } from '../providers/live-models.js';
 import type { LiveModel } from '../providers/live-models.js';
-import { getApiKey } from '../util/env.js';
+import { getApiKey, saveToAgentsEnv } from '../util/env.js';
+import type { ProviderEntry } from '../providers/live-models.js';
 
 /**
  * True when switching prevModel → newModel crosses a provider family
@@ -293,9 +294,136 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
   return models[r.index].id;
 }
 
+/** Mask a secret: last 6 chars visible, e.g. "sk-or-****9f9802". */
+function maskKey(key: string): string {
+  if (key.length <= 6) return '****';
+  return '****' + key.slice(-6);
+}
+
+/** Env var holding a provider's base URL override. */
+function baseUrlEnvFor(entry: ProviderEntry): string {
+  switch (entry.id) {
+    case 'ollama': return 'OLLAMA_BASE_URL';
+    case 'lmstudio': return 'LMSTUDIO_BASE_URL';
+    case 'glm': return 'ZHIPU_BASE_URL';
+    default:
+      if (entry.envKey?.endsWith('_API_KEY')) return entry.envKey.replace(/_API_KEY$/, '_BASE_URL');
+      return `${entry.id.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
+  }
+}
+
+/**
+ * Read one line from stdin with no echo (API keys). Enter finishes,
+ * backspace works, Ctrl-C/ESC cancels (returns undefined).
+ * Non-TTY stdin falls back to a plain visible prompt.
+ */
+async function readHiddenLine(prompt: string): Promise<string | undefined> {
+  if (!process.stdin.isTTY) {
+    const v = (await askLine(prompt)).trim();
+    return v || undefined;
+  }
+  return new Promise(resolve => {
+    process.stdout.write(prompt);
+    readline.emitKeypressEvents(process.stdin);
+    const wasRaw = process.stdin.isRaw;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    let value = '';
+    const done = (result: string | undefined) => {
+      process.stdin.removeListener('keypress', onKey);
+      process.stdin.setRawMode(wasRaw ?? false);
+      process.stdout.write('\n');
+      resolve(result);
+    };
+    const onKey = (str: string | undefined, key: { name?: string; ctrl?: boolean }) => {
+      if (key.ctrl && key.name === 'c') return done(undefined);
+      if (key.name === 'escape') return done(undefined);
+      if (key.name === 'return' || key.name === 'enter') return done(value.trim() || undefined);
+      if (key.name === 'backspace') { value = value.slice(0, -1); return; }
+      if (str && !key.ctrl && str >= ' ') value += str;
+    };
+    process.stdin.on('keypress', onKey);
+  });
+}
+
+/** Wait for a single keypress; returns lowercase key name or char. */
+async function readSingleKey(): Promise<string> {
+  if (!process.stdin.isTTY) {
+    const v = (await askLine('')).trim().toLowerCase();
+    return v === '' ? 'escape' : v[0];
+  }
+  return new Promise(resolve => {
+    readline.emitKeypressEvents(process.stdin);
+    const wasRaw = process.stdin.isRaw;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    const onKey = (str: string | undefined, key: { name?: string; ctrl?: boolean }) => {
+      process.stdin.removeListener('keypress', onKey);
+      process.stdin.setRawMode(wasRaw ?? false);
+      if (key.ctrl && key.name === 'c') return resolve('escape');
+      resolve((key.name ?? str ?? '').toLowerCase());
+    };
+    process.stdin.on('keypress', onKey);
+  });
+}
+
+/** [K] Update API key — masked current value, hidden input, agents.env save. */
+async function updateApiKeyFlow(entry: ProviderEntry): Promise<void> {
+  if (!entry.envKey) {
+    console.log(chalk.hex(DIM)(`\n  ${entry.name} needs no API key.\n`));
+    return;
+  }
+  const current = getApiKey(entry.envKey);
+  console.log(chalk.hex(DIM)(`\n  ${entry.envKey}: ${current ? maskKey(current) : chalk.hex('#d4903a')('not set')}`));
+  const key = await readHiddenLine(chalk.hex(ACCENT)(`  New key (hidden, Enter to cancel): `));
+  if (!key) {
+    console.log(chalk.hex(DIM)('  Unchanged.\n'));
+    return;
+  }
+  const file = saveToAgentsEnv(entry.envKey, key);
+  console.log(chalk.hex(GREEN)(`  ✓ Key saved`) + chalk.hex(DIM)(` (${entry.envKey} → ${file})\n`));
+}
+
+/** [U] Change base URL — visible input, agents.env save. */
+async function updateBaseUrlFlow(entry: ProviderEntry): Promise<void> {
+  const envVar = baseUrlEnvFor(entry);
+  const current = process.env[envVar];
+  console.log(chalk.hex(DIM)(`\n  ${envVar}: ${current ?? chalk.hex('#d4903a')('not set (provider default)')}`));
+  const url = (await askLine(chalk.hex(ACCENT)('  New base URL (Enter to cancel): '))).trim();
+  if (!url) {
+    console.log(chalk.hex(DIM)('  Unchanged.\n'));
+    return;
+  }
+  const file = saveToAgentsEnv(envVar, url);
+  console.log(chalk.hex(GREEN)(`  ✓ URL saved`) + chalk.hex(DIM)(` (${envVar} → ${file})\n`));
+}
+
+/** Per-provider action submenu: browse models / update key / change URL. */
+async function providerActionMenu(entry: ProviderEntry): Promise<'models' | 'key' | 'url' | 'back'> {
+  const key = entry.envKey ? getApiKey(entry.envKey) : undefined;
+  const keyLabel = entry.envKey
+    ? (key ? `current: ${maskKey(key)}` : 'not set')
+    : 'no key needed';
+  process.stdout.write('\x1b[2J\x1b[H');
+  console.log(chalk.hex(ACCENT).bold(`\n  ${entry.name}`));
+  console.log(chalk.hex(DIM)(`  ${entry.desc}\n`));
+  console.log(`  ${chalk.hex(ACCENT)('[M]')} Browse models`);
+  console.log(`  ${chalk.hex(ACCENT)('[K]')} Update API key  ${chalk.hex(DIM)(`(${keyLabel})`)}`);
+  console.log(`  ${chalk.hex(ACCENT)('[U]')} Change base URL`);
+  console.log(`  ${chalk.hex(DIM)('ESC Back')}\n`);
+  for (;;) {
+    const k = await readSingleKey();
+    if (k === 'm' || k === 'return' || k === 'enter') return 'models';
+    if (k === 'k') return 'key';
+    if (k === 'u') return 'url';
+    if (k === 'escape' || k === 'q') return 'back';
+  }
+}
+
 /**
  * Level 1: full provider list. Configured providers (env key present) show ✓.
- * Selecting a provider opens its model list; ESC there returns here.
+ * Selecting a provider opens its action submenu (models / key / URL); ESC
+ * anywhere walks back up one level.
  * Returns the finally-chosen model id, or undefined on cancel/ESC.
  */
 export async function showProviderSelector(): Promise<string | undefined> {
@@ -311,10 +439,58 @@ export async function showProviderSelector(): Promise<string | undefined> {
     });
     const r = await interactiveList('Select provider', items, { filter: true });
     if (r.kind !== 'pick') return undefined;
-    const model = await showModelSelectorForProvider(PROVIDER_LIST[r.index].id);
-    if (model === 'back') continue;
-    return model;
+    const entry = PROVIDER_LIST[r.index];
+
+    submenu: for (;;) {
+      const action = await providerActionMenu(entry);
+      switch (action) {
+        case 'back':
+          break submenu;
+        case 'key':
+          await updateApiKeyFlow(entry);
+          continue;
+        case 'url':
+          await updateBaseUrlFlow(entry);
+          continue;
+        case 'models': {
+          const model = await showModelSelectorForProvider(entry.id);
+          if (model === 'back') continue;
+          return model;
+        }
+      }
+    }
   }
+}
+
+/**
+ * Interactive recovery for a 401/403 from a provider: offer to update the
+ * API key in place (saved to ~/.secrets/agents.env). Returns the new key
+ * when one was entered and saved, undefined otherwise.
+ */
+export async function promptAuthKeyUpdate(model: string): Promise<string | undefined> {
+  const envKey = apiKeyEnvVarForModel(model);
+  const family = modelProviderFamily(model);
+  const label = PROVIDER_LIST.find(p => p.envKey === envKey)?.name ?? family;
+  console.log(chalk.hex('#d4903a')(`\n  ⚠ API key rejected for ${label}. Press K to update key or ESC to cancel.`));
+  const k = await readSingleKey();
+  if (k !== 'k') {
+    console.log(chalk.hex(DIM)('  Cancelled.\n'));
+    return undefined;
+  }
+  if (!envKey) {
+    console.log(chalk.hex(DIM)(`  No API-key env var known for model "${model}" — set it with :apikey instead.\n`));
+    return undefined;
+  }
+  const current = getApiKey(envKey);
+  console.log(chalk.hex(DIM)(`  ${envKey}: ${current ? maskKey(current) : 'not set'}`));
+  const key = await readHiddenLine(chalk.hex(ACCENT)('  New key (hidden, Enter to cancel): '));
+  if (!key) {
+    console.log(chalk.hex(DIM)('  Unchanged.\n'));
+    return undefined;
+  }
+  const file = saveToAgentsEnv(envKey, key);
+  console.log(chalk.hex(GREEN)('  ✓ Key saved') + chalk.hex(DIM)(` (${envKey} → ${file})\n`));
+  return key;
 }
 
 export function layoutColumns<T>(items: T[], cellWidth: number, termWidth: number, indent: number): T[][] {

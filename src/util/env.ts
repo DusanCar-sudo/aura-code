@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 /**
  * Provider-agnostic env-var reader.
  *
@@ -30,4 +34,44 @@ export function getEnv(canonical: string, ...aliases: string[]): string | undefi
     if (v && v.trim()) return v;
   }
   return undefined;
+}
+
+/**
+ * Persist an env var to ~/.secrets/agents.env (the file auto-loaded at CLI
+ * startup) and set it in the live process.env. Replaces an existing
+ * `KEY=...` line in place (also `export KEY=...`), otherwise appends.
+ * Creates the directory/file with owner-only permissions on first write.
+ * Returns the file path written.
+ */
+export function saveToAgentsEnv(key: string, value: string): string {
+  const dir = path.join(os.homedir(), '.secrets');
+  const file = path.join(dir, 'agents.env');
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+
+  let lines: string[] = [];
+  if (fs.existsSync(file)) {
+    lines = fs.readFileSync(file, 'utf8').split('\n');
+  }
+
+  const newLine = `${key}=${value}`;
+  let replaced = false;
+  lines = lines.map(line => {
+    const t = line.trim();
+    if (t.startsWith('#')) return line;
+    const m = t.match(/^(export\s+)?([A-Za-z_][A-Za-z0-9_]*)=/);
+    if (m && m[2] === key && !replaced) {
+      replaced = true;
+      return (m[1] ?? '') + newLine;
+    }
+    return line;
+  });
+  if (!replaced) {
+    while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+    lines.push(newLine);
+  }
+  if (lines[lines.length - 1] !== '') lines.push('');
+
+  fs.writeFileSync(file, lines.join('\n'), { mode: 0o600 });
+  process.env[key] = value;
+  return file;
 }
