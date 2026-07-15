@@ -36,6 +36,7 @@ import {
   computeTailBoundary,
   countMessage,
   countText,
+  truncateOversizedResults,
   type CompactionExtras,
 } from './compactor.js';
 
@@ -220,6 +221,12 @@ export async function compactHistoryTiered(
   const preserved = [history[0], placeholder, ...history.slice(keepFrom)];
   history.length = 0;
   for (const msg of preserved) history.push(msg);
+
+  // Churn guard (same as the default strategy): a single oversized
+  // tool_result in the kept tail otherwise holds the estimate above the
+  // trigger forever — compaction fires every turn at -1% while the ladder
+  // escalates and the giant message never shrinks.
+  truncateOversizedResults(history, threshold);
 
   const afterTokens = countText(placeholder.content) + preserved.slice(2).reduce((sum, m) => sum + countMessage(m), 0) + countMessage(history[0]);
 

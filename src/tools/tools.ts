@@ -106,8 +106,15 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
     const allLines = result.trim().split('\n').filter(Boolean);
     const lines = allLines.slice(0, input.max_results);
     if (lines.length === 0) return `No results for "${input.pattern}"`;
-    // Make paths relative
-    const relative = lines.map(l => l.replace(searchDir + '/', '').replace(searchDir + path.sep, ''));
+    // Make paths relative. Clip each matched line: a match inside a minified
+    // file (one 1.2 MB line in graphify-out/dashboard.html) once dumped ~340k
+    // tokens into history in a single tool result and poisoned the context
+    // for the rest of the session.
+    const MAX_LINE_CHARS = 500;
+    const relative = lines.map(l => {
+      const rel = l.replace(searchDir + '/', '').replace(searchDir + path.sep, '');
+      return rel.length > MAX_LINE_CHARS ? rel.slice(0, MAX_LINE_CHARS) + ' …[line clipped]' : rel;
+    });
     const truncated = allLines.length > lines.length ? ` (showing first ${lines.length} of ${allLines.length})` : '';
     return `Found ${allLines.length} result${allLines.length > 1 ? 's' : ''} for "${input.pattern}"${truncated}:\n\n${relative.join('\n')}`;
   } catch (e: unknown) {

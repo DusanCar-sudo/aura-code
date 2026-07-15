@@ -457,6 +457,14 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         isError = true;
         display.error(result);
       }
+      // Safety net independent of any single tool's own limits: one runaway
+      // result (a minified file matched by search, a huge command dump) must
+      // never inject hundreds of thousands of tokens into history at once.
+      const MAX_TOOL_RESULT_CHARS = 48_000;
+      if (result.length > MAX_TOOL_RESULT_CHARS) {
+        result = result.slice(0, MAX_TOOL_RESULT_CHARS)
+          + `\n[result truncated: ${result.length.toLocaleString()} chars total — narrow the query or read the file in ranges]`;
+      }
       toolResults.push({ id: call.id, name: call.name, content: result, isError });
     }
 
