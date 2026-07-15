@@ -289,7 +289,7 @@ export function compactHistory(
  * with no shrinkage. If the history is still over threshold, cap result
  * bodies. Returns true if anything was truncated.
  */
-function truncateOversizedResults(history: HistoryMessage[], threshold: number): boolean {
+export function truncateOversizedResults(history: HistoryMessage[], threshold: number): boolean {
   let total = 0;
   for (const msg of history) total += countMessage(msg);
   if (total < threshold) return false;
