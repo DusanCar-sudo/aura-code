@@ -241,6 +241,10 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
     { id: 'qwen/qwen3-coder-plus', name: 'Qwen3 Coder Plus' },
     { id: 'qwen/qwen-max', name: 'Qwen Max' },
   ],
+  minimax: [
+    { id: 'minimax/MiniMax-M2', name: 'MiniMax M2' },
+    { id: 'minimax/MiniMax-Text-01', name: 'MiniMax Text-01' },
+  ],
 };
 
 /**
@@ -316,6 +320,15 @@ const ROUTE_PREFIX: Record<string, string> = {
   deepseek: 'deepseek/',
   kimi: 'kimi/',
   qwen: 'qwen/',
+  minimax: 'minimax/',
+  stepfun: 'stepfun/',
+  fireworks: 'fireworks/',
+  upstage: 'upstage/',
+  arcee: 'arcee/',
+  tencent: 'tencent/',
+  gmi: 'gmi/',
+  kilocode: 'kilocode/',
+  alibaba: 'alibaba/',
 };
 
 /** Prefix a bare model id with its provider's routing prefix when missing. */
@@ -323,7 +336,7 @@ function applyRoutePrefix(providerId: string, id: string): string {
   const prefix = ROUTE_PREFIX[providerId];
   if (!prefix || id.startsWith(prefix)) return id;
   // Already carries some other known routing prefix (user typed it fully) — leave alone.
-  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai)\//.test(id)) return id;
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//.test(id)) return id;
   return prefix + id;
 }
 

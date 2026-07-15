@@ -42,7 +42,7 @@ export function getCustomProviders(): ProviderDef[] {
  * up against registry entries (which store unprefixed ids).
  */
 function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini)\//, '');
+  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
 }
 
 /**
@@ -91,6 +91,15 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   if (m.startsWith('huggingface/')) return 'HUGGINGFACE_API_KEY';
   if (m.startsWith('kimi/')) return 'MOONSHOT_API_KEY';
   if (m.startsWith('qwen/')) return 'DASHSCOPE_API_KEY';
+  if (m.startsWith('minimax/')) return 'MINIMAX_API_KEY';
+  if (m.startsWith('stepfun/')) return 'STEPFUN_API_KEY';
+  if (m.startsWith('fireworks/')) return 'FIREWORKS_API_KEY';
+  if (m.startsWith('upstage/')) return 'UPSTAGE_API_KEY';
+  if (m.startsWith('arcee/')) return 'ARCEE_API_KEY';
+  if (m.startsWith('tencent/')) return 'TENCENT_API_KEY';
+  if (m.startsWith('gmi/')) return 'GMI_API_KEY';
+  if (m.startsWith('kilocode/')) return 'KILOCODE_API_KEY';
+  if (m.startsWith('alibaba/')) return 'ALIBABA_API_KEY';
   return undefined;
 }
 
@@ -123,6 +132,15 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('kimi/')) return 'kimi';
   if (m.startsWith('qwen/')) return 'qwen';
   if (m.startsWith('lmstudio/') || m.startsWith('local/')) return 'lmstudio';
+  if (m.startsWith('minimax/')) return 'minimax';
+  if (m.startsWith('stepfun/')) return 'stepfun';
+  if (m.startsWith('fireworks/')) return 'fireworks';
+  if (m.startsWith('upstage/')) return 'upstage';
+  if (m.startsWith('arcee/')) return 'arcee';
+  if (m.startsWith('tencent/')) return 'tencent';
+  if (m.startsWith('gmi/')) return 'gmi';
+  if (m.startsWith('kilocode/')) return 'kilocode';
+  if (m.startsWith('alibaba/')) return 'alibaba';
   return 'openai-compatible';
 }
 
@@ -140,6 +158,15 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   huggingface: 'HUGGINGFACE_API_KEY',
   kimi: 'MOONSHOT_API_KEY',
   qwen: 'DASHSCOPE_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+  stepfun: 'STEPFUN_API_KEY',
+  fireworks: 'FIREWORKS_API_KEY',
+  upstage: 'UPSTAGE_API_KEY',
+  arcee: 'ARCEE_API_KEY',
+  tencent: 'TENCENT_API_KEY',
+  gmi: 'GMI_API_KEY',
+  kilocode: 'KILOCODE_API_KEY',
+  alibaba: 'ALIBABA_API_KEY',
   'openai-compatible': 'OPENAI_API_KEY',
 };
 
@@ -404,6 +431,31 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       baseUrl: config.baseUrl ?? getEnv('DASHSCOPE_BASE_URL') ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
       apiKey: config.apiKey ?? getApiKey('DASHSCOPE_API_KEY'),
     }, 'Qwen');
+  }
+
+  // ── Simple OpenAI-compatible vendors (one table row each) ─────────────────
+  // Prefix-routed like the branches above; default endpoint overridable via
+  // <X>_BASE_URL. Kept in a table because they differ only in name/URL/key.
+  const SIMPLE_VENDORS: Record<string, { name: string; baseUrl: string; baseUrlEnv: string; keyEnv: string }> = {
+    'minimax/':   { name: 'MiniMax',        baseUrl: 'https://api.minimax.io/v1',                    baseUrlEnv: 'MINIMAX_BASE_URL',   keyEnv: 'MINIMAX_API_KEY' },
+    'stepfun/':   { name: 'StepFun',        baseUrl: 'https://api.stepfun.com/v1',                   baseUrlEnv: 'STEPFUN_BASE_URL',   keyEnv: 'STEPFUN_API_KEY' },
+    'fireworks/': { name: 'Fireworks AI',   baseUrl: 'https://api.fireworks.ai/inference/v1',        baseUrlEnv: 'FIREWORKS_BASE_URL', keyEnv: 'FIREWORKS_API_KEY' },
+    'upstage/':   { name: 'Upstage',        baseUrl: 'https://api.upstage.ai/v1',                    baseUrlEnv: 'UPSTAGE_BASE_URL',   keyEnv: 'UPSTAGE_API_KEY' },
+    'arcee/':     { name: 'Arcee AI',       baseUrl: 'https://conductor.arcee.ai/v1',                baseUrlEnv: 'ARCEE_BASE_URL',     keyEnv: 'ARCEE_API_KEY' },
+    'tencent/':   { name: 'Tencent TokenHub', baseUrl: 'https://tokenhub.tencentmaas.com/v1',        baseUrlEnv: 'TENCENT_BASE_URL',   keyEnv: 'TENCENT_API_KEY' },
+    'gmi/':       { name: 'GMI Cloud',      baseUrl: 'https://api.gmi-serving.com/v1',               baseUrlEnv: 'GMI_BASE_URL',       keyEnv: 'GMI_API_KEY' },
+    'kilocode/':  { name: 'Kilo Code',      baseUrl: 'https://api.kilocode.ai/api/openrouter',       baseUrlEnv: 'KILOCODE_BASE_URL',  keyEnv: 'KILOCODE_API_KEY' },
+    'alibaba/':   { name: 'Alibaba Coding', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', baseUrlEnv: 'ALIBABA_BASE_URL', keyEnv: 'ALIBABA_API_KEY' },
+  };
+  for (const [prefix, v] of Object.entries(SIMPLE_VENDORS)) {
+    if (model.startsWith(prefix)) {
+      return new OpenAICompatibleProvider({
+        ...config,
+        model: model.slice(prefix.length),
+        baseUrl: config.baseUrl ?? getEnv(v.baseUrlEnv) ?? v.baseUrl,
+        apiKey: config.apiKey ?? getApiKey(v.keyEnv),
+      }, v.name);
+    }
   }
 
   // ── OpenRouter ─────────────────────────────────────────────────────────────

@@ -1417,6 +1417,15 @@ const FAMILY_TO_PROVIDER_ID: Record<string, string | undefined> = {
   kimi: 'kimi',
   qwen: 'qwen',
   lmstudio: 'lmstudio',
+  minimax: 'minimax',
+  stepfun: 'stepfun',
+  fireworks: 'fireworks',
+  upstage: 'upstage',
+  arcee: 'arcee',
+  tencent: 'tencent',
+  gmi: 'gmi',
+  kilocode: 'kilocode',
+  alibaba: 'alibaba',
   'openai-compatible': 'openai',
 };
 
