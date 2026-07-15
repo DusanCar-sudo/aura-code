@@ -280,4 +280,20 @@ describe('TUI cursor preservation', () => {
 
     expect(submitted).toBe('ok');
   });
+
+  it('exits scroll mode automatically and inputs character when typing a printable key', () => {
+    initTui();
+    startInput();
+    writeOutput('some output'); // ensure scrollBuffer is not empty
+    chunks = [];
+
+    process.stdin.emit('data', '\x1b'); // enter scroll mode
+    process.stdin.emit('data', 'a'); // type 'a' (printable key)
+
+    const output = chunks.join('');
+    // It should have exited scroll mode and drawn the prompt with the input 'a'
+    expect(output).toContain('a');
+    // Ensure we are back in insert mode / returned cursor to output region
+    expect(output).toContain('\x1b[17;1H');
+  });
 });

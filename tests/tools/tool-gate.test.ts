@@ -4,9 +4,9 @@ import type { HistoryMessage } from '../../src/providers/types.js';
 
 const CORE = [
   'read_file', 'list_dir', 'edit_file', 'write_file', 'search_code',
-  'run_shell', 'run_tests', 'git_status', 'git_diff', 'spawn_task',
-  'web_fetch', 'web_search', 'memory', 'mcp',
+  'run_shell', 'run_tests', 'git_status', 'git_diff',
 ];
+const CORE_CONDITIONAL = ['spawn_task', 'web_fetch', 'web_search', 'memory', 'mcp'];
 const CONDITIONAL = [
   'telegram', 'whatsapp', 'email', 'calendar', 'cron',
   'browser', 'http_request', 'notify', 'image_read', 'clipboard',
@@ -78,7 +78,7 @@ describe('selectTools relevance gate', () => {
 
   it('selected tools preserve TOOL_DEFINITIONS order and cover all 24 when everything triggers', () => {
     const everything = Object.values({
-      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect',
+      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url',
     }).join(' ');
     const sent = names(everything);
     expect(sent).toEqual(TOOL_DEFINITIONS.map(t => t.name));
