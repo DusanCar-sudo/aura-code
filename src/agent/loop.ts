@@ -65,6 +65,8 @@ export interface LoopOptions {
    *  loop creates an internal one. Passing it in lets a /context command read
    *  the accumulated compaction history and per-turn snapshots. */
   healthTracker?: import('../cli/context-health.js').ContextHealthTracker;
+  /** Internal: skip pre-planning inspector phase to avoid recursive spawning */
+  skipInspector?: boolean;
 }
 
 export interface LoopResult {
@@ -119,13 +121,20 @@ export function costFor(model: string, input: number, output: number, cachedToke
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const { provider, task, context, permissions, display } = opts;
 
-  const profile = getLoopProfile(task, opts.maxTurns);
+  let finalTask = task;
+  if (!opts.skipInspector && process.env.AURA_ENABLE_INSPECTOR === 'true') {
+    const { runInspector } = await import('../orchestration/inspector.js');
+    const report = await runInspector(task, context, display);
+    finalTask = `${task}\n\n${report}`;
+  }
+
+  const profile = getLoopProfile(finalTask, opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = buildSystemPrompt(context, provider.name, task);
+  const system = buildSystemPrompt(context, provider.name, finalTask);
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
-    { role: 'user', content: task },
+    { role: 'user', content: finalTask },
   ];
 
   let turns = 0;

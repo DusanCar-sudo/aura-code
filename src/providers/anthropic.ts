@@ -194,6 +194,22 @@ function toAnthropicMessages(history: HistoryMessage[]): Anthropic.MessageParam[
       });
     }
   }
+
+  let breakpointCount = 0;
+  for (let i = out.length - 1; i >= 0; i--) {
+    if ((out.length - i) % 4 === 0 && breakpointCount < 2) {
+      const msg = out[i];
+      if (typeof msg.content === 'string') {
+        msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } } as Anthropic.TextBlockParam & CacheControl];
+        breakpointCount++;
+      } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+        const lastBlock = msg.content[msg.content.length - 1] as any;
+        lastBlock.cache_control = { type: 'ephemeral' };
+        breakpointCount++;
+      }
+    }
+  }
+
   return out;
 }
 
