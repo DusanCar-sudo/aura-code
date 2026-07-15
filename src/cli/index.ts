@@ -1411,6 +1411,12 @@ const FAMILY_TO_PROVIDER_ID: Record<string, string | undefined> = {
   openrouter: 'openrouter',
   opencode: 'opencode-zen',
   ollama: 'ollama',
+  groq: 'groq',
+  nvidia: 'nvidia',
+  huggingface: 'huggingface',
+  kimi: 'kimi',
+  qwen: 'qwen',
+  lmstudio: 'lmstudio',
   'openai-compatible': 'openai',
 };
 

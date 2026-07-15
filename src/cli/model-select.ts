@@ -278,7 +278,10 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
   if (models.length === 0) {
     console.log(chalk.hex(DIM)(`\n  No models found for ${entry?.name ?? providerId} (live fetch empty, no static entries).`));
     const id = (await askLine(chalk.hex(ACCENT)('  Model id (Enter to go back): '))).trim();
-    return id || 'back';
+    if (!id) return 'back';
+    const prefixed = applyRoutePrefix(providerId, id);
+    if (prefixed !== id) console.log(chalk.hex(DIM)(`  Routing as ${prefixed}`));
+    return prefixed;
   }
 
   const items: ListItem[] = models.map(m => ({
@@ -292,6 +295,36 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
   if (r.kind === 'back') return 'back';
   if (r.kind === 'cancel') return undefined;
   return models[r.index].id;
+}
+
+/**
+ * Routing prefix the factory expects for models of a given selector provider.
+ * A bare id typed on a provider's page gets this prefix so createProvider
+ * routes it to that provider's endpoint instead of the OpenAI-compatible
+ * default (which 401s against api.openai.com).
+ */
+const ROUTE_PREFIX: Record<string, string> = {
+  'opencode-zen': 'zen/',
+  'opencode-go': 'go-anthropic/',
+  openrouter: 'openrouter/',
+  ollama: 'ollama/',
+  lmstudio: 'lmstudio/',
+  groq: 'groq/',
+  nvidia: 'nvidia/',
+  gemini: 'gemini/',
+  huggingface: 'huggingface/',
+  deepseek: 'deepseek/',
+  kimi: 'kimi/',
+  qwen: 'qwen/',
+};
+
+/** Prefix a bare model id with its provider's routing prefix when missing. */
+function applyRoutePrefix(providerId: string, id: string): string {
+  const prefix = ROUTE_PREFIX[providerId];
+  if (!prefix || id.startsWith(prefix)) return id;
+  // Already carries some other known routing prefix (user typed it fully) — leave alone.
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai)\//.test(id)) return id;
+  return prefix + id;
 }
 
 /** Mask a secret: last 6 chars visible, e.g. "sk-or-****9f9802". */
