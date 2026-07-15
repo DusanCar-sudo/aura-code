@@ -4,6 +4,7 @@ import { listDir } from './list-dir.js';
 import { editFile } from './edit-file.js';
 import { writeFile } from './write-file.js';
 import { searchCode } from './search-code.js';
+import { searchSemantic } from './search-semantic.js';
 import { runShell } from './run-shell.js';
 import { runTests } from './run-tests.js';
 import { gitStatus, gitDiff } from './git.js';
@@ -96,6 +97,18 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: 'search_semantic',
+    description: 'Semantically extract file outlines (classes/functions) and specific snippets instead of reading entire files. Highly token-efficient.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path:  { type: 'string', description: 'Path to the file to extract' },
+        query: { type: 'string', description: 'Optional search query to extract specific surrounding context' },
+      },
+      required: ['path'],
+    },
+  },
+  {
     name: 'run_shell',
     description: 'Run shell command in project directory. Use for build/pkgmgr/fmt/lint. Avoid destructive commands.',
     parameters: {
@@ -175,7 +188,7 @@ const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
   clipboard:    /clipboard|copy to|paste/,
   spawn_task:   /\b(spawn|sub.?agent|parallel|delegate|orchestrat|multi.?agent)\b/i,
   web_fetch:    /\b(http|https|url|fetch|curl|download|website|webpage|endpoint)\b/i,
-  web_search:   /\b(search|look up|find online|google|latest|current|news|recent)\b/i,
+  web_search:   /\b(web.?search|search|look up|find online|google|latest|current|news|recent)\b/i,
   memory:       /\b(remember|recall|memory|forget|note|store|what did|last time)\b/i,
   mcp:          /\b(mcp|tool server|external tool|connect to)\b/i,
 };
@@ -238,6 +251,7 @@ export async function executeTool(
       case 'list_dir':     return listDir({ path: (input.path as string) ?? '.', recursive: (input.recursive as boolean) ?? false, depth: (input.depth as number) ?? 3 }, cwd);
       case 'edit_file':    return editFile({ path: input.path as string, find: input.find as string, replace: input.replace as string }, cwd);
       case 'write_file':   return writeFile({ path: input.path as string, content: input.content as string }, cwd);
+      case 'search_semantic': return searchSemantic({ path: input.path as string, query: input.query as string | undefined }, cwd);
       case 'search_code':  return searchCode({ pattern: input.pattern as string, path: input.path as string | undefined, file_glob: input.file_glob as string | undefined, literal: (input.literal as boolean) ?? false, case_sensitive: (input.case_sensitive as boolean) ?? false, max_results: (input.max_results as number) ?? 50 }, cwd);
       case 'run_shell':    return runShell({ command: input.command as string, cwd: input.cwd as string | undefined, timeout: input.timeout as number | undefined }, cwd);
       case 'run_tests':    return runTests({ file_or_pattern: input.file_or_pattern as string | undefined }, cwd);

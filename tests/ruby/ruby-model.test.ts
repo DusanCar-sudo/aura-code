@@ -142,12 +142,10 @@ describe('RubyModel — getVersion / updateModel', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('RubyModel — complete', () => {
   it('delegates to internal OpenAICompatibleProvider', async () => {
-    const ruby = makeRuby();
-    // The complete method delegates to the OpenAICompatibleProvider.
-    // Without mocking fetch, it will try to reach Ollama and fail.
-    // We test that the method exists and is callable.
+    // Unreachable port so the provider call rejects even when a real
+    // Ollama is running on this machine.
+    const ruby = makeRuby({ ollamaBaseUrl: 'http://127.0.0.1:9/v1' });
     const promise = ruby.complete('system', [{ role: 'user', content: 'test' }], []);
-    // Will reject because no real Ollama, but the method exists
     await expect(promise).rejects.toThrow();
   });
 });

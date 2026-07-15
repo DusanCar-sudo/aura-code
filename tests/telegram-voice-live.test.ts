@@ -1,12 +1,9 @@
-// TEMPORARY live verification — real Groq TTS + real Telegram sendVoice.
-// Deleted after the live check; not part of the suite.
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import { textToSpeech, sendVoiceMessage, isOggOpus } from '../src/tools/telegram-voice.js';
 
 const isCI = process.env.CI === 'true';
-import * as fs2 from 'fs';
-const hasTelegramConfig = fs2.existsSync('/home/dusan/.aura/telegram.json');
+const hasTelegramConfig = fs.existsSync('/home/dusan/.aura/telegram.json');
 
 describe.skipIf(isCI || !hasTelegramConfig)('LIVE voice bubble check', () => {
   it('sends a real inline voice note', async () => {
