@@ -81,7 +81,7 @@ export async function textToSpeech(text: string, apiKey: string): Promise<Buffer
 
   const body = JSON.stringify({
     model: 'canopylabs/orpheus-v1-english',
-    voice: 'troy',
+    voice: 'autumn',
     input: truncated,
     response_format: 'wav',
   });
