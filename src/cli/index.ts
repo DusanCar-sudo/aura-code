@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
-import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel } from '../providers/factory.js';
+import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily } from '../providers/factory.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
@@ -57,7 +57,7 @@ import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
 import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
-import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, type ModelRow } from './model-select.js';
+import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, type ModelRow } from './model-select.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
@@ -1381,6 +1381,23 @@ async function postModelSwitch(c: ReplCtx): Promise<void> {
 }
 
 /**
+ * Maps modelProviderFamily() names onto PROVIDER_LIST ids so :model can jump
+ * straight to the current provider's model list. Families with no selector
+ * entry (xai, openai-compatible fallback) open the provider list instead.
+ */
+const FAMILY_TO_PROVIDER_ID: Record<string, string | undefined> = {
+  deepseek: 'deepseek',
+  xiaomi: 'mimo',
+  zhipu: 'glm',
+  anthropic: 'anthropic',
+  google: 'gemini',
+  openrouter: 'openrouter',
+  opencode: 'opencode-zen',
+  ollama: 'ollama',
+  'openai-compatible': 'openai',
+};
+
+/**
  * Interactive model selector — shows all models grouped by provider,
  * lets the user pick by number or type a custom model ID.
  */
@@ -2037,34 +2054,27 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  // ── Provider wizard command ────────────────────────────────────────────────
+  // ── Two-level provider → model selector ──────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    // Fullscreen prompt approach was unreliable — wizard's readline and TUI's
-    // stdin handler collide. Instead, stop TUI input, let readline own stdin
-    // completely, then restart TUI input. enterFullscreenPrompt resets the
-    // scroll region so the wizard's output isn't crammed into the small scroll
-    // area (numbers were invisible because the bottom block was overwriting them).
+    // Same stdin-collision fix as showModelSelector: stop TUI input, let the
+    // selector own stdin completely, then restart TUI input.
     const wasInputActive = inputActive;
     if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
     try {
-      const cfg = await runProviderWizard(undefined, undefined);
-      if (cfg) {
-        runtimeConfig.model = cfg.model;
-        runtimeConfig.baseUrl = cfg.baseUrl;
-        runtimeConfig.apiKey = cfg.apiKey;
-        c.providerConfig.model = cfg.model;
-        c.providerConfig.baseUrl = cfg.baseUrl;
-        c.providerConfig.apiKey = cfg.apiKey;
-        resolved.model = cfg.model;
-        resolved.baseUrl = cfg.baseUrl;
-        writeOutput(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
-        // Update the TUI status line so the provider/model change is immediately visible.
-        setStatusLine([cfg.provider, cfg.model, permissionLevel].filter(Boolean).join(' · '));
-        if (fileConfig.model && fileConfig.model !== cfg.model) {
-          writeOutput(chalk.hex(TEXT_DIM_HEX)(
-            `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
-            `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
-          ));
+      const modelId = await showProviderSelector();
+      if (modelId) {
+        const r = trySetModel(c, modelId);
+        if (!r.ok) {
+          console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+        } else {
+          await postModelSwitch(c);
+          setStatusLine([resolved.model ?? modelId, permissionLevel].filter(Boolean).join(' · '));
+          if (fileConfig.model && fileConfig.model !== modelId) {
+            writeOutput(chalk.hex(TEXT_DIM_HEX)(
+              `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
+              `    Remove the "model" field from .aura.json (or set it to ${modelId}) to keep this choice.`,
+            ));
+          }
         }
       }
     } finally {
@@ -2073,28 +2083,26 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':models') {
-    const allModels = getAllModels();
-    const byProvider = allModels.reduce<Record<string, typeof allModels>>((acc, m) => {
-      (acc[m.provider] ??= []).push(m);
-      return acc;
-    }, {});
-    const listWidth = process.stdout.columns ?? 80;
-    for (const [provider, models] of Object.entries(byProvider)) {
-      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  ${provider}`));
-      const cellWidth = Math.max(...models.map(m => m.id.length)) + 3;
-      for (const line of layoutColumns(models, cellWidth, listWidth, 4)) {
-        console.log('    ' + line.map(m =>
-          chalk.hex('#cc785c')(m.id) + ' '.repeat(cellWidth - m.id.length),
-        ).join(''));
-      }
-    }
-    console.log();
-    return { handled: true };
-  }
-
   if (input === ':model' || input === '/model') {
-    await showModelSelector(c);
+    // Shortcut: skip Level 1 and open the model list for the current
+    // provider. ESC from the model list goes up to the provider list.
+    const family = modelProviderFamily(resolved.model ?? runtimeConfig.model ?? '');
+    const providerId = FAMILY_TO_PROVIDER_ID[family];
+    const wasInputActive = inputActive;
+    if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
+    try {
+      let modelId: string | 'back' | undefined = providerId
+        ? await showModelSelectorForProvider(providerId)
+        : 'back';
+      if (modelId === 'back') modelId = await showProviderSelector();
+      if (modelId) {
+        const r = trySetModel(c, modelId);
+        if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+        else await postModelSwitch(c);
+      }
+    } finally {
+      if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
+    }
     return { handled: true };
   }
 

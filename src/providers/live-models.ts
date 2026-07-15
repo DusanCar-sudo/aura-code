@@ -146,7 +146,7 @@ async function fetchOpenRouterModels(limit: number): Promise<ModelEntry[]> {
  * Never throws.
  *
  * Call once at startup (fire-and-forget, see index.ts). Safe to call
- * again later to refresh (e.g. a future `:models refresh` REPL command).
+ * again later to refresh (e.g. a future refresh REPL command).
  */
 export async function refreshLiveModels(openRouterLimit = 8): Promise<void> {
   const [anthropic, openai, google, openrouter] = await Promise.all([
@@ -157,3 +157,157 @@ export async function refreshLiveModels(openRouterLimit = 8): Promise<void> {
   ]);
   liveModelsCache = [...anthropic, ...openai, ...google, ...openrouter];
 }
+
+// ─── Per-provider live fetching for the two-level :provider selector ────────
+
+export interface LiveModel {
+  id: string;        // full prefixed id, e.g. "openrouter/openai/gpt-4o"
+  name?: string;     // display name if available
+  free?: boolean;    // true if the model is free to use
+}
+
+/**
+ * Fetch the live model list for one provider (used by the :provider / :model
+ * selectors). Falls back to empty array on any error — the caller uses the
+ * static list instead. Never throws.
+ */
+export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> {
+  try {
+    switch (providerId) {
+
+      case 'ollama': {
+        const base = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+        const r = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (!r.ok) return [];
+        const d = await r.json() as { models?: { name: string }[] };
+        return (d.models ?? []).map(m => ({ id: `ollama/${m.name}`, name: m.name }));
+      }
+
+      case 'lmstudio': {
+        const base = process.env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234';
+        const r = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `lmstudio/${m.id}`, name: m.id }));
+      }
+
+      case 'openrouter': {
+        const key = getApiKey('OPENROUTER_API_KEY');
+        if (!key) return [];
+        const r = await fetch('https://openrouter.ai/api/v1/models', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as {
+          data?: { id: string; name?: string; pricing?: { prompt: string } }[]
+        };
+        return (d.data ?? []).map(m => ({
+          id: `openrouter/${m.id}`,
+          name: m.name ?? m.id,
+          free: m.pricing?.prompt === '0',
+        }));
+      }
+
+      case 'groq': {
+        const key = getApiKey('GROQ_API_KEY');
+        if (!key) return [];
+        const r = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `groq/${m.id}`, name: m.id }));
+      }
+
+      case 'nvidia': {
+        const key = getApiKey('NVIDIA_API_KEY');
+        if (!key) return [];
+        const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `nvidia/${m.id}`, name: m.id }));
+      }
+
+      case 'gemini': {
+        const key = getApiKey('GOOGLE_API_KEY');
+        if (!key) return [];
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+          { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+        );
+        if (!r.ok) return [];
+        const d = await r.json() as { models?: { name: string; displayName?: string }[] };
+        return (d.models ?? []).map(m => ({
+          id: `gemini/${m.name.replace('models/', '')}`,
+          name: m.displayName ?? m.name,
+        }));
+      }
+
+      case 'huggingface': {
+        const key = getApiKey('HUGGINGFACE_API_KEY');
+        if (!key) return [];
+        const r = await fetch('https://huggingface.co/api/inference-endpoints', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { id?: string }[];
+        return (Array.isArray(d) ? d : []).map(m => ({
+          id: `huggingface/${m.id ?? ''}`,
+          name: m.id,
+        }));
+      }
+
+      default:
+        return [];
+    }
+  } catch {
+    return [];
+  }
+}
+
+export interface ProviderEntry {
+  id: string;
+  name: string;
+  desc: string;
+  envKey?: string;       // env var that proves it's configured
+  liveFetch?: boolean;   // true = call fetchLiveModels(id)
+}
+
+export const PROVIDER_LIST: ProviderEntry[] = [
+  { id: 'deepseek',     name: 'DeepSeek',                  desc: 'V3, R1, coder — direct API',                    envKey: 'DEEPSEEK_API_KEY' },
+  { id: 'openrouter',   name: 'OpenRouter',                desc: 'Pay-per-use aggregator, free models available',  envKey: 'OPENROUTER_API_KEY',  liveFetch: true },
+  { id: 'ollama',       name: 'Ollama (local)',             desc: 'Local models on your GPU — free',               liveFetch: true },
+  { id: 'gemini',       name: 'Google AI Studio',          desc: 'Native Gemini API',                             envKey: 'GOOGLE_API_KEY',      liveFetch: true },
+  { id: 'glm',          name: 'Z.AI / GLM',                desc: 'Zhipu direct API',                              envKey: 'GLM_API_KEY' },
+  { id: 'mimo',         name: 'Xiaomi MiMo',               desc: 'MiMo-V2.5 and V2 models',                      envKey: 'XIAOMI_API_KEY' },
+  { id: 'groq',         name: 'Groq',                      desc: 'Very fast inference',                           envKey: 'GROQ_API_KEY',        liveFetch: true },
+  { id: 'nvidia',       name: 'NVIDIA NIM',                desc: 'Nemotron models via build.nvidia.com',          envKey: 'NVIDIA_API_KEY',      liveFetch: true },
+  { id: 'anthropic',    name: 'Anthropic',                 desc: 'Claude models via API key',                     envKey: 'ANTHROPIC_API_KEY' },
+  { id: 'openai',       name: 'OpenAI',                    desc: 'GPT models direct API',                         envKey: 'OPENAI_API_KEY' },
+  { id: 'opencode-zen', name: 'OpenCode Zen',              desc: 'Pay-as-you-go endpoint',                        envKey: 'OPENCODE_API_KEY' },
+  { id: 'opencode-go',  name: 'OpenCode Go',               desc: '$10/month subscription',                        envKey: 'OPENCODE_GO_API_KEY' },
+  { id: 'lmstudio',     name: 'LM Studio',                 desc: 'Local desktop app with built-in model server',  liveFetch: true },
+  { id: 'huggingface',  name: 'Hugging Face',              desc: 'Inference Providers',                           envKey: 'HUGGINGFACE_API_KEY', liveFetch: true },
+  { id: 'vertex',       name: 'Google Vertex AI',          desc: 'Gemini via GCP; OAuth2 or ADC',                 envKey: 'GOOGLE_API_KEY' },
+  { id: 'kimi',         name: 'Kimi / Moonshot',           desc: 'Coding Plan, global & China endpoints',         envKey: 'MOONSHOT_API_KEY' },
+  { id: 'minimax',      name: 'MiniMax',                   desc: 'Global, OAuth Coding Plan & China',             envKey: 'MINIMAX_API_KEY' },
+  { id: 'qwen',         name: 'Qwen Cloud / DashScope',    desc: 'Qwen + multi-provider',                         envKey: 'DASHSCOPE_API_KEY' },
+  { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY' },
+  { id: 'tencent',      name: 'Tencent TokenHub',          desc: 'Hy3 Preview via tokenhub.tencentmaas.com',      envKey: 'TENCENT_API_KEY' },
+  { id: 'fireworks',    name: 'Fireworks AI',              desc: 'OpenAI-compatible direct model API',            envKey: 'FIREWORKS_API_KEY' },
+  { id: 'arcee',        name: 'Arcee AI',                  desc: 'Trinity models, direct API',                    envKey: 'ARCEE_API_KEY' },
+  { id: 'gmi',          name: 'GMI Cloud',                 desc: 'Multi-model direct API',                        envKey: 'GMI_API_KEY' },
+  { id: 'kilocode',     name: 'Kilo Code',                 desc: 'Kilo Gateway API',                              envKey: 'KILOCODE_API_KEY' },
+  { id: 'bedrock',      name: 'AWS Bedrock',               desc: 'Claude, Nova, Llama, DeepSeek; IAM or API key', envKey: 'AWS_ACCESS_KEY_ID' },
+  { id: 'azure',        name: 'Azure Foundry',             desc: 'OpenAI-style or Anthropic-style endpoint',      envKey: 'AZURE_API_KEY' },
+  { id: 'github',       name: 'GitHub Copilot',            desc: 'GitHub token API or copilot --acp process',     envKey: 'GITHUB_TOKEN' },
+  { id: 'upstage',      name: 'Upstage',                   desc: 'Solar API',                                     envKey: 'UPSTAGE_API_KEY' },
+  { id: 'alibaba',      name: 'Alibaba Cloud Coding Plan', desc: 'Dedicated coding tier',                         envKey: 'ALIBABA_API_KEY' },
+  { id: 'custom',       name: 'Custom endpoint',           desc: 'Enter URL manually' },
+];

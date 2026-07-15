@@ -35,8 +35,7 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':save', label: 'Save session', description: 'Rename/save current session', category: 'Session' },
   // Model
   { id: ':model', label: 'Switch model', description: 'Interactive model selector', category: 'Model / API' },
-  { id: ':models', label: 'List models', description: 'All available models', category: 'Model / API' },
-  { id: ':provider', label: 'Provider wizard', description: 'Pick provider, model, key', category: 'Model / API' },
+  { id: ':provider', label: 'Provider selector', description: 'Pick provider, then model', category: 'Model / API' },
   { id: ':apikey', label: 'Set API key', description: 'Set API key for session', category: 'Model / API' },
   // Workflows
   { id: ':workflows', label: 'List workflows', description: 'All saved workflows', category: 'Workflows' },
