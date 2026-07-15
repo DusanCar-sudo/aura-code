@@ -125,6 +125,15 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
 
 export interface RunShellInput { command: string; cwd?: string; timeout?: number }
 
+function truncateOutput(output: string, isError: boolean): string {
+  const MAX_LEN = isError ? 4000 : 2000;
+  if (!output || output.length <= MAX_LEN) return output;
+  const head = 500;
+  const tail = isError ? 3000 : 1000;
+  const truncated = output.length - head - tail;
+  return `${output.slice(0, head)}\n\n... [ TRUNCATED ${truncated} BYTES ] ...\n\n${output.slice(-tail)}`;
+}
+
 export function runShell(input: RunShellInput, projectCwd: string): string {
   let workDir: string;
   try { workDir = input.cwd ? resolveInRoot(projectCwd, input.cwd) : projectCwd; }
@@ -139,13 +148,15 @@ export function runShell(input: RunShellInput, projectCwd: string): string {
       maxBuffer: 2 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return result.trim() || '(command completed with no output)';
+    const output = result.trim() || '(command completed with no output)';
+    return truncateOutput(output, false);
   } catch (e: unknown) {
     const err = e as { stdout?: string; stderr?: string; message: string; killed?: boolean; signal?: string };
-    // Timeout shows up as either killed=true (with kill) or a SIGTERM/ETIMEDOUT message
     if (err.killed) return `Error: Command timed out after ${timeout}ms`;
     if (/ETIMEDOUT|timeout|timed out/i.test(err.message)) return `Error: Command timed out after ${timeout}ms`;
-    const out = [err.stdout?.trim(), err.stderr?.trim()].filter(Boolean).join('\n');
+    const outStdout = truncateOutput(err.stdout?.trim() || '', true);
+    const outStderr = truncateOutput(err.stderr?.trim() || '', true);
+    const out = [outStdout, outStderr].filter(Boolean).join('\n');
     return out || `Error: ${err.message}`;
   }
 }

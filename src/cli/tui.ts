@@ -959,7 +959,14 @@ function handleScrollKey(key: string): void {
 }
 
 function handleKey(key: string): void {
-  if (scrollMode) { handleScrollKey(key); return; }
+  if (scrollMode) {
+    if (isPrintableText(key) && key !== 'i' && key !== 'q') {
+      exitScrollMode();
+    } else {
+      handleScrollKey(key);
+      return;
+    }
+  }
 
   // Ctrl+P — command palette (0x10)
   if (key === '\x10') { openOverlay('palette'); return; }
