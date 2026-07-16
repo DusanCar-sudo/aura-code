@@ -561,7 +561,32 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   }
 
   // ── OpenAI (default OpenAI-compatible fallback) ───────────────────────────
+  // Guard the silent 401 path: an unrecognized model with no baseUrl and no
+  // OpenAI key would be sent to api.openai.com and fail — tell the user what
+  // routing prefix is missing instead. Ollama tags are the common culprit
+  // (their `name:tag` shape never appears in cloud model ids).
+  const looksOpenAI = /^(gpt-|o[134]|chatgpt)/.test(model);
+  if (!looksOpenAI && !config.baseUrl && !config.apiKey && !getApiKey('OPENAI_API_KEY')) {
+    const hint = model.includes(':')
+      ? ` Did you mean "ollama/${config.model}" (local Ollama model)?`
+      : ' Use a provider-prefixed id (e.g. deepseek/..., ollama/...) or set --base-url.';
+    throw new Error(`Model "${config.model}" matches no known provider and no base URL is configured.${hint}`);
+  }
   return new OpenAICompatibleProvider(config);
+}
+
+/**
+ * Best-effort repair for bare model ids that would otherwise fall through to
+ * the OpenAI-compatible default. Ollama tags carry a `name:tag` suffix
+ * (granite4.1:3b) that no cloud model id uses — those get the ollama/ prefix.
+ * Ids already recognized by modelProviderFamily pass through untouched.
+ */
+export function normalizeModelId(model: string): string {
+  const m = model.toLowerCase();
+  if (modelProviderFamily(m) !== 'openai-compatible') return model;
+  if (/^(gpt-|o[134])/.test(m)) return model; // genuinely OpenAI
+  if (m.includes(':') && !m.includes('/')) return `ollama/${model}`;
+  return model;
 }
 
 /**
