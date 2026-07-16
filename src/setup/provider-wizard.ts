@@ -195,7 +195,9 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry, askI
       console.log(chalk.hex('#8a7768')('  Start it first: ollama serve'));
       console.log(chalk.hex('#8a7768')('  Pull a model:   ollama pull llama3.2\n'));
       const manual = await askInput(rl, '  ▸ Enter model name manually (or press Enter to cancel): ');
-      return manual || null;
+      // Bare Ollama tags aren't routable — the factory needs the ollama/
+      // prefix to pick the localhost endpoint instead of the OpenAI default.
+      return manual ? (manual.startsWith('ollama/') ? manual : `ollama/${manual}`) : null;
     }
     for (let i = 0; i < ollamaModels.length; i++) {
       const num = chalk.hex('#8a7768')(String(i + 1).padStart(2) + '.');
@@ -209,7 +211,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry, askI
       console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
       return null;
     }
-    return ollamaModels[idx];
+    return `ollama/${ollamaModels[idx]}`;
   }
 
   // Standard provider — show preset model list
