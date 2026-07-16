@@ -32,6 +32,7 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
+import { RubyAlternator, DEFAULT_RUBY_CONFIG } from '../ruby/index.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
@@ -910,6 +911,22 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
+    } else if (fileConfig.ruby?.enabled) {
+      const rubyConfig = {
+        ...DEFAULT_RUBY_CONFIG,
+        ...(fileConfig.ruby ?? {}),
+      };
+      const alternator = new RubyAlternator({
+        rubyConfig,
+        largeModelProvider: provider,
+        projectRoot: ctx.root,
+        context: ctx,
+        display,
+        permissions,
+        initialHistory: activeChatHistory,
+      });
+      const altResult = await alternator.run(task);
+      result = altResult.loopResult;
     } else {
       result = await runAgentLoop({
         provider, task, context: ctx, permissions, display,
