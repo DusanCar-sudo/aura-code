@@ -54,3 +54,4 @@ google-cloud-cli-*.tar.gz
 .env.*.local
 .env!.example
 .aura.json
+graphify-out/
