@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
-import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily } from '../providers/factory.js';
+import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily, normalizeModelId } from '../providers/factory.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
@@ -393,12 +393,16 @@ const savedProvider = loadProviderConfig();
 
 // Effective model = CLI > AURA_MODEL env > .aura.json > global config > undefined
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
-const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel
+const rawEffectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel
   ?? savedProvider?.model ?? process.env.AURA_MODEL;
+// Self-heal bare ids saved by older versions (e.g. an unprefixed Ollama tag
+// that would route to api.openai.com and 401).
+const effectiveModel = rawEffectiveModel ? normalizeModelId(rawEffectiveModel) : rawEffectiveModel;
 
 // The saved provider record only applies when we're actually running the
 // model it was saved with — its baseUrl/apiKey belong to that provider.
-const savedProviderApplies = !!savedProvider && effectiveModel === savedProvider.model;
+const savedProviderApplies = !!savedProvider
+  && (effectiveModel === savedProvider.model || rawEffectiveModel === savedProvider.model);
 
 // Effective base URL = CLI > .aura.json > global config > undefined.
 // CRITICAL: the global config's baseUrl belongs to the provider the wizard
@@ -1272,6 +1276,9 @@ function envNameForModel(model: string): string | undefined {
 }
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
+  // `:model granite4.1:3b` (bare Ollama tag) must not route to the OpenAI
+  // default — normalize before switching or persisting.
+  newModel = normalizeModelId(newModel);
   const prevModel = runtimeConfig.model;
   const prevResolved = resolved.model;
   const prevApiKey = runtimeConfig.apiKey;
