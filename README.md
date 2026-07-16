@@ -75,6 +75,60 @@ Persistent memory across sessions — identity, lessons from past failures, sess
 
 ---
 
+## Live Kanban Board
+
+Aura ships with a standalone, agent-agnostic live kanban server. Any agent (Aura, AgentMesh, Claude, GPT, etc.) can update cards via a minimal HTTP API — no human dragging required.
+
+### Quick Start
+
+```bash
+# Start the kanban server (default port 3456)
+npx ts-node src/kanban/standalone-server.ts
+
+# Or with a custom port
+npx ts-node src/kanban/standalone-server.ts --port 4567
+```
+
+### API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/board` | GET | Full board state (columns + cards) |
+| `/api/cards` | GET | List cards (optional `?column=` filter) |
+| `/api/card/:id` | GET | Single card details |
+| `/api/move` | POST | Move a card — core agent action |
+| `/api/card` | POST | Create a new card |
+| `/api/card/:id` | DELETE | Delete a card |
+| `/api/stats` | GET | Board statistics |
+| `/api/events` | WS | WebSocket for live updates |
+| `/api/health` | GET | Health check |
+
+### Agent Usage (minimal prompt)
+
+An agent moves a card by posting a tiny structured diff:
+
+```json
+POST /api/move
+{
+  "cardId": "kb-a1b2c3d4",
+  "column": "in-progress",
+  "reason": "Starting implementation"
+}
+```
+
+The agent's own prompt for this is just **~21 tokens** (vs ~102 tokens for a verbose template) — saving ~4,000 tokens over a 50-move session.
+
+### MCP Tool
+
+The kanban server also exposes MCP tool definitions (`kanban_move_card`, `kanban_get_board`) in `src/kanban/mcp-tool.ts` for agents that speak the Model Context Protocol.
+
+### Columns
+
+- **Task Pipeline:** backlog → todo → in-progress → review → done
+- **Agent Workers:** orchestrator, architect, verifier — concurrent handler slots reflecting real agent state
+
+---
+
 ## Why Aura?
 
 Most coding agents start from zero every session. Aura does not.
