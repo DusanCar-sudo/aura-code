@@ -2,7 +2,7 @@
   "model": "deepseek/deepseek-v4-flash",
   "ruby": {
     "enabled": true,
-    "modelName": "qwen2.5-coder:1.5b",
+    "modelName": "granite4.1:3b",
     "ollamaBaseUrl": "http://localhost:11434/v1",
     "competenceThreshold": 0.7,
     "minAttempts": 3
