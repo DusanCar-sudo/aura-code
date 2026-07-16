@@ -22,6 +22,7 @@ import {
 } from './provider-registry.js';
 import { testProviderConnection, normalizeBaseUrl } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
+import { saveKey } from './key-store.js';
 import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig, xiaomiKeyKind } from './xiaomi.js';
 import { ZHIPU_CODING_BASE_URL, ZHIPU_GENERAL_BASE_URL } from '../providers/factory.js';
 
@@ -367,9 +368,10 @@ function saveProviderConfig(config: ProviderConfig): void {
   const entry = PROVIDER_REGISTRY.find(p => p.name === config.provider);
   const apiKeyEnv = entry?.envKey ?? '';
 
-  // Export API key as env var for the current process
+  // Persist the key in the key store (also exports it into process.env).
+  // Keys never land in provider.json — that file is world-readable config.
   if (config.apiKey && apiKeyEnv) {
-    process.env[apiKeyEnv] = config.apiKey;
+    saveKey(apiKeyEnv, config.apiKey);
     process.env[apiKeyEnv.toLowerCase()] = config.apiKey;
   }
 
@@ -391,7 +393,6 @@ function saveProviderConfig(config: ProviderConfig): void {
     provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
-    ...(config.apiKey ? { apiKey: config.apiKey } : {}),
   };
   fs.writeFileSync(
     path.join(configDir, 'provider.json'),
@@ -408,9 +409,22 @@ export function loadProviderConfig(): ProviderConfig | null {
     const configDir = process.env.XDG_CONFIG_HOME
       ? path.join(process.env.XDG_CONFIG_HOME, 'aura-code')
       : path.join(os.homedir(), '.config', 'aura-code');
-    const raw = fs.readFileSync(path.join(configDir, 'provider.json'), 'utf8');
+    const filePath = path.join(configDir, 'provider.json');
+    const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw) as ProviderConfig;
     if (!parsed.provider || !parsed.model) return null;
+    // Legacy files stored the key in plaintext here — migrate it into the
+    // key store once and strip it from the file.
+    if (parsed.apiKey) {
+      const entry = PROVIDER_REGISTRY.find(p => p.name === parsed.provider);
+      if (entry?.envKey) {
+        try {
+          saveKey(entry.envKey, parsed.apiKey);
+          const { apiKey: _dropped, ...rest } = parsed;
+          fs.writeFileSync(filePath, JSON.stringify(rest, null, 2) + '\n', { mode: 0o600 });
+        } catch { /* keep the legacy file as-is; runtime still works via parsed.apiKey */ }
+      }
+    }
     return parsed;
   } catch {
     return null;
