@@ -1125,6 +1125,24 @@ let abortController: AbortController | null = null;
           display: tuiDisplay,
         });
         result = wrapperResult.loopResult;
+      } else if (fileConfig.ruby?.enabled) {
+        const rubyConfig = {
+          ...DEFAULT_RUBY_CONFIG,
+          ...(fileConfig.ruby ?? {}),
+        };
+        const alternator = new RubyAlternator({
+          rubyConfig,
+          largeModelProvider: currentProvider,
+          projectRoot: ctx.root,
+          context: ctx,
+          display: tuiDisplay,
+          permissions,
+          initialHistory: activeChatHistory,
+          abortSignal,
+          healthTracker,
+        });
+        const altResult = await alternator.run(input);
+        result = altResult.loopResult;
       } else {
         result = await runAgentLoop({
           provider: currentProvider, task: input,

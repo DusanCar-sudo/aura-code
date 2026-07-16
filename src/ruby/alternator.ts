@@ -5,6 +5,7 @@ import { runAgentLoop, type LoopResult } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
+import type { ContextHealthTracker } from '../cli/context-health.js';
 import type {
   AlternationDecision,
   Episode,
@@ -37,6 +38,10 @@ export interface AlternatorOptions {
   confirmFn?: (message: string) => Promise<boolean>;
   /** Prior conversation history (multi-turn REPL), threaded into the loop. */
   initialHistory?: HistoryMessage[];
+  /** Abort signal (REPL Ctrl+C / :stop) — forwarded to both inner agent loops. */
+  abortSignal?: AbortSignal;
+  /** Shared context-health tracker (the REPL's) — forwarded to both inner agent loops. */
+  healthTracker?: ContextHealthTracker;
 }
 
 export interface AlternatorRunResult {
@@ -215,6 +220,8 @@ export class RubyAlternator {
               maxTurns: 15,
               confirmFn: this.opts.confirmFn,
               initialHistory: this.opts.initialHistory,
+              abortSignal: this.opts.abortSignal,
+              healthTracker: this.opts.healthTracker,
             });
 
             rubyTokens = loopResult.usage.totalTokens;
@@ -248,6 +255,8 @@ export class RubyAlternator {
             disableSpawn: true,
             confirmFn: this.opts.confirmFn,
             initialHistory: this.opts.initialHistory,
+            abortSignal: this.opts.abortSignal,
+            healthTracker: this.opts.healthTracker,
           });
           largeModelTokens = loopResult.usage.totalTokens;
           largeModelOutput = loopResult.summary;
