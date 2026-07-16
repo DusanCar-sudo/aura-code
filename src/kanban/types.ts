@@ -25,7 +25,10 @@ export interface KanbanBoard {
   cards: KanbanCard[];
 }
 
-export const DEFAULT_COLUMNS = ['backlog', 'todo', 'in-progress', 'review', 'done'] as const;
+export const DEFAULT_COLUMNS = [
+  'backlog', 'todo', 'in-progress', 'review', 'done',
+  'agent-orchestrator', 'agent-architect', 'agent-verifier',
+] as const;
 
 export const PRIORITY_ORDER: Record<CardPriority, number> = {
   critical: 4,
