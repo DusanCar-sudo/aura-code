@@ -4,6 +4,7 @@ import { apiKeyEnvVarForModel, modelProviderFamily, getAllModels } from '../prov
 import { PROVIDER_LIST, fetchLiveModels } from '../providers/live-models.js';
 import type { LiveModel } from '../providers/live-models.js';
 import { getApiKey, saveToAgentsEnv } from '../util/env.js';
+import { saveKey } from '../setup/key-store.js';
 import type { ProviderEntry } from '../providers/live-models.js';
 
 /**
@@ -426,8 +427,8 @@ async function updateApiKeyFlow(entry: ProviderEntry): Promise<void> {
     console.log(chalk.hex(DIM)('  Unchanged.\n'));
     return;
   }
-  const file = saveToAgentsEnv(entry.envKey, key);
-  console.log(chalk.hex(GREEN)(`  ✓ Key saved`) + chalk.hex(DIM)(` (${entry.envKey} → ${file})\n`));
+  saveKey(entry.envKey, key);
+  console.log(chalk.hex(GREEN)(`  ✓ Key saved`) + chalk.hex(DIM)(` (${entry.envKey} → ~/.aura/keys.json)\n`));
 }
 
 /** [U] Change base URL — visible input, agents.env save. */
@@ -499,6 +500,13 @@ export async function showProviderSelector(): Promise<string | undefined> {
           await updateBaseUrlFlow(entry);
           continue;
         case 'models': {
+          // Hermes-style: first use of a keyed provider prompts for the key
+          // once, stores it, and moves straight on to the live model list.
+          if (entry.envKey && !getApiKey(entry.envKey)) {
+            console.log(chalk.hex(DIM)(`\n  ${entry.name} needs an API key (${entry.envKey}).`));
+            await updateApiKeyFlow(entry);
+            if (!getApiKey(entry.envKey)) continue; // declined — back to submenu
+          }
           const model = await showModelSelectorForProvider(entry.id);
           if (model === 'back') continue;
           return model;
@@ -534,8 +542,8 @@ export async function promptAuthKeyUpdate(model: string): Promise<string | undef
     console.log(chalk.hex(DIM)('  Unchanged.\n'));
     return undefined;
   }
-  const file = saveToAgentsEnv(envKey, key);
-  console.log(chalk.hex(GREEN)('  ✓ Key saved') + chalk.hex(DIM)(` (${envKey} → ${file})\n`));
+  saveKey(envKey, key);
+  console.log(chalk.hex(GREEN)('  ✓ Key saved') + chalk.hex(DIM)(` (${envKey} → ~/.aura/keys.json)\n`));
   return key;
 }
 
