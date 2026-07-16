@@ -167,13 +167,63 @@ export interface LiveModel {
 }
 
 /**
+ * Providers whose /models endpoint speaks the OpenAI wire format
+ * (GET {base}/models → { data: [{ id }] }). One generic fetch covers all.
+ * `prefix` is the routing prefix createProvider expects; empty string for
+ * families the factory pattern-matches on the bare id (gpt-*, glm-*, …).
+ */
+const OPENAI_COMPAT_MODELS: Record<string, { base: string; envKey: string; prefix: string; exclude?: RegExp }> = {
+  deepseek:       { base: 'https://api.deepseek.com/v1',    envKey: 'DEEPSEEK_API_KEY', prefix: 'deepseek/' },
+  openai:         { base: 'https://api.openai.com/v1',      envKey: 'OPENAI_API_KEY',   prefix: '', exclude: OPENAI_EXCLUDE },
+  glm:            { base: 'https://api.z.ai/api/paas/v4',   envKey: 'ZHIPU_API_KEY',    prefix: '' },
+  'opencode-zen': { base: 'https://opencode.ai/zen/v1',     envKey: 'OPENCODE_API_KEY', prefix: 'zen/' },
+  fireworks:      { base: 'https://api.fireworks.ai/inference/v1', envKey: 'FIREWORKS_API_KEY', prefix: 'fireworks/' },
+};
+
+async function fetchOpenAICompatModels(cfg: { base: string; envKey: string; prefix: string; exclude?: RegExp }): Promise<LiveModel[]> {
+  const key = getApiKey(cfg.envKey);
+  if (!key) return [];
+  const base = process.env[cfg.envKey.replace(/_API_KEY$/, '_BASE_URL')] ?? cfg.base;
+  const r = await fetch(`${base}/models`, {
+    headers: { Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!r.ok) return [];
+  const d = await r.json() as { data?: { id: string }[] };
+  return (d.data ?? [])
+    .filter(m => !cfg.exclude || !cfg.exclude.test(m.id))
+    .map(m => ({ id: `${cfg.prefix}${m.id}`, name: m.id }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
  * Fetch the live model list for one provider (used by the :provider / :model
  * selectors). Falls back to empty array on any error — the caller uses the
  * static list instead. Never throws.
  */
 export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> {
   try {
+    const compat = OPENAI_COMPAT_MODELS[providerId];
+    if (compat) return await fetchOpenAICompatModels(compat);
+
     switch (providerId) {
+
+      case 'anthropic': {
+        // Bare claude-* ids route natively — no prefix needed.
+        return (await fetchAnthropicModels()).map(m => ({ id: m.id, name: m.name }));
+      }
+
+      case 'mimo': {
+        // Endpoint depends on key type: tp- keys → Token Plan host,
+        // sk- keys → pay-as-you-go host (mirrors factory routing).
+        const key = getApiKey('XIAOMI_API_KEY');
+        if (!key) return [];
+        const base = process.env.XIAOMI_BASE_URL
+          ?? (key.startsWith('tp-')
+            ? 'https://token-plan-sgp.xiaomimimo.com/v1'
+            : 'https://api.xiaomimimo.com/v1');
+        return await fetchOpenAICompatModels({ base, envKey: 'XIAOMI_API_KEY', prefix: '' });
+      }
 
       case 'ollama': {
         const base = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
@@ -280,17 +330,17 @@ export interface ProviderEntry {
 }
 
 export const PROVIDER_LIST: ProviderEntry[] = [
-  { id: 'deepseek',     name: 'DeepSeek',                  desc: 'V3, R1, coder — direct API',                    envKey: 'DEEPSEEK_API_KEY' },
+  { id: 'deepseek',     name: 'DeepSeek',                  desc: 'V3, R1, coder — direct API',                    envKey: 'DEEPSEEK_API_KEY',    liveFetch: true },
   { id: 'openrouter',   name: 'OpenRouter',                desc: 'Pay-per-use aggregator, free models available',  envKey: 'OPENROUTER_API_KEY',  liveFetch: true },
   { id: 'ollama',       name: 'Ollama (local)',             desc: 'Local models on your GPU — free',               liveFetch: true },
   { id: 'gemini',       name: 'Google AI Studio',          desc: 'Native Gemini API',                             envKey: 'GOOGLE_API_KEY',      liveFetch: true },
-  { id: 'glm',          name: 'Z.AI / GLM',                desc: 'Zhipu direct API',                              envKey: 'GLM_API_KEY' },
-  { id: 'mimo',         name: 'Xiaomi MiMo',               desc: 'MiMo-V2.5 and V2 models',                      envKey: 'XIAOMI_API_KEY' },
+  { id: 'glm',          name: 'Z.AI / GLM',                desc: 'Zhipu direct API',                              envKey: 'ZHIPU_API_KEY',       liveFetch: true },
+  { id: 'mimo',         name: 'Xiaomi MiMo',               desc: 'MiMo-V2.5 and V2 models',                      envKey: 'XIAOMI_API_KEY',      liveFetch: true },
   { id: 'groq',         name: 'Groq',                      desc: 'Very fast inference',                           envKey: 'GROQ_API_KEY',        liveFetch: true },
   { id: 'nvidia',       name: 'NVIDIA NIM',                desc: 'Nemotron models via build.nvidia.com',          envKey: 'NVIDIA_API_KEY',      liveFetch: true },
-  { id: 'anthropic',    name: 'Anthropic',                 desc: 'Claude models via API key',                     envKey: 'ANTHROPIC_API_KEY' },
-  { id: 'openai',       name: 'OpenAI',                    desc: 'GPT models direct API',                         envKey: 'OPENAI_API_KEY' },
-  { id: 'opencode-zen', name: 'OpenCode Zen',              desc: 'Pay-as-you-go endpoint',                        envKey: 'OPENCODE_API_KEY' },
+  { id: 'anthropic',    name: 'Anthropic',                 desc: 'Claude models via API key',                     envKey: 'ANTHROPIC_API_KEY',   liveFetch: true },
+  { id: 'openai',       name: 'OpenAI',                    desc: 'GPT models direct API',                         envKey: 'OPENAI_API_KEY',      liveFetch: true },
+  { id: 'opencode-zen', name: 'OpenCode Zen',              desc: 'Pay-as-you-go endpoint',                        envKey: 'OPENCODE_API_KEY',    liveFetch: true },
   { id: 'opencode-go',  name: 'OpenCode Go',               desc: '$10/month subscription',                        envKey: 'OPENCODE_GO_API_KEY' },
   { id: 'lmstudio',     name: 'LM Studio',                 desc: 'Local desktop app with built-in model server',  liveFetch: true },
   { id: 'huggingface',  name: 'Hugging Face',              desc: 'Inference Providers',                           envKey: 'HUGGINGFACE_API_KEY', liveFetch: true },
@@ -300,7 +350,7 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'qwen',         name: 'Qwen Cloud / DashScope',    desc: 'Qwen + multi-provider',                         envKey: 'DASHSCOPE_API_KEY' },
   { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY' },
   { id: 'tencent',      name: 'Tencent TokenHub',          desc: 'Hy3 Preview via tokenhub.tencentmaas.com',      envKey: 'TENCENT_API_KEY' },
-  { id: 'fireworks',    name: 'Fireworks AI',              desc: 'OpenAI-compatible direct model API',            envKey: 'FIREWORKS_API_KEY' },
+  { id: 'fireworks',    name: 'Fireworks AI',              desc: 'OpenAI-compatible direct model API',            envKey: 'FIREWORKS_API_KEY',   liveFetch: true },
   { id: 'arcee',        name: 'Arcee AI',                  desc: 'Trinity models, direct API',                    envKey: 'ARCEE_API_KEY' },
   { id: 'gmi',          name: 'GMI Cloud',                 desc: 'Multi-model direct API',                        envKey: 'GMI_API_KEY' },
   { id: 'kilocode',     name: 'Kilo Code',                 desc: 'Kilo Gateway API',                              envKey: 'KILOCODE_API_KEY' },
