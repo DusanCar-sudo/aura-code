@@ -586,6 +586,8 @@ async function main() {
   let activeChatId: string | undefined;
   let activeChatHistory: import('../providers/types.js').HistoryMessage[] = [];
   let activeChatTitle: string | undefined;
+  // Runtime Ruby toggle: undefined = defer to .aura.json, true/false = session override
+  let rubyOverride: boolean | undefined = undefined;
 
   if (!noSession) {
     if (argv['new-session']) {
@@ -1081,6 +1083,7 @@ let abortController: AbortController | null = null;
       chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
       sessionPath,
       healthTracker,
+      rubyOverride,
     };
 
     // Check for REPL commands
@@ -1089,6 +1092,7 @@ let abortController: AbortController | null = null;
       if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
       if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
       if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
+      if (cmdResult.newRubyOverride !== undefined) rubyOverride = cmdResult.newRubyOverride;
       if (activeChatId) setChatId(activeChatId);
       return;
     }
@@ -1125,7 +1129,7 @@ let abortController: AbortController | null = null;
           display: tuiDisplay,
         });
         result = wrapperResult.loopResult;
-      } else if (fileConfig.ruby?.enabled) {
+      } else if (rubyOverride !== undefined ? rubyOverride : fileConfig.ruby?.enabled) {
         const rubyConfig = {
           ...DEFAULT_RUBY_CONFIG,
           ...(fileConfig.ruby ?? {}),
@@ -1275,6 +1279,7 @@ interface ReplCtx {
   chatState: ChatState;
   sessionPath: string | undefined;
   healthTracker: ContextHealthTracker;
+  rubyOverride: boolean | undefined;
 }
 
 interface ReplCommandResult {
@@ -1282,6 +1287,7 @@ interface ReplCommandResult {
   newChatId?: string | undefined;
   newHistory?: import('../providers/types.js').HistoryMessage[];
   newTitle?: string | undefined;
+  newRubyOverride?: boolean;
 }
 
 /**
@@ -1912,6 +1918,16 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const result = await runBtwQuery(question, buildProvider(c.display), c.ctx);
     console.log(renderBtwAnswer(result.answer, result.tokens));
     return { handled: true };
+  }
+
+  if (input === ':rubyon') {
+    c.display.success('Ruby Alternator: ON for this session (overrides .aura.json until :rubyoff or restart).');
+    return { handled: true, newRubyOverride: true };
+  }
+
+  if (input === ':rubyoff') {
+    c.display.success('Ruby Alternator: OFF for this session (overrides .aura.json until :rubyon or restart).');
+    return { handled: true, newRubyOverride: false };
   }
 
   if (input === ':help' || input === '/help') {
