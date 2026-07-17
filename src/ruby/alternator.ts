@@ -138,6 +138,49 @@ async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
   }
 }
 
+interface RubyVerification {
+  valid: boolean;
+  reason: string;
+}
+
+/**
+ * Cheap correctness gate on Ruby's answer: one `complete()` call to the large
+ * model with no tools and no history — deliberately NOT a full agent loop.
+ * Fail-safe: any verification error counts as invalid (escalate), never as
+ * silent trust.
+ */
+async function verifyRubyAnswer(
+  task: string,
+  answer: string,
+  verifierProvider: LLMProvider,
+): Promise<RubyVerification> {
+  const prompt = [
+    `Task: ${task}`,
+    ``,
+    `Proposed answer:`,
+    answer,
+    ``,
+    `Does this answer correctly and completely address the task? `,
+    `Reply with exactly one line: either "VALID" or "INVALID: <short reason>".`,
+  ].join('\n');
+
+  try {
+    const response = await verifierProvider.complete(
+      'You are a strict verifier. Judge only whether the proposed answer addresses the task. Reply with exactly one line.',
+      [{ role: 'user', content: prompt }],
+      [],
+    );
+    const text = response.text.trim();
+    if (text.toUpperCase().startsWith('VALID')) {
+      return { valid: true, reason: '' };
+    }
+    const reason = text.replace(/^INVALID:?\s*/i, '') || 'failed verification';
+    return { valid: false, reason };
+  } catch (e) {
+    return { valid: false, reason: `verification error: ${String(e)}` };
+  }
+}
+
 function buildRubyProvider(config: RubyConfig): OpenAICompatibleProvider {
   return new OpenAICompatibleProvider(
     {
@@ -228,11 +271,22 @@ export class RubyAlternator {
             rubyOutput = loopResult.summary;
 
             if (isNonEmptyResult(rubyOutput) && loopResult.success) {
-              rubySucceeded = true;
-              usedRuby = true;
-              result = rubyOutput!;
-              finalLoopResult = loopResult;
-              this.display.success('Ruby handled the task without escalation.');
+              const verification = await verifyRubyAnswer(
+                task,
+                rubyOutput!,
+                largeModelProvider,
+              );
+              if (verification.valid) {
+                rubySucceeded = true;
+                usedRuby = true;
+                result = rubyOutput!;
+                finalLoopResult = loopResult;
+                this.display.success('Ruby handled the task without escalation.');
+              } else {
+                this.display.warning(
+                  `Ruby's answer failed verification (${verification.reason}) — escalating.`,
+                );
+              }
             } else {
               this.display.warning('Ruby did not produce a usable result — escalating.');
             }
