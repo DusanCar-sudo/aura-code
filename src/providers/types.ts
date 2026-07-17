@@ -107,4 +107,6 @@ export interface ProviderConfig {
   baseUrl?: string;     // For custom endpoints (Ollama, LM Studio, proxies)
   maxTokens?: number;
   temperature?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
 }

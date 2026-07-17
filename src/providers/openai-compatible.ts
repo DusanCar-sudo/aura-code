@@ -14,6 +14,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private client: OpenAI;
   private maxTokens: number;
   private temperature: number;
+  private frequencyPenalty: number;
+  private presencePenalty: number;
   private reasoningEffort?: string;
 
   constructor(config: ProviderConfig, providerName?: string) {
@@ -24,6 +26,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.maxTokens = config.maxTokens ?? 16384;
     this.reasoningEffort = deriveProviderName(config) === 'Zhipu' ? 'high' : undefined;
     this.temperature = config.temperature ?? 0.2;
+    // Nonzero penalties discourage degenerate repetition loops (observed live
+    // with DeepSeek); 0.3 is conservative enough not to hurt code generation.
+    this.frequencyPenalty = config.frequencyPenalty ?? 0.3;
+    this.presencePenalty = config.presencePenalty ?? 0.3;
     this.name = providerName ?? deriveProviderName(config);
 
     this.client = new OpenAI({
@@ -42,6 +48,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
+      frequency_penalty: this.frequencyPenalty,
+      presence_penalty: this.presencePenalty,
       tools: tools.length > 0 ? tools.map(toOpenAITool) : undefined,
       messages,
       // GLM defaults to "max" thinking effort (~85k reasoning tokens per Z.ai's
@@ -62,6 +70,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
+      frequency_penalty: this.frequencyPenalty,
+      presence_penalty: this.presencePenalty,
       tools: tools.length > 0 ? tools.map(toOpenAITool) : undefined,
       messages,
       stream: true,
