@@ -2,6 +2,53 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.10.5] — 2026-07-17
+
+The Ruby Principle release: the local+cloud alternation layer is now wired
+into both execution paths, gated by real verification, and controllable at
+runtime.
+
+### Added
+- **RubyAlternator wired into the CLI single-task path.** `aura "<task>"` now
+  routes through the alternator when `.aura.json` has `ruby.enabled: true` —
+  a small local Ollama model attempts the task first, escalating to the large
+  model on failure.
+- **RubyAlternator wired into the TUI/REPL path** with abort support
+  (Ctrl+C forwarded into both inner agent loops), shared context-health
+  tracker, session history, and the session's real permission system —
+  the Ruby attempt can no longer auto-approve operations the user's mode
+  would have prompted for.
+- **Verification gate on Ruby answers.** Before a Ruby result is trusted, a
+  single no-tools `complete()` call to the large model judges whether the
+  answer actually addresses the task (`VALID` / `INVALID: <reason>`). Catches
+  confident-but-wrong drift, not just crashes and empty output. Fail-safe:
+  any verification error counts as invalid and escalates.
+- **`:rubyon` / `:rubyoff` REPL commands** — session-scoped runtime override
+  of `.aura.json`'s `ruby.enabled`, following the existing
+  `ReplCommandResult` state pattern. Registered in the Ctrl+P command
+  palette and `:help`.
+- **Standalone live kanban server** (`src/kanban/`) — agent-agnostic HTTP API
+  + WebSocket board with MCP tool wrappers and three agent-worker lanes.
+
+### Changed
+- **Ruby local model switched to `granite4.1:3b`** (IBM Granite 4.1, 3B) via
+  Ollama — notably accurate for its size in testing. The shipped code default
+  (`DEFAULT_RUBY_CONFIG`) remains `qwen2.5-coder:1.5b`; set `ruby.modelName`
+  in `.aura.json` to use Granite.
+
+### Fixed
+- **Provider prefix routing** — `zen/`, `nvidia/`, `groq/`, `gemini/`,
+  `huggingface/`, `kimi/`, `qwen/`, `minimax/`, `stepfun/`, `fireworks/`,
+  `upstage/`, `arcee/`, `tencent/`, `gmi/`, `kilocode/`, `alibaba/` prefixes
+  now resolve to their providers.
+- **Giant tool results no longer poison context** and defeat compaction.
+- **Provider key management in `:provider` selector** with 401/403 recovery.
+- **Severe local-model prefill slowness under Ollama's Vulkan backend on AMD
+  iGPUs** — Vulkan prefill throughput was far below CPU on this hardware,
+  making local-model calls hang for minutes. Environment-level fix (run
+  Ollama CPU-only via `GGML_VK_VISIBLE_DEVICES`); guidance documented in the
+  README's Ruby Principle section.
+
 ## [0.10.1] — 2026-07-11
 
 ### Fixed
