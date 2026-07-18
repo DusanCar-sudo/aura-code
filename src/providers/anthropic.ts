@@ -68,6 +68,7 @@ export class AnthropicProvider implements LLMProvider {
     let inputTokens = 0;
     let outputTokens = 0;
     let cacheRead = 0;
+    let cacheCreation = 0;
 
     for await (const event of stream) {
       if (event.type === 'content_block_start') {
@@ -112,8 +113,9 @@ export class AnthropicProvider implements LLMProvider {
             cache_read_input_tokens?: number;
           };
           cacheRead = u.cache_read_input_tokens ?? 0;
+          cacheCreation = u.cache_creation_input_tokens ?? 0;
           if (process.env.AURA_DEBUG_CACHE) {
-            console.error(`[cache] creation=${u.cache_creation_input_tokens ?? 0} read=${cacheRead} input=${u.input_tokens}`);
+            console.error(`[cache] creation=${cacheCreation} read=${cacheRead} input=${u.input_tokens}`);
           }
         }
       }
@@ -125,7 +127,11 @@ export class AnthropicProvider implements LLMProvider {
         text: textBuffer,
         toolCalls: completed,
         stopReason,
-        usage: { inputTokens, outputTokens, ...(cacheRead > 0 ? { cachedTokens: cacheRead } : {}) },
+        usage: {
+          inputTokens, outputTokens,
+          ...(cacheRead > 0 ? { cachedTokens: cacheRead } : {}),
+          ...(cacheCreation > 0 ? { cacheCreationTokens: cacheCreation } : {}),
+        },
       },
     };
   }
@@ -245,6 +251,7 @@ export function fromAnthropicResponse(response: Anthropic.Message): LLMResponse 
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       ...(cacheRead > 0 ? { cachedTokens: cacheRead } : {}),
+      ...(cacheCreation > 0 ? { cacheCreationTokens: cacheCreation } : {}),
     },
   };
 }

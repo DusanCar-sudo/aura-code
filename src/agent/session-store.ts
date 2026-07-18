@@ -3,6 +3,32 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import type { HistoryMessage } from '../providers/types.js';
 
+/** Usage for a single provider API call, straight from the API response —
+ *  never estimated. cost is computed from the same pricing table /stats uses.
+ *  Defined here (not loop.ts) so session-store never imports the loop. */
+export interface TurnUsage {
+  turn: number;
+  at: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+}
+
+/** Real usage accumulated across every run saved into this session, sourced
+ *  from provider API responses (LoopResult.usage / LoopResult.turnUsage) —
+ *  never estimated from text. Absent on sessions saved before this existed. */
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  /** One entry per provider API call, across all runs, oldest first. */
+  turns: TurnUsage[];
+}
+
 export interface ChatSession {
   id: string;
   title: string;
@@ -10,6 +36,20 @@ export interface ChatSession {
   updatedAt: string;
   version: number;
   history: HistoryMessage[];
+  usage?: SessionUsage;
+}
+
+/** Accumulate one run's real usage into a session's running totals. */
+function mergeSessionUsage(existing: SessionUsage | undefined, run: SessionUsage): SessionUsage {
+  if (!existing) return run;
+  return {
+    inputTokens: existing.inputTokens + run.inputTokens,
+    outputTokens: existing.outputTokens + run.outputTokens,
+    cachedTokens: existing.cachedTokens + run.cachedTokens,
+    cacheCreationTokens: existing.cacheCreationTokens + run.cacheCreationTokens,
+    costUsd: existing.costUsd + run.costUsd,
+    turns: [...(existing.turns ?? []), ...run.turns],
+  };
 }
 
 /**
@@ -89,6 +129,7 @@ export const sessionStore = {
     id: string,
     history: HistoryMessage[],
     existingTitle?: string,
+    runUsage?: SessionUsage,
   ): Promise<ChatSession> {
     let session = await this.loadSession(projectRoot, id);
     const now = new Date().toISOString();
@@ -106,6 +147,9 @@ export const sessionStore = {
         history,
       };
     }
+    // Additive: undefined runUsage leaves any previously accumulated usage
+    // untouched (title-only saves, MoA/Ruby paths that don't collect it yet).
+    if (runUsage) session.usage = mergeSessionUsage(session.usage, runUsage);
     await this.saveSession(projectRoot, session);
     return session;
   },
