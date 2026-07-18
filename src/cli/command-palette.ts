@@ -58,6 +58,7 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':help', label: 'Help', description: 'Show all commands', category: 'System' },
   { id: ':rubyon', label: 'Ruby On', description: 'Enable Ruby Alternator for this session', category: 'System' },
   { id: ':rubyoff', label: 'Ruby Off', description: 'Disable Ruby Alternator for this session', category: 'System' },
+  { id: ':rubymodel', label: 'Ruby Model', description: 'Set Ruby local model for this session  e.g. :rubymodel qwen3-vl:4b', category: 'System' },
   { id: ':q', label: 'Quit', description: 'Exit Aura', category: 'System' },
   { id: ':context', label: 'Context health', description: 'Token usage dashboard', category: 'System' },
   { id: ':doctor', label: 'Doctor', description: 'Run health checks', category: 'System' },

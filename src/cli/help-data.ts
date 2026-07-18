@@ -61,6 +61,8 @@ export const HELP_TEXT = [
   '  ── Ruby ──────────────────────────────────────────',
   '  :rubyon                 Enable Ruby Alternator for this session (overrides .aura.json)',
   '  :rubyoff                Disable Ruby Alternator for this session (overrides .aura.json)',
+  '  :rubymodel <tag>        Set Ruby local model for this session (e.g. :rubymodel qwen3-vl:4b)',
+  '  :rubymodel              Show current Ruby model setting',
   '',
   '  ── Context / Stats ──────────────────────────────',
   '  :compact, :compress     Force compaction now (reuses auto-compaction logic)',
