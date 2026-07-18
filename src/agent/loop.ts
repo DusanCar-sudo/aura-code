@@ -7,7 +7,8 @@ import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import type { ProjectContext } from './context.js';
 import type { Display } from '../cli/display.js';
-import { sessionStore } from './session-store.js';
+import { sessionStore, type TurnUsage } from './session-store.js';
+export type { TurnUsage };
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
 import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
@@ -80,6 +81,10 @@ export interface LoopResult {
   history: HistoryMessage[];
   /** Every tool call made during this loop run — used by the verify layer. */
   toolCallLog: Array<{ name: string; input: Record<string, unknown> }>;
+  /** Real per-API-call usage as reported by the provider, one entry per
+   *  completed call. Optional so older consumers/paths (MoA, Ruby) that
+   *  don't collect it stay type-compatible. */
+  turnUsage?: TurnUsage[];
 }
 
 export interface TokenUsage {
@@ -173,6 +178,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const { opts, provider, system, history, profile, pricingModel, display, permissions } = args;
   let { turns, toolCallCount, usage } = args;
   const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const turnUsage: TurnUsage[] = [];
   // Bounded record of state-altering calls; its digest survives compaction so
   // the model never repeats a write/edit/command it already executed.
   const execQueue = new ExecutiveQueue();
@@ -307,7 +313,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             if (chunk.response.toolCalls.length > 0 && responseToolCalls.length === 0) {
               responseToolCalls.push(...chunk.response.toolCalls);
             }
-            const u = (chunk.response as { usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }).usage;
+            const u = (chunk.response as { usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; cacheCreationTokens?: number } }).usage;
             if (u) {
               const inT = u.inputTokens ?? 0;
               const outT = u.outputTokens ?? 0;
@@ -316,6 +322,15 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
               usage.outputTokens += outT;
               usage.totalTokens += inT + outT;
               usage.cachedTokens += cachedT;
+              turnUsage.push({
+                turn: turns,
+                at: new Date().toISOString(),
+                inputTokens: inT,
+                outputTokens: outT,
+                cachedTokens: cachedT,
+                cacheCreationTokens: u.cacheCreationTokens ?? 0,
+                costUsd: costFor(pricingModel, inT, outT, cachedT),
+              });
             }
             break;
         }
@@ -327,7 +342,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: false,
         summary: `Provider error on turn ${turns}: ${errMsg}`,
-        turns, toolCallCount, usage, history, toolCallLog,
+        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
     }
@@ -355,7 +370,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: false,
         summary: 'Provider returned empty response after 4 attempts — likely rate-limited or filtered',
-        turns, toolCallCount, usage, history, toolCallLog,
+        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
     }
@@ -366,7 +381,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: true,
         summary: responseText,
-        turns, toolCallCount, usage, history, toolCallLog,
+        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
     }
@@ -491,7 +506,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   return {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,
-    turns, toolCallCount, usage, history, toolCallLog,
+    turns, toolCallCount, usage, history, toolCallLog, turnUsage,
     costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
   };
 }

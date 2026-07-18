@@ -43,7 +43,7 @@ import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
 import pkg from '../../package.json';
 
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
-import { sessionStore } from '../agent/session-store.js';
+import { sessionStore, type SessionUsage } from '../agent/session-store.js';
 import type { LLMProvider } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
@@ -494,6 +494,26 @@ function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMPr
 // ─────────────────────────────────────────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Shape a finished loop run's real API usage for session storage. Returns
+ *  undefined when the run produced no usage data (so upsertSession leaves any
+ *  previously accumulated session usage untouched). */
+function sessionUsageFrom(result: {
+  usage?: { inputTokens: number; outputTokens: number; cachedTokens: number };
+  costUsd?: number;
+  turnUsage?: SessionUsage['turns'];
+}): SessionUsage | undefined {
+  if (!result.usage) return undefined;
+  const turns = result.turnUsage ?? [];
+  return {
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    cachedTokens: result.usage.cachedTokens ?? 0,
+    cacheCreationTokens: turns.reduce((s, t) => s + t.cacheCreationTokens, 0),
+    costUsd: result.costUsd ?? 0,
+    turns,
+  };
+}
 
 async function main() {
   const display = createTerminalDisplay();
@@ -960,7 +980,7 @@ async function main() {
     }
 
     if (activeChatId && !noSession) {
-      await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
+      await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle, sessionUsageFrom(result));
     }
     {
       const { recordEpisode } = await import('../dream/episode.js');
@@ -1229,7 +1249,7 @@ let abortController: AbortController | null = null;
 
     // Persist session
     if (activeChatId && !noSession) {
-      await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
+      await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle, sessionUsageFrom(result));
     }
 
     {

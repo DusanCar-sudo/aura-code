@@ -54,7 +54,7 @@ export interface LLMResponse {
   text: string;                  // Any prose the model wrote (may be empty)
   toolCalls: ToolCall[];         // Tool invocations (may be empty)
   stopReason: 'done' | 'tools' | 'limit';
-  usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
+  usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number; cacheCreationTokens?: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
