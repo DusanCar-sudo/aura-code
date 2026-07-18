@@ -609,6 +609,8 @@ async function main() {
   let activeChatTitle: string | undefined;
   // Runtime Ruby toggle: undefined = defer to .aura.json, true/false = session override
   let rubyOverride: boolean | undefined = undefined;
+  // Runtime Ruby model override: undefined = defer to .aura.json, string = session override
+  let rubyModelOverride: string | undefined = undefined;
 
   if (!noSession) {
     if (argv['new-session']) {
@@ -938,9 +940,9 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
-    } else if (fileConfig.ruby?.enabled) {
-      const { config: rubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
-      if (!rubyConfig) {
+    } else if (rubyOverride ?? fileConfig.ruby?.enabled) {
+      const { config: baseRubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
+      if (!baseRubyConfig) {
         display.warning(reason);
         result = await runAgentLoop({
           provider, task, context: ctx, permissions, display,
@@ -954,6 +956,10 @@ async function main() {
         });
       } else {
         display.success(reason);
+        const rubyConfig = {
+          ...baseRubyConfig,
+          ...(rubyModelOverride ? { modelName: rubyModelOverride } : {}),
+        };
         const alternator = new RubyAlternator({
           rubyConfig,
           largeModelProvider: provider,
@@ -1117,6 +1123,7 @@ let abortController: AbortController | null = null;
       sessionPath,
       healthTracker,
       rubyOverride,
+      rubyModelOverride,
     };
 
     // Check for REPL commands
@@ -1126,6 +1133,7 @@ let abortController: AbortController | null = null;
       if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
       if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
       if (cmdResult.newRubyOverride !== undefined) rubyOverride = cmdResult.newRubyOverride;
+      if (cmdResult.newRubyModelOverride !== undefined) rubyModelOverride = cmdResult.newRubyModelOverride;
       if (activeChatId) setChatId(activeChatId);
       return;
     }
@@ -1163,8 +1171,8 @@ let abortController: AbortController | null = null;
         });
         result = wrapperResult.loopResult;
       } else if (rubyOverride !== undefined ? rubyOverride : fileConfig.ruby?.enabled) {
-        const { config: rubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
-        if (!rubyConfig) {
+        const { config: baseRubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
+        if (!baseRubyConfig) {
           tuiDisplay.warning(reason);
           result = await runAgentLoop({
             provider: currentProvider, task: input,
@@ -1181,6 +1189,10 @@ let abortController: AbortController | null = null;
           });
         } else {
           tuiDisplay.success(reason);
+          const rubyConfig = {
+            ...baseRubyConfig,
+            ...(rubyModelOverride ? { modelName: rubyModelOverride } : {}),
+          };
           const alternator = new RubyAlternator({
             rubyConfig,
             largeModelProvider: currentProvider,
@@ -1328,6 +1340,7 @@ interface ReplCtx {
   sessionPath: string | undefined;
   healthTracker: ContextHealthTracker;
   rubyOverride: boolean | undefined;
+  rubyModelOverride: string | undefined;
 }
 
 interface ReplCommandResult {
@@ -1336,6 +1349,7 @@ interface ReplCommandResult {
   newHistory?: import('../providers/types.js').HistoryMessage[];
   newTitle?: string | undefined;
   newRubyOverride?: boolean;
+  newRubyModelOverride?: string;
 }
 
 /**
@@ -1976,6 +1990,21 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':rubyoff') {
     c.display.success('Ruby Alternator: OFF for this session (overrides .aura.json until :rubyon or restart).');
     return { handled: true, newRubyOverride: false };
+  }
+
+  if (input.startsWith(':rubymodel ')) {
+    const modelTag = input.slice(11).trim();
+    if (!modelTag) {
+      c.display.warning('Usage: :rubymodel <ollama-model-tag>  e.g. :rubymodel qwen3-vl:4b');
+      return { handled: true };
+    }
+    return { handled: true, newRubyModelOverride: modelTag };
+  }
+
+  if (input === ':rubymodel') {
+    const current = c.rubyModelOverride ?? '(from .aura.json or auto-detect)';
+    c.display.success(`Ruby model: ${current}`);
+    return { handled: true };
   }
 
   if (input === ':help' || input === '/help') {
