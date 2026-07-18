@@ -32,7 +32,8 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { RubyAlternator, DEFAULT_RUBY_CONFIG } from '../ruby/index.js';
+import { RubyAlternator } from '../ruby/index.js';
+import { resolveRubyConfig } from '../ruby/resolve-config.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
@@ -918,21 +919,33 @@ async function main() {
       });
       result = wrapperResult.loopResult;
     } else if (fileConfig.ruby?.enabled) {
-      const rubyConfig = {
-        ...DEFAULT_RUBY_CONFIG,
-        ...(fileConfig.ruby ?? {}),
-      };
-      const alternator = new RubyAlternator({
-        rubyConfig,
-        largeModelProvider: provider,
-        projectRoot: ctx.root,
-        context: ctx,
-        display,
-        permissions,
-        initialHistory: activeChatHistory,
-      });
-      const altResult = await alternator.run(task);
-      result = altResult.loopResult;
+      const { config: rubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
+      if (!rubyConfig) {
+        display.warning(reason);
+        result = await runAgentLoop({
+          provider, task, context: ctx, permissions, display,
+          initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
+          spawnConfig: {
+            apiKey: argv['api-key'] ?? undefined,
+            baseUrl: resolved.baseUrl ?? undefined,
+          },
+          sessionPath,
+        });
+      } else {
+        display.success(reason);
+        const alternator = new RubyAlternator({
+          rubyConfig,
+          largeModelProvider: provider,
+          projectRoot: ctx.root,
+          context: ctx,
+          display,
+          permissions,
+          initialHistory: activeChatHistory,
+        });
+        const altResult = await alternator.run(task);
+        result = altResult.loopResult;
+      }
     } else {
       result = await runAgentLoop({
         provider, task, context: ctx, permissions, display,
@@ -1130,23 +1143,38 @@ let abortController: AbortController | null = null;
         });
         result = wrapperResult.loopResult;
       } else if (rubyOverride !== undefined ? rubyOverride : fileConfig.ruby?.enabled) {
-        const rubyConfig = {
-          ...DEFAULT_RUBY_CONFIG,
-          ...(fileConfig.ruby ?? {}),
-        };
-        const alternator = new RubyAlternator({
-          rubyConfig,
-          largeModelProvider: currentProvider,
-          projectRoot: ctx.root,
-          context: ctx,
-          display: tuiDisplay,
-          permissions,
-          initialHistory: activeChatHistory,
-          abortSignal,
-          healthTracker,
-        });
-        const altResult = await alternator.run(input);
-        result = altResult.loopResult;
+        const { config: rubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
+        if (!rubyConfig) {
+          tuiDisplay.warning(reason);
+          result = await runAgentLoop({
+            provider: currentProvider, task: input,
+            context: ctx, permissions, display: tuiDisplay,
+            initialHistory: activeChatHistory,
+            maxTurns: resolved.maxTurns,
+            spawnConfig: {
+              apiKey: runtimeConfig.apiKey,
+              baseUrl: runtimeConfig.baseUrl ?? undefined,
+            },
+            sessionPath,
+            abortSignal,
+            healthTracker,
+          });
+        } else {
+          tuiDisplay.success(reason);
+          const alternator = new RubyAlternator({
+            rubyConfig,
+            largeModelProvider: currentProvider,
+            projectRoot: ctx.root,
+            context: ctx,
+            display: tuiDisplay,
+            permissions,
+            initialHistory: activeChatHistory,
+            abortSignal,
+            healthTracker,
+          });
+          const altResult = await alternator.run(input);
+          result = altResult.loopResult;
+        }
       } else {
         result = await runAgentLoop({
           provider: currentProvider, task: input,
