@@ -144,6 +144,40 @@ interface RubyVerification {
 }
 
 /**
+ * Condense Ruby's tool activity from loop history into a short, cheap summary
+ * for the verifier. The toolCallLog on LoopResult only records name+input, so
+ * actual outputs are pulled from `tool_result` history entries; args come from
+ * the matching assistant toolCalls (paired by id). Each result is truncated so
+ * the verification call stays one cheap prompt, not a transcript dump.
+ */
+function summarizeToolActivity(history: HistoryMessage[]): string {
+  const MAX_RESULT_CHARS = 300;
+  const argsById = new Map<string, string>();
+  for (const msg of history) {
+    if (msg.role === 'assistant' && msg.toolCalls) {
+      for (const call of msg.toolCalls) {
+        let args = JSON.stringify(call.input);
+        if (args.length > 120) args = args.slice(0, 120) + '…';
+        argsById.set(call.id, args);
+      }
+    }
+  }
+
+  const lines: string[] = [];
+  for (const msg of history) {
+    if (msg.role !== 'tool_result') continue;
+    for (const r of msg.results) {
+      let content = r.content.replace(/\s+/g, ' ').trim();
+      if (content.length > MAX_RESULT_CHARS) {
+        content = content.slice(0, MAX_RESULT_CHARS) + '…';
+      }
+      lines.push(`- ${r.name}(${argsById.get(r.id) ?? ''}) -> ${content}`);
+    }
+  }
+  return lines.length > 0 ? lines.join('\n') : '(no tools were called)';
+}
+
+/**
  * Cheap correctness gate on Ruby's answer: one `complete()` call to the large
  * model with no tools and no history — deliberately NOT a full agent loop.
  * Fail-safe: any verification error counts as invalid (escalate), never as
@@ -152,15 +186,27 @@ interface RubyVerification {
 async function verifyRubyAnswer(
   task: string,
   answer: string,
+  history: HistoryMessage[],
   verifierProvider: LLMProvider,
 ): Promise<RubyVerification> {
+  const toolSummary = summarizeToolActivity(history);
+
   const prompt = [
     `Task: ${task}`,
     ``,
-    `Proposed answer:`,
+    `Tools Ruby actually called and what they returned:`,
+    toolSummary,
+    ``,
+    `Ruby's final answer:`,
     answer,
     ``,
-    `Does this answer correctly and completely address the task? `,
+    `Does this answer correctly and completely address the task?`,
+    `Critically: check the answer against the tool results above for`,
+    `direct contradictions — for example, if a tool result says a`,
+    `function/file/symbol was not found, but the answer describes it`,
+    `in detail as if it exists, that is a fabrication and must be`,
+    `marked INVALID regardless of how complete or well-written the`,
+    `answer looks.`,
     `Reply with exactly one line: either "VALID" or "INVALID: <short reason>".`,
   ].join('\n');
 
@@ -257,7 +303,11 @@ export class RubyAlternator {
               provider: rubyProvider,
               task,
               context,
-              permissions: this.permissions,
+              // Ruby is unproven — it must never inherit the session's write
+              // access (with --auto it once wrote garbage into a real source
+              // file on an informational task). Always read-only, independent
+              // of session permissions, until competence tracking proves it.
+              permissions: new PermissionSystem('read-only'),
               display: this.display,
               disableSpawn: true,
               maxTurns: 15,
@@ -274,6 +324,7 @@ export class RubyAlternator {
               const verification = await verifyRubyAnswer(
                 task,
                 rubyOutput!,
+                loopResult.history,
                 largeModelProvider,
               );
               if (verification.valid) {
