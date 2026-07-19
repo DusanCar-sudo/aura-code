@@ -64,6 +64,7 @@ import { isAuthError } from '../util/errors.js';
 import { ContextHealthTracker } from './context-health.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
+import { loadImages, looksVisionCapable } from './image-utils.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ import { HELP_TEXT } from './help-data.js';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
   boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
@@ -97,6 +98,12 @@ const cliProfile         = typeof argv.profile === 'string' ? argv.profile : und
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
 const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.AURA_API_RPM);
 const cliTpm             = num(argv['rate-limit-tpm']) ?? num(process.env.AURA_API_TPM);
+const cliImagePaths: string[] =
+  Array.isArray(argv.image)
+    ? argv.image.map(String)
+    : typeof argv.image === 'string'
+      ? [argv.image]
+      : [];
 const cliFallbacks: string[] =
   Array.isArray(argv.fallback)
     ? argv.fallback.map(String)
@@ -863,6 +870,19 @@ async function main() {
     const task = argv._.join(' ');
     console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Task: ${chalk.hex(TEXT_HEX)(task)}\n`));
 
+    // --image: load attachments into base64 data URIs. Failures degrade to
+    // text-only with a warning — never abort the session over a bad image.
+    const { images: taskImages, warnings: imageWarnings } = loadImages(cliImagePaths);
+    for (const w of imageWarnings) {
+      console.warn(chalk.hex('#b15439')(`  ⚠ ${w}`));
+    }
+    if (taskImages.length > 0 && !looksVisionCapable(provider.model)) {
+      console.warn(chalk.hex('#b15439')(
+        `  ⚠ Model "${provider.model}" may not support image input. Sending anyway — ` +
+        `if it fails, the provider will likely return a text-only response or an error.`,
+      ));
+    }
+
     // --architect: plan-only — decompose and display, then exit (no execution)
     if (argv.architect === true) {
       await runArchitectPlan(task, provider, ctx, display);
@@ -928,6 +948,7 @@ async function main() {
         loopOpts: {
           provider, task, context: ctx, permissions, display,
           initialHistory: activeChatHistory,
+          images: taskImages,
           maxTurns: resolved.maxTurns,
           spawnConfig: {
             apiKey: argv['api-key'] ?? undefined,
@@ -947,6 +968,7 @@ async function main() {
         result = await runAgentLoop({
           provider, task, context: ctx, permissions, display,
           initialHistory: activeChatHistory,
+          images: taskImages,
           maxTurns: resolved.maxTurns,
           spawnConfig: {
             apiKey: argv['api-key'] ?? undefined,
@@ -976,6 +998,7 @@ async function main() {
       result = await runAgentLoop({
         provider, task, context: ctx, permissions, display,
         initialHistory: activeChatHistory,
+        images: taskImages,
         maxTurns: resolved.maxTurns,
         spawnConfig: {
           apiKey: argv['api-key'] ?? undefined,
@@ -2773,6 +2796,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
     --max-turns <n>          Max agent loop turns before stopping (default: sized by task shape)
     --moa                    Mixture of agents: parallel read-only domain perspectives + synthesis (exploratory tasks only)
+    --image <path>           Attach an image to the initial message (repeatable; png/jpg/webp/gif)
     --analyze                Mine session history for weakness patterns; save report
     --propose-harness        Generate system-prompt patches from weakness report
     --apply-harness <id>     Apply a proposal patch; reverts if tests fail
