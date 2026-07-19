@@ -64,7 +64,7 @@ export function editFile(input: EditFileInput, cwd: string): string {
 
   // Nothing found — return helpful context
   const lines = normalContent.split('\n');
-  const preview = lines.slice(0, 60).map((l, i) => `${i + 1}: ${l}`).join('\n');
+  const preview = lines.slice(0, 15).map((l, i) => `${i + 1}: ${l}`).join('\n');
 
   return [
     `Error: Could not find the specified block in ${input.path}.`,

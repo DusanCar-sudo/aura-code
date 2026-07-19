@@ -43,7 +43,9 @@ export function readFile(input: ReadFileInput, cwd: string): string {
   }
 
   // Return full file with line numbers, truncating if very large
-  const MAX_LINES = 500;
+  // Cap full-file reads at 200 lines (~15K chars / ~4K tokens).
+  // For larger files the agent should use start_line/end_line ranges.
+  const MAX_LINES = 200;
   if (total > MAX_LINES) {
     const head = lines.slice(0, 80).map((l, i) => `${i + 1}: ${l}`).join('\n');
     const tail = lines.slice(-40).map((l, i) => `${total - 39 + i}: ${l}`).join('\n');
