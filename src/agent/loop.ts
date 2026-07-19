@@ -46,6 +46,8 @@ export interface LoopOptions {
   sessionPath?: string;
   /** Pre-existing conversation history to resume from (e.g. loaded session). */
   initialHistory?: HistoryMessage[];
+  /** Base64 data URIs attached to the initial user message (multimodal input). */
+  images?: string[];
   /** Base config passed to spawned sub-agents. If undefined, spawn_task returns an error. */
   spawnConfig?: { apiKey?: string; baseUrl?: string };
   /** Disables subagent tool entirely (e.g. for tests) */
@@ -139,7 +141,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const system = buildSystemPrompt(context, provider.name, finalTask);
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
-    { role: 'user', content: finalTask },
+    { role: 'user', content: finalTask, ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}) },
   ];
 
   let turns = 0;
@@ -459,6 +461,15 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         result = await executeTool(call.name, call.input, opts.context.root);
         const elapsed = Date.now() - startMs;
         display.toolResult(call.name, result, elapsed);
+        // Proactive truncation: align with the compactor's MAX_RESULT_CHARS
+        // (4K chars ~1K tokens). Oversized results pollute context between
+        // compaction cycles — truncate early so every API call carries less
+        // dead weight. Errors get a higher ceiling so diagnostics survive.
+        const RESULT_TRUNCATE_AT = result.startsWith('Error:') || result.startsWith('Tool error') ? 8_000 : 4_000;
+        if (result.length > RESULT_TRUNCATE_AT) {
+          result = result.slice(0, RESULT_TRUNCATE_AT)
+            + `\n[result truncated: ${result.length.toLocaleString()} chars total]`;
+        }
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
         toolCallLog.push({ name: call.name, input: call.input });
         if (!isError) execQueue.push(call.name, call.input, turns);
@@ -472,10 +483,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         isError = true;
         display.error(result);
       }
-      // Safety net independent of any single tool's own limits: one runaway
-      // result (a minified file matched by search, a huge command dump) must
-      // never inject hundreds of thousands of tokens into history at once.
-      const MAX_TOOL_RESULT_CHARS = 48_000;
+      // Safety net: prevent any single tool result from consuming excessive
+      // context. 8K chars (~2K tokens) is enough for any meaningful output;
+      // larger results mean the agent should narrow its query or use ranges.
+      const MAX_TOOL_RESULT_CHARS = 8_000;
       if (result.length > MAX_TOOL_RESULT_CHARS) {
         result = result.slice(0, MAX_TOOL_RESULT_CHARS)
           + `\n[result truncated: ${result.length.toLocaleString()} chars total — narrow the query or read the file in ranges]`;

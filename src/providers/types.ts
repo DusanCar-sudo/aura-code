@@ -42,7 +42,7 @@ export interface ToolResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type HistoryMessage =
-  | { role: 'user';       content: string }
+  | { role: 'user';       content: string; images?: string[] }
   | { role: 'assistant';  content: string; toolCalls?: ToolCall[] }
   | { role: 'tool_result'; results: ToolResult[] };
 

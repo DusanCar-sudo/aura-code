@@ -187,7 +187,21 @@ function toOpenAIMessages(
 
   for (const msg of history) {
     if (msg.role === 'user') {
-      out.push({ role: 'user', content: msg.content });
+      if (msg.images && msg.images.length > 0) {
+        // Multimodal: images first, then text
+        out.push({
+          role: 'user',
+          content: [
+            ...msg.images.map(img => ({
+              type: 'image_url' as const,
+              image_url: { url: img }
+            })),
+            { type: 'text' as const, text: msg.content }
+          ]
+        });
+      } else {
+        out.push({ role: 'user', content: msg.content });
+      }
     } else if (msg.role === 'assistant') {
       if (msg.toolCalls && msg.toolCalls.length > 0) {
         out.push({
