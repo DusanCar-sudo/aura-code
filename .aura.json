@@ -1,5 +1,5 @@
 {
-  "ruby": {
+  "archimedes": {
     "enabled": true,
     "modelName": "granite4.1:3b",
     "ollamaBaseUrl": "http://localhost:11434/v1",

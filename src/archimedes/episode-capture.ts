@@ -8,19 +8,19 @@ import { shouldFineTune } from './competence.js';
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Stores alternation episodes under ~/.aura/episodes/{projectHash}/ so
-// Ruby competence and fine-tune readiness can be computed per project.
+// Archimedes competence and fine-tune readiness can be computed per project.
 
 /** Stats returned by {@link getEpisodeStats}. */
 export interface EpisodeStats {
   total: number;
-  rubySuccesses: number;
-  rubyFailures: number;
+  archimedesSuccesses: number;
+  archimedesFailures: number;
   largeModelInterventions: number;
   readyForFineTune: boolean;
 }
 
 /**
- * On-disk episode persistence for the Ruby Principle.
+ * On-disk episode persistence for the Archimedes Principle.
  * Mirrors {@link sessionStore} — atomic `.tmp` writes, namespaced by project hash.
  */
 export const episodeStore = {
@@ -107,30 +107,30 @@ export const episodeStore = {
   async getEpisodeStats(projectRoot: string): Promise<EpisodeStats> {
     try {
       const episodes = await this.loadEpisodes(projectRoot);
-      let rubySuccesses = 0;
-      let rubyFailures = 0;
+      let archimedesSuccesses = 0;
+      let archimedesFailures = 0;
       let largeModelInterventions = 0;
 
       for (const ep of episodes) {
-        if (ep.rubyAttempted) {
-          if (ep.rubySucceeded) rubySuccesses++;
-          else rubyFailures++;
+        if (ep.archimedesAttempted) {
+          if (ep.archimedesSucceeded) archimedesSuccesses++;
+          else archimedesFailures++;
         }
         if (ep.largeModelUsed) largeModelInterventions++;
       }
 
       return {
         total: episodes.length,
-        rubySuccesses,
-        rubyFailures,
+        archimedesSuccesses,
+        archimedesFailures,
         largeModelInterventions,
         readyForFineTune: shouldFineTune(episodes),
       };
     } catch {
       return {
         total: 0,
-        rubySuccesses: 0,
-        rubyFailures: 0,
+        archimedesSuccesses: 0,
+        archimedesFailures: 0,
         largeModelInterventions: 0,
         readyForFineTune: false,
       };

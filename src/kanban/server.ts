@@ -131,7 +131,7 @@ function buildKanbanUI(): string {
     { id: 'orchestrate', label: 'Orchestrate', sub: 'Multi-Agent' },
     { id: 'architect', label: 'Architect', sub: 'Design Phase' },
     { id: 'verify', label: 'Verify', sub: 'Self-Correction' },
-    { id: 'ruby-alternator', label: 'RubyAlternator', sub: 'Improvement' },
+    { id: 'archimedes-alternator', label: 'ArchimedesAlternator', sub: 'Improvement' },
   ];
 
   const PHASES: Array<{ id: PipelinePhase; label: string; sub: string }> = [

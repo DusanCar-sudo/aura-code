@@ -34,7 +34,7 @@ const harnesses = [
     name: 'OpenCode',
     command: 'opencode',
     role: 'External terminal coding agent for project-level coding tasks.',
-    notes: ['Use as an alternate coding backend.', 'Ruby should pass a project cwd and a bounded prompt.'],
+    notes: ['Use as an alternate coding backend.', 'Aura should pass a project cwd and a bounded prompt.'],
   },
   {
     id: 'openclaude',
@@ -48,7 +48,7 @@ const harnesses = [
     name: 'Antigravity CLI',
     command: 'agy',
     role: 'Agentic workspace harness with project boundaries, permissions and background workflows.',
-    notes: ['Best treated as a workspace runner.', 'Ruby can inspect availability first, then expose launch actions.'],
+    notes: ['Best treated as a workspace runner.', 'Aura can inspect availability first, then expose launch actions.'],
   },
   {
     id: 'pi',

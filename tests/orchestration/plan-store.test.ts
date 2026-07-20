@@ -46,7 +46,7 @@ describe('planStore — plans', () => {
   let plansDir: string;
 
   beforeEach(() => {
-    homeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-plans-'));
+    homeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-plans-'));
     vi.stubEnv('HOME', homeTmp);
     plansDir = planStore.plansDir();
   });
@@ -140,7 +140,7 @@ describe('planStore — memory', () => {
   let projectTmp: string;
 
   beforeEach(() => {
-    projectTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-proj-'));
+    projectTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-proj-'));
   });
 
   afterEach(() => {

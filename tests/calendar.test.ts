@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { calendarTool, CALENDAR_DEFINITION } from '../src/tools/calendar.js';
 
-const testDir = path.join(os.tmpdir(), 'ruby-test-calendar-' + Date.now());
+const testDir = path.join(os.tmpdir(), 'aura-test-calendar-' + Date.now());
 
 beforeEach(() => {
   process.env.HOME = testDir;

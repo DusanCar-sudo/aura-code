@@ -1,26 +1,26 @@
-import { loadEpisodes } from '../ruby/episode-capture.js';
-import type { Episode, TaskCategory } from '../ruby/types.js';
+import { loadEpisodes } from '../archimedes/episode-capture.js';
+import type { Episode, TaskCategory } from '../archimedes/types.js';
 
 /**
- * Baby Ruby — experience mining, not learning.
+ * Baby Archimedes — experience mining, not learning.
  *
  * Finds structure in raw episode data using pure statistics: clustering,
  * frequency counts, keyword overlap. NO LLM calls. This is deliberate:
- * Baby Ruby's job is to be reliable, boring infrastructure — the kind that
+ * Baby Archimedes's job is to be reliable, boring infrastructure — the kind that
  * doesn't hallucinate, doesn't cost tokens, and produces the same output
  * given the same input every time.
  *
  * This is the "observation" stage of a three-stage cognitive pipeline:
  *
  *   episodes (raw experience)
- *     -> Baby Ruby (this file)    — no LLM, finds structure
+ *     -> Baby Archimedes (this file)    — no LLM, finds structure
  *       -> concepts (this file's output)
- *         -> Papa Ruby (future)   — local LLM, reasons about concepts
+ *         -> Papa Archimedes (future)   — local LLM, reasons about concepts
  *           -> training data / refined knowledge
  *
- * Baby Ruby does NOT produce instruction/output training pairs. That is
- * explicitly Papa Ruby's job, on top of Baby Ruby's structure. Keeping this
- * separation means Baby Ruby never needs a model, a provider, an API key,
+ * Baby Archimedes does NOT produce instruction/output training pairs. That is
+ * explicitly Papa Archimedes's job, on top of Baby Archimedes's structure. Keeping this
+ * separation means Baby Archimedes never needs a model, a provider, an API key,
  * or a network call — it's pure, fast, and always available.
  *
  * Three-pass recursive clustering:
@@ -223,13 +223,13 @@ function leafToConcept(leaf: ClusterNode, category: TaskCategory, totalEpisodes:
 }
 
 /**
- * Run Baby Ruby: mine episodes for structural patterns without any LLM call.
+ * Run Baby Archimedes: mine episodes for structural patterns without any LLM call.
  *
  * Pass 1: group by taskCategory (free, already on every episode).
  * Pass 2-3: within each category, recursively split by keyword overlap
  *           until no meaningful further split exists or MAX_DEPTH is hit.
  *
- * Returns a flat list of MinedConcept — Papa Ruby (future) will read these
+ * Returns a flat list of MinedConcept — Papa Archimedes (future) will read these
  * and turn the most useful ones into actual training/instruction data.
  */
 export async function mineExperience(projectRoot: string): Promise<MiningResult> {

@@ -26,7 +26,7 @@ function fakeProvider(text: string): LLMProvider {
 
 describe('maybeRollover', () => {
   let tmpDir: string;
-  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-flush-')); });
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-flush-')); });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
   it('no-ops when there is no recap to flush', async () => {

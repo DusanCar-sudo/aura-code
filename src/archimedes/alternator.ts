@@ -9,7 +9,7 @@ import type { ContextHealthTracker } from '../cli/context-health.js';
 import type {
   AlternationDecision,
   Episode,
-  RubyConfig,
+  ArchimedesConfig,
   TaskCategory,
 } from './types.js';
 import { assessCompetence, shouldFineTune } from './competence.js';
@@ -20,9 +20,9 @@ import type { EpisodeStats } from './episode-capture.js';
 // Options
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Configuration for a {@link RubyAlternator} instance. */
+/** Configuration for a {@link ArchimedesAlternator} instance. */
 export interface AlternatorOptions {
-  rubyConfig: RubyConfig;
+  archimedesConfig: ArchimedesConfig;
   largeModelProvider: LLMProvider;
   projectRoot: string;
   context: ProjectContext;
@@ -30,7 +30,7 @@ export interface AlternatorOptions {
   display?: Display;
   /**
    * The session's permission system. When omitted, defaults to the safe
-   * 'normal' level — NEVER 'auto': the Ruby attempt must not auto-approve
+   * 'normal' level — NEVER 'auto': the Archimedes attempt must not auto-approve
    * destructive operations the user's chosen mode would have prompted for.
    */
   permissions?: PermissionSystem;
@@ -51,7 +51,7 @@ export interface AlternatorRunResult {
    *  a safe empty result is substituted when every path failed. */
   loopResult: LoopResult;
   episode: Episode;
-  usedRuby: boolean;
+  usedArchimedes: boolean;
   decision: AlternationDecision;
 }
 
@@ -71,6 +71,19 @@ function emptyLoopResult(summary: string): LoopResult {
 
 const RECENT_EPISODE_LIMIT = 50;
 const OLLAMA_PING_MS = 3_000;
+
+/**
+ * Probability of overriding a gated (useArchimedes: false) decision and letting
+ * Archimedes attempt anyway. Without this, `assessCompetence` gates a task
+ * pattern once its success rate drops below threshold, and — because
+ * `archimedesAttempted` only becomes true inside the `decision.useArchimedes` branch —
+ * that pattern's score then never updates again. The gate becomes
+ * permanent even if the underlying model improves. This periodic probe
+ * keeps the score live. Kept low: the probe still pays full Archimedes-then-large-
+ * model cost on every trial (verification always runs), so it should not be
+ * confused with a free background check.
+ */
+const EPSILON_PROBE_RATE = 0.05;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Display noop
@@ -138,13 +151,13 @@ async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
   }
 }
 
-interface RubyVerification {
+interface ArchimedesVerification {
   valid: boolean;
   reason: string;
 }
 
 /**
- * Condense Ruby's tool activity from loop history into a short, cheap summary
+ * Condense Archimedes's tool activity from loop history into a short, cheap summary
  * for the verifier. The toolCallLog on LoopResult only records name+input, so
  * actual outputs are pulled from `tool_result` history entries; args come from
  * the matching assistant toolCalls (paired by id). Each result is truncated so
@@ -178,26 +191,26 @@ function summarizeToolActivity(history: HistoryMessage[]): string {
 }
 
 /**
- * Cheap correctness gate on Ruby's answer: one `complete()` call to the large
+ * Cheap correctness gate on Archimedes's answer: one `complete()` call to the large
  * model with no tools and no history — deliberately NOT a full agent loop.
  * Fail-safe: any verification error counts as invalid (escalate), never as
  * silent trust.
  */
-async function verifyRubyAnswer(
+async function verifyArchimedesAnswer(
   task: string,
   answer: string,
   history: HistoryMessage[],
   verifierProvider: LLMProvider,
-): Promise<RubyVerification> {
+): Promise<ArchimedesVerification> {
   const toolSummary = summarizeToolActivity(history);
 
   const prompt = [
     `Task: ${task}`,
     ``,
-    `Tools Ruby actually called and what they returned:`,
+    `Tools Archimedes actually called and what they returned:`,
     toolSummary,
     ``,
-    `Ruby's final answer:`,
+    `Archimedes's final answer:`,
     answer,
     ``,
     `Does this answer correctly and completely address the task?`,
@@ -227,26 +240,26 @@ async function verifyRubyAnswer(
   }
 }
 
-function buildRubyProvider(config: RubyConfig): OpenAICompatibleProvider {
+function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProvider {
   return new OpenAICompatibleProvider(
     {
       model: config.modelName,
       baseUrl: config.ollamaBaseUrl,
       apiKey: 'ollama',
     },
-    'Ruby (Ollama)',
+    'Archimedes (Ollama)',
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RubyAlternator
+// ArchimedesAlternator
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Routes tasks between the small Ruby model (Ollama) and a large model based on
+ * Routes tasks between the small Archimedes model (Ollama) and a large model based on
  * learned competence, capturing every alternation as an {@link Episode}.
  */
-export class RubyAlternator {
+export class ArchimedesAlternator {
   private readonly opts: AlternatorOptions;
   private readonly display: Display;
   private readonly permissions: PermissionSystem;
@@ -258,52 +271,69 @@ export class RubyAlternator {
   }
 
   /**
-   * Runs a task through Ruby and/or the large model, persists an episode, and
+   * Runs a task through Archimedes and/or the large model, persists an episode, and
    * returns the final output. Never throws — failures escalate to the large model.
    */
   async run(task: string): Promise<AlternatorRunResult> {
     const startMs = Date.now();
-    const { rubyConfig, largeModelProvider, projectRoot, context } = this.opts;
+    const { archimedesConfig, largeModelProvider, projectRoot, context } = this.opts;
 
     let decision: AlternationDecision = {
-      useRuby: false,
+      useArchimedes: false,
       reason: 'Initializing alternation.',
       confidence: 0,
       fallbackModel: largeModelProvider.model,
     };
 
-    let rubyAttempted = false;
-    let rubySucceeded = false;
-    let rubyOutput: string | undefined;
-    let rubyTokens = 0;
+    let archimedesAttempted = false;
+    let archimedesSucceeded = false;
+    let archimedesOutput: string | undefined;
+    let archimedesTokens = 0;
     let largeModelOutput: string | undefined;
     let largeModelTokens = 0;
-    let usedRuby = false;
+    let usedArchimedes = false;
     let result = '';
     let finalLoopResult: LoopResult | undefined;
+    // Populated whenever Archimedes is attempted and fails/errors, so the escalation
+    // call isn't blind to what Archimedes already tried. Never fed back into the
+    // Episode — only into the large model's task text for this run.
+    let archimedesFailureContext: string | undefined;
 
     try {
       const recent = await episodeStore.loadEpisodes(projectRoot, RECENT_EPISODE_LIMIT);
-      decision = assessCompetence(recent, task, rubyConfig);
+      decision = assessCompetence(recent, task, archimedesConfig);
       decision.fallbackModel = largeModelProvider.model;
 
-      this.display.header('Ruby Principle', decision.reason);
+      // Epsilon probe: a gated pattern (useArchimedes: false) would otherwise never
+      // get another `archimedesAttempted: true` episode, freezing its score
+      // permanently (see EPSILON_PROBE_RATE doc comment above). Roll the die
+      // only when the gate actually fired — a pattern still in its
+      // minAttempts learning phase is already using Archimedes and needs no probe.
+      if (!decision.useArchimedes && archimedesConfig.enabled && Math.random() < EPSILON_PROBE_RATE) {
+        decision = {
+          ...decision,
+          useArchimedes: true,
+          reason: `[probe] Overriding gate to re-test competence — ${decision.reason}`,
+        };
+      }
 
-      if (decision.useRuby && rubyConfig.enabled) {
-        const available = await isOllamaAvailable(rubyConfig.ollamaBaseUrl);
+      this.display.header('Archimedes Principle', decision.reason);
+
+      if (decision.useArchimedes && archimedesConfig.enabled) {
+        const available = await isOllamaAvailable(archimedesConfig.ollamaBaseUrl);
         if (!available) {
-          this.display.warning('Ruby (Ollama) is not reachable — escalating to large model.');
+          this.display.warning('Archimedes (Ollama) is not reachable — escalating to large model.');
         } else {
-          rubyAttempted = true;
-          this.display.success(`Trying Ruby (${rubyConfig.modelName})…`);
+          archimedesAttempted = true;
+          this.display.success(`Trying Archimedes (${archimedesConfig.modelName})…`);
 
           try {
-            const rubyProvider = buildRubyProvider(rubyConfig);
+            const archimedesProvider = buildArchimedesProvider(archimedesConfig);
             const loopResult = await runAgentLoop({
-              provider: rubyProvider,
+              provider: archimedesProvider,
               task,
               context,
-              // Ruby is unproven — it must never inherit the session's write
+              // Archimedes is unproven — it must never inherit the session's write
               // access (with --auto it once wrote garbage into a real source
               // file on an informational task). Always read-only, independent
               // of session permissions, until competence tracking proves it.
@@ -317,43 +347,77 @@ export class RubyAlternator {
               healthTracker: this.opts.healthTracker,
             });
 
-            rubyTokens = loopResult.usage.totalTokens;
-            rubyOutput = loopResult.summary;
+            archimedesTokens = loopResult.usage.totalTokens;
+            archimedesOutput = loopResult.summary;
 
-            if (isNonEmptyResult(rubyOutput) && loopResult.success) {
-              const verification = await verifyRubyAnswer(
+            if (isNonEmptyResult(archimedesOutput) && loopResult.success) {
+              const verification = await verifyArchimedesAnswer(
                 task,
-                rubyOutput!,
+                archimedesOutput!,
                 loopResult.history,
                 largeModelProvider,
               );
               if (verification.valid) {
-                rubySucceeded = true;
-                usedRuby = true;
-                result = rubyOutput!;
+                archimedesSucceeded = true;
+                usedArchimedes = true;
+                result = archimedesOutput!;
                 finalLoopResult = loopResult;
-                this.display.success('Ruby handled the task without escalation.');
+                this.display.success('Archimedes handled the task without escalation.');
               } else {
+                archimedesFailureContext = [
+                  `Archimedes's answer failed verification: ${verification.reason}`,
+                  ``,
+                  `Archimedes's tool activity:`,
+                  summarizeToolActivity(loopResult.history),
+                  ``,
+                  `Archimedes's (invalid) answer, for reference only — verify independently:`,
+                  archimedesOutput!,
+                ].join('\n');
                 this.display.warning(
-                  `Ruby's answer failed verification (${verification.reason}) — escalating.`,
+                  `Archimedes's answer failed verification (${verification.reason}) — escalating.`,
                 );
               }
             } else {
-              this.display.warning('Ruby did not produce a usable result — escalating.');
+              archimedesFailureContext = [
+                loopResult.success
+                  ? `Archimedes produced no usable output.`
+                  : `Archimedes did not complete the task (${loopResult.summary}).`,
+                ``,
+                `Archimedes's tool activity:`,
+                summarizeToolActivity(loopResult.history),
+              ].join('\n');
+              this.display.warning('Archimedes did not produce a usable result — escalating.');
             }
           } catch (e) {
-            this.display.warning(`Ruby error: ${String(e)} — escalating.`);
-            rubyOutput = rubyOutput ?? `Error: ${String(e)}`;
+            this.display.warning(`Archimedes error: ${String(e)} — escalating.`);
+            archimedesOutput = archimedesOutput ?? `Error: ${String(e)}`;
+            archimedesFailureContext = `Archimedes errored before producing output: ${String(e)}`;
           }
         }
       }
 
-      if (!usedRuby) {
+      if (!usedArchimedes) {
         this.display.header('Large model', largeModelProvider.name);
+        // If Archimedes already tried and failed, hand its attempt to the large
+        // model instead of letting it re-discover the same dead end. The
+        // Episode still records the original `task` — this augmented
+        // version is only used for this run.
+        const largeModelTask = archimedesFailureContext
+          ? [
+              task,
+              ``,
+              `---`,
+              `Note: a smaller local model (Archimedes) already attempted this task`,
+              `and failed. Use the following as context on what NOT to repeat —`,
+              `it is not verified and may itself be wrong or incomplete:`,
+              archimedesFailureContext,
+              `---`,
+            ].join('\n')
+          : task;
         try {
           const loopResult = await runAgentLoop({
             provider: largeModelProvider,
-            task,
+            task: largeModelTask,
             context,
             permissions: this.permissions,
             display: this.display,
@@ -387,15 +451,15 @@ export class RubyAlternator {
       timestamp: Date.now(),
       task,
       projectRoot,
-      rubyAttempted,
-      rubySucceeded,
-      rubyOutput,
-      largeModelUsed: usedRuby ? undefined : largeModelProvider.model,
-      largeModelOutput: usedRuby ? undefined : largeModelOutput,
+      archimedesAttempted,
+      archimedesSucceeded,
+      archimedesOutput,
+      largeModelUsed: usedArchimedes ? undefined : largeModelProvider.model,
+      largeModelOutput: usedArchimedes ? undefined : largeModelOutput,
       reviewerApproved: isNonEmptyResult(result),
       tokensUsed: {
-        ruby: rubyAttempted ? rubyTokens : undefined,
-        largeModel: usedRuby ? undefined : largeModelTokens,
+        archimedes: archimedesAttempted ? archimedesTokens : undefined,
+        largeModel: usedArchimedes ? undefined : largeModelTokens,
       },
       durationMs: Date.now() - startMs,
       taskCategory: inferTaskCategory(task),
@@ -411,7 +475,7 @@ export class RubyAlternator {
       const all = await episodeStore.loadEpisodes(projectRoot);
       if (shouldFineTune(all)) {
         this.display.warning(
-          'Ruby Principle: enough failures accumulated — project is ready for fine-tuning.',
+          'Archimedes Principle: enough failures accumulated — project is ready for fine-tuning.',
         );
       }
     } catch {
@@ -422,7 +486,7 @@ export class RubyAlternator {
       result,
       loopResult: finalLoopResult ?? emptyLoopResult(result),
       episode,
-      usedRuby,
+      usedArchimedes,
       decision,
     };
   }

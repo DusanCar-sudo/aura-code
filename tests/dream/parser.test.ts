@@ -6,7 +6,7 @@ import { parseDreamMarkdown } from '../../src/dream/parser.js';
 // mix of [tagged] and untagged bullets seen in production dreams.
 const REAL_DREAM = `# Dream — 2026-06-26
 
-> 69 episodes recalled since beginning · 46 approved · 2 ruby wins
+> 69 episodes recalled since beginning · 46 approved · 2 archimedes wins
 > Categories: other, research, implementation, review
 
 ## Lessons

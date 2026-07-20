@@ -8,7 +8,7 @@ describe('detectRubyProject', () => {
   let projectTmp: string;
 
   beforeEach(() => {
-    projectTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-rb-'));
+    projectTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-rb-'));
   });
 
   afterEach(() => {

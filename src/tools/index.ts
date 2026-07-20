@@ -236,6 +236,69 @@ export function selectTools(
   return selected;
 }
 
+/**
+ * Eviction-enabled variant of {@link selectTools} for small local models
+ * (Archimedes via Ollama), where context window is scarcer than the prompt-cache
+ * stability the sticky set protects. A conditional tool that hasn't been
+ * called for more than `evictAfterTurns` turns is dropped from the schema
+ * block; CORE tools are never evicted.
+ *
+ * State contract (all owned by the caller, one instance per loop run):
+ * - `included`: currently offered conditional tools.
+ * - `lastUsedTurn`: turn a tool was last *called* (seeded to the turn it was
+ *   first offered). Offered-but-not-called does not refresh it.
+ * - `evicted`: tools removed by staleness. An evicted tool is NOT re-added
+ *   by its trigger still matching old history text (that would undo every
+ *   eviction immediately) — only a fresh mention in the latest user message
+ *   re-admits it, so mid-session pivots still work.
+ */
+export function selectToolsWithEviction(
+  task: string,
+  history: HistoryMessage[],
+  included: Set<string>,
+  lastUsedTurn: Map<string, number>,
+  currentTurn: number,
+  evictAfterTurns: number = 3,
+  evicted: Set<string> = new Set(),
+): ToolDefinition[] {
+  const text = gateText(task, history);
+  const lastUserMsg = [...history].reverse()
+    .find(m => m.role === 'user')?.content?.toLowerCase() ?? '';
+
+  for (const [name, trigger] of Object.entries(CONDITIONAL_TOOL_TRIGGERS)) {
+    if (included.has(name)) continue;
+    if (evicted.has(name)) {
+      if (trigger.test(lastUserMsg)) {
+        evicted.delete(name);
+        included.add(name);
+        lastUsedTurn.set(name, currentTurn);
+      }
+      continue;
+    }
+    if (trigger.test(text)) {
+      included.add(name);
+      if (!lastUsedTurn.has(name)) lastUsedTurn.set(name, currentTurn);
+    }
+  }
+
+  for (const name of [...included]) {
+    const last = lastUsedTurn.get(name) ?? currentTurn;
+    if (currentTurn - last > evictAfterTurns) {
+      included.delete(name);
+      evicted.add(name);
+    }
+  }
+
+  const selected = TOOL_DEFINITIONS.filter(
+    t => !(t.name in CONDITIONAL_TOOL_TRIGGERS) || included.has(t.name),
+  );
+  if (process.env.AURA_DEBUG_TOOLS) {
+    const chars = JSON.stringify(selected).length;
+    console.error(`[tools/evict] sent=${selected.length}/${TOOL_DEFINITIONS.length} evicted=[${[...evicted].join(',')}] chars=${chars}`);
+  }
+  return selected;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool executor — dispatches to the right implementation
 // ─────────────────────────────────────────────────────────────────────────────

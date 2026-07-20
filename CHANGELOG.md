@@ -2,6 +2,24 @@
 
 All notable changes to Aura Code are documented here.
 
+## [Unreleased]
+
+### Changed
+- **The small-model alternator is renamed from "Ruby" to "Archimedes".**
+  The name "Ruby" meant three things at once (the programming language in
+  `src/orchestration/ruby-detect.ts`, the pre-Aura product persona, and the
+  small-model alternation layer); the alternator now carries its own name.
+  "Archimedes Principle" is deliberate: a small model displaces work from the
+  large one once it has proven competent, the way a body displaces its own
+  weight. Renames: `src/ruby/` → `src/archimedes/`, `RubyAlternator` →
+  `ArchimedesAlternator`, `RubyConfig` → `ArchimedesConfig`, `RubyModel` →
+  `ArchimedesModel`, the `.aura.json` `ruby` block → `archimedes`, and the
+  REPL commands `:rubyon`/`:rubyoff`/`:rubymodel` →
+  `:archon`/`:archoff`/`:archmodel`. The old `ruby` config key and old
+  episode field names (`rubyAttempted`, …) are not migrated — new keys going
+  forward. Ruby-the-language detection is untouched. Entries below this one
+  keep their original "Ruby" wording — they describe the code as it was.
+
 ## [0.10.5] — 2026-07-17
 
 The Ruby Principle release: the local+cloud alternation layer is now wired

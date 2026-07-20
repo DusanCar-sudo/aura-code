@@ -42,7 +42,7 @@ describe('Kanban Pipeline', () => {
       expect(rows.has('orchestrate')).toBe(true);
       expect(rows.has('architect')).toBe(true);
       expect(rows.has('verify')).toBe(true);
-      expect(rows.has('ruby-alternator')).toBe(true);
+      expect(rows.has('archimedes-alternator')).toBe(true);
     });
 
     it('has at least 10 tasks total', () => {
@@ -96,7 +96,7 @@ describe('Kanban Pipeline', () => {
       expect(labels.orchestrate).toBe('Orchestrate');
       expect(labels.architect).toBe('Architect');
       expect(labels.verify).toBe('Verify');
-      expect(labels['ruby-alternator']).toBe('RubyAlternator');
+      expect(labels['archimedes-alternator']).toBe('ArchimedesAlternator');
     });
   });
 
@@ -223,9 +223,9 @@ describe('Kanban Pipeline', () => {
       expect(titles).toContain('Runtime Patching');
     });
 
-    it('ruby-alternator row has correct tasks', async () => {
+    it('archimedes-alternator row has correct tasks', async () => {
       const report = await runPipeline({ projectRoot: process.cwd() });
-      const row = report.rows.find(r => r.row === 'ruby-alternator');
+      const row = report.rows.find(r => r.row === 'archimedes-alternator');
       expect(row).toBeDefined();
       const titles = row!.executions.map(e => e.task.title);
       expect(titles).toContain('Competence Scoring');

@@ -89,7 +89,7 @@ there in this repo).
 - `safety/` — permission system and confirmation prompts
 - `harness/` — weakness mining and self-improvement proposals
 - `workflows/` — multi-step workflow engine
-- `ruby/` — episode capture, competence, fine-tuning / local model support
+- `archimedes/` — episode capture, competence, fine-tuning / local model support
 - `server/` — Express + WS server and session handling
 - `viz/` — dashboard generation
 - `setup/` — first-run wizard and global config

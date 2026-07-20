@@ -67,7 +67,7 @@ export async function fineTuneWithOllama(
       '"""',
     ].join('\n');
 
-    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'rubycode-ft-'));
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aura-ft-'));
     const modelfilePath = path.join(tmpDir, 'Modelfile');
     await fs.promises.writeFile(modelfilePath, modelfile, 'utf8');
 

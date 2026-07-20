@@ -42,7 +42,7 @@ function makeSteps(n: number): WorkflowStep[] {
 let homeTmp: string;
 
 beforeEach(() => {
-  homeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-workflows-'));
+  homeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-workflows-'));
   vi.stubEnv('HOME', homeTmp);
 });
 

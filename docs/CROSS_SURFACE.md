@@ -81,7 +81,7 @@ filter, no separate cleanup job needed).
 
 **No LLM call for this.** Reuse the task string directly, truncated, plus
 the boolean outcome already available at that point in the code. This
-matches Baby Ruby's philosophy — don't spend a model call when the data
+matches Baby Archimedes's philosophy — don't spend a model call when the data
 you need is already sitting in a variable. If the plain task string proves
 uninformative in practice, a summarization pass can be added later as an
 opt-in upgrade — not a first-version requirement.

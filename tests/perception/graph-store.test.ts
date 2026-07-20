@@ -74,7 +74,7 @@ describe('savePerception / loadPerception', () => {
   let storePath: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-gs-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-gs-'));
     storePath = path.join(tmpDir, 'perception.json');
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -232,7 +232,7 @@ describe('clearPerception', () => {
   let storePath: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-gs-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-gs-'));
     storePath = path.join(tmpDir, 'perception.json');
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));

@@ -20,7 +20,7 @@ const ROW_LABELS: Record<PipelineRow, string> = {
   orchestrate:       'Orchestrate',
   architect:         'Architect',
   verify:            'Verify',
-  'ruby-alternator': 'RubyAlternator',
+  'archimedes-alternator': 'ArchimedesAlternator',
 };
 
 /** All tasks extracted from the Kanban board HTML (Premium theme). */
@@ -61,8 +61,8 @@ const BOARD_TASKS: KanbanTask[] = [
     tag: 'Vitest', highPriority: false,
   },
   {
-    id: 'plan-ruby-competence',
-    phase: 'plan', row: 'ruby-alternator',
+    id: 'plan-archimedes-competence',
+    phase: 'plan', row: 'archimedes-alternator',
     badge: 'Inactive',
     title: 'Competence Scoring',
     description: 'Define structural criteria for grading provider output success rates.',
@@ -105,8 +105,8 @@ const BOARD_TASKS: KanbanTask[] = [
     tag: 'TSC', highPriority: false,
   },
   {
-    id: 'verify-ruby-episode',
-    phase: 'verify', row: 'ruby-alternator',
+    id: 'verify-archimedes-episode',
+    phase: 'verify', row: 'archimedes-alternator',
     badge: 'Logging',
     title: 'Episode Recording',
     description: 'Validate structured runtime logs tracking agent attempts into the DB.',
@@ -123,8 +123,8 @@ const BOARD_TASKS: KanbanTask[] = [
     tag: 'Markdown', highPriority: false,
   },
   {
-    id: 'report-ruby-dashboard',
-    phase: 'report', row: 'ruby-alternator',
+    id: 'report-archimedes-dashboard',
+    phase: 'report', row: 'archimedes-alternator',
     badge: 'Dashboard',
     title: 'Learning Metrics',
     description: 'Expose historical agent competence statistics graphically.',
@@ -336,7 +336,7 @@ async function phaseRead(task: KanbanTask, projectRoot: string): Promise<Omit<Ph
 
   if (task.title === 'Praktess Framework') {
     // Map project architecture
-    const dirs = ['src/agent', 'src/orchestration', 'src/providers', 'src/cli', 'src/safety', 'src/perception', 'src/ruby'];
+    const dirs = ['src/agent', 'src/orchestration', 'src/providers', 'src/cli', 'src/safety', 'src/perception', 'src/archimedes'];
     for (const d of dirs) {
       const dp = path.join(projectRoot, d);
       if (fs.existsSync(dp)) {
@@ -434,7 +434,7 @@ async function phasePlan(task: KanbanTask, projectRoot: string): Promise<Omit<Ph
     plans.push('  3. Latency score (1 / normalized_duration)');
     plans.push('  4. Error recovery rate (recovered / total_errors)');
     plans.push('  5. Cross-provider transfer quality');
-    plans.push('Plan: Implement scoring in src/ruby/competence.ts with persistence to stats.json.');
+    plans.push('Plan: Implement scoring in src/archimedes/competence.ts with persistence to stats.json.');
     return { status: 'done', output: plans.join('\n') };
   }
 
@@ -461,7 +461,7 @@ async function phasePlan(task: KanbanTask, projectRoot: string): Promise<Omit<Ph
     orchestrate: 'Approach: Design multi-step plan with specialist dispatch. Research context → implement changes → verify with tests.',
     architect: 'Approach: Analyze architecture, design interface contracts, plan module boundaries. No code written until design is solid.',
     verify: 'Approach: Run tests, identify failures, trace to source, plan targeted patches, re-verify.',
-    'ruby-alternator': 'Approach: Record episode, score competence, update routing metrics, persist to learning database.',
+    'archimedes-alternator': 'Approach: Record episode, score competence, update routing metrics, persist to learning database.',
   };
   plans.push(rowStrategies[task.row] || 'Approach: Analyse → plan → implement → verify → report.');
   plans.push(`Plan phase complete for "${task.title}"`);
@@ -611,14 +611,14 @@ async function phaseVerify(task: KanbanTask, projectRoot: string): Promise<Omit<
 
   if (task.title === 'Episode Recording') {
     // Check for episode/log infrastructure
-    const episodePath = path.join(projectRoot, 'src/ruby/episode-capture.ts');
+    const episodePath = path.join(projectRoot, 'src/archimedes/episode-capture.ts');
     if (fs.existsSync(episodePath)) {
       const content = fs.readFileSync(episodePath, 'utf-8');
       const exports = (content.match(/export\s+/g) || []).length;
       results.push(`episode-capture.ts: ${content.split('\n').length} lines, ${exports} exports`);
     }
 
-    const statsPath = path.join(projectRoot, 'src/ruby/stats.ts');
+    const statsPath = path.join(projectRoot, 'src/archimedes/stats.ts');
     if (fs.existsSync(statsPath)) {
       results.push('stats.ts: present — metrics aggregation module available');
     }
@@ -713,7 +713,7 @@ async function phaseReport(
     }
     report.push('');
     report.push('### Other rows');
-    report.push("Architect, Verify, and RubyAlternator haven't run yet at this point in the");
+    report.push("Architect, Verify, and ArchimedesAlternator haven't run yet at this point in the");
     report.push('pipeline — this task cannot honestly report on them. See the aggregate');
     report.push('report (`/api/report.md`) after the full run completes for their real results.');
     report.push('');
@@ -730,7 +730,7 @@ async function phaseReport(
   }
 
   if (task.title === 'Learning Metrics') {
-    report.push('## Learning Metrics — RubyAlternator row summary');
+    report.push('## Learning Metrics — ArchimedesAlternator row summary');
     report.push('');
     report.push('### Same-row results');
     if (priorExecutions.length === 0) {
@@ -744,8 +744,8 @@ async function phaseReport(
     report.push('');
     report.push('### Real infrastructure check');
     const checks: Array<[string, string]> = [
-      ['src/ruby/stats.ts', 'stats.ts'],
-      ['src/ruby/episode-capture.ts', 'episode-capture.ts'],
+      ['src/archimedes/stats.ts', 'stats.ts'],
+      ['src/archimedes/episode-capture.ts', 'episode-capture.ts'],
       ['src/viz/index.ts', 'viz/index.ts'],
     ];
     for (const [rel, label] of checks) {
@@ -760,7 +760,7 @@ async function phaseReport(
     orchestrate: 'Orchestrate (Multi-Agent)',
     architect: 'Architect (Design)',
     verify: 'Verify (Self-Correction)',
-    'ruby-alternator': 'RubyAlternator (Self-Improvement)',
+    'archimedes-alternator': 'ArchimedesAlternator (Self-Improvement)',
   };
 
   report.push(`## Report: ${task.title}`);

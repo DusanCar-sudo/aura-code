@@ -9,7 +9,7 @@ describe('sessionStore', () => {
   let tmpDir: string;
   let file: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-sess-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-sess-'));
     file = path.join(tmpDir, 'session.json');
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));

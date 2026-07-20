@@ -41,7 +41,7 @@ export function formatStats(episodes: Episode[]): string {
   let totalTokens = 0;
 
   for (const ep of episodes) {
-    const model = ep.largeModelUsed ?? (ep.rubySucceeded ? 'ruby' : undefined);
+    const model = ep.largeModelUsed ?? (ep.archimedesSucceeded ? 'archimedes' : undefined);
     if (model) {
       const existing = modelStats.get(model) ?? {
         tasks: 0,
@@ -54,8 +54,8 @@ export function formatStats(episodes: Episode[]): string {
       // Episodes only have a single tokensUsed bucket, not split by input/output.
       // Treat largeModel tokens as input tokens for reporting purposes.
       const largeTokens = ep.tokensUsed?.largeModel ?? 0;
-      const rubyTokens = ep.tokensUsed?.ruby ?? 0;
-      existing.inputTokens += largeTokens + rubyTokens;
+      const archimedesTokens = ep.tokensUsed?.archimedes ?? 0;
+      existing.inputTokens += largeTokens + archimedesTokens;
       modelStats.set(model, existing);
     }
 
@@ -64,7 +64,7 @@ export function formatStats(episodes: Episode[]): string {
     // honest total rather than inventing an "output" figure that was never
     // actually measured.
     totalTokens += ep.tokensUsed?.largeModel ?? 0;
-    totalTokens += ep.tokensUsed?.ruby ?? 0;
+    totalTokens += ep.tokensUsed?.archimedes ?? 0;
   }
 
   let topModel = '—';

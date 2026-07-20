@@ -4,7 +4,7 @@ import type { ProjectPerception } from '../perception/types.js';
 import type { Episode, TrainingExample } from './types.js';
 
 /**
- * Builds instruction-tuning rows from episodes where Ruby failed and the large
+ * Builds instruction-tuning rows from episodes where Archimedes failed and the large
  * model produced an approved correction.
  */
 export async function generateTrainingData(
@@ -28,7 +28,7 @@ export async function generateTrainingData(
     const examples: TrainingExample[] = [];
 
     for (const ep of episodes) {
-      if (!ep?.rubyAttempted || ep.rubySucceeded) continue;
+      if (!ep?.archimedesAttempted || ep.archimedesSucceeded) continue;
       if (!ep.largeModelOutput?.trim()) continue;
       if (!ep.reviewerApproved) continue;
 
@@ -39,9 +39,9 @@ export async function generateTrainingData(
         metadata: {
           projectRoot: ep.projectRoot,
           taskCategory: ep.taskCategory,
-          rubyFailureReason: ep.rubyOutput
-            ? `Ruby output insufficient: ${ep.rubyOutput.slice(0, 200)}`
-            : 'Ruby did not produce an acceptable result',
+          archimedesFailureReason: ep.archimedesOutput
+            ? `Archimedes output insufficient: ${ep.archimedesOutput.slice(0, 200)}`
+            : 'Archimedes did not produce an acceptable result',
           timestamp: ep.timestamp,
         },
       });

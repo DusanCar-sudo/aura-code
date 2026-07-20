@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { imageRead, IMAGE_READ_DEFINITION } from '../src/tools/image-read.js';
 
-const testDir = path.join(os.tmpdir(), 'ruby-test-image-' + Date.now());
+const testDir = path.join(os.tmpdir(), 'aura-test-image-' + Date.now());
 
 beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });

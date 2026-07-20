@@ -39,7 +39,7 @@ aura 'refactor the auth module to use JWT'
 ## Features
 
 - **Autonomous execution** — reads files, edits code, runs shell commands, verifies, retries
-- **The Ruby Principle** — a small local model attempts tasks first; the cloud model steps in only when needed
+- **The Archimedes Principle** — a small local model attempts tasks first; the cloud model steps in only when needed
 - **Full TUI** — terminal UI with command palette, diff view, markdown rendering, vim-style input
 - **Persistent memory** — identity, lessons, and project context survive across sessions
 - **Telegram bot** — voice notes, PC control, file transfer, webcam snapshots
@@ -65,46 +65,46 @@ aura 'refactor the auth module to use JWT'
 
 ---
 
-## The Ruby Principle
+## The Archimedes Principle
 
-Aura's local+cloud alternation system. A small local model — "Ruby" — attempts tasks first; a large cloud model escalates in only when Ruby can't be trusted with the task or its answer fails verification. Every alternation is captured as an *episode*, and Ruby's track record decides how much it gets trusted next time.
+Aura's local+cloud alternation system. A small local model — "Archimedes" — attempts tasks first; a large cloud model escalates in only when Archimedes can't be trusted with the task or its answer fails verification. Every alternation is captured as an *episode*, and Archimedes's track record decides how much it gets trusted next time.
 
 The name reflects the design: a small model, present from the beginning, that learns from every episode where the large model had to intervene.
 
 ### The local model
 
-The shipped code default is `qwen2.5-coder:1.5b` via Ollama. In practice this project runs **IBM Granite 4.1 (3B)** (`granite4.1:3b`), which proved notably accurate for its size in testing — set it via `ruby.modelName` in `.aura.json` (example below). Any Ollama model tag works.
+The shipped code default is `qwen2.5-coder:1.5b` via Ollama. In practice this project runs **IBM Granite 4.1 (3B)** (`granite4.1:3b`), which proved notably accurate for its size in testing — set it via `archimedes.modelName` in `.aura.json` (example below). Any Ollama model tag works.
 
 ### Competence-based routing
 
-Before each task, `assessCompetence` checks Ruby's historical success rate on similar tasks (token-overlap similarity against the last 50 episodes):
+Before each task, `assessCompetence` checks Archimedes's historical success rate on similar tasks (token-overlap similarity against the last 50 episodes):
 
-- **Fewer than `minAttempts` (default 3) prior attempts** on a pattern → Ruby always gets a chance, to gather training data.
-- **Success rate ≥ `competenceThreshold` (default 0.7)** → Ruby handles the task.
+- **Fewer than `minAttempts` (default 3) prior attempts** on a pattern → Archimedes always gets a chance, to gather training data.
+- **Success rate ≥ `competenceThreshold` (default 0.7)** → Archimedes handles the task.
 - **Below threshold after enough attempts** → escalate straight to the large model.
 
 If Ollama isn't reachable, Aura escalates immediately rather than hanging.
 
 ### The verification gate
 
-When Ruby produces an answer, it is *not* trusted just for being non-empty. A single cheap `complete()` call (no tools, no history) asks the large model whether the answer actually addresses the task; anything other than a clear `VALID` — including verification errors — escalates to the large model. This exists because a small model's most dangerous failure mode isn't crashing, it's a confident-but-wrong answer or silent drift off-task.
+When Archimedes produces an answer, it is *not* trusted just for being non-empty. A single cheap `complete()` call (no tools, no history) asks the large model whether the answer actually addresses the task; anything other than a clear `VALID` — including verification errors — escalates to the large model. This exists because a small model's most dangerous failure mode isn't crashing, it's a confident-but-wrong answer or silent drift off-task.
 
-### Runtime toggle: `:rubyon` / `:rubyoff`
+### Runtime toggle: `:archon` / `:archoff`
 
-In the interactive TUI you can override `.aura.json`'s `ruby.enabled` for the rest of the session:
+In the interactive TUI you can override `.aura.json`'s `archimedes.enabled` for the rest of the session:
 
-- `:rubyon` — force Ruby routing on, even if the config file has it disabled
-- `:rubyoff` — force everything to the large model, even if the config file has it enabled
+- `:archon` — force Archimedes routing on, even if the config file has it disabled
+- `:archoff` — force everything to the large model, even if the config file has it enabled
 
 The override lasts for the current session only; restart returns control to the config file.
 
 ### Configuration
 
-`.aura.json`'s `ruby` block:
+`.aura.json`'s `archimedes` block:
 
 ```json
 {
-  "ruby": {
+  "archimedes": {
     "enabled": true,
     "modelName": "granite4.1:3b",
     "ollamaBaseUrl": "http://localhost:11434/v1",
@@ -114,9 +114,9 @@ The override lasts for the current session only; restart returns control to the 
 }
 ```
 
-When enough Ruby failures accumulate (20 by default), Aura flags the project as ready for fine-tuning — failed episodes become instruction-tuning rows for the local model.
+When enough Archimedes failures accumulate (20 by default), Aura flags the project as ready for fine-tuning — failed episodes become instruction-tuning rows for the local model.
 
-**Performance note:** if you run Ruby on an AMD iGPU via Ollama and see local-model calls hang for minutes, the Vulkan backend's prefill throughput may be far below CPU on your hardware. Running Ollama CPU-only (e.g. hiding the Vulkan device via `GGML_VK_VISIBLE_DEVICES`) restores usable speed.
+**Performance note:** if you run Archimedes on an AMD iGPU via Ollama and see local-model calls hang for minutes, the Vulkan backend's prefill throughput may be far below CPU on your hardware. Running Ollama CPU-only (e.g. hiding the Vulkan device via `GGML_VK_VISIBLE_DEVICES`) restores usable speed.
 
 ---
 
@@ -228,12 +228,12 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 | `:confess` / `:confessions` | Auto-detect & list anomalous-episode confessions |
 | `:btw <question>` | Quick side question (read-only, no history pollution) |
 
-### Ruby
+### Archimedes
 
 | Command | Description |
 |---------|-------------|
-| `:rubyon` | Enable Ruby Alternator for this session (overrides `.aura.json`) |
-| `:rubyoff` | Disable Ruby Alternator for this session (overrides `.aura.json`) |
+| `:archon` | Enable Archimedes Alternator for this session (overrides `.aura.json`) |
+| `:archoff` | Disable Archimedes Alternator for this session (overrides `.aura.json`) |
 
 ### Voice / safety
 

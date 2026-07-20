@@ -43,7 +43,7 @@ export const PRIORITY_ORDER: Record<CardPriority, number> = {
 export type PipelinePhase = 'read' | 'plan' | 'execute' | 'verify' | 'report';
 
 /** The four swim-lane rows. */
-export type PipelineRow = 'orchestrate' | 'architect' | 'verify' | 'ruby-alternator';
+export type PipelineRow = 'orchestrate' | 'architect' | 'verify' | 'archimedes-alternator';
 
 /** Status of a task card within the pipeline. */
 export type TaskStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';

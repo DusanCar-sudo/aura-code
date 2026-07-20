@@ -13,7 +13,7 @@ function writeDream(dir: string, date: string, body: string): string {
 
 const DREAM_A = `# Dream — 2026-06-22
 
-> 65 episodes recalled since beginning · 42 approved · 0 ruby wins
+> 65 episodes recalled since beginning · 42 approved · 0 archimedes wins
 > Categories: other, research, implementation, review
 
 ## Lessons
@@ -31,7 +31,7 @@ Consolidation could not run; episodes are preserved and will be recalled next dr
 
 const DREAM_B = `# Dream — 2026-06-24
 
-> 69 episodes recalled since beginning · 46 approved · 2 ruby wins
+> 69 episodes recalled since beginning · 46 approved · 2 archimedes wins
 > Categories: other, research, implementation, review
 
 ## Lessons

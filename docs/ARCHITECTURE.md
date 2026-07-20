@@ -103,21 +103,21 @@ Reconciled beliefs are also written as an Open Knowledge Format v0.1 bundle to `
 
 Reconciled memory is loaded in `context.ts` (`loadReconciledMemory`), which reads `dreams/.reconciled.md`, strips YAML frontmatter, truncates to ~2000 characters, and injects it into the system prompt under `### Memory (from past sessions)`. Optional — if no reconciled file exists, the prompt is identical to a memoryless agent.
 
-## Experience Mining — Baby Ruby & Papa Ruby
+## Experience Mining — Baby Archimedes & Papa Archimedes
 
 A second, independent path from raw episodes to usable knowledge — pure statistics first, local-model judgment second.
 
 ```
 episodes
-  → Baby Ruby (src/mining/extract.ts) — NO LLM, pure clustering/statistics
+  → Baby Archimedes (src/mining/extract.ts) — NO LLM, pure clustering/statistics
     → concepts (MinedConcept[])
-      → Papa Ruby (src/mining/refine.ts) — local LLM judgment
+      → Papa Archimedes (src/mining/refine.ts) — local LLM judgment
         → training-data/*.jsonl — fine-tuning-ready output
 ```
 
-**Baby Ruby** clusters episodes by category, then recursively splits by keyword overlap (depth-bounded at 3, size-bounded at 3 episodes minimum — a real termination condition, not unbounded recursion). Zero LLM calls, zero API keys, zero network. Confidence is mechanical: cluster size relative to total episodes.
+**Baby Archimedes** clusters episodes by category, then recursively splits by keyword overlap (depth-bounded at 3, size-bounded at 3 episodes minimum — a real termination condition, not unbounded recursion). Zero LLM calls, zero API keys, zero network. Confidence is mechanical: cluster size relative to total episodes.
 
-**Papa Ruby** takes Baby Ruby's concepts and asks a local model (RubyAlternator's configured small model, e.g. `qwen2.5-coder:1.5b` via Ollama) to judge whether each concept is a real, generalizable lesson or coincidental noise. Pre-call gating skips weak-signal concepts before ever spending a model call. Deduplicates against `dreams/.reconciled.md` so the two independent pipelines (dream reconciliation and mining) don't produce redundant rows. Accepted lessons are written as `TrainingExample` rows, ready for external fine-tuning — the same approach used to build the Serbian Legal LLM corpus.
+**Papa Archimedes** takes Baby Archimedes's concepts and asks a local model (ArchimedesAlternator's configured small model, e.g. `qwen2.5-coder:1.5b` via Ollama) to judge whether each concept is a real, generalizable lesson or coincidental noise. Pre-call gating skips weak-signal concepts before ever spending a model call. Deduplicates against `dreams/.reconciled.md` so the two independent pipelines (dream reconciliation and mining) don't produce redundant rows. Accepted lessons are written as `TrainingExample` rows, ready for external fine-tuning — the same approach used to build the Serbian Legal LLM corpus.
 
 Implemented in `src/mining/extract.ts` and `src/mining/refine.ts`; as of this
 writing there is no `:mine` REPL command or CLI flag wired to either stage —

@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { whatsAppTool, WHATSAPP_DEFINITION } from '../src/tools/whatsapp.js';
 
-const testDir = path.join(os.tmpdir(), 'ruby-test-whatsapp-' + Date.now());
+const testDir = path.join(os.tmpdir(), 'aura-test-whatsapp-' + Date.now());
 const configDir = path.join(testDir, '.aura');
 
 const mockFetch = vi.fn();

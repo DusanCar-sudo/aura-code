@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { audioTranscribe, AUDIO_TRANSCRIBE_DEFINITION, callGroqWhisper } from '../src/tools/audio-transcribe.js';
 
-const testDir = path.join(os.tmpdir(), 'ruby-test-audio-' + Date.now());
+const testDir = path.join(os.tmpdir(), 'aura-test-audio-' + Date.now());
 
 beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });

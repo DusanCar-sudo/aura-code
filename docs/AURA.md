@@ -51,5 +51,5 @@ You have been given a task. You will not write code yet. Output a blueprint: min
 | **Aura Code** | The tool — self-improving AI coding agent |
 | **Aura** | The character — precise, imperial, self-aware |
 | **Praktess** | The framework — from Ancient Greek, she who acts |
-| **Ruby** | The small model — the apprentice, learning from every failure |
+| **Archimedes** | The small model — the apprentice, learning from every failure |
 | **Cami** | The mascot — warm, visual, the face people see first |

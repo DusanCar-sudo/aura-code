@@ -8,7 +8,7 @@ Aura Code (formerly Rubyness, BootstrapRuby) — the name, concept, architecture
 
 This includes:
 - The concept of a self-improving AI coding agent directed by a human orchestrator
-- The Ruby Principle — small model learns from large model failures
+- The Archimedes Principle — small model learns from large model failures
 - The Self-Harness improvement loop architecture
 - The Practess character, brand, and identity
 - The multi-agent orchestration methodology used to build this system

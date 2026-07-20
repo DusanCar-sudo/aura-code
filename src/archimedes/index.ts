@@ -1,5 +1,5 @@
-export { RubyModel } from './ruby-model.js';
-export { RubyAlternator } from './alternator.js';
+export { ArchimedesModel } from './archimedes-model.js';
+export { ArchimedesAlternator } from './alternator.js';
 export type { AlternatorOptions, AlternatorRunResult } from './alternator.js';
 export {
   assessCompetence,
@@ -24,11 +24,11 @@ export {
 } from './fine-tune.js';
 export type {
   Episode,
-  RubyConfig,
+  ArchimedesConfig,
   CompetenceLevel,
   AlternationDecision,
   TrainingExample,
   FineTuneJob,
   TaskCategory,
 } from './types.js';
-export { DEFAULT_RUBY_CONFIG } from './types.js';
+export { DEFAULT_ARCHIMEDES_CONFIG } from './types.js';
