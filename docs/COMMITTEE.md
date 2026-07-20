@@ -6,7 +6,7 @@
 
 ## Why this exists
 
-Baby Ruby (`src/mining/extract.ts`) and Papa Ruby (`src/mining/refine.ts`)
+Baby Archimedes (`src/mining/extract.ts`) and Papa Archimedes (`src/mining/refine.ts`)
 both run **on-demand** — you trigger `:mine`, they process whatever episodes
 exist. Dream reconciliation (`src/dream/reconcile.ts`) runs after `:dream`,
 gated at ≥3 dreams.
@@ -22,7 +22,7 @@ that doesn't actually need continuous coverage — the goal is a clean
 checkpoint at a moment the user chooses, not real-time ingestion.
 
 This is the answer to the "memory pollution" risk flagged in review: instead
-of one model's judgment deciding what's worth keeping (Papa Ruby today), a
+of one model's judgment deciding what's worth keeping (Papa Archimedes today), a
 **committee of three votes from the same small model** filters candidates
 before they're even considered for the permanent knowledge graph.
 
@@ -33,7 +33,7 @@ layer:
 
 - Is a **command the user explicitly runs** (`:committee`), exactly like
   `:dream`. It is never auto-triggered by any other command.
-- If never run, **nothing else changes**. Baby Ruby, Papa Ruby, dream
+- If never run, **nothing else changes**. Baby Archimedes, Papa Archimedes, dream
   reconciliation, `:council`, everything works exactly as it does today —
   none of them read from or depend on the committee's output.
 - Writes to its **own directory** (`committee/` or similar), never a
@@ -88,22 +88,22 @@ Locked decision from design discussion:
 - Accepted tradeoff: occasionally a lower-value-but-still-clean memory gets
   through. That's fine — clean-but-modest beats polluted. The committee's
   job is precision (don't let garbage through), not recall (don't worry
-  about missing some good candidates — Papa Ruby and dream reconciliation
+  about missing some good candidates — Papa Archimedes and dream reconciliation
   still run independently and will likely catch real patterns anyway).
 
 ## Data source: episodes only
 
-Locked decision: `:committee` reads `episodes/` — the same source Baby Ruby
+Locked decision: `:committee` reads `episodes/` — the same source Baby Archimedes
 already reads. It does **not** watch live terminal output, file changes, or
 in-progress conversation. This keeps a single clean boundary: episodes are
-the one source of raw truth for every downstream system (Baby Ruby, Papa
-Ruby, the committee command). No new data source, no new complexity at the
+the one source of raw truth for every downstream system (Baby Archimedes, Papa
+Archimedes, the committee command). No new data source, no new complexity at the
 ingestion boundary.
 
 Practical effect: `:committee` is a *stricter, vote-gated* sibling to
 `:mine` — same input, same candidate-generation approach (likely reusing
 `mineExperience()` directly), but every candidate must clear 2-of-3 votes
-before it's written anywhere, rather than going straight to Papa Ruby's
+before it's written anywhere, rather than going straight to Papa Archimedes's
 single-pass judgment.
 
 ## Edge thickness: "frequently useful," not "frequently mentioned"
@@ -122,15 +122,15 @@ doesn't register as 100% confidence.
 
 This is directly computable from existing `Episode.reviewerApproved` data —
 no new tracking field needed. It answers a different question than Baby
-Ruby's confidence (`cluster size / total episodes`, which measures
+Archimedes's confidence (`cluster size / total episodes`, which measures
 *frequency*) — this measures *correlation with success*, which is a
 stronger signal for "this belief is worth weighting heavily."
 
 ## Open questions for implementation (next session, not tonight)
 
 1. **What exactly is a "candidate memory unit"?** Is the committee voting
-   on Baby-Ruby-style concepts (clusters), or on raw single-episode claims
-   extracted directly? Leaning toward: reuse Baby Ruby's clustering as the
+   on Baby-Archimedes-style concepts (clusters), or on raw single-episode claims
+   extracted directly? Leaning toward: reuse Baby Archimedes's clustering as the
    candidate-generation step directly — `:committee` calls `mineExperience()`
    internally, then runs committee voting on each resulting concept, rather
    than inventing a separate candidate-extraction method.
@@ -140,15 +140,15 @@ stronger signal for "this belief is worth weighting heavily."
    step (temp layer -> permanent knowledge graph) is NOT specced here. Before
    building this, decide: does promotion happen automatically the next time
    `:committee` runs and finds the same concept again, or does it require
-   another explicit step (maybe folded into Papa Ruby, maybe its own thing)?
-   This is the same shape of open question MINING.md left for Papa Ruby's
+   another explicit step (maybe folded into Papa Archimedes, maybe its own thing)?
+   This is the same shape of open question MINING.md left for Papa Archimedes's
    output destination — don't guess at it without deciding deliberately.
 
 3. **Relationship to `:mine` and `:mine --refine`.** Does `:committee`
    replace `:mine --refine` for some use cases, sit alongside it, or
-   precede it (committee filters first, then Papa Ruby reasons only over
+   precede it (committee filters first, then Papa Archimedes reasons only over
    committee-approved concepts)? The cleanest design is probably: committee
-   voting is a *stricter alternative* to Papa Ruby's single-pass judgment —
+   voting is a *stricter alternative* to Papa Archimedes's single-pass judgment —
    the user picks one path or the other depending on how much they trust a
    single local-model judgment vs. wanting majority-vote consistency. Worth
    deciding before implementation, since it affects whether `:committee`
@@ -157,7 +157,7 @@ stronger signal for "this belief is worth weighting heavily."
 
 ## Non-goals
 
-- This is not a replacement for Papa Ruby. The two may end up being
+- This is not a replacement for Papa Archimedes. The two may end up being
   alternative paths over the same concepts (see open question #3) rather
   than one replacing the other.
 - This does not change anything about how dreams, reconciliation, or the

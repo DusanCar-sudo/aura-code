@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatStats } from '../../src/ruby/stats.js';
-import type { Episode } from '../../src/ruby/types.js';
+import { formatStats } from '../../src/archimedes/stats.js';
+import type { Episode } from '../../src/archimedes/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -15,8 +15,8 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
     timestamp: Date.now(),
     task: 'Fix the auth bug',
     projectRoot: '/fake/project',
-    rubyAttempted: false,
-    rubySucceeded: false,
+    archimedesAttempted: false,
+    archimedesSucceeded: false,
     largeModelUsed: 'claude-sonnet-4-5',
     reviewerApproved: true,
     tokensUsed: { largeModel: 1000 },
@@ -181,7 +181,7 @@ describe('formatStats — multiple episodes with mixed success', () => {
 
   it('handles episodes with no largeModelUsed gracefully', () => {
     const episodes = [
-      makeEpisode({ largeModelUsed: undefined, rubySucceeded: true, reviewerApproved: true }),
+      makeEpisode({ largeModelUsed: undefined, archimedesSucceeded: true, reviewerApproved: true }),
       makeEpisode({ largeModelUsed: 'claude-sonnet-4-5', reviewerApproved: true }),
     ];
     expect(() => formatStats(episodes)).not.toThrow();

@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockLoadEpisodes = vi.fn();
-vi.mock('../../src/ruby/episode-capture.js', () => ({
+vi.mock('../../src/archimedes/episode-capture.js', () => ({
   loadEpisodes: (...args: unknown[]) => mockLoadEpisodes(...args),
 }));
 
 import { mineExperience } from '../../src/mining/extract.js';
-import type { Episode, TaskCategory } from '../../src/ruby/types.js';
+import type { Episode, TaskCategory } from '../../src/archimedes/types.js';
 
 function makeEpisode(overrides: Partial<Episode> & { task: string; taskCategory: TaskCategory }): Episode {
   return {
     id: Math.random().toString(36).slice(2),
     timestamp: Date.now(),
     projectRoot: '/fake',
-    rubyAttempted: false,
-    rubySucceeded: false,
+    archimedesAttempted: false,
+    archimedesSucceeded: false,
     reviewerApproved: true,
     tokensUsed: {},
     durationMs: 1000,

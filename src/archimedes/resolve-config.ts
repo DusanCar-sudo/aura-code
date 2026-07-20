@@ -1,5 +1,5 @@
-import type { RubyConfig } from './types.js';
-import { DEFAULT_RUBY_CONFIG } from './types.js';
+import type { ArchimedesConfig } from './types.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from './types.js';
 
 interface OllamaTag {
   name: string;
@@ -37,13 +37,13 @@ async function fetchLocalOllamaModels(ollamaBaseUrl: string): Promise<OllamaTag[
   }
 }
 
-export interface RubyConfigResolution {
-  config: RubyConfig | null;
+export interface ArchimedesConfigResolution {
+  config: ArchimedesConfig | null;
   reason: string;
 }
 
 /**
- * Resolves a usable RubyConfig. If .aura.json explicitly set a
+ * Resolves a usable ArchimedesConfig. If .aura.json explicitly set a
  * modelName, that always wins with no network call. Otherwise, queries
  * Ollama for what's actually installed locally and uses the most
  * recently modified/used one. If nothing is installed at all, returns
@@ -53,13 +53,13 @@ export interface RubyConfigResolution {
  * both call sites in cli/index.ts (CLI --auto and TUI mode) share the
  * same fetch result without redundant round-trips.
  */
-export async function resolveRubyConfig(
-  fileRubyConfig: Partial<RubyConfig> | undefined,
-): Promise<RubyConfigResolution> {
-  const merged = { ...DEFAULT_RUBY_CONFIG, ...(fileRubyConfig ?? {}) };
+export async function resolveArchimedesConfig(
+  fileArchimedesConfig: Partial<ArchimedesConfig> | undefined,
+): Promise<ArchimedesConfigResolution> {
+  const merged = { ...DEFAULT_ARCHIMEDES_CONFIG, ...(fileArchimedesConfig ?? {}) };
 
-  if (fileRubyConfig?.modelName) {
-    return { config: merged, reason: `Using configured Ruby model: ${merged.modelName}` };
+  if (fileArchimedesConfig?.modelName) {
+    return { config: merged, reason: `Using configured Archimedes model: ${merged.modelName}` };
   }
 
   const models = await fetchLocalOllamaModels(merged.ollamaBaseUrl);
@@ -67,9 +67,9 @@ export async function resolveRubyConfig(
     return {
       config: null,
       reason:
-        'No local Ollama models found — Ruby Alternator has nothing to route to.\n' +
+        'No local Ollama models found — Archimedes Alternator has nothing to route to.\n' +
         '  Run: ollama pull granite4.1:3b (or any model you prefer)\n' +
-        '  It will be auto-detected next time, or set "ruby": { "modelName": "..." } in .aura.json.',
+        '  It will be auto-detected next time, or set "archimedes": { "modelName": "..." } in .aura.json.',
     };
   }
 

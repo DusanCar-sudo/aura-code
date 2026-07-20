@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { telegramTool, TELEGRAM_DEFINITION } from '../src/tools/telegram.js';
 
-const testDir = path.join(os.tmpdir(), 'ruby-test-telegram-' + Date.now());
+const testDir = path.join(os.tmpdir(), 'aura-test-telegram-' + Date.now());
 const configDir = path.join(testDir, '.aura');
 
 const mockFetch = vi.fn();

@@ -8,8 +8,8 @@ import {
   loadEpisodes,
   deleteEpisode,
   getEpisodeStats,
-} from '../../src/ruby/episode-capture.js';
-import type { Episode } from '../../src/ruby/types.js';
+} from '../../src/archimedes/episode-capture.js';
+import type { Episode } from '../../src/archimedes/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -24,10 +24,10 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
     timestamp: overrides.timestamp ?? Date.now(),
     task: 'Fix the auth bug in core/auth.ts',
     projectRoot: '/fake/project',
-    rubyAttempted: true,
-    rubySucceeded: overrides.rubySucceeded ?? true,
+    archimedesAttempted: true,
+    archimedesSucceeded: overrides.archimedesSucceeded ?? true,
     reviewerApproved: true,
-    tokensUsed: { ruby: 100 },
+    tokensUsed: { archimedes: 100 },
     durationMs: 5000,
     taskCategory: 'implementation',
     ...overrides,
@@ -42,7 +42,7 @@ describe('saveEpisode & loadEpisodes', () => {
   let projectRoot: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-ruby-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-archimedes-'));
     vi.stubEnv('HOME', tmpDir);
     projectRoot = path.join(tmpDir, 'fake-project');
   });
@@ -58,10 +58,10 @@ describe('saveEpisode & loadEpisodes', () => {
       id: 'ep-save-load',
       timestamp: 1_700_000_000_000,
       task: 'Add rate limiting',
-      rubyAttempted: true,
-      rubySucceeded: true,
+      archimedesAttempted: true,
+      archimedesSucceeded: true,
       reviewerApproved: true,
-      tokensUsed: { ruby: 250 },
+      tokensUsed: { archimedes: 250 },
       durationMs: 8000,
     });
 
@@ -228,7 +228,7 @@ describe('getEpisodeStats', () => {
   let projectRoot: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-ruby-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-archimedes-'));
     vi.stubEnv('HOME', tmpDir);
     projectRoot = path.join(tmpDir, 'fake-project');
   });
@@ -243,8 +243,8 @@ describe('getEpisodeStats', () => {
     const stats = await getEpisodeStats(projectRoot);
 
     expect(stats.total).toBe(0);
-    expect(stats.rubySuccesses).toBe(0);
-    expect(stats.rubyFailures).toBe(0);
+    expect(stats.archimedesSuccesses).toBe(0);
+    expect(stats.archimedesFailures).toBe(0);
     expect(stats.largeModelInterventions).toBe(0);
     expect(stats.readyForFineTune).toBe(false);
   });
@@ -252,39 +252,39 @@ describe('getEpisodeStats', () => {
   it('returns zeros for missing directory', async () => {
     const stats = await getEpisodeStats(path.join(tmpDir, 'nonexistent-project'));
     expect(stats.total).toBe(0);
-    expect(stats.rubySuccesses).toBe(0);
-    expect(stats.rubyFailures).toBe(0);
+    expect(stats.archimedesSuccesses).toBe(0);
+    expect(stats.archimedesFailures).toBe(0);
     expect(stats.readyForFineTune).toBe(false);
   });
 
-  it('counts rubySuccesses correctly', async () => {
+  it('counts archimedesSuccesses correctly', async () => {
     await saveEpisode(projectRoot, makeEpisode({
-      id: 'ep-s-1', rubyAttempted: true, rubySucceeded: true,
+      id: 'ep-s-1', archimedesAttempted: true, archimedesSucceeded: true,
     }));
     await saveEpisode(projectRoot, makeEpisode({
-      id: 'ep-s-2', rubyAttempted: true, rubySucceeded: true,
+      id: 'ep-s-2', archimedesAttempted: true, archimedesSucceeded: true,
     }));
     await saveEpisode(projectRoot, makeEpisode({
-      id: 'ep-s-3', rubyAttempted: true, rubySucceeded: false,
+      id: 'ep-s-3', archimedesAttempted: true, archimedesSucceeded: false,
     }));
 
     const stats = await getEpisodeStats(projectRoot);
     expect(stats.total).toBe(3);
-    expect(stats.rubySuccesses).toBe(2);
-    expect(stats.rubyFailures).toBe(1);
+    expect(stats.archimedesSuccesses).toBe(2);
+    expect(stats.archimedesFailures).toBe(1);
   });
 
-  it('counts rubyFailures correctly', async () => {
+  it('counts archimedesFailures correctly', async () => {
     await saveEpisode(projectRoot, makeEpisode({
-      id: 'ep-f-1', rubyAttempted: true, rubySucceeded: false,
+      id: 'ep-f-1', archimedesAttempted: true, archimedesSucceeded: false,
     }));
     await saveEpisode(projectRoot, makeEpisode({
-      id: 'ep-f-2', rubyAttempted: true, rubySucceeded: false,
+      id: 'ep-f-2', archimedesAttempted: true, archimedesSucceeded: false,
     }));
 
     const stats = await getEpisodeStats(projectRoot);
-    expect(stats.rubyFailures).toBe(2);
-    expect(stats.rubySuccesses).toBe(0);
+    expect(stats.archimedesFailures).toBe(2);
+    expect(stats.archimedesSuccesses).toBe(0);
   });
 
   it('counts largeModelInterventions when largeModelUsed is set', async () => {
@@ -296,7 +296,7 @@ describe('getEpisodeStats', () => {
     }));
     await saveEpisode(projectRoot, makeEpisode({
       id: 'ep-lm-3',
-      // largeModelUsed not set (Ruby succeeded, no large model needed)
+      // largeModelUsed not set (Archimedes succeeded, no large model needed)
     }));
 
     const stats = await getEpisodeStats(projectRoot);
@@ -308,12 +308,12 @@ describe('getEpisodeStats', () => {
     for (let i = 0; i < 10; i++) {
       await saveEpisode(projectRoot, makeEpisode({
         id: `ep-ft-no-${i}`,
-        rubyAttempted: true,
-        rubySucceeded: false,
+        archimedesAttempted: true,
+        archimedesSucceeded: false,
       }));
     }
     const stats = await getEpisodeStats(projectRoot);
-    expect(stats.rubyFailures).toBe(10);
+    expect(stats.archimedesFailures).toBe(10);
     expect(stats.readyForFineTune).toBe(false);
   });
 
@@ -322,12 +322,12 @@ describe('getEpisodeStats', () => {
     for (let i = 0; i < 20; i++) {
       await saveEpisode(projectRoot, makeEpisode({
         id: `ep-ft-yes-${i}`,
-        rubyAttempted: true,
-        rubySucceeded: false,
+        archimedesAttempted: true,
+        archimedesSucceeded: false,
       }));
     }
     const stats = await getEpisodeStats(projectRoot);
-    expect(stats.rubyFailures).toBe(20);
+    expect(stats.archimedesFailures).toBe(20);
     expect(stats.readyForFineTune).toBe(true);
   });
 
@@ -336,29 +336,29 @@ describe('getEpisodeStats', () => {
     for (let i = 0; i < 30; i++) {
       await saveEpisode(projectRoot, makeEpisode({
         id: `ep-ft-exceed-${i}`,
-        rubyAttempted: true,
-        rubySucceeded: false,
+        archimedesAttempted: true,
+        archimedesSucceeded: false,
       }));
     }
     const stats = await getEpisodeStats(projectRoot);
     expect(stats.readyForFineTune).toBe(true);
   });
 
-  it('readyForFineTune uses only rubyAttempted + not rubySucceeded', async () => {
+  it('readyForFineTune uses only archimedesAttempted + not archimedesSucceeded', async () => {
     // 15 failures + 10 successes = 15 failures counted (< 20 → false)
     for (let i = 0; i < 15; i++) {
       await saveEpisode(projectRoot, makeEpisode({
-        id: `ep-mixed-fail-${i}`, rubyAttempted: true, rubySucceeded: false,
+        id: `ep-mixed-fail-${i}`, archimedesAttempted: true, archimedesSucceeded: false,
       }));
     }
     for (let i = 0; i < 10; i++) {
       await saveEpisode(projectRoot, makeEpisode({
-        id: `ep-mixed-succ-${i}`, rubyAttempted: true, rubySucceeded: true,
+        id: `ep-mixed-succ-${i}`, archimedesAttempted: true, archimedesSucceeded: true,
       }));
     }
     const stats = await getEpisodeStats(projectRoot);
-    expect(stats.rubyFailures).toBe(15);
-    expect(stats.rubySuccesses).toBe(10);
+    expect(stats.archimedesFailures).toBe(15);
+    expect(stats.archimedesSuccesses).toBe(10);
     expect(stats.readyForFineTune).toBe(false);
   });
 });
@@ -371,7 +371,7 @@ describe('deleteEpisode', () => {
   let projectRoot: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-ruby-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-archimedes-'));
     vi.stubEnv('HOME', tmpDir);
     projectRoot = path.join(tmpDir, 'fake-project');
   });

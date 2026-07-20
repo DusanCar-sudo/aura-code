@@ -56,9 +56,9 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':approve', label: 'Toggle auto-approve', description: 'Skip y/N prompts', category: 'Safety' },
   // System
   { id: ':help', label: 'Help', description: 'Show all commands', category: 'System' },
-  { id: ':rubyon', label: 'Ruby On', description: 'Enable Ruby Alternator for this session', category: 'System' },
-  { id: ':rubyoff', label: 'Ruby Off', description: 'Disable Ruby Alternator for this session', category: 'System' },
-  { id: ':rubymodel', label: 'Ruby Model', description: 'Set Ruby local model for this session  e.g. :rubymodel qwen3-vl:4b', category: 'System' },
+  { id: ':archon', label: 'Archimedes On', description: 'Enable Archimedes Alternator for this session', category: 'System' },
+  { id: ':archoff', label: 'Archimedes Off', description: 'Disable Archimedes Alternator for this session', category: 'System' },
+  { id: ':archmodel', label: 'Archimedes Model', description: 'Set Archimedes local model for this session  e.g. :archmodel qwen3-vl:4b', category: 'System' },
   { id: ':q', label: 'Quit', description: 'Exit Aura', category: 'System' },
   { id: ':context', label: 'Context health', description: 'Token usage dashboard', category: 'System' },
   { id: ':doctor', label: 'Doctor', description: 'Run health checks', category: 'System' },

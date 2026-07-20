@@ -8,9 +8,9 @@ import * as path from 'path';
 import type { LLMProvider } from '../providers/types.js';
 import * as os from 'os';
 import { listAllEpisodes } from './episode.js';
-import { loadEpisodes } from '../ruby/episode-capture.js';
+import { loadEpisodes } from '../archimedes/episode-capture.js';
 import { createProvider, checkOllamaHealth } from '../providers/factory.js';
-import type { Episode } from '../ruby/types.js';
+import type { Episode } from '../archimedes/types.js';
 
 function dreamsDir(root: string): string {
   return path.join(root, 'dreams');
@@ -68,8 +68,8 @@ function advanceCutoff(root: string, ts: number): void {
 function formatEpisodesForPrompt(episodes: Episode[]): string {
   return episodes.map(e => {
     const date = new Date(e.timestamp).toISOString();
-    const outcome = e.rubyAttempted
-      ? (e.rubySucceeded ? 'ruby succeeded' : `ruby failed${e.largeModelUsed ? `, escalated to ${e.largeModelUsed}` : ''}`)
+    const outcome = e.archimedesAttempted
+      ? (e.archimedesSucceeded ? 'archimedes succeeded' : `archimedes failed${e.largeModelUsed ? `, escalated to ${e.largeModelUsed}` : ''}`)
       : (e.largeModelUsed ? `handled by ${e.largeModelUsed}` : 'no model recorded');
     const review = e.reviewerApproved ? 'approved' : 'NOT approved';
     return `- [${date}] (${e.taskCategory ?? 'uncategorized'}, ${outcome}, ${review}, ${Math.round(e.durationMs / 1000)}s): ${e.task.slice(0, 200)}`;

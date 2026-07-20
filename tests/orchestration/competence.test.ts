@@ -63,7 +63,7 @@ describe('competenceStore', () => {
   let projectTmp: string;
 
   beforeEach(() => {
-    projectTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-comp-'));
+    projectTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-comp-'));
   });
 
   afterEach(() => {

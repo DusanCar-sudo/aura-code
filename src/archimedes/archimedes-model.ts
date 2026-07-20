@@ -6,10 +6,10 @@ import type {
   StreamChunk,
 } from '../providers/types.js';
 import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
-import type { RubyConfig } from './types.js';
+import type { ArchimedesConfig } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RubyModel — small local model via Ollama
+// ArchimedesModel — small local model via Ollama
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OllamaTagsResponse {
@@ -17,18 +17,18 @@ interface OllamaTagsResponse {
 }
 
 /**
- * {@link LLMProvider} implementation for the Ruby Principle small model.
+ * {@link LLMProvider} implementation for the Archimedes Principle small model.
  * Delegates completions to {@link OpenAICompatibleProvider} against Ollama.
  */
-export class RubyModel implements LLMProvider {
-  readonly name = 'Ruby';
+export class ArchimedesModel implements LLMProvider {
+  readonly name = 'Archimedes';
   supportsTools = true;
   model: string;
 
-  private readonly config: RubyConfig;
+  private readonly config: ArchimedesConfig;
   private delegate: OpenAICompatibleProvider;
 
-  constructor(config: RubyConfig) {
+  constructor(config: ArchimedesConfig) {
     this.config = config;
     this.model = config.modelName;
     this.delegate = this.buildDelegate();
@@ -102,7 +102,7 @@ export class RubyModel implements LLMProvider {
         baseUrl: this.config.ollamaBaseUrl,
         apiKey: 'ollama',
       },
-      'Ruby',
+      'Archimedes',
     );
   }
 }

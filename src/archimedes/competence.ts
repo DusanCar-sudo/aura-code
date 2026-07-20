@@ -2,15 +2,15 @@ import type {
   AlternationDecision,
   CompetenceLevel,
   Episode,
-  RubyConfig,
+  ArchimedesConfig,
 } from './types.js';
-import { DEFAULT_RUBY_CONFIG } from './types.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Large model used when Ruby is not trusted or is disabled. */
+/** Large model used when Archimedes is not trusted or is disabled. */
 export const DEFAULT_FALLBACK_MODEL = 'claude-sonnet-4-5-20251001';
 
 /** Default failure count before `shouldFineTune` returns true. */
@@ -31,15 +31,15 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-function safeConfig(config: RubyConfig): RubyConfig {
+function safeConfig(config: ArchimedesConfig): ArchimedesConfig {
   return {
-    modelName: config?.modelName ?? DEFAULT_RUBY_CONFIG.modelName,
-    ollamaBaseUrl: config?.ollamaBaseUrl ?? DEFAULT_RUBY_CONFIG.ollamaBaseUrl,
+    modelName: config?.modelName ?? DEFAULT_ARCHIMEDES_CONFIG.modelName,
+    ollamaBaseUrl: config?.ollamaBaseUrl ?? DEFAULT_ARCHIMEDES_CONFIG.ollamaBaseUrl,
     competenceThreshold: clamp01(
-      config?.competenceThreshold ?? DEFAULT_RUBY_CONFIG.competenceThreshold,
+      config?.competenceThreshold ?? DEFAULT_ARCHIMEDES_CONFIG.competenceThreshold,
     ),
-    minAttempts: Math.max(0, config?.minAttempts ?? DEFAULT_RUBY_CONFIG.minAttempts),
-    enabled: config?.enabled ?? DEFAULT_RUBY_CONFIG.enabled,
+    minAttempts: Math.max(0, config?.minAttempts ?? DEFAULT_ARCHIMEDES_CONFIG.minAttempts),
+    enabled: config?.enabled ?? DEFAULT_ARCHIMEDES_CONFIG.enabled,
   };
 }
 
@@ -86,7 +86,7 @@ function taskPatternFrom(task: string, category?: string): string {
 function safeEpisodes(episodes: Episode[]): Episode[] {
   if (!Array.isArray(episodes)) return [];
   return episodes.filter(
-    e => e && typeof e.task === 'string' && typeof e.rubyAttempted === 'boolean',
+    e => e && typeof e.task === 'string' && typeof e.archimedesAttempted === 'boolean',
   );
 }
 
@@ -94,13 +94,13 @@ function buildLevelFromEpisodes(
   pattern: string,
   matched: Episode[],
 ): CompetenceLevel {
-  const attempted = matched.filter(e => e.rubyAttempted);
-  const successes = attempted.filter(e => e.rubySucceeded);
+  const attempted = matched.filter(e => e.archimedesAttempted);
+  const successes = attempted.filter(e => e.archimedesSucceeded);
   const attemptCount = attempted.length;
   const successRate = attemptCount === 0 ? 0 : successes.length / attemptCount;
   const examples = attempted
     .slice(-MAX_EXAMPLES)
-    .map(e => ({ task: e.task, succeeded: e.rubySucceeded }));
+    .map(e => ({ task: e.task, succeeded: e.archimedesSucceeded }));
   const lastUpdated = attempted.reduce(
     (max, e) => Math.max(max, e.timestamp ?? 0),
     0,
@@ -116,8 +116,8 @@ function buildLevelFromEpisodes(
 
 function safeDecision(partial: Partial<AlternationDecision>): AlternationDecision {
   return {
-    useRuby: partial.useRuby ?? true,
-    reason: partial.reason ?? 'Defaulting to Ruby (safe fallback).',
+    useArchimedes: partial.useArchimedes ?? true,
+    reason: partial.reason ?? 'Defaulting to Archimedes (safe fallback).',
     confidence: clamp01(partial.confidence ?? 0),
     competenceLevel: partial.competenceLevel,
     fallbackModel: partial.fallbackModel ?? DEFAULT_FALLBACK_MODEL,
@@ -129,7 +129,7 @@ function safeDecision(partial: Partial<AlternationDecision>): AlternationDecisio
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Decides whether the current task should be routed to Ruby or escalated to
+ * Decides whether the current task should be routed to Archimedes or escalated to
  * the large model, based on historical episodes and configuration thresholds.
  *
  * Never throws — returns a conservative `AlternationDecision` on bad input.
@@ -137,7 +137,7 @@ function safeDecision(partial: Partial<AlternationDecision>): AlternationDecisio
 export function assessCompetence(
   episodes: Episode[],
   task: string,
-  config: RubyConfig,
+  config: ArchimedesConfig,
 ): AlternationDecision {
   try {
     const cfg = safeConfig(config);
@@ -145,8 +145,8 @@ export function assessCompetence(
 
     if (!cfg.enabled) {
       return safeDecision({
-        useRuby: false,
-        reason: 'Ruby alternation is disabled in configuration.',
+        useArchimedes: false,
+        reason: 'Archimedes alternation is disabled in configuration.',
         confidence: 1,
         fallbackModel,
       });
@@ -163,8 +163,8 @@ export function assessCompetence(
 
     if (level.attemptCount < cfg.minAttempts) {
       return safeDecision({
-        useRuby: true,
-        reason: `Only ${level.attemptCount} prior attempt(s) for this pattern (minimum ${cfg.minAttempts}) — giving Ruby a chance to learn.`,
+        useArchimedes: true,
+        reason: `Only ${level.attemptCount} prior attempt(s) for this pattern (minimum ${cfg.minAttempts}) — giving Archimedes a chance to learn.`,
         confidence: clamp01(0.3 + level.attemptCount / Math.max(cfg.minAttempts, 1) * 0.3),
         competenceLevel: level,
         fallbackModel,
@@ -173,8 +173,8 @@ export function assessCompetence(
 
     if (level.successRate >= cfg.competenceThreshold) {
       return safeDecision({
-        useRuby: true,
-        reason: `Ruby success rate ${(level.successRate * 100).toFixed(0)}% meets threshold ${(cfg.competenceThreshold * 100).toFixed(0)}% for pattern "${pattern}".`,
+        useArchimedes: true,
+        reason: `Archimedes success rate ${(level.successRate * 100).toFixed(0)}% meets threshold ${(cfg.competenceThreshold * 100).toFixed(0)}% for pattern "${pattern}".`,
         confidence: clamp01(level.successRate * Math.min(1, level.attemptCount / 10)),
         competenceLevel: level,
         fallbackModel,
@@ -182,16 +182,16 @@ export function assessCompetence(
     }
 
     return safeDecision({
-      useRuby: false,
-      reason: `Ruby success rate ${(level.successRate * 100).toFixed(0)}% below threshold ${(cfg.competenceThreshold * 100).toFixed(0)}% after ${level.attemptCount} attempt(s) — escalating to large model.`,
+      useArchimedes: false,
+      reason: `Archimedes success rate ${(level.successRate * 100).toFixed(0)}% below threshold ${(cfg.competenceThreshold * 100).toFixed(0)}% after ${level.attemptCount} attempt(s) — escalating to large model.`,
       confidence: clamp01((1 - level.successRate) * Math.min(1, level.attemptCount / 10)),
       competenceLevel: level,
       fallbackModel,
     });
   } catch {
     return safeDecision({
-      useRuby: true,
-      reason: 'Assessment error — defaulting to Ruby attempt.',
+      useArchimedes: true,
+      reason: 'Assessment error — defaulting to Archimedes attempt.',
       confidence: 0,
     });
   }
@@ -210,7 +210,7 @@ export function updateCompetence(
   episode: Episode,
 ): CompetenceLevel[] {
   try {
-    if (!episode?.rubyAttempted) return Array.isArray(existing) ? [...existing] : [];
+    if (!episode?.archimedesAttempted) return Array.isArray(existing) ? [...existing] : [];
 
     const list = Array.isArray(existing) ? [...existing] : [];
     const pattern = taskPatternFrom(episode.task ?? '', episode.taskCategory);
@@ -219,12 +219,12 @@ export function updateCompetence(
 
     const examples = [
       ...(prev?.examples ?? []),
-      { task: episode.task, succeeded: episode.rubySucceeded },
+      { task: episode.task, succeeded: episode.archimedesSucceeded },
     ].slice(-MAX_EXAMPLES);
 
     const attemptCount = (prev?.attemptCount ?? 0) + 1;
     const prevSuccesses = Math.round((prev?.successRate ?? 0) * (prev?.attemptCount ?? 0));
-    const newSuccesses = prevSuccesses + (episode.rubySucceeded ? 1 : 0);
+    const newSuccesses = prevSuccesses + (episode.archimedesSucceeded ? 1 : 0);
     const successRate = attemptCount === 0 ? 0 : newSuccesses / attemptCount;
 
     const updated: CompetenceLevel = {
@@ -250,7 +250,7 @@ export function updateCompetence(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Summarises Ruby performance grouped by `taskCategory`.
+ * Summarises Archimedes performance grouped by `taskCategory`.
  * Never throws — returns an empty array on invalid input.
  */
 export function getCompetenceReport(
@@ -261,11 +261,11 @@ export function getCompetenceReport(
     const buckets = new Map<string, { successes: number; count: number }>();
 
     for (const ep of list) {
-      if (!ep.rubyAttempted) continue;
+      if (!ep.archimedesAttempted) continue;
       const cat = ep.taskCategory ?? 'other';
       const b = buckets.get(cat) ?? { successes: 0, count: 0 };
       b.count += 1;
-      if (ep.rubySucceeded) b.successes += 1;
+      if (ep.archimedesSucceeded) b.successes += 1;
       buckets.set(cat, b);
     }
 
@@ -286,8 +286,8 @@ export function getCompetenceReport(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Returns true when enough Ruby failures have accumulated to justify a
- * fine-tune pass. A failure is an episode where Ruby was attempted but did
+ * Returns true when enough Archimedes failures have accumulated to justify a
+ * fine-tune pass. A failure is an episode where Archimedes was attempted but did
  * not succeed (large model intervened or reviewer rejected).
  *
  * Never throws — returns false on invalid input.
@@ -300,7 +300,7 @@ export function shouldFineTune(
     const threshold = Math.max(1, minFailures ?? DEFAULT_MIN_FAILURES);
     const list = safeEpisodes(episodes);
     const failures = list.filter(
-      e => e.rubyAttempted && !e.rubySucceeded,
+      e => e.archimedesAttempted && !e.archimedesSucceeded,
     ).length;
     return failures >= threshold;
   } catch {

@@ -11,7 +11,7 @@ import { searchCode } from '../src/tools/tools.js';
 describe('readFile', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
@@ -50,7 +50,7 @@ describe('readFile', () => {
 describe('editFile', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
@@ -77,7 +77,7 @@ describe('editFile', () => {
 describe('writeFile', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
@@ -102,7 +102,7 @@ describe('writeFile', () => {
 describe('runShell', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
@@ -126,7 +126,7 @@ describe('runShell', () => {
 describe('searchCode', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 

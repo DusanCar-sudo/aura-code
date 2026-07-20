@@ -148,7 +148,7 @@ export const sessionStore = {
       };
     }
     // Additive: undefined runUsage leaves any previously accumulated usage
-    // untouched (title-only saves, MoA/Ruby paths that don't collect it yet).
+    // untouched (title-only saves, MoA/Archimedes paths that don't collect it yet).
     if (runUsage) session.usage = mergeSessionUsage(session.usage, runUsage);
     await this.saveSession(projectRoot, session);
     return session;

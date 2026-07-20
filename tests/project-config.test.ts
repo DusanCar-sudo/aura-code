@@ -7,7 +7,7 @@ import { loadProjectConfig, resolveConfig } from '../src/config/project-config.j
 describe('loadProjectConfig', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-cfg-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-cfg-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
@@ -109,7 +109,7 @@ describe('resolveConfig', () => {
 describe('loadProjectConfig — providers', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-cfg-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-cfg-'));
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 

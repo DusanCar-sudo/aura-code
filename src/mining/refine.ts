@@ -1,18 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createProvider } from '../providers/factory.js';
-import { DEFAULT_RUBY_CONFIG } from '../ruby/types.js';
-import type { TrainingExample, RubyConfig } from '../ruby/types.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
+import type { TrainingExample, ArchimedesConfig } from '../archimedes/types.js';
 import type { MinedConcept } from './extract.js';
 
 /**
- * Papa Ruby — reasoning over Baby Ruby's concepts.
+ * Papa Archimedes — reasoning over Baby Archimedes's concepts.
  *
- * Takes the structural concepts Baby Ruby found (pure statistics, no LLM)
+ * Takes the structural concepts Baby Archimedes found (pure statistics, no LLM)
  * and runs ONE local-model call per qualifying concept to decide:
  *   - is this concept a real, generalizable lesson, or coincidental noise?
  *   - if real, write it as a TrainingExample (the type already exists in
- *     ruby/types.ts — this reuses it rather than inventing a new shape).
+ *     archimedes/types.ts — this reuses it rather than inventing a new shape).
  *
  * Mirrors src/dream/reconcile.ts's pattern deliberately:
  *   - one provider.complete() call per unit of work
@@ -21,17 +21,17 @@ import type { MinedConcept } from './extract.js';
  *   - the caller (mineExperience + refineConcepts together) decides whether
  *     to gate on confidence/frequency before spending a model call
  *
- * Model: the RubyAlternator's configured small model (Ollama, e.g.
+ * Model: the ArchimedesAlternator's configured small model (Ollama, e.g.
  * qwen2.5-coder:1.5b) — NOT the dream-consolidation fallback model and NOT
- * the user's large active provider. Papa Ruby's job (judging whether a
- * cluster is a real pattern) is closer to RubyAlternator's existing
+ * the user's large active provider. Papa Archimedes's job (judging whether a
+ * cluster is a real pattern) is closer to ArchimedesAlternator's existing
  * "small model attempts first" philosophy than to dream consolidation's
- * "summarize a day of work" job. Reusing DEFAULT_RUBY_CONFIG.modelName
+ * "summarize a day of work" job. Reusing DEFAULT_ARCHIMEDES_CONFIG.modelName
  * keeps Aura's "small model" vocabulary consistent across both systems.
  *
  * Deduplication against reconciled memory: if `dreams/.reconciled.md`
  * exists, its content is included in the prompt as "already known" so
- * Papa Ruby doesn't re-derive lessons the dream system already distilled.
+ * Papa Archimedes doesn't re-derive lessons the dream system already distilled.
  * This avoids redundant training rows from two independent pipelines
  * converging on the same insight.
  *
@@ -82,7 +82,7 @@ function buildRefinementPrompt(
   concept: MinedConcept,
   reconciledContext: string,
 ): { system: string; user: string } {
-  const system = `You are Papa Ruby, judging whether a statistically-detected pattern in Aura's task history is a REAL, GENERALIZABLE lesson worth turning into training data — or just coincidental keyword overlap with no real pattern.
+  const system = `You are Papa Archimedes, judging whether a statistically-detected pattern in Aura's task history is a REAL, GENERALIZABLE lesson worth turning into training data — or just coincidental keyword overlap with no real pattern.
 
 You are given:
 - A concept: a cluster of similar tasks found by pure keyword/frequency analysis (no AI was involved in finding it — it's just statistics).
@@ -155,15 +155,15 @@ function parseDecision(raw: string): RawDecision | null {
 }
 
 /**
- * Build the small local provider Papa Ruby reasons with. Reuses
- * RubyAlternator's configured model rather than inventing a separate
- * config surface — `rubyConfig` defaults to DEFAULT_RUBY_CONFIG if the
+ * Build the small local provider Papa Archimedes reasons with. Reuses
+ * ArchimedesAlternator's configured model rather than inventing a separate
+ * config surface — `archimedesConfig` defaults to DEFAULT_ARCHIMEDES_CONFIG if the
  * caller doesn't have one already loaded (e.g. from .aura.json).
  */
-function buildPapaRubyProvider(rubyConfig: RubyConfig) {
+function buildPapaArchimedesProvider(archimedesConfig: ArchimedesConfig) {
   return createProvider({
-    model: `ollama/${rubyConfig.modelName}`,
-    baseUrl: rubyConfig.ollamaBaseUrl,
+    model: `ollama/${archimedesConfig.modelName}`,
+    baseUrl: archimedesConfig.ollamaBaseUrl,
     maxTokens: 512, // judging one concept is a small, bounded task
   });
 }
@@ -208,11 +208,11 @@ async function refineOne(
 }
 
 /**
- * Run Papa Ruby over a set of Baby Ruby's concepts.
+ * Run Papa Archimedes over a set of Baby Archimedes's concepts.
  *
  * Gates BEFORE calling the model: concepts below MIN_CONFIDENCE_TO_REFINE
  * or MIN_FREQUENCY_TO_REFINE are skipped entirely (not worth a model call
- * to judge — Baby Ruby's own confidence already says this is weak signal).
+ * to judge — Baby Archimedes's own confidence already says this is weak signal).
  *
  * Accepted training examples are appended to training-data/<date>.jsonl.
  * Never overwrites — each run appends, since this mirrors an append-only
@@ -221,13 +221,13 @@ async function refineOne(
 export async function refineConcepts(opts: {
   projectRoot: string;
   concepts: MinedConcept[];
-  rubyConfig?: RubyConfig;
+  archimedesConfig?: ArchimedesConfig;
 }): Promise<RefinementResult> {
   const { projectRoot, concepts } = opts;
-  const rubyConfig = opts.rubyConfig ?? DEFAULT_RUBY_CONFIG;
+  const archimedesConfig = opts.archimedesConfig ?? DEFAULT_ARCHIMEDES_CONFIG;
 
   const reconciledContext = loadReconciledContext(projectRoot);
-  const provider = buildPapaRubyProvider(rubyConfig);
+  const provider = buildPapaArchimedesProvider(archimedesConfig);
 
   const accepted: TrainingExample[] = [];
   let rejected = 0;

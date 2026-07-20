@@ -87,7 +87,7 @@ class FakeProvider implements LLMProvider {
 describe('runAgentLoop', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-loop-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-loop-'));
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
     // These tests assert on the default compactor's recap/flush markers —
     // pin the strategy so an ambient AURA_CONTEXT_STRATEGY=tiered in the

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { generateTrainingData, exportJSONL } from '../../src/ruby/training-data.js';
-import type { Episode, TrainingExample } from '../../src/ruby/types.js';
+import { generateTrainingData, exportJSONL } from '../../src/archimedes/training-data.js';
+import type { Episode, TrainingExample } from '../../src/archimedes/types.js';
 import type { ProjectPerception } from '../../src/perception/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,13 +17,13 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
     timestamp: Date.now(),
     task: 'Fix the auth bug in core/auth.ts',
     projectRoot: '/fake/project',
-    rubyAttempted: true,
-    rubySucceeded: false,
-    rubyOutput: 'Some broken code...',
+    archimedesAttempted: true,
+    archimedesSucceeded: false,
+    archimedesOutput: 'Some broken code...',
     largeModelUsed: 'claude-sonnet-4-5-20251001',
     largeModelOutput: 'function fixedAuth() { return true; }',
     reviewerApproved: true,
-    tokensUsed: { ruby: 100, largeModel: 500 },
+    tokensUsed: { archimedes: 100, largeModel: 500 },
     durationMs: 8000,
     taskCategory: 'implementation',
     ...overrides,
@@ -66,19 +66,19 @@ function assertValidExample(ex: TrainingExample): void {
 // generateTrainingData
 // ─────────────────────────────────────────────────────────────────────────────
 describe('generateTrainingData', () => {
-  it('filters out episodes where rubyAttempted is false', async () => {
+  it('filters out episodes where archimedesAttempted is false', async () => {
     const episodes = [
-      makeEpisode({ rubyAttempted: false, largeModelOutput: 'correct code' }),
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false, largeModelOutput: 'correct code' }),
+      makeEpisode({ archimedesAttempted: false, largeModelOutput: 'correct code' }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false, largeModelOutput: 'correct code' }),
     ];
     const result = await generateTrainingData(episodes, mockPerception);
     expect(result).toHaveLength(1);
   });
 
-  it('filters out episodes where rubySucceeded is true (only failures)', async () => {
+  it('filters out episodes where archimedesSucceeded is true (only failures)', async () => {
     const episodes = [
-      makeEpisode({ rubyAttempted: true, rubySucceeded: true, largeModelOutput: 'Ruby did fine' }),
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false, largeModelOutput: 'Large model corrected this' }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: true, largeModelOutput: 'Archimedes did fine' }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false, largeModelOutput: 'Large model corrected this' }),
     ];
     const result = await generateTrainingData(episodes, mockPerception);
     expect(result).toHaveLength(1);
@@ -86,8 +86,8 @@ describe('generateTrainingData', () => {
 
   it('filters out episodes without largeModelOutput', async () => {
     const episodes = [
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false, largeModelOutput: undefined }),
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false, largeModelOutput: 'Fixed version' }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false, largeModelOutput: undefined }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false, largeModelOutput: 'Fixed version' }),
     ];
     const result = await generateTrainingData(episodes, mockPerception);
     expect(result).toHaveLength(1);
@@ -97,11 +97,11 @@ describe('generateTrainingData', () => {
   it('filters out episodes where reviewerApproved is false', async () => {
     const episodes = [
       makeEpisode({
-        rubyAttempted: true, rubySucceeded: false,
+        archimedesAttempted: true, archimedesSucceeded: false,
         largeModelOutput: 'Not reviewed', reviewerApproved: false,
       }),
       makeEpisode({
-        rubyAttempted: true, rubySucceeded: false,
+        archimedesAttempted: true, archimedesSucceeded: false,
         largeModelOutput: 'Reviewed and approved', reviewerApproved: true,
       }),
     ];
@@ -113,9 +113,9 @@ describe('generateTrainingData', () => {
   it('returns correct TrainingExample shape', async () => {
     const episode = makeEpisode({
       task: 'Add JWT authentication',
-      rubyAttempted: true,
-      rubySucceeded: false,
-      rubyOutput: 'broken auth code',
+      archimedesAttempted: true,
+      archimedesSucceeded: false,
+      archimedesOutput: 'broken auth code',
       largeModelOutput: 'function authenticate(token) { /* correct */ }',
       reviewerApproved: true,
       projectRoot: '/home/user/my-app',
@@ -134,7 +134,7 @@ describe('generateTrainingData', () => {
   it('instruction includes project vision from perception', async () => {
     const episode = makeEpisode({
       task: 'Fix something',
-      rubyAttempted: true, rubySucceeded: false,
+      archimedesAttempted: true, archimedesSucceeded: false,
       largeModelOutput: 'corrected', reviewerApproved: true,
     });
     const result = await generateTrainingData([episode], mockPerception);
@@ -144,7 +144,7 @@ describe('generateTrainingData', () => {
   it('instruction includes strict rules from perception', async () => {
     const episode = makeEpisode({
       task: 'Modify auth',
-      rubyAttempted: true, rubySucceeded: false,
+      archimedesAttempted: true, archimedesSucceeded: false,
       largeModelOutput: 'corrected', reviewerApproved: true,
     });
     const result = await generateTrainingData([episode], mockPerception);
@@ -153,10 +153,10 @@ describe('generateTrainingData', () => {
 
   it('returns empty array for no qualifying episodes', async () => {
     const episodes = [
-      makeEpisode({ rubyAttempted: false }),
-      makeEpisode({ rubyAttempted: true, rubySucceeded: true }),
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false, largeModelOutput: undefined }),
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false, largeModelOutput: 'ok', reviewerApproved: false }),
+      makeEpisode({ archimedesAttempted: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: true }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false, largeModelOutput: undefined }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false, largeModelOutput: 'ok', reviewerApproved: false }),
     ];
     const result = await generateTrainingData(episodes, mockPerception);
     expect(result).toEqual([]);
@@ -179,29 +179,29 @@ describe('generateTrainingData', () => {
   it('input field contains the original task text', async () => {
     const episode = makeEpisode({
       task: 'Add rate limiting middleware to Express',
-      rubyAttempted: true, rubySucceeded: false,
+      archimedesAttempted: true, archimedesSucceeded: false,
       largeModelOutput: 'app.use(rateLimit(...))', reviewerApproved: true,
     });
     const result = await generateTrainingData([episode], mockPerception);
     expect(result[0].input).toBe('Add rate limiting middleware to Express');
   });
 
-  it('metadata includes rubyFailureReason from rubyOutput', async () => {
+  it('metadata includes archimedesFailureReason from archimedesOutput', async () => {
     const episode = makeEpisode({
-      rubyAttempted: true, rubySucceeded: false,
-      rubyOutput: 'Ruby produced totally wrong code',
+      archimedesAttempted: true, archimedesSucceeded: false,
+      archimedesOutput: 'Archimedes produced totally wrong code',
       largeModelOutput: 'correct', reviewerApproved: true,
     });
     const result = await generateTrainingData([episode], mockPerception);
-    expect(result[0].metadata.rubyFailureReason).toContain('Ruby output insufficient');
-    expect(result[0].metadata.rubyFailureReason).toContain('wrong code');
+    expect(result[0].metadata.archimedesFailureReason).toContain('Archimedes output insufficient');
+    expect(result[0].metadata.archimedesFailureReason).toContain('wrong code');
   });
 
   it('multiple qualifying episodes all produce examples', async () => {
     const episodes = Array.from({ length: 5 }, (_, i) =>
       makeEpisode({
         task: `Task ${i}`,
-        rubyAttempted: true, rubySucceeded: false,
+        archimedesAttempted: true, archimedesSucceeded: false,
         largeModelOutput: `Output ${i}`, reviewerApproved: true,
       }),
     );
@@ -221,7 +221,7 @@ describe('exportJSONL', () => {
   let jsonlPath: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-td-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-td-'));
     jsonlPath = path.join(tmpDir, 'training.jsonl');
   });
 
@@ -248,7 +248,7 @@ describe('exportJSONL', () => {
       metadata: {
         projectRoot: '/home/app',
         taskCategory: 'implementation',
-        rubyFailureReason: 'Ruby produced incorrect limiter scope',
+        archimedesFailureReason: 'Archimedes produced incorrect limiter scope',
         timestamp: 1_700_000_001_000,
       },
     },

@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
-import { selectTools, executeTool } from '../tools/index.js';
+import { selectTools, selectToolsWithEviction, executeTool } from '../tools/index.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
@@ -70,6 +70,21 @@ export interface LoopOptions {
   healthTracker?: import('../cli/context-health.js').ContextHealthTracker;
   /** Internal: skip pre-planning inspector phase to avoid recursive spawning */
   skipInspector?: boolean;
+  /** Replaces the full built system prompt (e.g. minimal prompt for small
+   *  local models with tiny context windows). When set, buildSystemPrompt
+   *  is not called at all. */
+  systemPromptOverride?: string;
+  /** When set, only tool definitions with these names are sent to the
+   *  provider. Cuts context cost for small local models; execution-side
+   *  blocking is still the PermissionSystem's job. */
+  allowedTools?: string[];
+  /** Conditional-tool eviction (small local models only). When enabled, a
+   *  triggered conditional tool that goes uncalled for `evictAfterTurns`
+   *  turns is dropped from the schema block instead of staying sticky.
+   *  Defaults ON for the Archimedes (Ollama) provider, OFF everywhere else —
+   *  cloud providers keep sticky selectTools() to protect the Anthropic
+   *  prompt-cache prefix. */
+  toolEviction?: { enabled: boolean; evictAfterTurns?: number };
 }
 
 export interface LoopResult {
@@ -84,7 +99,7 @@ export interface LoopResult {
   /** Every tool call made during this loop run — used by the verify layer. */
   toolCallLog: Array<{ name: string; input: Record<string, unknown> }>;
   /** Real per-API-call usage as reported by the provider, one entry per
-   *  completed call. Optional so older consumers/paths (MoA, Ruby) that
+   *  completed call. Optional so older consumers/paths (MoA, Archimedes) that
    *  don't collect it stay type-compatible. */
   turnUsage?: TurnUsage[];
 }
@@ -94,6 +109,22 @@ export interface TokenUsage {
   outputTokens: number;
   totalTokens: number;
   cachedTokens: number;
+}
+
+/**
+ * Read-only, deterministic tools whose result depends solely on workspace
+ * state. Safe to serve from the per-run cache until something mutates.
+ * Deliberately excludes non-deterministic tools (web_fetch, web_search,
+ * http_request, browser) and anything with side effects.
+ */
+const CACHEABLE_READ_TOOLS = new Set([
+  'read_file', 'list_dir', 'git_diff', 'git_status', 'search_code', 'search_semantic',
+]);
+
+/** Stable cache key for a tool call — key order must not affect identity. */
+function callSignature(name: string, input: Record<string, unknown>): string {
+  const keys = Object.keys(input).sort();
+  return `${name}(${keys.map(k => `${k}=${JSON.stringify(input[k])}`).join(',')})`;
 }
 
 const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number }> = {
@@ -138,7 +169,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const profile = getLoopProfile(finalTask, opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = buildSystemPrompt(context, provider.name, finalTask);
+  const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name, finalTask);
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
     { role: 'user', content: finalTask, ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}) },
@@ -207,9 +238,28 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   // Mutable bag for per-loop state (empty-response retry counter, etc.).
   const loopState: Record<string, number> = {};
 
+  // Redundant-read cache. Exploratory runs routinely re-read the same file or
+  // re-list the same directory several turns apart, paying full I/O and a full
+  // second copy of the content in context each time. Cached results are keyed
+  // by exact call signature and dropped wholesale the moment anything mutates
+  // the workspace, so a hit can never serve stale content.
+  const readCache = new Map<string, string>();
+
   // Sticky set of triggered conditional tools — survives history compaction.
   const includedTools = new Set<string>();
-  
+
+  // Tool eviction: Archimedes's call site (alternator.ts) is owned by another
+  // track, so eviction defaults on by provider identity; the flag remains
+  // the explicit override for other embedders. Cloud providers stay sticky.
+  const evictionEnabled = opts.toolEviction?.enabled
+    ?? provider.name === 'Archimedes (Ollama)';
+  const evictAfterTurns = opts.toolEviction?.evictAfterTurns ?? 3;
+  const lastUsedTurn = new Map<string, number>();
+  const evictedTools = new Set<string>();
+
+  // Optional allowlist filter — applied after selectTools so conditional
+  // triggers still work, but nothing outside the allowlist is ever sent.
+  const allowedToolNames = opts.allowedTools ? new Set(opts.allowedTools) : null;
 
   while (true) {
     if (turns >= maxTurns) {
@@ -295,7 +345,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     let finalResponse: { stopReason: 'done' | 'tools' | 'limit' } | null = null;
 
     try {
-      const stream = provider.stream(system, history, selectTools(opts.task, history, includedTools));
+      let tools = evictionEnabled
+        ? selectToolsWithEviction(opts.task, history, includedTools, lastUsedTurn, turns, evictAfterTurns, evictedTools)
+        : selectTools(opts.task, history, includedTools);
+      if (allowedToolNames) tools = tools.filter(t => allowedToolNames.has(t.name));
+      const stream = provider.stream(system, history, tools);
       for await (const chunk of stream) {
         switch (chunk.type) {
           case 'text':
@@ -416,6 +470,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
     for (const call of responseToolCalls) {
       toolCallCount++;
+      // Any attempted call counts as "used" for eviction — the model
+      // demonstrably wants the tool even if the call is blocked or errors.
+      lastUsedTurn.set(call.name, turns);
       display.toolCall(call.name, call.input);
 
       let result: string;
@@ -457,10 +514,34 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           }
         }
 
-        const startMs = Date.now();
-        result = await executeTool(call.name, call.input, opts.context.root);
-        const elapsed = Date.now() - startMs;
-        display.toolResult(call.name, result, elapsed);
+        // Any mutation invalidates every cached read: a shell command or file
+        // write can change arbitrary paths, so partial invalidation would be
+        // guesswork. Cleared before execution so a mutation that throws still
+        // drops the cache rather than leaving it falsely warm.
+        if (MUTATING_TOOLS.has(call.name) || call.name === 'run_tests') {
+          readCache.clear();
+        }
+
+        const sig = callSignature(call.name, call.input);
+        const cacheable = CACHEABLE_READ_TOOLS.has(call.name);
+        const cached = cacheable ? readCache.get(sig) : undefined;
+
+        if (cached !== undefined) {
+          // The content is only elided if it is still verbatim in the live
+          // history — if compaction has since dropped it, the model genuinely
+          // no longer has it and must get the full result back.
+          const stillInContext = history.some(m =>
+            m.role === 'tool_result' && m.results.some(r => r.content === cached));
+          result = stillInContext
+            ? `[identical to the earlier ${sig} call this session; workspace unchanged since. Result omitted — reuse the copy already in context.]`
+            : cached;
+          display.toolResult(call.name, result, 0);
+        } else {
+          const startMs = Date.now();
+          result = await executeTool(call.name, call.input, opts.context.root);
+          const elapsed = Date.now() - startMs;
+          display.toolResult(call.name, result, elapsed);
+        }
         // Proactive truncation: align with the compactor's MAX_RESULT_CHARS
         // (4K chars ~1K tokens). Oversized results pollute context between
         // compaction cycles — truncate early so every API call carries less
@@ -471,6 +552,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             + `\n[result truncated: ${result.length.toLocaleString()} chars total]`;
         }
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
+        // Cache the post-truncation text — that is exactly what lands in
+        // history, so a later hit can compare against it verbatim. Errors are
+        // never cached: they are frequently transient and re-reading is cheap.
+        if (cached === undefined && cacheable && !isError) {
+          readCache.set(sig, result);
+        }
         toolCallLog.push({ name: call.name, input: call.input });
         if (!isError) execQueue.push(call.name, call.input, turns);
 

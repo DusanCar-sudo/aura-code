@@ -166,9 +166,9 @@ export async function extractPerception(projectRoot: string): Promise<ProjectPer
     strictRules.push(...mustLines);
   }
 
-  const rubyConfig = readRubyConfig(root);
-  const readOnly: string[] = rubyConfig.readOnly ?? [];
-  if (rubyConfig.strictRules) strictRules.push(...rubyConfig.strictRules);
+  const auraConfig = readAuraConfig(root);
+  const readOnly: string[] = auraConfig.readOnly ?? [];
+  if (auraConfig.strictRules) strictRules.push(...auraConfig.strictRules);
 
   const pkgJson = readPackageJson(root);
   if (pkgJson) {
@@ -414,12 +414,12 @@ function parseMustConstraints(content: string): string[] {
   return results;
 }
 
-interface RubyConfigData {
+interface AuraConfigData {
   readOnly?: string[];
   strictRules?: string[];
 }
 
-function readRubyConfig(root: string): RubyConfigData {
+function readAuraConfig(root: string): AuraConfigData {
   const raw = readFile(root, '.aura.json');
   if (!raw) return {};
   try {

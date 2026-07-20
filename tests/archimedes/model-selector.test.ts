@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { selectModelFromHistory } from '../../src/ruby/model-selector.js';
-import type { Episode } from '../../src/ruby/types.js';
+import { selectModelFromHistory } from '../../src/archimedes/model-selector.js';
+import type { Episode } from '../../src/archimedes/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -15,8 +15,8 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
     timestamp: Date.now(),
     task: 'Fix the auth bug in core/auth.ts',
     projectRoot: '/fake/project',
-    rubyAttempted: false,
-    rubySucceeded: false,
+    archimedesAttempted: false,
+    archimedesSucceeded: false,
     largeModelUsed: 'claude-sonnet-4-5',
     reviewerApproved: true,
     tokensUsed: { largeModel: 1000 },
@@ -102,9 +102,9 @@ describe('selectModelFromHistory — model selection', () => {
 
   it('ignores episodes without largeModelUsed', () => {
     const episodes = [
-      makeEpisode({ largeModelUsed: undefined, rubySucceeded: true }),
-      makeEpisode({ largeModelUsed: undefined, rubySucceeded: true }),
-      makeEpisode({ largeModelUsed: undefined, rubySucceeded: true }),
+      makeEpisode({ largeModelUsed: undefined, archimedesSucceeded: true }),
+      makeEpisode({ largeModelUsed: undefined, archimedesSucceeded: true }),
+      makeEpisode({ largeModelUsed: undefined, archimedesSucceeded: true }),
       makeEpisode({ largeModelUsed: 'claude-sonnet-4-5', reviewerApproved: true }),
       makeEpisode({ largeModelUsed: 'claude-sonnet-4-5', reviewerApproved: true }),
     ];

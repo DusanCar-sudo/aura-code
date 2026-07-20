@@ -32,8 +32,8 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { RubyAlternator } from '../ruby/index.js';
-import { resolveRubyConfig } from '../ruby/resolve-config.js';
+import { ArchimedesAlternator } from '../archimedes/index.js';
+import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
@@ -219,7 +219,7 @@ if (argv['propose-harness']) {
       console.log();
     }
     console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
-    console.log(chalk.hex(TEXT_DIM_HEX)('  Apply with: ruby --apply-harness <id>\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('  Apply with: aura --apply-harness <id>\n'));
   }
   process.exit(0);
 }
@@ -614,10 +614,10 @@ async function main() {
   let activeChatId: string | undefined;
   let activeChatHistory: import('../providers/types.js').HistoryMessage[] = [];
   let activeChatTitle: string | undefined;
-  // Runtime Ruby toggle: undefined = defer to .aura.json, true/false = session override
-  let rubyOverride: boolean | undefined = undefined;
-  // Runtime Ruby model override: undefined = defer to .aura.json, string = session override
-  let rubyModelOverride: string | undefined = undefined;
+  // Runtime Archimedes toggle: undefined = defer to .aura.json, true/false = session override
+  let archimedesOverride: boolean | undefined = undefined;
+  // Runtime Archimedes model override: undefined = defer to .aura.json, string = session override
+  let archimedesModelOverride: string | undefined = undefined;
 
   if (!noSession) {
     if (argv['new-session']) {
@@ -753,7 +753,7 @@ async function main() {
     const stepTasks = argv._.map(String);
     if (stepTasks.length === 0) {
       console.error(chalk.hex('#b15439')('\n  ✗ No step tasks provided.'));
-      console.error(chalk.hex(TEXT_DIM_HEX)('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  Usage: aura --workflow <name> "step 1" "step 2" ...\n'));
       process.exit(1);
     }
 
@@ -805,7 +805,7 @@ async function main() {
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: aura --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -859,7 +859,7 @@ async function main() {
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: aura --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -961,9 +961,9 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
-    } else if (rubyOverride ?? fileConfig.ruby?.enabled) {
-      const { config: baseRubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
-      if (!baseRubyConfig) {
+    } else if (archimedesOverride ?? fileConfig.archimedes?.enabled) {
+      const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
+      if (!baseArchimedesConfig) {
         display.warning(reason);
         result = await runAgentLoop({
           provider, task, context: ctx, permissions, display,
@@ -978,12 +978,12 @@ async function main() {
         });
       } else {
         display.success(reason);
-        const rubyConfig = {
-          ...baseRubyConfig,
-          ...(rubyModelOverride ? { modelName: rubyModelOverride } : {}),
+        const archimedesConfig = {
+          ...baseArchimedesConfig,
+          ...(archimedesModelOverride ? { modelName: archimedesModelOverride } : {}),
         };
-        const alternator = new RubyAlternator({
-          rubyConfig,
+        const alternator = new ArchimedesAlternator({
+          archimedesConfig,
           largeModelProvider: provider,
           projectRoot: ctx.root,
           context: ctx,
@@ -1145,8 +1145,8 @@ let abortController: AbortController | null = null;
       chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
       sessionPath,
       healthTracker,
-      rubyOverride,
-      rubyModelOverride,
+      archimedesOverride,
+      archimedesModelOverride,
     };
 
     // Check for REPL commands
@@ -1155,8 +1155,8 @@ let abortController: AbortController | null = null;
       if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
       if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
       if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
-      if (cmdResult.newRubyOverride !== undefined) rubyOverride = cmdResult.newRubyOverride;
-      if (cmdResult.newRubyModelOverride !== undefined) rubyModelOverride = cmdResult.newRubyModelOverride;
+      if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
+      if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
       if (activeChatId) setChatId(activeChatId);
       return;
     }
@@ -1193,9 +1193,9 @@ let abortController: AbortController | null = null;
           display: tuiDisplay,
         });
         result = wrapperResult.loopResult;
-      } else if (rubyOverride !== undefined ? rubyOverride : fileConfig.ruby?.enabled) {
-        const { config: baseRubyConfig, reason } = await resolveRubyConfig(fileConfig.ruby);
-        if (!baseRubyConfig) {
+      } else if (archimedesOverride !== undefined ? archimedesOverride : fileConfig.archimedes?.enabled) {
+        const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
+        if (!baseArchimedesConfig) {
           tuiDisplay.warning(reason);
           result = await runAgentLoop({
             provider: currentProvider, task: input,
@@ -1212,12 +1212,12 @@ let abortController: AbortController | null = null;
           });
         } else {
           tuiDisplay.success(reason);
-          const rubyConfig = {
-            ...baseRubyConfig,
-            ...(rubyModelOverride ? { modelName: rubyModelOverride } : {}),
+          const archimedesConfig = {
+            ...baseArchimedesConfig,
+            ...(archimedesModelOverride ? { modelName: archimedesModelOverride } : {}),
           };
-          const alternator = new RubyAlternator({
-            rubyConfig,
+          const alternator = new ArchimedesAlternator({
+            archimedesConfig,
             largeModelProvider: currentProvider,
             projectRoot: ctx.root,
             context: ctx,
@@ -1362,8 +1362,8 @@ interface ReplCtx {
   chatState: ChatState;
   sessionPath: string | undefined;
   healthTracker: ContextHealthTracker;
-  rubyOverride: boolean | undefined;
-  rubyModelOverride: string | undefined;
+  archimedesOverride: boolean | undefined;
+  archimedesModelOverride: string | undefined;
 }
 
 interface ReplCommandResult {
@@ -1371,8 +1371,8 @@ interface ReplCommandResult {
   newChatId?: string | undefined;
   newHistory?: import('../providers/types.js').HistoryMessage[];
   newTitle?: string | undefined;
-  newRubyOverride?: boolean;
-  newRubyModelOverride?: string;
+  newArchimedesOverride?: boolean;
+  newArchimedesModelOverride?: string;
 }
 
 /**
@@ -1853,9 +1853,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     return { handled: true };
   }
-  // ── :mine — Baby Ruby experience mining (src/mining/). The base pass is
+  // ── :mine — Baby Archimedes experience mining (src/mining/). The base pass is
   // zero-LLM (pure clustering over episodes/*.json); --refine additionally
-  // runs Papa Ruby, one local-model call per qualifying concept, appending
+  // runs Papa Archimedes, one local-model call per qualifying concept, appending
   // accepted lessons to training-data/<date>.jsonl.
   if (input === ':mine' || input === ':mine --refine') {
     const refine = input.endsWith('--refine');
@@ -1874,7 +1874,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex(FAINT_HEX)(`  … and ${mined.concepts.length - 15} more.`));
     }
     if (refine) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refining with the local Ruby model (Papa Ruby)…'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refining with the local Archimedes model (Papa Archimedes)…'));
       const { refineConcepts } = await import('../mining/refine.js');
       const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
       if (res.accepted.length > 0) {
@@ -1884,7 +1884,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
       }
     } else if (mined.concepts.length > 0) {
-      console.log(chalk.hex(FAINT_HEX)('\n  :mine --refine judges these with the local Ruby model and writes training-data/*.jsonl\n'));
+      console.log(chalk.hex(FAINT_HEX)('\n  :mine --refine judges these with the local Archimedes model and writes training-data/*.jsonl\n'));
     }
     return { handled: true };
   }
@@ -2005,28 +2005,28 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':rubyon') {
-    c.display.success('Ruby Alternator: ON for this session (overrides .aura.json until :rubyoff or restart).');
-    return { handled: true, newRubyOverride: true };
+  if (input === ':archon') {
+    c.display.success('Archimedes Alternator: ON for this session (overrides .aura.json until :archoff or restart).');
+    return { handled: true, newArchimedesOverride: true };
   }
 
-  if (input === ':rubyoff') {
-    c.display.success('Ruby Alternator: OFF for this session (overrides .aura.json until :rubyon or restart).');
-    return { handled: true, newRubyOverride: false };
+  if (input === ':archoff') {
+    c.display.success('Archimedes Alternator: OFF for this session (overrides .aura.json until :archon or restart).');
+    return { handled: true, newArchimedesOverride: false };
   }
 
-  if (input.startsWith(':rubymodel ')) {
+  if (input.startsWith(':archmodel ')) {
     const modelTag = input.slice(11).trim();
     if (!modelTag) {
-      c.display.warning('Usage: :rubymodel <ollama-model-tag>  e.g. :rubymodel qwen3-vl:4b');
+      c.display.warning('Usage: :archmodel <ollama-model-tag>  e.g. :archmodel qwen3-vl:4b');
       return { handled: true };
     }
-    return { handled: true, newRubyModelOverride: modelTag };
+    return { handled: true, newArchimedesModelOverride: modelTag };
   }
 
-  if (input === ':rubymodel') {
-    const current = c.rubyModelOverride ?? '(from .aura.json or auto-detect)';
-    c.display.success(`Ruby model: ${current}`);
+  if (input === ':archmodel') {
+    const current = c.archimedesModelOverride ?? '(from .aura.json or auto-detect)';
+    c.display.success(`Archimedes model: ${current}`);
     return { handled: true };
   }
 
@@ -2655,8 +2655,8 @@ async function runArchitectPlan(
   }
 
   console.log(chalk.hex('#5a9e6e')('\n  Blueprint saved. No files were modified.'));
-  console.log(chalk.hex('#5a9e6e')(`  Review with: ruby --blueprint ${blueprint.id}`));
-  console.log(chalk.hex('#5a9e6e')(`  Build with: ruby --build ${blueprint.id}\n`));
+  console.log(chalk.hex('#5a9e6e')(`  Review with: aura --blueprint ${blueprint.id}`));
+  console.log(chalk.hex('#5a9e6e')(`  Build with: aura --build ${blueprint.id}\n`));
 }
 
 async function runOrchestratedTask(

@@ -123,7 +123,7 @@ writing. No content was recovered.]*
 This keeps the file structurally valid (so the parser and reconciliation
 no longer choke on it) without inventing lesson content that was never
 actually produced. **No LLM call for repair, by default** -- same
-philosophy as Baby Ruby: a placeholder is honest and free; calling a
+philosophy as Baby Archimedes: a placeholder is honest and free; calling a
 model to "guess" what the missing section probably said is neither.
 Re-derivation (asking a model to regenerate a missing section from that
 day's episodes, if they're still available) can be added later as an

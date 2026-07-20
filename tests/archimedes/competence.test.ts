@@ -6,14 +6,14 @@ import {
   shouldFineTune,
   DEFAULT_FALLBACK_MODEL,
   DEFAULT_MIN_FAILURES,
-} from '../../src/ruby/competence.js';
-import { DEFAULT_RUBY_CONFIG } from '../../src/ruby/types.js';
+} from '../../src/archimedes/competence.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from '../../src/archimedes/types.js';
 import type {
   AlternationDecision,
   CompetenceLevel,
   Episode,
-  RubyConfig,
-} from '../../src/ruby/types.js';
+  ArchimedesConfig,
+} from '../../src/archimedes/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -26,8 +26,8 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
     timestamp: Date.now(),
     task: 'Fix the auth bug in core/auth.ts',
     projectRoot: '/fake/project',
-    rubyAttempted: true,
-    rubySucceeded: false,
+    archimedesAttempted: true,
+    archimedesSucceeded: false,
     reviewerApproved: false,
     tokensUsed: {},
     durationMs: 5000,
@@ -39,7 +39,7 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
 /** Validate an AlternationDecision has all required shape guarantees. */
 function assertValidDecision(d: AlternationDecision): void {
   expect(d).toBeDefined();
-  expect(typeof d.useRuby).toBe('boolean');
+  expect(typeof d.useArchimedes).toBe('boolean');
   expect(typeof d.reason).toBe('string');
   expect(d.reason.length).toBeGreaterThan(0);
   expect(typeof d.confidence).toBe('number');
@@ -53,61 +53,61 @@ function assertValidDecision(d: AlternationDecision): void {
 // assessCompetence
 // ─────────────────────────────────────────────────────────────────────────────
 describe('assessCompetence', () => {
-  const config: RubyConfig = { ...DEFAULT_RUBY_CONFIG };
+  const config: ArchimedesConfig = { ...DEFAULT_ARCHIMEDES_CONFIG };
   // minAttempts = 3, competenceThreshold = 0.7
 
   // ── Empty / cold-start ──────────────────────────────────────────────────
   describe('empty / cold-start', () => {
-    it('returns useRuby: true when no episodes exist (give Ruby a chance)', () => {
+    it('returns useArchimedes: true when no episodes exist (give Archimedes a chance)', () => {
       const decision = assessCompetence([], 'Fix the auth bug', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
-      // 0 attempts < 3 minAttempts → "giving Ruby a chance to learn"
-      expect(decision.reason).toMatch(/0 prior attempt|giving Ruby/i);
+      expect(decision.useArchimedes).toBe(true);
+      // 0 attempts < 3 minAttempts → "giving Archimedes a chance to learn"
+      expect(decision.reason).toMatch(/0 prior attempt|giving Archimedes/i);
     });
 
-    it('returns useRuby: true when episodes array is empty but task matches nothing', () => {
+    it('returns useArchimedes: true when episodes array is empty but task matches nothing', () => {
       const decision = assessCompetence([], 'Add rate limiting middleware', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
+      expect(decision.useArchimedes).toBe(true);
     });
   });
 
   // ── Below minimum attempts ─────────────────────────────────────────────
   describe('below minimum attempts', () => {
-    it('returns useRuby: true when attemptCount < minAttempts (1 attempt)', () => {
+    it('returns useArchimedes: true when attemptCount < minAttempts (1 attempt)', () => {
       // One matching episode with same exact task → attemptCount = 1
       const episodes = [
-        makeEpisode({ task: 'Fix the auth bug in core/auth.ts', rubyAttempted: true, rubySucceeded: true }),
+        makeEpisode({ task: 'Fix the auth bug in core/auth.ts', archimedesAttempted: true, archimedesSucceeded: true }),
       ];
       const decision = assessCompetence(episodes, 'Fix the auth bug in core/auth.ts', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
+      expect(decision.useArchimedes).toBe(true);
       expect(decision.reason).toContain('1 prior attempt');
       // confidence = 0.3 + 1/3*0.3 = 0.3 + 0.1 = 0.4
       expect(decision.confidence).toBeCloseTo(0.4, 5);
     });
 
-    it('returns useRuby: true when attemptCount < minAttempts (2 attempts)', () => {
+    it('returns useArchimedes: true when attemptCount < minAttempts (2 attempts)', () => {
       const episodes = Array.from({ length: 2 }, () =>
-        makeEpisode({ task: 'Add tests', rubyAttempted: true, rubySucceeded: false }),
+        makeEpisode({ task: 'Add tests', archimedesAttempted: true, archimedesSucceeded: false }),
       );
       const decision = assessCompetence(episodes, 'Add tests', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
+      expect(decision.useArchimedes).toBe(true);
       expect(decision.reason).toContain('2 prior attempt');
       // confidence = 0.3 + 2/3*0.3 = 0.3 + 0.2 = 0.5
       expect(decision.confidence).toBeCloseTo(0.5, 5);
     });
 
-    it('does NOT count episodes where rubyAttempted is false', () => {
+    it('does NOT count episodes where archimedesAttempted is false', () => {
       const episodes = [
-        makeEpisode({ task: 'Fix auth', rubyAttempted: false }),
-        makeEpisode({ task: 'Fix auth', rubyAttempted: false }),
+        makeEpisode({ task: 'Fix auth', archimedesAttempted: false }),
+        makeEpisode({ task: 'Fix auth', archimedesAttempted: false }),
       ];
       const decision = assessCompetence(episodes, 'Fix auth', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
+      expect(decision.useArchimedes).toBe(true);
       // 0 attempts counted
       expect(decision.reason).toMatch(/0 prior attempt/);
     });
@@ -115,39 +115,39 @@ describe('assessCompetence', () => {
 
   // ── At or above threshold ──────────────────────────────────────────────
   describe('at or above threshold', () => {
-    it('returns useRuby: true when successRate >= threshold (0.7)', () => {
+    it('returns useArchimedes: true when successRate >= threshold (0.7)', () => {
       // 10 attempts, 7 successes → 0.7 exactly at threshold
       const episodes = Array.from({ length: 10 }, (_, i) =>
         makeEpisode({
           task: 'Refactor the database layer',
-          rubyAttempted: true,
-          rubySucceeded: i < 7,
+          archimedesAttempted: true,
+          archimedesSucceeded: i < 7,
         }),
       );
       const decision = assessCompetence(episodes, 'Refactor the database layer', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
+      expect(decision.useArchimedes).toBe(true);
       expect(decision.reason).toContain('70%');
       expect(decision.reason).toContain('meets threshold');
     });
 
-    it('returns useRuby: true when successRate > threshold (all successes)', () => {
+    it('returns useArchimedes: true when successRate > threshold (all successes)', () => {
       const episodes = Array.from({ length: 5 }, () =>
         makeEpisode({
           task: 'Write unit tests for utils',
-          rubyAttempted: true,
-          rubySucceeded: true,
+          archimedesAttempted: true,
+          archimedesSucceeded: true,
         }),
       );
       const decision = assessCompetence(episodes, 'Write unit tests for utils', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(true);
+      expect(decision.useArchimedes).toBe(true);
       expect(decision.reason).toContain('100%');
     });
 
     it('includes competenceLevel with correct attemptCount', () => {
       const episodes = Array.from({ length: 5 }, () =>
-        makeEpisode({ task: 'Task X', rubyAttempted: true, rubySucceeded: true }),
+        makeEpisode({ task: 'Task X', archimedesAttempted: true, archimedesSucceeded: true }),
       );
       const decision = assessCompetence(episodes, 'Task X', config);
       expect(decision.competenceLevel).toBeDefined();
@@ -158,55 +158,55 @@ describe('assessCompetence', () => {
 
   // ── Below threshold ────────────────────────────────────────────────────
   describe('below threshold', () => {
-    it('returns useRuby: false when successRate < threshold', () => {
+    it('returns useArchimedes: false when successRate < threshold', () => {
       // 10 attempts, 6 successes → 0.6 < 0.7
       const episodes = Array.from({ length: 10 }, (_, i) =>
         makeEpisode({
           task: 'Implement OAuth2 flow',
-          rubyAttempted: true,
-          rubySucceeded: i < 6,
+          archimedesAttempted: true,
+          archimedesSucceeded: i < 6,
         }),
       );
       const decision = assessCompetence(episodes, 'Implement OAuth2 flow', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(false);
+      expect(decision.useArchimedes).toBe(false);
       expect(decision.reason).toContain('below threshold');
       expect(decision.reason).toContain('60%');
     });
 
-    it('returns useRuby: false when all attempts failed', () => {
+    it('returns useArchimedes: false when all attempts failed', () => {
       const episodes = Array.from({ length: 5 }, () =>
         makeEpisode({
           task: 'Complex refactor',
-          rubyAttempted: true,
-          rubySucceeded: false,
+          archimedesAttempted: true,
+          archimedesSucceeded: false,
         }),
       );
       const decision = assessCompetence(episodes, 'Complex refactor', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(false);
+      expect(decision.useArchimedes).toBe(false);
       expect(decision.reason).toContain('0%');
     });
 
     it('escalates only after minAttempts threshold is met', () => {
       // 3 attempts, 0 success → attemptCount (3) >= minAttempts (3), successRate 0 < 0.7
       const episodes = Array.from({ length: 3 }, () =>
-        makeEpisode({ task: 'Tricky bug', rubyAttempted: true, rubySucceeded: false }),
+        makeEpisode({ task: 'Tricky bug', archimedesAttempted: true, archimedesSucceeded: false }),
       );
       const decision = assessCompetence(episodes, 'Tricky bug', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(false);
+      expect(decision.useArchimedes).toBe(false);
     });
 
     it('still escalates with 2 successes out of 3 (0.67 < 0.7)', () => {
       const episodes = [
-        makeEpisode({ task: 'Edge case task', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Edge case task', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Edge case task', rubyAttempted: true, rubySucceeded: false }),
+        makeEpisode({ task: 'Edge case task', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Edge case task', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Edge case task', archimedesAttempted: true, archimedesSucceeded: false }),
       ];
       const decision = assessCompetence(episodes, 'Edge case task', config);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(false);
+      expect(decision.useArchimedes).toBe(false);
       // 2/3 ≈ 0.667 < 0.7
     });
   });
@@ -219,7 +219,7 @@ describe('assessCompetence', () => {
       expect(d1.reason.length).toBeGreaterThan(0);
 
       // With episodes
-      const episodes = [makeEpisode({ task: 'task', rubyAttempted: true, rubySucceeded: true })];
+      const episodes = [makeEpisode({ task: 'task', archimedesAttempted: true, archimedesSucceeded: true })];
       const d2 = assessCompetence(episodes, 'task', config);
       expect(d2.reason.length).toBeGreaterThan(0);
     });
@@ -228,7 +228,7 @@ describe('assessCompetence', () => {
       const d1 = assessCompetence([], 'task', config);
       expect(d1.fallbackModel).toBe(DEFAULT_FALLBACK_MODEL);
 
-      const episodes = [makeEpisode({ task: 'task', rubyAttempted: true, rubySucceeded: false })];
+      const episodes = [makeEpisode({ task: 'task', archimedesAttempted: true, archimedesSucceeded: false })];
       const d2 = assessCompetence(episodes, 'task', config);
       expect(d2.fallbackModel).toBe(DEFAULT_FALLBACK_MODEL);
     });
@@ -236,9 +236,9 @@ describe('assessCompetence', () => {
     it('confidence is always between 0 and 1', () => {
       const cases: Array<[Episode[], string, string]> = [
         [[], 'task', 'empty'],
-        [[makeEpisode({ task: 't', rubyAttempted: true, rubySucceeded: true })], 't', '1 attempt'],
-        [Array.from({ length: 10 }, () => makeEpisode({ task: 't', rubyAttempted: true, rubySucceeded: true })), 't', '10 successes'],
-        [Array.from({ length: 10 }, () => makeEpisode({ task: 't', rubyAttempted: true, rubySucceeded: false })), 't', '10 failures'],
+        [[makeEpisode({ task: 't', archimedesAttempted: true, archimedesSucceeded: true })], 't', '1 attempt'],
+        [Array.from({ length: 10 }, () => makeEpisode({ task: 't', archimedesAttempted: true, archimedesSucceeded: true })), 't', '10 successes'],
+        [Array.from({ length: 10 }, () => makeEpisode({ task: 't', archimedesAttempted: true, archimedesSucceeded: false })), 't', '10 failures'],
       ];
 
       for (const [eps, task, label] of cases) {
@@ -268,22 +268,22 @@ describe('assessCompetence', () => {
 
   // ── Disabled config ────────────────────────────────────────────────────
   describe('disabled config', () => {
-    it('returns useRuby: false when config.enabled is false', () => {
-      const disabledConfig: RubyConfig = { ...DEFAULT_RUBY_CONFIG, enabled: false };
+    it('returns useArchimedes: false when config.enabled is false', () => {
+      const disabledConfig: ArchimedesConfig = { ...DEFAULT_ARCHIMEDES_CONFIG, enabled: false };
       const decision = assessCompetence([], 'Any task', disabledConfig);
       assertValidDecision(decision);
-      expect(decision.useRuby).toBe(false);
+      expect(decision.useArchimedes).toBe(false);
       expect(decision.reason).toMatch(/disabled/i);
       expect(decision.confidence).toBe(1);
     });
 
-    it('returns useRuby: false even with high success rate when disabled', () => {
+    it('returns useArchimedes: false even with high success rate when disabled', () => {
       const episodes = Array.from({ length: 10 }, () =>
-        makeEpisode({ task: 'Task', rubyAttempted: true, rubySucceeded: true }),
+        makeEpisode({ task: 'Task', archimedesAttempted: true, archimedesSucceeded: true }),
       );
-      const disabledConfig: RubyConfig = { ...DEFAULT_RUBY_CONFIG, enabled: false };
+      const disabledConfig: ArchimedesConfig = { ...DEFAULT_ARCHIMEDES_CONFIG, enabled: false };
       const decision = assessCompetence(episodes, 'Task', disabledConfig);
-      expect(decision.useRuby).toBe(false);
+      expect(decision.useArchimedes).toBe(false);
     });
   });
 
@@ -291,9 +291,9 @@ describe('assessCompetence', () => {
   describe('task similarity matching', () => {
     it('matches exact same task string', () => {
       const episodes = [
-        makeEpisode({ task: 'Exact same task string', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Exact same task string', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Exact same task string', rubyAttempted: true, rubySucceeded: true }),
+        makeEpisode({ task: 'Exact same task string', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Exact same task string', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Exact same task string', archimedesAttempted: true, archimedesSucceeded: true }),
       ];
       const decision = assessCompetence(episodes, 'Exact same task string', config);
       expect(decision.competenceLevel!.attemptCount).toBe(3);
@@ -301,9 +301,9 @@ describe('assessCompetence', () => {
 
     it('matches tasks where one is substring of the other', () => {
       const episodes = [
-        makeEpisode({ task: 'Fix the authentication bug in the login module', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Fix the authentication bug in the login module', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Fix the authentication bug in the login module', rubyAttempted: true, rubySucceeded: true }),
+        makeEpisode({ task: 'Fix the authentication bug in the login module', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Fix the authentication bug in the login module', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Fix the authentication bug in the login module', archimedesAttempted: true, archimedesSucceeded: true }),
       ];
       const decision = assessCompetence(episodes, 'Fix the authentication bug', config);
       // Substring match → all 3 match
@@ -312,13 +312,13 @@ describe('assessCompetence', () => {
 
     it('does NOT match completely different tasks', () => {
       const episodes = [
-        makeEpisode({ task: 'Fix the authentication bug', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Fix the authentication bug', rubyAttempted: true, rubySucceeded: true }),
-        makeEpisode({ task: 'Fix the authentication bug', rubyAttempted: true, rubySucceeded: true }),
+        makeEpisode({ task: 'Fix the authentication bug', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Fix the authentication bug', archimedesAttempted: true, archimedesSucceeded: true }),
+        makeEpisode({ task: 'Fix the authentication bug', archimedesAttempted: true, archimedesSucceeded: true }),
       ];
       const decision = assessCompetence(episodes, 'Deploy to production server with Kubernetes Helm charts', config);
-      // Completely different → 0 matches → attemptCount = 0 → useRuby: true (below minAttempts)
-      expect(decision.useRuby).toBe(true);
+      // Completely different → 0 matches → attemptCount = 0 → useArchimedes: true (below minAttempts)
+      expect(decision.useArchimedes).toBe(true);
       expect(decision.competenceLevel!.attemptCount).toBe(0);
     });
   });
@@ -332,8 +332,8 @@ describe('updateCompetence', () => {
     const episode = makeEpisode({
       task: 'Add login functionality',
       taskCategory: 'implementation',
-      rubyAttempted: true,
-      rubySucceeded: true,
+      archimedesAttempted: true,
+      archimedesSucceeded: true,
     });
     const result = updateCompetence([], episode);
 
@@ -349,20 +349,20 @@ describe('updateCompetence', () => {
     const episode1 = makeEpisode({
       task: 'Add login functionality',
       taskCategory: 'implementation',
-      rubyAttempted: true,
-      rubySucceeded: true,
+      archimedesAttempted: true,
+      archimedesSucceeded: true,
     });
     const after1 = updateCompetence([], episode1);
     expect(after1).toHaveLength(1);
     expect(after1[0].attemptCount).toBe(1);
     expect(after1[0].successRate).toBe(1);
 
-    // Second episode — same task, Ruby failed
+    // Second episode — same task, Archimedes failed
     const episode2 = makeEpisode({
       task: 'Add login functionality',
       taskCategory: 'implementation',
-      rubyAttempted: true,
-      rubySucceeded: false,
+      archimedesAttempted: true,
+      archimedesSucceeded: false,
     });
     const after2 = updateCompetence(after1, episode2);
 
@@ -378,8 +378,8 @@ describe('updateCompetence', () => {
       const ep = makeEpisode({
         task: 'Recurring task',
         taskCategory: 'review',
-        rubyAttempted: true,
-        rubySucceeded: i % 2 === 0, // alternate success/failure
+        archimedesAttempted: true,
+        archimedesSucceeded: i % 2 === 0, // alternate success/failure
       });
       levels = updateCompetence(levels, ep);
     }
@@ -396,8 +396,8 @@ describe('updateCompetence', () => {
       const ep = makeEpisode({
         task: 'Always works',
         taskCategory: 'implementation',
-        rubyAttempted: true,
-        rubySucceeded: true,
+        archimedesAttempted: true,
+        archimedesSucceeded: true,
       });
       levels = updateCompetence(levels, ep);
     }
@@ -411,8 +411,8 @@ describe('updateCompetence', () => {
       const ep = makeEpisode({
         task: 'Always fails',
         taskCategory: 'refactor',
-        rubyAttempted: true,
-        rubySucceeded: false,
+        archimedesAttempted: true,
+        archimedesSucceeded: false,
       });
       levels = updateCompetence(levels, ep);
     }
@@ -420,14 +420,14 @@ describe('updateCompetence', () => {
     expect(levels[0].attemptCount).toBe(3);
   });
 
-  it('ignores episodes where rubyAttempted is false', () => {
+  it('ignores episodes where archimedesAttempted is false', () => {
     const episode = makeEpisode({
       task: 'Some task',
-      rubyAttempted: false,
-      rubySucceeded: false,
+      archimedesAttempted: false,
+      archimedesSucceeded: false,
     });
     const result = updateCompetence([], episode);
-    // rubyAttempted is false → ignored entirely
+    // archimedesAttempted is false → ignored entirely
     expect(result).toHaveLength(0);
   });
 
@@ -435,14 +435,14 @@ describe('updateCompetence', () => {
     const ep1 = makeEpisode({
       task: 'Fix the authentication bug',
       taskCategory: 'implementation',
-      rubyAttempted: true,
-      rubySucceeded: true,
+      archimedesAttempted: true,
+      archimedesSucceeded: true,
     });
     const ep2 = makeEpisode({
       task: 'Review the codebase for security issues',
       taskCategory: 'review',
-      rubyAttempted: true,
-      rubySucceeded: false,
+      archimedesAttempted: true,
+      archimedesSucceeded: false,
     });
 
     const levels = updateCompetence(updateCompetence([], ep1), ep2);
@@ -462,8 +462,8 @@ describe('updateCompetence', () => {
       const ep = makeEpisode({
         task: 'Recurring pattern',
         taskCategory: 'implementation',
-        rubyAttempted: true,
-        rubySucceeded: i % 2 === 0,
+        archimedesAttempted: true,
+        archimedesSucceeded: i % 2 === 0,
       });
       levels = updateCompetence(levels, ep);
     }
@@ -481,10 +481,10 @@ describe('getCompetenceReport', () => {
     expect(report).toEqual([]);
   });
 
-  it('returns empty array for episodes where none were rubyAttempted', () => {
+  it('returns empty array for episodes where none were archimedesAttempted', () => {
     const episodes = [
-      makeEpisode({ rubyAttempted: false, taskCategory: 'implementation' }),
-      makeEpisode({ rubyAttempted: false, taskCategory: 'review' }),
+      makeEpisode({ archimedesAttempted: false, taskCategory: 'implementation' }),
+      makeEpisode({ archimedesAttempted: false, taskCategory: 'review' }),
     ];
     const report = getCompetenceReport(episodes);
     expect(report).toEqual([]);
@@ -492,10 +492,10 @@ describe('getCompetenceReport', () => {
 
   it('groups by taskCategory correctly', () => {
     const episodes = [
-      makeEpisode({ taskCategory: 'implementation', rubyAttempted: true, rubySucceeded: true }),
-      makeEpisode({ taskCategory: 'implementation', rubyAttempted: true, rubySucceeded: false }),
-      makeEpisode({ taskCategory: 'research', rubyAttempted: true, rubySucceeded: true }),
-      makeEpisode({ taskCategory: 'research', rubyAttempted: true, rubySucceeded: true }),
+      makeEpisode({ taskCategory: 'implementation', archimedesAttempted: true, archimedesSucceeded: true }),
+      makeEpisode({ taskCategory: 'implementation', archimedesAttempted: true, archimedesSucceeded: false }),
+      makeEpisode({ taskCategory: 'research', archimedesAttempted: true, archimedesSucceeded: true }),
+      makeEpisode({ taskCategory: 'research', archimedesAttempted: true, archimedesSucceeded: true }),
     ];
     const report = getCompetenceReport(episodes);
 
@@ -514,9 +514,9 @@ describe('getCompetenceReport', () => {
 
   it('calculates successRate per category correctly', () => {
     const episodes = [
-      makeEpisode({ taskCategory: 'refactor', rubyAttempted: true, rubySucceeded: false }),
-      makeEpisode({ taskCategory: 'refactor', rubyAttempted: true, rubySucceeded: false }),
-      makeEpisode({ taskCategory: 'refactor', rubyAttempted: true, rubySucceeded: true }),
+      makeEpisode({ taskCategory: 'refactor', archimedesAttempted: true, archimedesSucceeded: false }),
+      makeEpisode({ taskCategory: 'refactor', archimedesAttempted: true, archimedesSucceeded: false }),
+      makeEpisode({ taskCategory: 'refactor', archimedesAttempted: true, archimedesSucceeded: true }),
     ];
     const report = getCompetenceReport(episodes);
 
@@ -528,12 +528,12 @@ describe('getCompetenceReport', () => {
 
   it('sorts categories by count descending', () => {
     const episodes = [
-      makeEpisode({ taskCategory: 'review', rubyAttempted: true, rubySucceeded: true }),
-      makeEpisode({ taskCategory: 'review', rubyAttempted: true, rubySucceeded: false }),
-      makeEpisode({ taskCategory: 'implementation', rubyAttempted: true, rubySucceeded: true }),
-      makeEpisode({ taskCategory: 'implementation', rubyAttempted: true, rubySucceeded: true }),
-      makeEpisode({ taskCategory: 'implementation', rubyAttempted: true, rubySucceeded: false }),
-      makeEpisode({ taskCategory: 'research', rubyAttempted: true, rubySucceeded: true }),
+      makeEpisode({ taskCategory: 'review', archimedesAttempted: true, archimedesSucceeded: true }),
+      makeEpisode({ taskCategory: 'review', archimedesAttempted: true, archimedesSucceeded: false }),
+      makeEpisode({ taskCategory: 'implementation', archimedesAttempted: true, archimedesSucceeded: true }),
+      makeEpisode({ taskCategory: 'implementation', archimedesAttempted: true, archimedesSucceeded: true }),
+      makeEpisode({ taskCategory: 'implementation', archimedesAttempted: true, archimedesSucceeded: false }),
+      makeEpisode({ taskCategory: 'research', archimedesAttempted: true, archimedesSucceeded: true }),
     ];
     const report = getCompetenceReport(episodes);
 
@@ -555,54 +555,54 @@ describe('getCompetenceReport', () => {
 describe('shouldFineTune', () => {
   it('returns false when failures < minFailures (default 20)', () => {
     const episodes = Array.from({ length: 19 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false }),
     );
     expect(shouldFineTune(episodes)).toBe(false);
   });
 
   it('returns true when failures >= minFailures (default 20)', () => {
     const episodes = Array.from({ length: 20 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false }),
     );
     expect(shouldFineTune(episodes)).toBe(true);
   });
 
   it('returns true when failures > minFailures', () => {
     const episodes = Array.from({ length: 50 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false }),
     );
     expect(shouldFineTune(episodes)).toBe(true);
   });
 
-  it('counts only rubyAttempted + not rubySucceeded episodes', () => {
+  it('counts only archimedesAttempted + not archimedesSucceeded episodes', () => {
     // Mix: 20 failures (counted), plus successes (not counted), plus not-attempted (not counted)
     const failures = Array.from({ length: 20 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false }),
     );
     const successes = Array.from({ length: 5 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: true }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: true }),
     );
     const notAttempted = Array.from({ length: 10 }, () =>
-      makeEpisode({ rubyAttempted: false }),
+      makeEpisode({ archimedesAttempted: false }),
     );
     const episodes = [...failures, ...successes, ...notAttempted];
     expect(shouldFineTune(episodes)).toBe(true);
   });
 
-  it('does not count episodes where rubySucceeded is true', () => {
+  it('does not count episodes where archimedesSucceeded is true', () => {
     // 19 failures + many successes → still under threshold
     const failures = Array.from({ length: 19 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false }),
     );
     const successes = Array.from({ length: 100 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: true }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: true }),
     );
     expect(shouldFineTune([...failures, ...successes])).toBe(false);
   });
 
   it('respects custom minFailures threshold', () => {
     const episodes = Array.from({ length: 5 }, () =>
-      makeEpisode({ rubyAttempted: true, rubySucceeded: false }),
+      makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false }),
     );
     expect(shouldFineTune(episodes, 5)).toBe(true);
     expect(shouldFineTune(episodes, 6)).toBe(false);
@@ -610,7 +610,7 @@ describe('shouldFineTune', () => {
   });
 
   it('minimum threshold is 1 (never lower)', () => {
-    const episodes = makeEpisode({ rubyAttempted: true, rubySucceeded: false });
+    const episodes = makeEpisode({ archimedesAttempted: true, archimedesSucceeded: false });
     // Even with minFailures = 0, it should be clamped to 1
     expect(shouldFineTune([episodes], 0)).toBe(true);
     expect(shouldFineTune([], 0)).toBe(false);

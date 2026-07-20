@@ -18,7 +18,7 @@ function wipeProviderEnv(): void {
 describe('first-run detection', () => {
   const orig = { ...process.env };
   const origXdg = process.env.XDG_CONFIG_HOME;
-  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   beforeEach(() => {
     wipeProviderEnv();
     // Isolate global config from the user's actual home so the test does not

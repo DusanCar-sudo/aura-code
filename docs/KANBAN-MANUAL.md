@@ -45,7 +45,7 @@ cell holds a task card or an empty slot you can fill in yourself.
  ├──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
  │Verify     │          │  card    │  card 🔴 │          │          │
  ├──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
- │RubyAlter  │          │  card    │          │  card    │  card    │
+ │ArchimedesAlter  │          │  card    │          │  card    │  card    │
  └──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
 ```
 
@@ -88,7 +88,7 @@ separately if you need a guarantee about the current state.
 | **Orchestrate** | Multi-agent routing, planning, specialist dispatch |
 | **Architect** | High-level design, schema analysis, build integrity |
 | **Verify** | Self-correction — analyzing failures, planning fixes |
-| **RubyAlternator** | The self-improvement subsystem — competence scoring, episode logging |
+| **ArchimedesAlternator** | The self-improvement subsystem — competence scoring, episode logging |
 
 ---
 
@@ -119,7 +119,7 @@ separately if you need a guarantee about the current state.
    (Token Optimization, File Patch Operations, 1000+ Test Run), each with
    their actual completion status, followed by your project's actual last
    5 git commits. It will also tell you plainly that it can't report on
-   Architect/Verify/RubyAlternator yet — because at that point in
+   Architect/Verify/ArchimedesAlternator yet — because at that point in
    execution, they genuinely haven't run.
 4. Try `/api/report.md` directly in a browser tab, or:
    ```bash

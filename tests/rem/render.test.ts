@@ -128,7 +128,7 @@ describe('runRem', () => {
     fs.mkdirSync(path.join(projectRoot, 'dreams'), { recursive: true });
     fs.writeFileSync(
       path.join(projectRoot, 'dreams', '2026-06-24.md'),
-      '# Dream — 2026-06-24\n\n> 5 episodes recalled since beginning · 3 approved · 0 ruby wins\n> Categories: other\n\n## Lessons\n- [tooling] something learned\n\n## Patterns\n- none\n\n## Open threads\n- none\n\n## Tomorrow brief\nKeep going.\n',
+      '# Dream — 2026-06-24\n\n> 5 episodes recalled since beginning · 3 approved · 0 archimedes wins\n> Categories: other\n\n## Lessons\n- [tooling] something learned\n\n## Patterns\n- none\n\n## Open threads\n- none\n\n## Tomorrow brief\nKeep going.\n',
     );
 
     const res = runRem({ projectRoot, writeHtml: true });

@@ -5,17 +5,17 @@ import * as path from 'path';
 import type { LoopResult } from '../../src/agent/loop.js';
 import type { LLMProvider } from '../../src/providers/types.js';
 import type { ProjectContext } from '../../src/agent/context.js';
-import type { RubyConfig } from '../../src/ruby/types.js';
+import type { ArchimedesConfig } from '../../src/archimedes/types.js';
 import { PermissionSystem } from '../../src/safety/permissions.js';
 
-// runAgentLoop is mocked so these tests exercise only RubyAlternator's own
+// runAgentLoop is mocked so these tests exercise only ArchimedesAlternator's own
 // routing/result-mapping/episode-construction logic, not a real LLM call.
 vi.mock('../../src/agent/loop.js', () => ({
   runAgentLoop: vi.fn(),
 }));
 
 import { runAgentLoop } from '../../src/agent/loop.js';
-import { RubyAlternator } from '../../src/ruby/alternator.js';
+import { ArchimedesAlternator } from '../../src/archimedes/alternator.js';
 
 const mockRunAgentLoop = runAgentLoop as unknown as ReturnType<typeof vi.fn>;
 
@@ -36,7 +36,11 @@ function makeLoopResult(overrides: Partial<LoopResult> = {}): LoopResult {
 const fakeProvider: LLMProvider = {
   name: 'fake-large',
   model: 'fake-large-model',
-  complete: async () => ({ text: '' }),
+  // The large model's only non-streamed call is as Archimedes's answer verifier
+  // (verifyArchimedesAnswer). A verifier that returns '' reads as INVALID and
+  // forces escalation on every run — so the mock must return an approving
+  // verdict for the "Archimedes succeeds" path to be reachable at all.
+  complete: async () => ({ text: 'VALID' }),
   stream: async () => makeLoopResult() as any,
 } as unknown as LLMProvider;
 
@@ -51,7 +55,7 @@ const fakeContext: ProjectContext = {
   recentCommits: '',
 };
 
-const enabledRubyConfig: RubyConfig = {
+const enabledArchimedesConfig: ArchimedesConfig = {
   modelName: 'qwen2.5-coder:1.5b',
   ollamaBaseUrl: 'http://localhost:11434/v1',
   competenceThreshold: 0.7,
@@ -80,24 +84,24 @@ afterEach(() => {
 
 function baseOpts() {
   return {
-    rubyConfig: enabledRubyConfig,
+    archimedesConfig: enabledArchimedesConfig,
     largeModelProvider: fakeProvider,
     projectRoot: path.join(tmpHome, 'project'),
     context: { ...fakeContext, root: path.join(tmpHome, 'project') },
   };
 }
 
-function makeAlternator(rubyConfig: RubyConfig) {
-  return new RubyAlternator({ ...baseOpts(), rubyConfig });
+function makeAlternator(archimedesConfig: ArchimedesConfig) {
+  return new ArchimedesAlternator({ ...baseOpts(), archimedesConfig });
 }
 
-describe('RubyAlternator permission defaulting', () => {
+describe('ArchimedesAlternator permission defaulting', () => {
   it('defaults to the safe "normal" permission level when none is provided', () => {
-    const alternator = new RubyAlternator(baseOpts());
+    const alternator = new ArchimedesAlternator(baseOpts());
     // PermissionSystem.level is private; this reaches in deliberately to
     // guard against ever silently reverting to the old hardcoded 'auto'
     // default, which would auto-approve destructive operations during the
-    // Ruby attempt regardless of the user's actual chosen session mode.
+    // Archimedes attempt regardless of the user's actual chosen session mode.
     const level = (alternator as any).permissions.level;
     expect(level).toBe('normal');
     expect(level).not.toBe('auto');
@@ -105,27 +109,27 @@ describe('RubyAlternator permission defaulting', () => {
 
   it('uses the caller-provided permission system instead of constructing its own', () => {
     const callerPermissions = new PermissionSystem('read-only');
-    const alternator = new RubyAlternator({ ...baseOpts(), permissions: callerPermissions });
+    const alternator = new ArchimedesAlternator({ ...baseOpts(), permissions: callerPermissions });
     expect((alternator as any).permissions).toBe(callerPermissions);
     expect((alternator as any).permissions.level).toBe('read-only');
   });
 });
 
-describe('RubyAlternator.run() — result threading', () => {
-  it("returns Ruby's full LoopResult (not a flattened string) when Ruby succeeds", async () => {
+describe('ArchimedesAlternator.run() — result threading', () => {
+  it("returns Archimedes's full LoopResult (not a flattened string) when Archimedes succeeds", async () => {
     fetchSpy.mockResolvedValue({ ok: true } as Response); // Ollama reachable
-    const rubyResult = makeLoopResult({ summary: 'ruby did it', turns: 2, costUsd: 0.0001 });
-    mockRunAgentLoop.mockResolvedValueOnce(rubyResult); // only the Ruby call should happen
+    const archimedesResult = makeLoopResult({ summary: 'archimedes did it', turns: 2, costUsd: 0.0001 });
+    mockRunAgentLoop.mockResolvedValueOnce(archimedesResult); // only the Archimedes call should happen
 
-    const alternator = makeAlternator(enabledRubyConfig);
-    const { loopResult, usedRuby, episode } = await alternator.run('fix a small bug');
+    const alternator = makeAlternator(enabledArchimedesConfig);
+    const { loopResult, usedArchimedes, episode } = await alternator.run('fix a small bug');
 
-    expect(usedRuby).toBe(true);
-    expect(loopResult).toEqual(rubyResult); // full object identity, not just .summary
+    expect(usedArchimedes).toBe(true);
+    expect(loopResult).toEqual(archimedesResult); // full object identity, not just .summary
     expect(loopResult.turns).toBe(2);
     expect(loopResult.costUsd).toBe(0.0001);
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(1); // large model never invoked
-    expect(episode.rubySucceeded).toBe(true);
+    expect(episode.archimedesSucceeded).toBe(true);
     expect(episode.largeModelUsed).toBeUndefined();
   });
 
@@ -134,53 +138,53 @@ describe('RubyAlternator.run() — result threading', () => {
     const largeResult = makeLoopResult({ summary: 'large model did it', turns: 5, costUsd: 0.05 });
     mockRunAgentLoop.mockResolvedValueOnce(largeResult); // only the escalation call happens
 
-    const alternator = makeAlternator(enabledRubyConfig);
-    const { loopResult, usedRuby, episode } = await alternator.run('fix a small bug');
+    const alternator = makeAlternator(enabledArchimedesConfig);
+    const { loopResult, usedArchimedes, episode } = await alternator.run('fix a small bug');
 
-    expect(usedRuby).toBe(false);
+    expect(usedArchimedes).toBe(false);
     expect(loopResult).toEqual(largeResult);
     expect(loopResult.turns).toBe(5);
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(1);
-    expect(episode.rubyAttempted).toBe(false); // never reached the Ruby attempt at all
+    expect(episode.archimedesAttempted).toBe(false); // never reached the Archimedes attempt at all
     expect(episode.largeModelUsed).toBe('fake-large-model');
   });
 
-  it('escalates straight to the large model when Ruby is disabled in config, without pinging Ollama', async () => {
+  it('escalates straight to the large model when Archimedes is disabled in config, without pinging Ollama', async () => {
     const largeResult = makeLoopResult({ summary: 'large model only' });
     mockRunAgentLoop.mockResolvedValueOnce(largeResult);
 
-    const alternator = makeAlternator({ ...enabledRubyConfig, enabled: false });
-    const { loopResult, usedRuby, episode } = await alternator.run('fix a small bug');
+    const alternator = makeAlternator({ ...enabledArchimedesConfig, enabled: false });
+    const { loopResult, usedArchimedes, episode } = await alternator.run('fix a small bug');
 
-    expect(usedRuby).toBe(false);
+    expect(usedArchimedes).toBe(false);
     expect(loopResult).toEqual(largeResult);
     expect(fetchSpy).not.toHaveBeenCalled(); // disabled — never even checked Ollama
-    expect(episode.rubyAttempted).toBe(false);
+    expect(episode.archimedesAttempted).toBe(false);
   });
 
   it('falls back to a safe empty LoopResult — never throws — if both paths fail', async () => {
     fetchSpy.mockResolvedValue({ ok: true } as Response);
     mockRunAgentLoop
-      .mockRejectedValueOnce(new Error('ruby crashed'))   // Ruby attempt throws
+      .mockRejectedValueOnce(new Error('archimedes crashed'))   // Archimedes attempt throws
       .mockRejectedValueOnce(new Error('large model down')); // escalation also throws
 
-    const alternator = makeAlternator(enabledRubyConfig);
+    const alternator = makeAlternator(enabledArchimedesConfig);
     const runPromise = alternator.run('fix a small bug');
     await expect(runPromise).resolves.toBeDefined(); // must not throw
 
-    const { loopResult, usedRuby } = await runPromise;
-    expect(usedRuby).toBe(false);
+    const { loopResult, usedArchimedes } = await runPromise;
+    expect(usedArchimedes).toBe(false);
     expect(loopResult.success).toBe(false);
     expect(loopResult.history).toEqual([]);
     expect(loopResult.usage.totalTokens).toBe(0);
   });
 
-  it('passes confirmFn through to runAgentLoop so confirmation prompts work during Ruby-alternation', async () => {
+  it('passes confirmFn through to runAgentLoop so confirmation prompts work during Archimedes-alternation', async () => {
     fetchSpy.mockResolvedValue({ ok: true } as Response);
     mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult());
     const confirmFn = vi.fn(async () => true);
 
-    const alternator = new RubyAlternator({ ...baseOpts(), confirmFn });
+    const alternator = new ArchimedesAlternator({ ...baseOpts(), confirmFn });
     await alternator.run('fix a small bug');
 
     expect(mockRunAgentLoop).toHaveBeenCalledWith(
@@ -193,7 +197,7 @@ describe('RubyAlternator.run() — result threading', () => {
     mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult());
     const priorHistory = [{ role: 'user' as const, content: 'earlier turn' }];
 
-    const alternator = new RubyAlternator({ ...baseOpts(), initialHistory: priorHistory });
+    const alternator = new ArchimedesAlternator({ ...baseOpts(), initialHistory: priorHistory });
     await alternator.run('fix a small bug');
 
     expect(mockRunAgentLoop).toHaveBeenCalledWith(

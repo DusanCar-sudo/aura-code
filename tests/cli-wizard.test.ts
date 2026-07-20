@@ -102,7 +102,7 @@ describe('CLI integration: first-run wizard', () => {
   let origHome: string | undefined;
 
   beforeEach(() => {
-    tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-int-'));
+    tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-int-'));
     origXdg = process.env.XDG_CONFIG_HOME;
     origHome = process.env.HOME;
     process.env.XDG_CONFIG_HOME = tmpConfigDir;
@@ -127,11 +127,23 @@ describe('CLI integration: first-run wizard', () => {
     expect(cfg.baseUrl).toBe(stubBaseUrl);
     expect(cfg.createdAt).toBeTruthy();
 
-    // The full provider config (incl. the key) lands next to it for the factory.
+    // provider.json holds the non-secret factory config (provider/model/baseUrl).
+    // The API key is deliberately NOT written here — it's a world-readable file,
+    // so secrets go to the separate 0600 key store instead.
     const providerPath = path.join(tmpConfigDir, 'aura-code', 'provider.json');
     expect(fs.existsSync(providerPath)).toBe(true);
     const providerCfg = JSON.parse(fs.readFileSync(providerPath, 'utf8'));
-    expect(providerCfg.apiKey).toBe('fake-key-test');
+    expect(providerCfg.provider).toBe('Xiaomi MiMo');
+    expect(providerCfg.model).toBe('mimo-v2.5-pro');
+    expect(providerCfg.baseUrl).toBe(stubBaseUrl);
+    expect(providerCfg.apiKey).toBeUndefined(); // secrets never land in this file
+
+    // The key itself is persisted to the secret key store (~/.aura/keys.json,
+    // resolved via HOME), keyed by the provider's env-var name.
+    const keyStorePath = path.join(tmpConfigDir, '.aura', 'keys.json');
+    expect(fs.existsSync(keyStorePath)).toBe(true);
+    const keys = JSON.parse(fs.readFileSync(keyStorePath, 'utf8'));
+    expect(keys.XIAOMI_API_KEY).toBe('fake-key-test');
   });
 
   it('runs the wizard when no env vars are set and no global config exists', async () => {

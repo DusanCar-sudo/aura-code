@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Episode } from '../../src/ruby/types.js';
+import type { Episode } from '../../src/archimedes/types.js';
 import type { LLMProvider, LLMResponse } from '../../src/providers/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,7 +13,7 @@ import type { LLMProvider, LLMResponse } from '../../src/providers/types.js';
 // tmp dir so we exercise the actual write/cutoff logic.
 // ─────────────────────────────────────────────────────────────────────────────
 const loadEpisodesMock = vi.fn();
-vi.mock('../../src/ruby/episode-capture.js', () => ({
+vi.mock('../../src/archimedes/episode-capture.js', () => ({
   loadEpisodes: (...args: unknown[]) => loadEpisodesMock(...args),
 }));
 
@@ -34,13 +34,13 @@ function makeEpisode(over: Partial<Episode> = {}): Episode {
     timestamp: over.timestamp ?? 1000,
     task: over.task ?? 'add a null check to the parser',
     projectRoot: over.projectRoot ?? '/tmp/proj',
-    rubyAttempted: over.rubyAttempted ?? true,
-    rubySucceeded: over.rubySucceeded ?? true,
-    rubyOutput: over.rubyOutput,
+    archimedesAttempted: over.archimedesAttempted ?? true,
+    archimedesSucceeded: over.archimedesSucceeded ?? true,
+    archimedesOutput: over.archimedesOutput,
     largeModelUsed: over.largeModelUsed,
     largeModelOutput: over.largeModelOutput,
     reviewerApproved: over.reviewerApproved ?? true,
-    tokensUsed: over.tokensUsed ?? { ruby: 100 },
+    tokensUsed: over.tokensUsed ?? { archimedes: 100 },
     durationMs: over.durationMs ?? 4200,
     taskCategory: over.taskCategory ?? 'implementation',
   };
@@ -61,7 +61,7 @@ function fakeProvider(result: string | Error): LLMProvider {
 }
 
 const GOOD_BODY =
-  '## Lessons\n- [routing] ruby handles small null-check edits fine\n\n' +
+  '## Lessons\n- [routing] archimedes handles small null-check edits fine\n\n' +
   '## Patterns\n- recurring parser tweaks\n\n' +
   '## Open threads\n- none\n\n' +
   '## Tomorrow brief\nReady for more parser work.';

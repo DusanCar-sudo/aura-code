@@ -47,8 +47,8 @@ export interface ProjectConfig {
   profile?: 'local';
   /** Shadow-git checkpoints before mutating tool calls (default: true). */
   checkpoints?: boolean;
-  /** Ruby alternator — small-local-model-first routing (single-task path). */
-  ruby?: {
+  /** Archimedes alternator — small-local-model-first routing (single-task path). */
+  archimedes?: {
     enabled?: boolean;
     modelName?: string;
     ollamaBaseUrl?: string;
@@ -101,17 +101,17 @@ function normalise(raw: unknown): ProjectConfig {
   if (typeof r.testCommand === 'string') out.testCommand = r.testCommand as string;
   if (r.profile === 'local') out.profile = 'local';
   if (r.checkpoints === true || r.checkpoints === false) out.checkpoints = r.checkpoints as boolean;
-  if (typeof r.ruby === 'object' && r.ruby !== null) {
-    const rb = r.ruby as Record<string, unknown>;
-    // Only copy present keys — the CLI spreads this over DEFAULT_RUBY_CONFIG,
+  if (typeof r.archimedes === 'object' && r.archimedes !== null) {
+    const rb = r.archimedes as Record<string, unknown>;
+    // Only copy present keys — the CLI spreads this over DEFAULT_ARCHIMEDES_CONFIG,
     // so an explicit `undefined` here would clobber a default.
-    const ruby: NonNullable<ProjectConfig['ruby']> = {};
-    if (rb.enabled === true || rb.enabled === false) ruby.enabled = rb.enabled;
-    if (typeof rb.modelName === 'string') ruby.modelName = rb.modelName;
-    if (typeof rb.ollamaBaseUrl === 'string') ruby.ollamaBaseUrl = rb.ollamaBaseUrl;
-    if (typeof rb.competenceThreshold === 'number') ruby.competenceThreshold = rb.competenceThreshold;
-    if (typeof rb.minAttempts === 'number' && rb.minAttempts > 0) ruby.minAttempts = Math.floor(rb.minAttempts);
-    out.ruby = ruby;
+    const archimedes: NonNullable<ProjectConfig['archimedes']> = {};
+    if (rb.enabled === true || rb.enabled === false) archimedes.enabled = rb.enabled;
+    if (typeof rb.modelName === 'string') archimedes.modelName = rb.modelName;
+    if (typeof rb.ollamaBaseUrl === 'string') archimedes.ollamaBaseUrl = rb.ollamaBaseUrl;
+    if (typeof rb.competenceThreshold === 'number') archimedes.competenceThreshold = rb.competenceThreshold;
+    if (typeof rb.minAttempts === 'number' && rb.minAttempts > 0) archimedes.minAttempts = Math.floor(rb.minAttempts);
+    out.archimedes = archimedes;
   }
   if (Array.isArray(r.providers)) {
     out.providers = r.providers
