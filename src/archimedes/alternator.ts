@@ -42,6 +42,13 @@ export interface AlternatorOptions {
   abortSignal?: AbortSignal;
   /** Shared context-health tracker (the REPL's) — forwarded to both inner agent loops. */
   healthTracker?: ContextHealthTracker;
+  /**
+   * Manual override (`:small1`): always start with Archimedes, bypassing the
+   * competence gate. Verification and escalation still run afterwards, and the
+   * episode is recorded normally — a forced attempt is what lets a frozen
+   * competence score move again.
+   */
+  forceArchimedes?: boolean;
 }
 
 export interface AlternatorRunResult {
@@ -73,17 +80,18 @@ const RECENT_EPISODE_LIMIT = 50;
 const OLLAMA_PING_MS = 3_000;
 
 /**
- * Probability of overriding a gated (useArchimedes: false) decision and letting
- * Archimedes attempt anyway. Without this, `assessCompetence` gates a task
+ * Default probability of overriding a gated (useArchimedes: false) decision and
+ * letting Archimedes attempt anyway. Without this, `assessCompetence` gates a task
  * pattern once its success rate drops below threshold, and — because
  * `archimedesAttempted` only becomes true inside the `decision.useArchimedes` branch —
  * that pattern's score then never updates again. The gate becomes
  * permanent even if the underlying model improves. This periodic probe
  * keeps the score live. Kept low: the probe still pays full Archimedes-then-large-
  * model cost on every trial (verification always runs), so it should not be
- * confused with a free background check.
+ * confused with a free background check. Override per project via
+ * `archimedes.epsilonProbeRate` in .aura.json.
  */
-const EPSILON_PROBE_RATE = 0.05;
+const DEFAULT_EPSILON_PROBE_RATE = 0.05;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Display noop
@@ -304,12 +312,27 @@ export class ArchimedesAlternator {
       decision = assessCompetence(recent, task, archimedesConfig);
       decision.fallbackModel = largeModelProvider.model;
 
+      // Manual override (:small1): start with Archimedes regardless of the gate.
+      // Applied before the epsilon probe so a forced session never depends on
+      // the dice roll; verification/escalation below is untouched.
+      if (this.opts.forceArchimedes && !decision.useArchimedes) {
+        const score = decision.competenceLevel
+          ? `${(decision.competenceLevel.successRate * 100).toFixed(0)}%`
+          : 'no recorded attempts';
+        decision = {
+          ...decision,
+          useArchimedes: true,
+          reason: `Starting with Archimedes (small1 override — competence gate bypassed, current score: ${score}).`,
+        };
+      }
+
       // Epsilon probe: a gated pattern (useArchimedes: false) would otherwise never
       // get another `archimedesAttempted: true` episode, freezing its score
-      // permanently (see EPSILON_PROBE_RATE doc comment above). Roll the die
+      // permanently (see DEFAULT_EPSILON_PROBE_RATE doc comment above). Roll the die
       // only when the gate actually fired — a pattern still in its
       // minAttempts learning phase is already using Archimedes and needs no probe.
-      if (!decision.useArchimedes && archimedesConfig.enabled && Math.random() < EPSILON_PROBE_RATE) {
+      const epsilon = archimedesConfig.epsilonProbeRate ?? DEFAULT_EPSILON_PROBE_RATE;
+      if (!decision.useArchimedes && archimedesConfig.enabled && Math.random() < epsilon) {
         decision = {
           ...decision,
           useArchimedes: true,
@@ -319,7 +342,7 @@ export class ArchimedesAlternator {
 
       this.display.header('Archimedes Principle', decision.reason);
 
-      if (decision.useArchimedes && archimedesConfig.enabled) {
+      if (decision.useArchimedes && (archimedesConfig.enabled || this.opts.forceArchimedes)) {
         const available = await isOllamaAvailable(archimedesConfig.ollamaBaseUrl);
         if (!available) {
           this.display.warning('Archimedes (Ollama) is not reachable — escalating to large model.');

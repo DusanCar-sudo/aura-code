@@ -61,6 +61,7 @@ const enabledArchimedesConfig: ArchimedesConfig = {
   competenceThreshold: 0.7,
   minAttempts: 3,
   enabled: true,
+  epsilonProbeRate: 0.05,
 };
 
 let tmpHome: string;
@@ -203,5 +204,51 @@ describe('ArchimedesAlternator.run() — result threading', () => {
     expect(mockRunAgentLoop).toHaveBeenCalledWith(
       expect.objectContaining({ initialHistory: priorHistory }),
     );
+  });
+});
+
+describe('ArchimedesAlternator.run() — forceArchimedes (:small1 override)', () => {
+  it('attempts Archimedes even when the gate says no (config disabled), and records the attempt', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    const archimedesResult = makeLoopResult({ summary: 'forced archimedes win' });
+    mockRunAgentLoop.mockResolvedValueOnce(archimedesResult);
+
+    const alternator = new ArchimedesAlternator({
+      ...baseOpts(),
+      archimedesConfig: { ...enabledArchimedesConfig, enabled: false },
+      forceArchimedes: true,
+    });
+    const { usedArchimedes, episode, decision } = await alternator.run('fix a small bug');
+
+    expect(decision.useArchimedes).toBe(true);
+    expect(decision.reason).toContain('small1');
+    expect(usedArchimedes).toBe(true);
+    expect(episode.archimedesAttempted).toBe(true); // the forced attempt feeds the competence score
+    expect(episode.archimedesSucceeded).toBe(true);
+  });
+
+  it('still escalates to the large model when the forced Archimedes attempt fails verification', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    const rejectingProvider = {
+      ...fakeProvider,
+      complete: async () => ({ text: 'INVALID: wrong answer' }),
+    } as unknown as LLMProvider;
+    mockRunAgentLoop
+      .mockResolvedValueOnce(makeLoopResult({ summary: 'bad archimedes answer' })) // Archimedes attempt
+      .mockResolvedValueOnce(makeLoopResult({ summary: 'large model rescue' }));   // escalation
+
+    const alternator = new ArchimedesAlternator({
+      ...baseOpts(),
+      largeModelProvider: rejectingProvider,
+      archimedesConfig: { ...enabledArchimedesConfig, enabled: false },
+      forceArchimedes: true,
+    });
+    const { usedArchimedes, episode, loopResult } = await alternator.run('fix a small bug');
+
+    expect(usedArchimedes).toBe(false);
+    expect(loopResult.summary).toBe('large model rescue');
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(2); // verification/escalation NOT disabled by the override
+    expect(episode.archimedesAttempted).toBe(true);
+    expect(episode.archimedesSucceeded).toBe(false); // the failure still moves the score
   });
 });

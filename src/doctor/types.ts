@@ -19,7 +19,8 @@ export type Category =
   | 'env'      // API keys
   | 'version'  // up-to-date check
   | 'memory'   // episodes, dreams
-  | 'hygiene'; // stray non-aura files/dirs in the repo root
+  | 'hygiene'  // stray non-aura files/dirs in the repo root
+  | 'archimedes'; // small-model alternator: gate status, epsilon probe rate
 
 export interface Finding {
   category: Category;
