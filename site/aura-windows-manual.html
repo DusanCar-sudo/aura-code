@@ -128,7 +128,7 @@
 
     html {
       scroll-behavior: smooth;
-      font-size: 15px;
+      font-size: 16px;
     }
 
     body {
@@ -189,16 +189,13 @@
     /* Terminal Container */
     .terminal-container {
       max-width: 1300px;
-      margin: 0 auto;
+      margin: 2rem auto;
       display: flex;
       flex-direction: column;
-      height: 94vh;
-      min-height: 700px;
       background-color: var(--panel-bg);
       border: 1px solid var(--border-color);
       border-radius: 8px;
       box-shadow: 0 20px 50px var(--shadow-color), 0 0 35px var(--glow-color);
-      overflow: hidden;
     }
 
     /* Title Bar */
@@ -296,8 +293,6 @@
     /* Workspace / Layout */
     .terminal-workspace {
       display: flex;
-      flex: 1;
-      overflow: hidden;
       position: relative;
     }
 
@@ -311,6 +306,10 @@
       overflow-y: auto;
       flex-shrink: 0;
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      z-index: 5;
     }
 
     .sidebar-header {
@@ -384,7 +383,6 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
       background-color: var(--panel-bg);
     }
 
@@ -468,10 +466,7 @@
 
     /* Content Area (Scrollable body) */
     .terminal-content {
-      flex: 1;
-      overflow-y: auto;
       padding: 2.5rem;
-      scroll-behavior: smooth;
     }
 
     /* Chapter/Section Headers */
@@ -1219,12 +1214,8 @@
           <section class="section-container" id="start">
             <div class="sec-label">System Initialization</div>
             <h2 class="sec-title"><span>◆</span> Aura Code</h2>
-            <div class="ascii-box" id="heroAscii">
-    _    _   _ ____    _      ____ ___  ____  _____ 
-   / \  | | | |  _ \  / \    / ___/ _ \|  _ \| ____|
-  / _ \ | | | | |_) |/ _ \  | |  | | | | | | |  _|  
- / ___ \| |_| |  _ // ___ \ | |__| |_| | |_| | |___ 
-/_/   \_\\___/|_| \_/_/   \_\ \____\___/|____/|_____|
+            <div style="text-align: center; margin: 1.5rem 0 2.5rem 0;">
+              <img src="aura-logo-tui.png" alt="AURA ◆ CODE" style="max-width: 100%; height: auto; display: block; margin: 0 auto; filter: drop-shadow(0 0 15px var(--accent-primary-glow));" />
             </div>
             
             <div class="system-info-grid">
@@ -2102,13 +2093,13 @@
       renderFaqs();
       
       const sections = document.querySelectorAll('section[id]');
-      const contentArea = document.getElementById('contentArea');
       
-      contentArea.addEventListener('scroll', () => {
+      window.addEventListener('scroll', () => {
         let current = '';
+        const scrollPos = window.scrollY || document.documentElement.scrollTop;
         sections.forEach(s => {
-          const top = s.offsetTop - 150;
-          if (contentArea.scrollTop >= top) {
+          const top = s.offsetTop - 200;
+          if (scrollPos >= top) {
             current = s.getAttribute('id');
           }
         });
