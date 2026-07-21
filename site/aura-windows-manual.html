@@ -1,619 +1,2126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aura Code — Windows 11 User Manual</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Code — Windows 11 Terminal Manual</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap');
 
-:root {
-  --ruby:#b80000;--ruby-deep:#8b0000;--ruby-dark:#5c0000;--ruby-glow:#ff2020;
-  --gold:#c8a45c;--gold-light:#e2c97e;--gold-dark:#8b6914;
-  --cream:#faf5ed;--cream-warm:#f5ead6;
-  --black:#0d0d0d;--charcoal:#1a1a1a;--slate:#2d2d2d;--grey:#6b6b6b;
-  --light:#e8e4dc;--white:#fcfaf7;
-  --success:#2ea043;--warning:#d2991d;--info:#388bfd;
-  --font-sans:'Inter',system-ui,-apple-system,sans-serif;
-  --font-mono:'JetBrains Mono','Cascadia Code','Fira Code',monospace;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth;font-size:16px}
-body{font-family:var(--font-sans);background:var(--black);color:var(--light);line-height:1.7;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse at 15% 10%,rgba(184,0,0,0.12) 0%,transparent 55%),radial-gradient(ellipse at 85% 90%,rgba(200,164,92,0.07) 0%,transparent 55%),radial-gradient(ellipse at 50% 50%,rgba(184,0,0,0.04) 0%,transparent 70%);pointer-events:none}
+    :root {
+      /* Default Theme: Aura Classic (Red/Gold/Dark) */
+      --bg-color: #08080a;
+      --panel-bg: #0d0d10;
+      --panel-header: #141419;
+      --border-color: #272730;
+      --text-main: #d8d8de;
+      --text-dim: #6c6c76;
+      --accent-primary: #ff3b30;
+      --accent-primary-glow: rgba(255, 59, 48, 0.45);
+      --accent-secondary: #c8a45c;
+      --accent-secondary-glow: rgba(200, 164, 92, 0.35);
+      --accent-success: #30d158;
+      --accent-info: #0a84ff;
+      --accent-warning: #ffd60a;
+      --glow-color: rgba(255, 59, 48, 0.15);
+      --selection-bg: rgba(200, 164, 92, 0.2);
+      
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --font-display: 'Share Tech Mono', monospace;
+      --shadow-color: rgba(0, 0, 0, 0.7);
+    }
 
-/* Navigation */
-nav{position:sticky;top:0;z-index:100;background:rgba(13,13,13,0.88);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);border-bottom:1px solid rgba(200,164,92,0.2);padding:0 2rem}
-.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:1.25rem;height:64px;overflow-x:auto}
-.nav-logo{font-weight:800;font-size:1.25rem;color:var(--gold);letter-spacing:-0.02em;white-space:nowrap;flex-shrink:0}
-.nav-logo span{color:var(--ruby-glow)}
-nav a{color:var(--light);text-decoration:none;font-size:0.85rem;font-weight:500;white-space:nowrap;transition:color 0.2s;position:relative}
-nav a:hover,nav a.active{color:var(--gold)}
-nav a::after{content:'';position:absolute;bottom:-4px;left:0;width:0;height:2px;background:var(--gold);transition:width 0.25s}
-nav a:hover::after,nav a.active::after{width:100%}
+    [data-theme="matrix"] {
+      --bg-color: #020603;
+      --panel-bg: #040e05;
+      --panel-header: #081609;
+      --border-color: #0c3311;
+      --text-main: #33ff33;
+      --text-dim: #127a12;
+      --accent-primary: #33ff33;
+      --accent-primary-glow: rgba(51, 255, 51, 0.5);
+      --accent-secondary: #00ff00;
+      --accent-secondary-glow: rgba(0, 255, 0, 0.4);
+      --accent-success: #33ff33;
+      --accent-info: #00ffff;
+      --accent-warning: #99ff33;
+      --glow-color: rgba(51, 255, 51, 0.2);
+      --selection-bg: rgba(51, 255, 51, 0.25);
+    }
 
-/* Page Layout */
-.page{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:3rem 2rem 6rem}
+    [data-theme="amber"] {
+      --bg-color: #080501;
+      --panel-bg: #100a03;
+      --panel-header: #191005;
+      --border-color: #332009;
+      --text-main: #ffb000;
+      --text-dim: #996a00;
+      --accent-primary: #ffb000;
+      --accent-primary-glow: rgba(255, 176, 0, 0.5);
+      --accent-secondary: #ffd000;
+      --accent-secondary-glow: rgba(255, 208, 0, 0.4);
+      --accent-success: #ffc800;
+      --accent-info: #ffdd00;
+      --accent-warning: #ff9a00;
+      --glow-color: rgba(255, 176, 0, 0.2);
+      --selection-bg: rgba(255, 176, 0, 0.25);
+    }
 
-/* Hero */
-.hero{text-align:center;padding:5rem 0 4rem}
-.hero-crown{width:80px;height:80px;margin:0 auto 2rem}
-.hero-crown svg{width:100%;height:100%}
-.hero h1{font-size:clamp(3rem,7vw,5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.05;background:linear-gradient(135deg,var(--gold-light) 0%,var(--gold) 40%,var(--gold-dark) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:0.75rem}
-.hero h1 .ruby-line{display:block;font-size:0.45em;font-weight:600;letter-spacing:0.3em;text-transform:uppercase;background:linear-gradient(135deg,var(--ruby-glow),var(--ruby));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:0.5rem}
-.hero-tagline{font-size:1.35rem;color:var(--grey);font-style:italic;margin-bottom:2rem}
-.hero-tagline em{font-style:normal;color:var(--gold);font-weight:600}
-.hero-desc{color:var(--grey);max-width:550px;margin:0 auto 2rem;font-size:1.05rem;line-height:1.8}
-.hero-desc strong{color:var(--white)}
-.hero-cta{display:inline-flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+    [data-theme="dracula"] {
+      --bg-color: #1a1b26;
+      --panel-bg: #222430;
+      --panel-header: #2e303e;
+      --border-color: #414558;
+      --text-main: #f8f8f2;
+      --text-dim: #6272a4;
+      --accent-primary: #ff79c6;
+      --accent-primary-glow: rgba(255, 121, 198, 0.5);
+      --accent-secondary: #8be9fd;
+      --accent-secondary-glow: rgba(139, 233, 253, 0.4);
+      --accent-success: #50fa7b;
+      --accent-info: #bd93f9;
+      --accent-warning: #ffb86c;
+      --glow-color: rgba(255, 121, 198, 0.2);
+      --selection-bg: rgba(255, 121, 198, 0.25);
+    }
 
-/* Buttons */
-.btn{display:inline-block;padding:0.85rem 2.2rem;border-radius:6px;font-weight:600;font-size:0.95rem;text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;font-family:var(--font-sans)}
-.btn-primary{background:var(--ruby);color:var(--white);box-shadow:0 0 0 1px rgba(184,0,0,0.4),0 4px 20px rgba(184,0,0,0.3)}
-.btn-primary:hover{background:var(--ruby-glow);transform:translateY(-2px);box-shadow:0 0 0 1px rgba(255,32,32,0.5),0 8px 30px rgba(184,0,0,0.4)}
-.btn-gold{background:transparent;color:var(--gold);box-shadow:0 0 0 1px rgba(200,164,92,0.3)}
-.btn-gold:hover{background:rgba(200,164,92,0.1);color:var(--gold-light);box-shadow:0 0 0 1px rgba(200,164,92,0.6)}
+    [data-theme="cyberpunk"] {
+      --bg-color: #0c0818;
+      --panel-bg: #140d28;
+      --panel-header: #20143f;
+      --border-color: #f70d1a;
+      --text-main: #00ffff;
+      --text-dim: #644a86;
+      --accent-primary: #f70d1a;
+      --accent-primary-glow: rgba(247, 13, 26, 0.5);
+      --accent-secondary: #ffee00;
+      --accent-secondary-glow: rgba(255, 238, 0, 0.4);
+      --accent-success: #39ff14;
+      --accent-info: #00ffff;
+      --accent-warning: #ff007f;
+      --glow-color: rgba(247, 13, 26, 0.2);
+      --selection-bg: rgba(0, 255, 255, 0.25);
+    }
 
-/* Sections */
-.section{margin:5rem 0}
-.section-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:var(--ruby-glow);margin-bottom:0.5rem}
-.section-title{font-size:2.25rem;font-weight:800;letter-spacing:-0.02em;color:var(--white);line-height:1.2;margin-bottom:0.75rem}
-.section-subtitle{font-size:1.05rem;color:var(--grey);max-width:600px;line-height:1.7}
+    [data-theme="monochrome"] {
+      --bg-color: #0a0a0a;
+      --panel-bg: #121212;
+      --panel-header: #1e1e1e;
+      --border-color: #333333;
+      --text-main: #ffffff;
+      --text-dim: #666666;
+      --accent-primary: #ffffff;
+      --accent-primary-glow: rgba(255, 255, 255, 0.3);
+      --accent-secondary: #cccccc;
+      --accent-secondary-glow: rgba(204, 204, 204, 0.2);
+      --accent-success: #ffffff;
+      --accent-info: #aaaaaa;
+      --accent-warning: #dddddd;
+      --glow-color: rgba(255, 255, 255, 0.05);
+      --selection-bg: rgba(255, 255, 255, 0.2);
+    }
 
-/* Cards */
-.card{background:var(--charcoal);border:1px solid rgba(200,164,92,0.12);border-radius:12px;padding:2.5rem;margin-bottom:2rem;position:relative;overflow:hidden;transition:all 0.3s}
-.card:hover{border-color:rgba(200,164,92,0.3);transform:translateY(-2px)}
-.card::before{content:'';position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,var(--ruby),var(--gold));opacity:0;transition:opacity 0.3s}
-.card:hover::before{opacity:1}
-.card h3{font-size:1.35rem;font-weight:700;color:var(--white);margin-bottom:1rem}
-.card p,.card li{color:var(--light);font-size:0.95rem;line-height:1.9}
-.card ul,.card ol{padding-left:1.5rem;margin:0.75rem 0}
-.card li{margin-bottom:0.35rem}
-.card code{font-family:var(--font-mono);font-size:0.85em;background:var(--slate);padding:2px 8px;border-radius:4px;color:var(--gold-light)}
-.card strong{color:var(--white)}
-.card a{color:var(--info)}
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-/* TODO Checklist */
-.todo-progress{margin-bottom:2rem}
-.todo-progress-bar{width:100%;height:8px;background:var(--slate);border-radius:99px;overflow:hidden;margin-bottom:0.75rem}
-.todo-progress-fill{height:100%;background:linear-gradient(90deg,var(--success),#4cde6e);border-radius:99px;transition:width 0.5s ease;width:0%}
-.todo-counter{display:flex;justify-content:space-between;align-items:center;color:var(--grey);font-size:0.9rem}
-.todo-counter strong{color:var(--success);font-size:1.1rem}
-.todo-reset{background:transparent;border:1px solid var(--slate);color:var(--grey);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all 0.2s}
-.todo-reset:hover{border-color:var(--ruby);color:var(--ruby-glow)}
-.todo-item{display:flex;align-items:flex-start;gap:1rem;padding:1.25rem 1.5rem;background:var(--charcoal);border:1px solid rgba(200,164,92,0.08);border-radius:10px;margin-bottom:0.75rem;cursor:pointer;transition:all 0.25s;position:relative}
-.todo-item:hover{border-color:rgba(200,164,92,0.25);background:var(--slate)}
-.todo-item.done{opacity:0.6}
-.todo-item.done .todo-text{text-decoration:line-through;text-decoration-color:var(--success)}
-.todo-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--grey);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.25s;font-size:0.8rem;margin-top:2px}
-.todo-item.done .todo-check{background:var(--success);border-color:var(--success);box-shadow:0 0 12px rgba(46,160,67,0.4)}
-.todo-content{flex:1;min-width:0}
-.todo-text{font-weight:500;color:var(--white);margin-bottom:0.25rem}
-.todo-cat{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.15em;color:var(--gold);margin-bottom:0.25rem}
-.todo-detail{font-size:0.85rem;color:var(--grey);line-height:1.6;max-height:0;overflow:hidden;transition:max-height 0.4s ease,padding 0.4s ease}
-.todo-item.open .todo-detail{max-height:200px;padding-top:0.75rem}
+    html {
+      scroll-behavior: smooth;
+      font-size: 15px;
+    }
 
-/* Code blocks */
-.code-block{background:var(--slate);border:1px solid rgba(200,164,92,0.15);border-radius:8px;padding:1.25rem 1.5rem;margin:1rem 0;overflow-x:auto;font-family:var(--font-mono);font-size:0.85rem;line-height:1.8;color:var(--light)}
-.code-block .prompt{color:var(--grey)}
-.code-block .cmd{color:var(--gold-light)}
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      line-height: 1.6;
+      padding: 1.5rem;
+      transition: background-color 0.3s, color 0.3s;
+      position: relative;
+    }
 
-/* Tip box */
-.tip-box{background:rgba(200,164,92,0.06);border-left:3px solid var(--gold);padding:1.25rem 1.5rem;border-radius:0 8px 8px 0;margin:1.5rem 0;font-size:0.9rem;color:var(--light)}
-.tip-box strong{color:var(--gold)}
-.tip-box.warning{border-left-color:var(--warning);background:rgba(210,153,29,0.06)}
-.tip-box.success{border-left-color:var(--success);background:rgba(46,160,67,0.06)}
+    /* Selection Color */
+    ::selection {
+      background: var(--selection-bg);
+      color: var(--accent-secondary);
+    }
 
-/* Tables */
-.table-wrap{overflow-x:auto;margin:1.5rem 0}
-table{width:100%;border-collapse:collapse;font-size:0.9rem}
-th{text-align:left;padding:0.85rem 1rem;background:var(--slate);color:var(--gold);font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.1em}
-td{padding:0.85rem 1rem;border-bottom:1px solid rgba(200,164,92,0.08)}
-tr:hover td{background:rgba(200,164,92,0.04)}
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--panel-bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-secondary);
+    }
 
-/* Steps */
-.step{display:flex;gap:1rem;margin-bottom:1.5rem}
-.step-num{width:36px;height:36px;border-radius:50%;background:var(--ruby);color:var(--white);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;flex-shrink:0}
-.step-content{flex:1}
-.step-content h4{color:var(--white);margin-bottom:0.35rem}
-.step-content p{color:var(--light);font-size:0.9rem;line-height:1.7}
+    /* CRT Overlay Effect */
+    body.crt-mode::after {
+      content: " ";
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.18) 50%), 
+                  linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+      z-index: 9999;
+      background-size: 100% 4px, 6px 100%;
+      pointer-events: none;
+    }
 
-/* Footer */
-footer{text-align:center;padding:4rem 2rem;border-top:1px solid rgba(200,164,92,0.12);margin-top:6rem}
-footer p{color:var(--grey);font-size:0.85rem;line-height:1.8}
-footer .heart{color:var(--ruby-glow)}
+    @keyframes crt-flicker {
+      0% { opacity: 0.985; }
+      50% { opacity: 0.995; }
+      100% { opacity: 0.985; }
+    }
 
-/* Responsive */
-@media(max-width:768px){
-  .page{padding:2rem 1rem 4rem}
-  .hero{padding:3rem 0 2rem}
-  .hero h1{font-size:2.5rem}
-  .section-title{font-size:1.75rem}
-  .card{padding:1.5rem}
-  nav{padding:0 1rem}
-  .nav-inner{gap:1rem}
-  .btn{padding:0.7rem 1.5rem;font-size:0.9rem}
-}
+    body.crt-mode {
+      animation: crt-flicker 0.15s infinite;
+    }
 
-/* Print-friendly */
-@media print{
-  nav, .todo-reset, .btn{display:none}
-  body{background:white;color:black}
-  .card{background:white;border:1px solid #ccc;break-inside:avoid}
-}
-</style>
+    /* Terminal Container */
+    .terminal-container {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      height: 94vh;
+      min-height: 700px;
+      background-color: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 20px 50px var(--shadow-color), 0 0 35px var(--glow-color);
+      overflow: hidden;
+    }
+
+    /* Title Bar */
+    .terminal-titlebar {
+      background-color: var(--panel-header);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+      z-index: 10;
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .window-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot-close { background-color: #ff5f56; }
+    .dot-min { background-color: #ffbd2e; }
+    .dot-max { background-color: #27c93f; }
+
+    .window-title {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      color: var(--accent-secondary);
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .window-title span {
+      color: var(--accent-primary);
+    }
+
+    .window-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .control-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    .control-item select, .control-btn {
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .control-item select:hover, .control-btn:hover {
+      border-color: var(--accent-secondary);
+      color: var(--accent-secondary);
+      box-shadow: 0 0 8px rgba(200,164,92,0.25);
+    }
+
+    .control-btn.active {
+      background-color: var(--accent-secondary);
+      color: var(--bg-color);
+      font-weight: bold;
+    }
+
+    .mobile-menu-toggle {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    /* Workspace / Layout */
+    .terminal-workspace {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Sidebar - File Explorer */
+    .terminal-sidebar {
+      width: 260px;
+      background-color: var(--panel-header);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sidebar-header {
+      padding: 1rem;
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tree-view {
+      padding: 1rem;
+      list-style-type: none;
+    }
+
+    .tree-item {
+      margin-bottom: 0.5rem;
+    }
+
+    .tree-folder {
+      color: var(--accent-secondary);
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      user-select: none;
+    }
+
+    .tree-files {
+      list-style-type: none;
+      padding-left: 1.25rem;
+      margin-top: 0.4rem;
+      border-left: 1px dashed var(--border-color);
+    }
+
+    .tree-file {
+      margin-bottom: 0.4rem;
+    }
+
+    .tree-file a {
+      color: var(--text-dim);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      padding: 2px 4px;
+      border-radius: 3px;
+      transition: all 0.15s;
+    }
+
+    .tree-file a:hover, .tree-file.active a {
+      color: var(--accent-success);
+      background-color: rgba(48, 209, 88, 0.08);
+      padding-left: 8px;
+    }
+
+    .tree-file.active a {
+      font-weight: 600;
+      box-shadow: inset 2px 0 0 var(--accent-success);
+    }
+
+    /* Main View Area */
+    .terminal-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background-color: var(--panel-bg);
+    }
+
+    /* Console Box (Top of main area) */
+    .console-container {
+      background-color: var(--bg-color);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 1.5rem;
+      font-family: var(--font-mono);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .console-history {
+      max-height: 120px;
+      overflow-y: auto;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .console-line {
+      margin-bottom: 0.35rem;
+      white-space: pre-wrap;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .console-line.input { color: var(--accent-secondary); }
+    .console-line.output { color: var(--text-main); }
+    .console-line.success { color: var(--accent-success); }
+    .console-line.error { color: var(--accent-primary); }
+
+    .console-prompt {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .console-prompt-symbol {
+      color: var(--accent-primary);
+      font-weight: bold;
+    }
+
+    .console-prompt input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--accent-success);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    .suggested-cmds {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-top: 0.4rem;
+    }
+
+    .cmd-badge {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      background-color: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .cmd-badge:hover {
+      color: var(--accent-secondary);
+      border-color: var(--accent-secondary);
+      background-color: rgba(200, 164, 92, 0.05);
+    }
+
+    /* Content Area (Scrollable body) */
+    .terminal-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2.5rem;
+      scroll-behavior: smooth;
+    }
+
+    /* Chapter/Section Headers */
+    .section-container {
+      margin-bottom: 4rem;
+      border-bottom: 1px dashed var(--border-color);
+      padding-bottom: 4rem;
+    }
+    .section-container:last-child {
+      border-bottom: none;
+      padding-bottom: 1rem;
+    }
+
+    .sec-label {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--accent-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .sec-title {
+      font-family: var(--font-display);
+      font-size: 2.2rem;
+      color: var(--text-main);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .sec-title span {
+      color: var(--accent-secondary);
+    }
+
+    .sec-subtitle {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      max-width: 800px;
+      margin-bottom: 2rem;
+    }
+
+    /* Cards */
+    .terminal-card {
+      background-color: rgba(255, 255, 255, 0.015);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+      transition: all 0.3s;
+    }
+
+    .terminal-card:hover {
+      border-color: var(--accent-secondary);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 15px rgba(200, 164, 92, 0.05);
+      transform: translateY(-1px);
+    }
+
+    .terminal-card h3 {
+      font-family: var(--font-display);
+      font-size: 1.3rem;
+      color: var(--accent-secondary);
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    .terminal-card p {
+      font-size: 0.9rem;
+      color: var(--text-main);
+      margin-bottom: 1rem;
+    }
+    .terminal-card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .terminal-card strong {
+      color: var(--accent-secondary);
+    }
+
+    .terminal-card ul, .terminal-card ol {
+      padding-left: 1.5rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+
+    .terminal-card li {
+      margin-bottom: 0.5rem;
+    }
+
+    .terminal-card code {
+      background-color: var(--bg-color);
+      color: var(--accent-primary);
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border-color);
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+    }
+
+    /* ASCII / Terminal styling elements */
+    .ascii-box {
+      font-family: var(--font-mono);
+      white-space: pre;
+      color: var(--accent-secondary);
+      line-height: 1.2;
+      margin-bottom: 2rem;
+      overflow-x: auto;
+      padding: 1rem 0;
+    }
+
+    /* Hero / System Status Info */
+    .system-info-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.5rem 1.5rem;
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+      background-color: var(--bg-color);
+      padding: 1.2rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      max-width: 600px;
+    }
+
+    .info-label {
+      color: var(--text-dim);
+      font-weight: bold;
+    }
+
+    .info-value {
+      color: var(--accent-success);
+    }
+
+    /* CTA Buttons */
+    .cta-container {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-term {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent-secondary);
+      background-color: transparent;
+      border: 1px solid var(--accent-secondary);
+      padding: 0.6rem 1.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.25s;
+    }
+
+    .btn-term:hover {
+      background-color: var(--accent-secondary);
+      color: var(--bg-color);
+      box-shadow: 0 0 15px var(--accent-secondary-glow);
+      transform: translateY(-2px);
+    }
+
+    .btn-term-primary {
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+
+    .btn-term-primary:hover {
+      background-color: var(--accent-primary);
+      color: var(--text-main);
+      box-shadow: 0 0 15px var(--accent-primary-glow);
+    }
+
+    /* Interactive Checklist */
+    .todo-box {
+      margin-top: 1.5rem;
+    }
+
+    .todo-progress-container {
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 1.2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .todo-progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .todo-pct {
+      color: var(--accent-success);
+      font-weight: bold;
+    }
+
+    .todo-bar-wrapper {
+      width: 100%;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--accent-success);
+      letter-spacing: -1px;
+    }
+
+    .todo-list-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .todo-card {
+      background-color: rgba(255, 255, 255, 0.005);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      gap: 1rem;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s;
+    }
+
+    .todo-card:hover {
+      background-color: rgba(255, 255, 255, 0.02);
+      border-color: var(--accent-secondary);
+    }
+
+    .todo-card.done {
+      border-color: rgba(48, 209, 88, 0.25);
+      background-color: rgba(48, 209, 88, 0.01);
+    }
+
+    .todo-card.done .todo-title-text {
+      text-decoration: line-through;
+      color: var(--text-dim);
+    }
+
+    .todo-checkbox-visual {
+      font-size: 1rem;
+      color: var(--text-dim);
+      font-weight: bold;
+      width: 24px;
+      display: flex;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .todo-card.done .todo-checkbox-visual {
+      color: var(--accent-success);
+    }
+
+    .todo-card-content {
+      flex: 1;
+    }
+
+    .todo-card-meta {
+      font-size: 0.7rem;
+      color: var(--accent-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.2rem;
+    }
+
+    .todo-card.done .todo-card-meta {
+      color: var(--text-dim);
+    }
+
+    .todo-title-text {
+      font-weight: 600;
+      color: var(--text-main);
+      font-size: 0.9rem;
+    }
+
+    .todo-card-detail {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 0.5rem;
+      line-height: 1.5;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, margin-top 0.3s ease;
+    }
+
+    .todo-card.open .todo-card-detail {
+      max-height: 150px;
+    }
+
+    /* Flowchart for Loop */
+    .flowchart-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      overflow-x: auto;
+    }
+
+    .flow-node {
+      border: 1px solid var(--border-color);
+      background-color: var(--panel-header);
+      padding: 0.6rem 1rem;
+      border-radius: 4px;
+      text-align: center;
+      min-width: 110px;
+      transition: all 0.2s;
+    }
+
+    .flow-node:hover {
+      border-color: var(--accent-secondary);
+      box-shadow: 0 0 10px rgba(200, 164, 92, 0.15);
+    }
+
+    .flow-node .node-title {
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: var(--text-main);
+    }
+
+    .flow-node .node-sub {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+
+    .flow-arrow {
+      color: var(--text-dim);
+      font-size: 1.2rem;
+      font-weight: bold;
+      padding: 0 0.5rem;
+      animation: pulse-arrow 1.5s infinite;
+    }
+
+    @keyframes pulse-arrow {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; color: var(--accent-secondary); }
+      100% { opacity: 0.4; }
+    }
+
+    /* Tip Boxes */
+    .term-tip-box {
+      border-left: 3px solid var(--accent-secondary);
+      background-color: rgba(200, 164, 92, 0.03);
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0;
+      border-radius: 0 4px 4px 0;
+      font-size: 0.85rem;
+    }
+
+    .term-tip-box.warning {
+      border-left-color: var(--accent-warning);
+      background-color: rgba(255, 214, 10, 0.02);
+    }
+
+    .term-tip-box.danger {
+      border-left-color: var(--accent-primary);
+      background-color: rgba(255, 59, 48, 0.02);
+    }
+
+    .term-tip-box.success {
+      border-left-color: var(--accent-success);
+      background-color: rgba(48, 209, 88, 0.02);
+    }
+
+    .term-tip-header {
+      font-weight: bold;
+      color: var(--text-main);
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--panel-header);
+      color: var(--accent-secondary);
+      font-weight: 600;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background-color: rgba(255, 255, 255, 0.01);
+    }
+
+    /* Steps guide */
+    .term-step {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .term-step-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      color: var(--accent-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .term-step-body {
+      flex: 1;
+    }
+
+    .term-step-body h4 {
+      font-size: 0.9rem;
+      color: var(--text-main);
+      margin-bottom: 0.25rem;
+    }
+
+    .term-step-body p {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin: 0;
+    }
+
+    /* Code blocks */
+    .term-code-block {
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+      position: relative;
+      overflow-x: auto;
+    }
+
+    .term-code-block pre {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-main);
+      line-height: 1.5;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background-color: var(--panel-header);
+      border: 1px solid var(--border-color);
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      opacity: 0;
+      transition: all 0.2s;
+    }
+
+    .term-code-block:hover .copy-btn {
+      opacity: 1;
+    }
+
+    .copy-btn:hover {
+      color: var(--accent-secondary);
+      border-color: var(--accent-secondary);
+    }
+
+    .cmd-prompt { color: var(--text-dim); }
+    .cmd-text { color: var(--accent-secondary); }
+    .cmd-out { color: var(--accent-success); }
+
+    /* FAQ Collapsable Questions */
+    .faq-item {
+      margin-bottom: 1rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: rgba(255, 255, 255, 0.005);
+      overflow: hidden;
+    }
+
+    .faq-question {
+      padding: 1rem 1.25rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      user-select: none;
+      color: var(--text-main);
+      background-color: rgba(255, 255, 255, 0.008);
+      transition: all 0.2s;
+    }
+
+    .faq-question:hover {
+      background-color: rgba(255, 255, 255, 0.02);
+      color: var(--accent-secondary);
+    }
+
+    .faq-answer {
+      padding: 0 1.25rem;
+      max-height: 0;
+      overflow: hidden;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+    }
+
+    .faq-item.open .faq-answer {
+      padding: 1rem 1.25rem;
+      max-height: 300px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .faq-toggle-icon {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      transition: transform 0.2s;
+    }
+
+    .faq-item.open .faq-toggle-icon {
+      transform: rotate(90deg);
+      color: var(--accent-secondary);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      margin-top: 3rem;
+      border-top: 1px solid var(--border-color);
+      background-color: var(--panel-header);
+    }
+
+    footer p {
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      margin-bottom: 0.5rem;
+    }
+
+    footer a {
+      color: var(--accent-info);
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 900px) {
+      body {
+        padding: 0.5rem;
+      }
+      .terminal-container {
+        height: auto;
+        min-height: auto;
+      }
+      .terminal-workspace {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+      }
+      .terminal-sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 300px;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .terminal-main {
+        height: auto;
+        overflow: visible;
+      }
+      .terminal-content {
+        padding: 1.2rem;
+        height: auto;
+        overflow: visible;
+      }
+      .sec-title {
+        font-size: 1.7rem;
+      }
+      .flowchart-wrapper {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: stretch;
+      }
+      .flow-arrow {
+        text-align: center;
+        transform: rotate(90deg);
+        padding: 0.25rem 0;
+      }
+    }
+
+    /* Print styling */
+    @media print {
+      body {
+        background-color: white !important;
+        color: black !important;
+      }
+      .terminal-container, .terminal-sidebar, .console-container, .window-controls, .copy-btn {
+        display: none !important;
+      }
+      .terminal-content {
+        padding: 0 !important;
+      }
+      .terminal-card {
+        border: 1px solid #ccc !important;
+        background: white !important;
+      }
+    }
+  </style>
 </head>
-<body>
+<body class="crt-mode">
 
-<!-- NAVIGATION -->
-<nav>
-  <div class="nav-inner">
-    <span class="nav-logo">&#9670; <span>AURA</span> CODE</span>
-    <a href="#start">Home</a>
-    <a href="#todo">&#9989; Checklist</a>
-    <a href="#what-is">What Is Aura</a>
-    <a href="#install">Install</a>
-    <a href="#apikeys">API Keys</a>
-    <a href="#commands">Commands</a>
-    <a href="#modes">Modes</a>
-    <a href="#providers">AI Brains</a>
-    <a href="#safety">Safety</a>
-    <a href="#faq">FAQ</a>
-  </div>
-</nav>
-
-<div class="page">
-
-<!-- HERO -->
-<section class="hero" id="start">
-  <div class="hero-crown">
-    <svg viewBox="0 0 80 80">
-      <defs>
-        <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#e2c97e"/>
-          <stop offset="100%" style="stop-color:#c8a45c"/>
-        </linearGradient>
-      </defs>
-      <polygon points="40,8 52,30 76,32 58,48 62,72 40,60 18,72 22,48 4,32 28,30" fill="none" stroke="url(#cg)" stroke-width="2"/>
-      <polygon points="40,16 48,32 66,34 54,46 57,64 40,56 23,64 26,46 14,34 32,32" fill="url(#cg)" opacity="0.4"/>
-      <circle cx="40" cy="38" r="6" fill="#c8a45c"/>
-    </svg>
-  </div>
-  <h1><span class="ruby-line">Windows 11 Edition</span>Aura Code</h1>
-  <p class="hero-tagline"><em>"I don't try. I verify."</em></p>
-  <p class="hero-desc">A step-by-step guide for <strong>absolute beginners</strong>. No technical knowledge required. If you can type and click a mouse, you can use Aura. This manual will take you from zero to AI-powered coding in about 15 minutes.</p>
-  <div class="hero-cta">
-    <a href="#todo" class="btn btn-primary">&#9989; Start My Setup Checklist</a>
-    <a href="#install" class="btn btn-gold">&#128229; How to Install</a>
-  </div>
-</section>
-
-<!-- TODO CHECKLIST -->
-<section class="section" id="todo">
-  <div class="section-label">Interactive</div>
-  <h2 class="section-title">&#9989; Your Setup Checklist</h2>
-  <p class="section-subtitle">Tick off each step as you complete it. Your progress is saved — come back anytime!</p>
-  
-  <div class="card" style="margin-top:2rem">
-    <div class="todo-progress">
-      <div class="todo-progress-bar"><div class="todo-progress-fill" id="progressFill"></div></div>
-      <div class="todo-counter">
-        <span><strong id="doneCount">0</strong> of <span id="totalCount">12</span> complete</span>
-        <button class="todo-reset" onclick="resetTodos()">&#8635; Reset All</button>
-      </div>
-    </div>
-    <div id="todoList"></div>
-  </div>
-</section>
-
-<!-- WHAT IS AURA -->
-<section class="section" id="what-is">
-  <div class="section-label">Chapter 1</div>
-  <h2 class="section-title">What Is Aura Code?</h2>
-  <p class="section-subtitle">Your personal AI assistant that reads, writes, and fixes code — so you don't have to be a programmer to get things done.</p>
-
-  <div class="card">
-    <h3>In Plain English</h3>
-    <p>Imagine you have a <strong style="color:var(--gold)">super-smart friend</strong> who can look at any folder on your computer and work with its files. That's Aura. You type what you want in <strong>plain English</strong>, and Aura does it.</p>
-    <p style="margin-top:0.75rem">Aura works in a <strong>5-step loop</strong>:</p>
-    <ol>
-      <li><strong style="color:var(--info)">Read</strong> — scans your files and understands your project</li>
-      <li><strong style="color:var(--warning)">Plan</strong> — decides what to change and how</li>
-      <li><strong style="color:var(--ruby-glow)">Execute</strong> — writes code, makes edits, runs commands</li>
-      <li><strong style="color:var(--success)">Verify</strong> — runs tests, checks everything still works</li>
-      <li><strong style="color:var(--gold)">Report</strong> — honestly summarizes what was done with proof</li>
-    </ol>
-    <div class="tip-box">
-      <strong>Real example:</strong> You type <code>aura "add dark mode to my website"</code><br>
-      Aura reads your files, figures out which ones control colors, edits them, and confirms it works. All you did was type one sentence.
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Built by Agents, for Everyone</h3>
-    <p>Aura was <strong style="color:var(--ruby-glow)">built by four AI agents</strong> working together under the direction of Dusan Milosavljevic. She knows this — it's part of her origin story.</p>
-    <p style="margin-top:0.75rem">She works with <strong>all major AI models</strong>: Claude, GPT, Gemini, MiMo, DeepSeek — and even free local models through Ollama. You pick which brain Aura uses.</p>
-    <p style="margin-top:0.75rem">Her framework is called <strong style="color:var(--gold)">Praktess</strong> — from Ancient Greek: <em>"she who acts and executes."</em> Her motto: <em>"I don't try. I verify."</em></p>
-  </div>
-</section>
-
-<!-- INSTALL -->
-<section class="section" id="install">
-  <div class="section-label">Chapter 2</div>
-  <h2 class="section-title">Installing on Windows 11</h2>
-  <p class="section-subtitle">Don't have Node.js yet? No problem. Follow these steps — takes about <strong style="color:var(--white)">10 minutes</strong>.</p>
-
-  <div class="card">
-    <h3>Step 1: Download Node.js</h3>
-    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Open your web browser</h4><p>Edge, Chrome, or Firefox — any browser works. You already have one!</p></div></div>
-    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Go to nodejs.org</h4><p>Type <strong>nodejs.org</strong> in the address bar at the top and press Enter.</p></div></div>
-    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Click the big green LTS button</h4><p>You'll see two big buttons. Click the one that says <strong style="color:var(--success)">"LTS"</strong> (Long Term Support — the most stable version). A file will download.</p></div></div>
-    <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Install Node.js</h4><p>Double-click the downloaded <code>node-vXX.XX.X-x64.msi</code> file. Click <strong>Next</strong>, accept the license, keep ALL defaults, click <strong>Install</strong>. When Windows asks "allow this app to make changes?" — click <strong>Yes</strong>.</p></div></div>
-    <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Finish and restart</h4><p>Click <strong>Finish</strong>. It's a good idea to restart your computer now.</p></div></div>
-  </div>
-
-  <div class="card">
-    <h3>Step 2: Open Windows Terminal</h3>
-    <p>Press the <strong>Windows key</strong> on your keyboard (it looks like a flag, between Ctrl and Alt). Type <code>cmd</code> or <code>Terminal</code>. Press <strong>Enter</strong>.</p>
-    <p style="margin-top:0.75rem">You'll see a black window with white text. This is the <strong>command line</strong> — don't be scared! You only need to type a few simple things.</p>
-    <div class="tip-box"><strong>Tip:</strong> You can also right-click the Start button and select "Terminal" or "Command Prompt".</div>
-  </div>
-
-  <div class="card">
-    <h3>Step 3: Verify Everything Works</h3>
-    <p>Type these commands exactly as shown. Press <strong>Enter</strong> after each line:</p>
-    <div class="code-block">
-      <span class="prompt">C:\Users\You&gt;</span> <span class="cmd">node --version</span><br>
-      <span style="color:var(--success)">v20.11.0</span> &larr; You should see a version number<br><br>
-      <span class="prompt">C:\Users\You&gt;</span> <span class="cmd">npm --version</span><br>
-      <span style="color:var(--success)">10.2.4</span> &larr; npm comes with Node.js automatically
-    </div>
-    <div class="tip-box warning"><strong>If you see an error:</strong> Restart your computer and try again. If it still doesn't work, reinstall Node.js.</div>
-  </div>
-
-  <div class="card">
-    <h3>Step 4: Install Aura Code</h3>
-    <p>In the same terminal, type this command and press Enter:</p>
-    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">npm install -g aura-code</span></div>
-    <p>You'll see <strong>a lot of text scroll by</strong> — that's normal! Wait 1-2 minutes until the blinking cursor returns.</p>
-    <p style="margin-top:1rem">Now verify Aura works:</p>
-    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">aura --version</span><br><span style="color:var(--success)">0.6.2</span> &larr; You're ready!</div>
-    <div class="tip-box success"><strong>Congratulations!</strong> Aura Code is now installed on your computer. Let's set up an API key so she can think.</div>
-  </div>
-</section>
-
-<!-- API KEYS -->
-<section class="section" id="apikeys">
-  <div class="section-label">Chapter 3</div>
-  <h2 class="section-title">Setting Up API Keys</h2>
-  <p class="section-subtitle">An API key is Aura's <strong style="color:var(--white)">connection to an AI brain</strong>. Without one, she can't think. With one, she's brilliant.</p>
-
-  <div class="card">
-    <h3>What Is an API Key?</h3>
-    <p>Think of an API key as a <strong>password</strong> that lets Aura talk to an AI service (like ChatGPT or Claude). It's a long string of letters and numbers that usually starts with <code>sk-</code>. You get one from the AI service's website, and you tell Aura to use it.</p>
-    <div class="tip-box warning"><strong>Keep your API key secret!</strong> Anyone with your key can use the AI service on your account — and you'll be billed for it. Never share it or put it in files you upload publicly.</div>
-  </div>
-
-  <div class="card">
-    <h3>Where to Get an API Key</h3>
-    <p><strong>Pick one</strong> — you only need one to start:</p>
-    <table>
-      <tr><th>Provider</th><th>Where to Sign Up</th><th>Cost</th></tr>
-      <tr><td><strong>OpenAI</strong> (GPT)</td><td><a href="https://platform.openai.com" target="_blank" style="color:var(--info)">platform.openai.com</a> &rarr; API keys</td><td>Pay-as-you-go (~$5-20/mo)</td></tr>
-      <tr><td><strong>Anthropic</strong> (Claude)</td><td><a href="https://console.anthropic.com" target="_blank" style="color:var(--info)">console.anthropic.com</a> &rarr; API Keys</td><td>Pay-as-you-go (~$5-20/mo)</td></tr>
-      <tr><td><strong>Google</strong> (Gemini)</td><td><a href="https://aistudio.google.com" target="_blank" style="color:var(--info)">aistudio.google.com</a> &rarr; Get API Key</td><td>Free tier available!</td></tr>
-      <tr><td><strong>Ollama</strong> (Local)</td><td>Download from <a href="https://ollama.com" target="_blank" style="color:var(--info)">ollama.com</a></td><td><strong style="color:var(--success)">Completely free!</strong></td></tr>
-    </table>
-  </div>
-
-  <div class="card">
-    <h3>How to Set Your API Key</h3>
-    <p><strong>Temporary method</strong> (lasts until you close Terminal):</p>
-    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">set ANTHROPIC_API_KEY=sk-ant-api03-your-key-here</span></div>
-    <p style="margin-top:1rem">Or for OpenAI:</p>
-    <div class="code-block"><span class="prompt">C:\Users\You&gt;</span> <span class="cmd">set OPENAI_API_KEY=sk-proj-your-key-here</span></div>
-    <p style="margin-top:1rem"><strong>Permanent method</strong> (survives restarts):</p>
-    <ol>
-      <li>Press <strong>Windows key</strong>, type <code>environment</code></li>
-      <li>Click <strong>"Edit the system environment variables"</strong></li>
-      <li>Click <strong>"Environment Variables..."</strong></li>
-      <li>Under "User variables", click <strong>"New..."</strong></li>
-      <li>Variable name: <code>ANTHROPIC_API_KEY</code> (or <code>OPENAI_API_KEY</code>)</li>
-      <li>Variable value: paste your actual key</li>
-      <li>Click <strong>OK</strong> on all windows. Restart Terminal.</li>
-    </ol>
-    <div class="tip-box success"><strong>Done!</strong> Now Aura can use whichever AI brain you chose. Test it: <code>aura --models</code> to see available models.</div>
-  </div>
-</section>
-
-<!-- COMMANDS -->
-<section class="section" id="commands">
-  <div class="section-label">Chapter 4</div>
-  <h2 class="section-title">Commands Reference</h2>
-  <p class="section-subtitle">Every command you can type. <strong style="color:var(--gold)">Remember:</strong> always type <code>aura</code> first, then the command.</p>
-
-  <div class="card">
-    <h3>Everyday Commands</h3>
-    <table>
-      <tr><th>Command</th><th>What It Does</th></tr>
-      <tr><td><code>aura "your task"</code></td><td>Runs a task. Aura reads, plans, executes, and verifies. <strong>This is what you'll use 90% of the time.</strong></td></tr>
-      <tr><td><code>aura --help</code></td><td>Shows all available commands and options</td></tr>
-      <tr><td><code>aura --version</code></td><td>Shows which version of Aura you have</td></tr>
-      <tr><td><code>aura --models</code></td><td>Lists all AI models Aura can use (Claude, GPT, Gemini, etc.)</td></tr>
-      <tr><td><code>aura kanban</code></td><td>Opens a visual task board at localhost:7474 (open in your browser)</td></tr>
-      <tr><td><code>aura "fix the bug in login"</code></td><td>Finds and fixes a bug in your code</td></tr>
-      <tr><td><code>aura "add error handling to all files"</code></td><td>Adds code improvements across your project</td></tr>
-      <tr><td><code>aura "explain what this project does"</code></td><td>Reads your files and gives you a summary</td></tr>
-    </table>
-  </div>
-
-  <div class="card">
-    <h3>Task Examples for Beginners</h3>
-    <p>Try these to get comfortable:</p>
-    <div class="code-block">
-      <span class="cmd">aura "list all the files in this folder"</span><br><br>
-      <span class="cmd">aura "find all TODO comments in the project"</span><br><br>
-      <span class="cmd">aura "explain the file package.json in simple terms"</span><br><br>
-      <span class="cmd">aura "create a new file called hello.txt with 'Hello World' in it"</span><br><br>
-      <span class="cmd">aura "check my code for common mistakes"</span>
-    </div>
-    <div class="tip-box"><strong>Think of Aura like texting a brilliant developer friend.</strong> You don't need special syntax — just describe what you need in plain English.</div>
-  </div>
-</section>
-
-<!-- MODES -->
-<section class="section" id="modes">
-  <div class="section-label">Chapter 5</div>
-  <h2 class="section-title">Aura's Modes</h2>
-  <p class="section-subtitle">Aura has different <strong style="color:var(--white)">personalities</strong> for different jobs. Pick the right mode for your task.</p>
-
-  <div class="card">
-    <h3>Normal Mode (Default)</h3>
-    <p><strong>Best for:</strong> everyday tasks — fixing bugs, adding features, asking questions.</p>
-    <div class="code-block"><span class="cmd">aura "fix the broken login button"</span></div>
-    <p>One agent. Read &rarr; Plan &rarr; Execute &rarr; Verify &rarr; Report. Simple and fast.</p>
-  </div>
-
-  <div class="card">
-    <h3>Orchestrate Mode</h3>
-    <p><strong>Best for:</strong> big, complex tasks that need multiple specialists.</p>
-    <div class="code-block"><span class="cmd">aura --orchestrate "add error handling to every endpoint in my API"</span></div>
-    <p>Aura breaks your task into sub-tasks and assigns each to a specialist agent — Researcher, Coder, Reviewer — working together like a tiny software team.</p>
-  </div>
-
-  <div class="card">
-    <h3>Architect Mode</h3>
-    <p><strong>Best for:</strong> planning before you build. No code is written — just a blueprint.</p>
-    <div class="code-block"><span class="cmd">aura --architect "design a new authentication system"</span></div>
-    <p>Outputs: which files to create, interfaces, dependencies, risks. <em>"If you cannot explain why a file needs to exist in one sentence — it does not need to exist."</em></p>
-  </div>
-
-  <div class="card">
-    <h3>Verify Mode</h3>
-    <p><strong>Best for:</strong> making sure your changes didn't break anything.</p>
-    <div class="code-block"><span class="cmd">aura --verify --test-command "npm test" "fix the failing tests"</span></div>
-    <p>After making changes, Aura runs your tests automatically. If tests fail, she fixes the issue and tries again.</p>
-  </div>
-
-  <div class="card">
-    <h3>Analyze Mode</h3>
-    <p><strong>Best for:</strong> learning from past mistakes.</p>
-    <div class="code-block"><span class="cmd">aura --analyze</span></div>
-    <p>Scans your session history for recurring failure patterns and suggests how to improve.</p>
-  </div>
-</section>
-
-<!-- PROVIDERS -->
-<section class="section" id="providers">
-  <div class="section-label">Chapter 6</div>
-  <h2 class="section-title">AI Brains (Providers)</h2>
-  <p class="section-subtitle">Aura is <strong style="color:var(--white)">model-agnostic</strong> — she can use any AI. Pick the one that fits your needs and budget.</p>
-
-  <div class="card">
-    <div class="table-wrap">
-    <table>
-      <tr><th>Provider</th><th>Best Models</th><th>Best For</th><th>Cost</th></tr>
-      <tr><td><strong style="color:var(--gold)">Claude</strong> (Anthropic)</td><td>Opus, Sonnet, Haiku</td><td>Deep reasoning, careful code</td><td>$3-15/million tokens</td></tr>
-      <tr><td><strong style="color:var(--info)">GPT</strong> (OpenAI)</td><td>gpt-4o, gpt-4o-mini</td><td>Fast, versatile, multimodal</td><td>$0.15-5/million tokens</td></tr>
-      <tr><td><strong style="color:var(--success)">Gemini</strong> (Google)</td><td>gemini-2.5-pro, flash</td><td>Long context (1M tokens)</td><td>Free tier available</td></tr>
-      <tr><td><strong>MiMo</strong> (Xiaomi)</td><td>mimo-v2.5-pro, flash</td><td>Large models, good value</td><td>Competitive</td></tr>
-      <tr><td><strong>DeepSeek</strong></td><td>deepseek-v4-pro, flash</td><td>1M context, some free tiers</td><td>Free options!</td></tr>
-      <tr><td><strong style="color:var(--success)">Ollama</strong></td><td>llama3.2, qwen2.5, etc.</td><td><strong>100% FREE, runs locally</strong></td><td><strong style="color:var(--success)">Free!</strong></td></tr>
-    </table>
-    </div>
-    <div class="tip-box"><strong>Recommendation for beginners:</strong> Start with <strong>Claude Sonnet</strong> or <strong>GPT-4o</strong>. Both are fast, reliable, and great at coding. If you want free, try <strong>Google Gemini</strong> (free tier) or install <strong>Ollama</strong> for completely local, private AI.</div>
-  </div>
-</section>
-
-<!-- SAFETY -->
-<section class="section" id="safety">
-  <div class="section-label">Chapter 7</div>
-  <h2 class="section-title">Safety & Permissions</h2>
-  <p class="section-subtitle">Aura respects <strong style="color:var(--white)">safety boundaries</strong>. You're always in control.</p>
-
-  <div class="card">
-    <h3>Permission Modes</h3>
-    <table>
-      <tr><th>Mode</th><th>What Aura Can Do</th></tr>
-      <tr><td><strong style="color:var(--info)">read-only</strong></td><td>Only read files. Cannot write, edit, or run commands. Safest for exploration.</td></tr>
-      <tr><td><strong style="color:var(--gold)">normal</strong></td><td>Read and write files, but <strong>asks you before</strong> running shell commands or making destructive changes.</td></tr>
-      <tr><td><strong style="color:var(--ruby-glow)">auto</strong></td><td>Full autonomy. No confirmation prompts. Use with caution on projects you trust.</td></tr>
-    </table>
-    <p style="margin-top:1rem">Aura starts in <strong>normal mode</strong> by default. She will always ask before doing anything that could be risky. You can say no.</p>
-  </div>
-</section>
-
-<!-- FAQ -->
-<section class="section" id="faq">
-  <div class="section-label">Chapter 8</div>
-  <h2 class="section-title">Frequently Asked Questions</h2>
-  <p class="section-subtitle">The answers to questions everyone asks.</p>
-
-  <div class="card">
-    <h3>Do I need to know how to code?</h3>
-    <p><strong style="color:var(--success)">No!</strong> Aura is designed to help both beginners and experts. You describe what you want in plain English. Aura figures out the technical details.</p>
-  </div>
-
-  <div class="card">
-    <h3>Is Aura free?</h3>
-    <p><strong>Aura Code itself is 100% free and open-source</strong> (MIT license). The AI models she uses (Claude, GPT, etc.) charge for API access — typically a few dollars per month. You can also use <strong>completely free</strong> local models via Ollama.</p>
-  </div>
-
-  <div class="card">
-    <h3>What can Aura NOT do?</h3>
-    <p>Aura works with <strong>text files and code</strong>. She can't edit images, edit videos, control your mouse, or browse the web like a human (though she can fetch web pages). She's a coding agent — she excels at reading, writing, and fixing code.</p>
-  </div>
-
-  <div class="card">
-    <h3>Is my code safe with Aura?</h3>
-    <p><strong>Yes.</strong> Aura runs on your computer. Your code is sent to the AI provider's servers for processing (like ChatGPT), but Aura doesn't store or share your code. Use <strong>Ollama</strong> with local models for complete privacy.</p>
-  </div>
-
-  <div class="card">
-    <h3>What if Aura makes a mistake?</h3>
-    <p>Aura's motto is <em>"I don't try. I verify."</em> She runs tests after making changes. But AI can still make mistakes — always review important changes. Use <code>git</code> to track changes so you can undo anything.</p>
-  </div>
-
-  <div class="card">
-    <h3>How do I update Aura?</h3>
-    <div class="code-block"><span class="cmd">npm update -g aura-code</span></div>
-    <p>Run this in Terminal anytime. Check version with <code>aura --version</code>.</p>
-  </div>
-
-  <div class="card">
-    <h3>Can I use Aura for non-coding tasks?</h3>
-    <p><strong>Absolutely!</strong> Aura has tools for web search, email, calendar, Telegram, WhatsApp, YouTube transcripts, audio transcription, and more. Try: <code>aura "search the web for latest AI news"</code></p>
-  </div>
-</section>
-
-</div>
-
-<!-- FOOTER -->
-<footer>
-  <div class="hero-crown" style="margin:0 auto 1.5rem;opacity:0.4">
-    <svg viewBox="0 0 80 80">
-      <polygon points="40,8 52,30 76,32 58,48 62,72 40,60 18,72 22,48 4,32 28,30" fill="none" stroke="#c8a45c" stroke-width="2"/>
-      <polygon points="40,16 48,32 66,34 54,46 57,64 40,56 23,64 26,46 14,34 32,32" fill="#c8a45c" opacity="0.3"/>
-    </svg>
-  </div>
-  <p><strong style="color:var(--gold);font-size:1.1rem">Aura Code v0.6.2</strong></p>
-  <p style="margin-top:0.5rem">Built by <span style="color:var(--ruby-glow)">hearts</span> agents. For everyone.<br>
-  Created by <strong>Lean Progress IQ</strong> — <a href="https://lean-progress-iq-site.vercel.app" style="color:var(--info)">lean-progress-iq-site.vercel.app</a></p>
-  <p style="margin-top:1rem"><a href="https://github.com/milodule3-debug/aura-code" style="color:var(--grey)">GitHub</a> · <a href="https://www.npmjs.com/package/aura-code" style="color:var(--grey)">npm</a> · MIT License</p>
-  <p style="margin-top:1.5rem;font-size:0.75rem;color:var(--grey)">Praktess framework — from Ancient Greek: <em>she who acts and executes.</em></p>
-</footer>
-
-<script>
-// INTERACTIVE TODO CHECKLIST
-const TODO_DATA = [
-  {id:'t1',cat:'Setup',text:'Install Node.js from nodejs.org (LTS version)',detail:'Go to https://nodejs.org, click the big green LTS button, run the downloaded .msi file, accept defaults, click Install.'},
-  {id:'t2',cat:'Setup',text:'Open Windows Terminal (press Win key, type cmd)',detail:'Press the Windows key on your keyboard (between Ctrl and Alt), type "cmd" or "Terminal", and press Enter.'},
-  {id:'t3',cat:'Setup',text:'Verify Node.js: type node --version',detail:'In the terminal, type: node --version [Enter]. You should see something like v20.11.0.'},
-  {id:'t4',cat:'Setup',text:'Verify npm: type npm --version',detail:'Type: npm --version [Enter]. npm comes with Node.js automatically. You should see 10.x.x or similar.'},
-  {id:'t5',cat:'Setup',text:'Install Aura: npm install -g aura-code',detail:'Type: npm install -g aura-code [Enter]. Wait 1-2 minutes while it downloads. Lots of text scrolling by is completely normal!'},
-  {id:'t6',cat:'Setup',text:'Verify Aura: type aura --version',detail:'Type: aura --version [Enter]. If you see "command not found", close and reopen Terminal and try again.'},
-  {id:'t7',cat:'API Keys',text:'Get an API key from an AI provider',detail:'Sign up at platform.openai.com (OpenAI), console.anthropic.com (Anthropic), or aistudio.google.com (Google). Copy your API key - it starts with "sk-".'},
-  {id:'t8',cat:'API Keys',text:'Set your API key in Terminal',detail:'Type: set ANTHROPIC_API_KEY=sk-ant-... (use your real key). Or set OPENAI_API_KEY=sk-... This connects Aura to an AI brain.'},
-  {id:'t9',cat:'First Steps',text:'Run your first Aura task!',detail:'Type: aura "list the files in this folder" [Enter]. Aura will read your files and tell you about them. Start simple and build confidence!'},
-  {id:'t10',cat:'First Steps',text:'Try a coding task in a project folder',detail:'Navigate to a project: cd your-project. Then try: aura "find all TODOs in the code" or aura "explain what this project does".'},
-  {id:'t11',cat:'Learn',text:'Explore Aura special modes',detail:'aura --orchestrate "complex task" (multi-agent team), aura --architect "design system" (planning only), aura --verify "fix tests" (auto-testing), aura --models (see all AI brains).'},
-  {id:'t12',cat:'Learn',text:'Bookmark this manual page!',detail:'You now have a complete Aura reference! Press Ctrl+D to bookmark. Come back anytime you need help.'}
-];
-
-const STORAGE_KEY = 'aura-manual-todos';
-
-function loadTodos() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch(e) { return {}; }
-}
-
-function saveTodos(state) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
-}
-
-function updateProgress(state) {
-  const total = TODO_DATA.length;
-  const done = Object.values(state).filter(v => v === true).length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('doneCount').textContent = done;
-  document.getElementById('totalCount').textContent = total;
-}
-
-function renderTodos() {
-  const state = loadTodos();
-  const container = document.getElementById('todoList');
-  
-  container.innerHTML = TODO_DATA.map((todo, i) => {
-    const isDone = state[todo.id] === true;
-    const open = state[todo.id + '_open'] === true;
-    const cls = ['todo-item'];
-    if (isDone) cls.push('done');
-    if (open) cls.push('open');
+  <div class="terminal-container">
     
-    return '<div class="' + cls.join(' ') + '" data-id="' + todo.id + '">' +
-      '<div class="todo-check" onclick="toggleTodo(event,\'' + todo.id + '\')">' +
-        (isDone ? '&#10003;' : '') +
-      '</div>' +
-      '<div class="todo-content" onclick="toggleOpen(event,\'' + todo.id + '\')">' +
-        '<div class="todo-cat">' + todo.cat + '</div>' +
-        '<div class="todo-text">' + (i + 1) + '. ' + todo.text + '</div>' +
-        '<div class="todo-detail">' + todo.detail + '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-  
-  updateProgress(state);
-}
+    <!-- HEADER TITLE BAR -->
+    <header class="terminal-titlebar">
+      <div class="window-dots">
+        <div class="window-dot dot-close"></div>
+        <div class="window-dot dot-min"></div>
+        <div class="window-dot dot-max"></div>
+        <button class="mobile-menu-toggle" id="menuToggle">☰ Menu</button>
+      </div>
+      <div class="window-title">
+        ◆ <span>AURA_OS</span>: ~/manual_windows_11.sh
+      </div>
+      <div class="window-controls">
+        <div class="control-item">
+          <label for="themeSelect">Theme:</label>
+          <select id="themeSelect">
+            <option value="aura">Aura Classic</option>
+            <option value="matrix">Matrix Green</option>
+            <option value="amber">Amber Fallout</option>
+            <option value="dracula">Dracula Dark</option>
+            <option value="cyberpunk">Cyber Neon</option>
+            <option value="monochrome">Monochrome</option>
+          </select>
+        </div>
+        <button class="control-btn active" id="crtToggle">CRT Scanlines</button>
+        <button class="control-btn" id="soundToggle">Audio Click [OFF]</button>
+      </div>
+    </header>
 
-function toggleTodo(e, id) {
-  e.stopPropagation();
-  const state = loadTodos();
-  state[id] = !state[id];
-  saveTodos(state);
-  renderTodos();
-}
+    <!-- MENU BAR -->
+    <div class="terminal-menu">
+      <span class="menu-item" onclick="terminalCommand('help')">Help</span>
+      <span class="menu-item" onclick="terminalCommand('clear')">Clear Screen</span>
+      <span class="menu-item" onclick="terminalCommand('aura checklist')">Show Checklist</span>
+      <span class="menu-item" onclick="terminalCommand('aura safety')">Safety Info</span>
+    </div>
 
-function toggleOpen(e, id) {
-  e.stopPropagation();
-  const state = loadTodos();
-  state[id + '_open'] = !state[id + '_open'];
-  saveTodos(state);
-  renderTodos();
-}
+    <!-- WORKSPACE -->
+    <div class="terminal-workspace">
+      
+      <!-- SIDEBAR FILE EXPLORER -->
+      <aside class="terminal-sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <span>📁 File Explorer</span>
+          <span style="font-size:0.75rem; opacity:0.5;">v0.6.2</span>
+        </div>
+        <ul class="tree-view">
+          <li class="tree-item">
+            <div class="tree-folder" onclick="toggleFolder(this)">📁 manual_root/</div>
+            <ul class="tree-files">
+              <li class="tree-file active" id="nav-start"><a href="#start" onclick="runSidebarCommand('cat info.json', 'start')">📄 info.json</a></li>
+              <li class="tree-file" id="nav-todo"><a href="#todo" onclick="runSidebarCommand('bash checklist.sh', 'todo')">⚙️ checklist.sh</a></li>
+              <li class="tree-file" id="nav-what-is"><a href="#what-is" onclick="runSidebarCommand('cat 01_what_is.md', 'what-is')">📄 01_what_is.md</a></li>
+              <li class="tree-file" id="nav-install"><a href="#install" onclick="runSidebarCommand('bash 02_setup.sh', 'install')">⚙️ 02_setup.sh</a></li>
+              <li class="tree-file" id="nav-apikeys"><a href="#apikeys" onclick="runSidebarCommand('cat 03_api_keys.env', 'apikeys')">📄 03_api_keys.env</a></li>
+              <li class="tree-file" id="nav-commands"><a href="#commands" onclick="runSidebarCommand('cat 04_cli_cmds.log', 'commands')">📄 04_cli_cmds.log</a></li>
+              <li class="tree-file" id="nav-modes"><a href="#modes" onclick="runSidebarCommand('cat 05_modes.json', 'modes')">📄 05_modes.json</a></li>
+              <li class="tree-file" id="nav-providers"><a href="#providers" onclick="runSidebarCommand('cat 06_brains.db', 'providers')">📄 06_brains.db</a></li>
+              <li class="tree-file" id="nav-safety"><a href="#safety" onclick="runSidebarCommand('cat 07_safety.cfg', 'safety')">📄 07_safety.cfg</a></li>
+              <li class="tree-file" id="nav-faq"><a href="#faq" onclick="runSidebarCommand('cat 08_faq.md', 'faq')">📄 08_faq.md</a></li>
+            </ul>
+          </li>
+        </ul>
+      </aside>
 
-function resetTodos() {
-  if (confirm('Reset all checklist progress? This cannot be undone.')) {
-    localStorage.removeItem(STORAGE_KEY);
-    renderTodos();
-  }
-}
+      <!-- MAIN FRAME -->
+      <main class="terminal-main">
+        
+        <!-- TOP CONSOLE WIDGET -->
+        <div class="console-container">
+          <div class="console-history" id="consoleHistory">
+            <div class="console-line output">System Diagnostics: Healthy. Shell session opened.</div>
+            <div class="console-line output">Type 'help' to see list of available commands.</div>
+          </div>
+          <div class="console-prompt">
+            <span class="console-prompt-symbol">guest@aura-os:~$</span>
+            <input type="text" id="consoleInput" placeholder="Enter manual command..." autocomplete="off">
+          </div>
+          <div class="suggested-cmds">
+            <span class="cmd-badge" onclick="terminalCommand('help')">help</span>
+            <span class="cmd-badge" onclick="terminalCommand('aura checklist')">aura checklist</span>
+            <span class="cmd-badge" onclick="terminalCommand('aura brains')">aura brains</span>
+            <span class="cmd-badge" onclick="terminalCommand('aura safety')">aura safety</span>
+            <span class="cmd-badge" onclick="terminalCommand('clear')">clear</span>
+          </div>
+        </div>
 
-// Initialize
-document.addEventListener('DOMContentLoaded', renderTodos);
+        <!-- MAIN SCROLLABLE CONTENT -->
+        <div class="terminal-content" id="contentArea">
+          
+          <!-- HERO -->
+          <section class="section-container" id="start">
+            <div class="sec-label">System Initialization</div>
+            <h2 class="sec-title"><span>◆</span> Aura Code</h2>
+            <div class="ascii-box" id="heroAscii">
+    _    _   _ ____    _      ____ ___  ____  _____ 
+   / \  | | | |  _ \  / \    / ___/ _ \|  _ \| ____|
+  / _ \ | | | | |_) |/ _ \  | |  | | | | | | |  _|  
+ / ___ \| |_| |  _ // ___ \ | |__| |_| | |_| | |___ 
+/_/   \_\\___/|_| \_/_/   \_\ \____\___/|____/|_____|
+            </div>
+            
+            <div class="system-info-grid">
+              <span class="info-label">OS:</span>
+              <span class="info-value">Windows 11 / Terminal Edition</span>
+              <span class="info-label">Version:</span>
+              <span class="info-value">v0.6.2 (Stable Release)</span>
+              <span class="info-label">Framework:</span>
+              <span class="info-value">Praktess Engine - "she who acts and executes"</span>
+              <span class="info-label">Motto:</span>
+              <span class="info-value">"I don't try. I verify."</span>
+              <span class="info-label">Developer:</span>
+              <span class="info-value">Lean Progress IQ</span>
+            </div>
 
-// Active nav highlighting
-document.addEventListener('DOMContentLoaded', function() {
-  const sections = document.querySelectorAll('section[id]');
-  const navLinks = document.querySelectorAll('nav a');
-  
-  function highlightNav() {
-    let current = '';
-    sections.forEach(s => {
-      const top = s.offsetTop - 100;
-      if (window.scrollY >= top) current = s.getAttribute('id');
+            <p class="sec-subtitle">
+              A step-by-step guide for <strong>absolute beginners</strong>. No technical knowledge required. If you can type and click a mouse, you can use Aura. This manual will take you from zero to AI-powered coding in about 15 minutes.
+            </p>
+
+            <div class="cta-container">
+              <a href="#todo" class="btn-term btn-term-primary" onclick="terminalCommand('bash checklist.sh')">⚙️ Start Setup Checklist</a>
+              <a href="#install" class="btn-term" onclick="terminalCommand('bash 02_setup.sh')">📂 Installation Guide</a>
+            </div>
+          </section>
+
+          <!-- CHECKLIST -->
+          <section class="section-container" id="todo">
+            <div class="sec-label">Setup Checklist</div>
+            <h2 class="sec-title"><span>✓</span> Setup Progress Checklist</h2>
+            <p class="sec-subtitle">Tick off each step as you complete it. Your progress is automatically stored in your local storage cache.</p>
+            
+            <div class="todo-box">
+              <div class="todo-progress-container">
+                <div class="todo-progress-header">
+                  <span>Current Task Checklist Run:</span>
+                  <span class="todo-pct"><span id="doneCount">0</span>/<span id="totalCount">12</span> Done (<span id="progressPct">0%</span>)</span>
+                </div>
+                <div class="todo-bar-wrapper">
+                  <span id="progressBarText">[........................]</span>
+                </div>
+                <div style="margin-top: 1rem; text-align: right;">
+                  <button class="control-btn" onclick="resetTodos()">Reset Progress Logs</button>
+                </div>
+              </div>
+              <div class="todo-list-items" id="todoList">
+                <!-- Checklist rendering via JS -->
+              </div>
+            </div>
+          </section>
+
+          <!-- WHAT IS AURA -->
+          <section class="section-container" id="what-is">
+            <div class="sec-label">Chapter 01 // Overview</div>
+            <h2 class="sec-title"><span>📁</span> What Is Aura Code?</h2>
+            <p class="sec-subtitle">Your personal AI coding agent that reads, plans, executes, verifies, and reports. No software development degree needed.</p>
+
+            <div class="terminal-card">
+              <h3>In Plain English</h3>
+              <p>Imagine you have a <strong>super-smart friend</strong> who can look at any folder on your computer and work with its files. That's Aura. You type what you want in <strong>plain English</strong>, and Aura does it.</p>
+              
+              <div class="flowchart-wrapper">
+                <div class="flow-node">
+                  <div class="node-title">1. READ</div>
+                  <div class="node-sub">Scans files</div>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-node">
+                  <div class="node-title">2. PLAN</div>
+                  <div class="node-sub">Designs strategy</div>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-node">
+                  <div class="node-title">3. EXECUTE</div>
+                  <div class="node-sub">Writes code</div>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-node">
+                  <div class="node-title">4. VERIFY</div>
+                  <div class="node-sub">Runs diagnostics</div>
+                </div>
+                <div class="flow-arrow">➔</div>
+                <div class="flow-node">
+                  <div class="node-title">5. REPORT</div>
+                  <div class="node-sub">Summarizes proof</div>
+                </div>
+              </div>
+
+              <div class="term-tip-box success">
+                <div class="term-tip-header">Command Execution Example:</div>
+                You type <code>aura "add dark mode to my website"</code>.<br>
+                Aura reads your files, figures out which ones control colors, edits them, and confirms it works. All you did was type one sentence.
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Built by Agents, for Everyone</h3>
+              <p>Aura was <strong>built by four AI agents</strong> working together under the direction of Dusan Milosavljevic. She knows this — it's part of her origin story.</p>
+              <p>She works with <strong>all major AI models</strong>: Claude, GPT, Gemini, MiMo, DeepSeek — and even free local models through Ollama. You pick which brain Aura uses.</p>
+              <p>Her framework is called <strong>Praktess</strong> — from Ancient Greek: <em>"she who acts and executes."</em> Her motto: <em>"I don't try. I verify."</em></p>
+            </div>
+          </section>
+
+          <!-- INSTALL -->
+          <section class="section-container" id="install">
+            <div class="sec-label">Chapter 02 // Environment Setup</div>
+            <h2 class="sec-title"><span>⚙️</span> Installing on Windows 11</h2>
+            <p class="sec-subtitle">Set up Node.js, verify the command prompt environment, and install the Aura CLI wrapper.</p>
+
+            <div class="terminal-card">
+              <h3>Step 1: Download & Install Node.js</h3>
+              <div class="term-step">
+                <div class="term-step-number">1</div>
+                <div class="term-step-body">
+                  <h4>Open your web browser</h4>
+                  <p>Edge, Chrome, or Firefox — any browser works.</p>
+                </div>
+              </div>
+              <div class="term-step">
+                <div class="term-step-number">2</div>
+                <div class="term-step-body">
+                  <h4>Go to nodejs.org</h4>
+                  <p>Type <strong>nodejs.org</strong> in the address bar at the top and press Enter.</p>
+                </div>
+              </div>
+              <div class="term-step">
+                <div class="term-step-number">3</div>
+                <div class="term-step-body">
+                  <h4>Click the big green LTS button</h4>
+                  <p>Click the one that says <strong>"LTS"</strong> (Long Term Support). A setup installer will download.</p>
+                </div>
+              </div>
+              <div class="term-step">
+                <div class="term-step-number">4</div>
+                <div class="term-step-body">
+                  <h4>Install Node.js</h4>
+                  <p>Double-click the downloaded <code>.msi</code> installer file. Accept ALL default settings and click Install. Give Windows admin consent when requested (click Yes).</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Step 2: Open Windows Terminal</h3>
+              <p>Press the <strong>Windows key</strong> on your keyboard. Type <code>cmd</code> or <code>Terminal</code>. Press <strong>Enter</strong>.</p>
+              <p>You'll see a command prompt windows. Do not panic! You only need to copy and paste a couple of commands.</p>
+              <div class="term-tip-box">
+                <div class="term-tip-header">Alternative shortcut:</div>
+                Right-click the Windows Start menu icon and select "Terminal" or "Command Prompt".
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Step 3: Verify Installation</h3>
+              <p>Type these commands into the shell and run them:</p>
+              
+              <div class="term-code-block">
+                <button class="copy-btn" onclick="copyCode(this)">[COPY]</button>
+                <pre><span class="cmd-prompt">C:\Users\You&gt;</span> <span class="cmd-text">node --version</span>
+<span class="cmd-out">v20.11.0</span>  &lt;-- Node.js is installed successfully
+
+<span class="cmd-prompt">C:\Users\You&gt;</span> <span class="cmd-text">npm --version</span>
+<span class="cmd-out">10.2.4</span>    &lt;-- npm package manager is online</pre>
+              </div>
+              <div class="term-tip-box warning">
+                <div class="term-tip-header">Environment Error?</div>
+                If the terminal displays a "command not found" error, restart your computer to update system path variables, then try again.
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Step 4: Install Aura Code Wrapper</h3>
+              <p>In the terminal, run the following global install package instruction:</p>
+              <div class="term-code-block">
+                <button class="copy-btn" onclick="copyCode(this)">[COPY]</button>
+                <pre><span class="cmd-prompt">C:\Users\You&gt;</span> <span class="cmd-text">npm install -g aura-code</span></pre>
+              </div>
+              <p>Wait 1-2 minutes for the compiler download. When completed, verify the aura command is active:</p>
+              <div class="term-code-block">
+                <button class="copy-btn" onclick="copyCode(this)">[COPY]</button>
+                <pre><span class="cmd-prompt">C:\Users\You&gt;</span> <span class="cmd-text">aura --version</span>
+<span class="cmd-out">v0.6.2</span></pre>
+              </div>
+              <div class="term-tip-box success">
+                <div class="term-tip-header">Installation Complete:</div>
+                Aura Code CLI environment is now operational. Let's configure API credentials.
+              </div>
+            </div>
+          </section>
+
+          <!-- API KEYS -->
+          <section class="section-container" id="apikeys">
+            <div class="sec-label">Chapter 03 // Credentials Config</div>
+            <h2 class="sec-title"><span>🔑</span> Setting Up API Keys</h2>
+            <p class="sec-subtitle">An API key is Aura's password to connect to an AI model brain. Choose a provider and set up credentials.</p>
+
+            <div class="terminal-card">
+              <h3>What Is an API Key?</h3>
+              <p>Think of an API key as a secure token that lets Aura chat with an LLM backend (like Claude or GPT-4). It is a long string of characters typically starting with <code>sk-</code>. Get one from your preferred AI console.</p>
+              <div class="term-tip-box danger">
+                <div class="term-tip-header">Security Alert:</div>
+                Keep your keys secret. Anyone with access to your keys can make charges to your credit card. Never save them in public repositories.
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Where to Obtain Keys</h3>
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>AI Brain Provider</th>
+                      <th>Developer Portal URL</th>
+                      <th>Cost Metrics</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Anthropic</strong> (Claude)</td>
+                      <td><a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></td>
+                      <td>Pay-as-you-go (~$3-15/M tokens)</td>
+                    </tr>
+                    <tr>
+                      <td><strong>OpenAI</strong> (GPT-4)</td>
+                      <td><a href="https://platform.openai.com" target="_blank">platform.openai.com</a></td>
+                      <td>Pay-as-you-go (~$1-10/M tokens)</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Google AI Studio</strong> (Gemini)</td>
+                      <td><a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a></td>
+                      <td>Free tiers available!</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Ollama</strong> (Local LLMs)</td>
+                      <td><a href="https://ollama.com" target="_blank">ollama.com</a></td>
+                      <td><strong>100% Free / Runs Offline</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>How to Configure Environment Keys</h3>
+              
+              <p><strong>Option A: Shell Session Key</strong> (active only until you close terminal window):</p>
+              <div class="term-code-block">
+                <button class="copy-btn" onclick="copyCode(this)">[COPY]</button>
+                <pre><span class="cmd-prompt">C:\Users\You&gt;</span> <span class="cmd-text">set ANTHROPIC_API_KEY=sk-ant-api03-your-key-here</span>
+<span class="cmd-prompt">C:\Users\You&gt;</span> <span class="cmd-text">set OPENAI_API_KEY=sk-proj-your-key-here</span></pre>
+              </div>
+
+              <p><strong>Option B: Permanent Environment Variables</strong> (retains after computer reboot):</p>
+              <ol>
+                <li>Open the Start menu, type <code>environment</code>.</li>
+                <li>Click <strong>"Edit the system environment variables"</strong>.</li>
+                <li>In System Properties, click <strong>"Environment Variables..."</strong>.</li>
+                <li>Under user variables, click <strong>"New..."</strong>.</li>
+                <li>Enter Variable Name: <code>ANTHROPIC_API_KEY</code> (or <code>OPENAI_API_KEY</code>).</li>
+                <li>Paste your API key value into Variable Value.</li>
+                <li>Click OK, apply, and restart Windows Terminal.</li>
+              </ol>
+              
+              <div class="term-tip-box success">
+                Verify variable registration in terminal: <code>aura --models</code>. It lists available brains linked by your keys.
+              </div>
+            </div>
+          </section>
+
+          <!-- COMMANDS -->
+          <section class="section-container" id="commands">
+            <div class="sec-label">Chapter 04 // CLI Reference</div>
+            <h2 class="sec-title"><span>💻</span> Command line logs</h2>
+            <p class="sec-subtitle">Common commands you can type. Remember: always invoke <code>aura</code> first, followed by the instruction.</p>
+
+            <div class="terminal-card">
+              <h3>Everyday Reference Table</h3>
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Terminal Command</th>
+                      <th>System Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>aura "your task description"</code></td>
+                      <td>Standard agent loop: Reads code, creates plan, executes, tests, reports.</td>
+                    </tr>
+                    <tr>
+                      <td><code>aura --help</code></td>
+                      <td>List available options, command flags, and help prompts.</td>
+                    </tr>
+                    <tr>
+                      <td><code>aura --version</code></td>
+                      <td>Show installed package version.</td>
+                    </tr>
+                    <tr>
+                      <td><code>aura --models</code></td>
+                      <td>List all online connected model brains.</td>
+                    </tr>
+                    <tr>
+                      <td><code>aura kanban</code></td>
+                      <td>Opens a localhost:7474 web browser server checklist dashboard.</td>
+                    </tr>
+                    <tr>
+                      <td><code>aura "fix the bug in login controller"</code></td>
+                      <td>Finds files, debugs runtime variables, and applies fixes.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Beginner Prompt Examples</h3>
+              <p>Type these in Windows terminal to test functionality:</p>
+              <div class="term-code-block">
+                <pre><span class="cmd-prompt">$</span> <span class="cmd-text">aura "list all code files in this folder"</span>
+<span class="cmd-prompt">$</span> <span class="cmd-text">aura "find all TODO tags in the codebase"</span>
+<span class="cmd-prompt">$</span> <span class="cmd-text">aura "explain the file package.json in simple terms"</span>
+<span class="cmd-prompt">$</span> <span class="cmd-text">aura "create hello.txt writing 'Verifying agent output' inside"</span></pre>
+              </div>
+              <div class="term-tip-box">
+                Talk to Aura like you are writing to a fellow engineer. Explain tasks clearly in English. No complex code formatting required.
+              </div>
+            </div>
+          </section>
+
+          <!-- MODES -->
+          <section class="section-container" id="modes">
+            <div class="sec-label">Chapter 05 // Cognitive Architecture</div>
+            <h2 class="sec-title"><span>🧠</span> Agent Personality Modes</h2>
+            <p class="sec-subtitle">Choose the appropriate cognitive architecture settings depending on the size and complexity of your programming task.</p>
+
+            <div class="terminal-card">
+              <h3>Normal Mode (Default)</h3>
+              <p>Ideal for general coding operations: writing features, debugging single files, answering questions.</p>
+              <div class="term-code-block">
+                <pre><span class="cmd-prompt">$</span> <span class="cmd-text">aura "fix class selectors in stylesheet"</span></pre>
+              </div>
+              <p>Standard loop: Read ➔ Plan ➔ Execute ➔ Verify ➔ Report. Fast and lean.</p>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Orchestrated Mode</h3>
+              <p>Ideal for larger scope projects that require coordinate teams of expert agents.</p>
+              <div class="term-code-block">
+                <pre><span class="cmd-prompt">$</span> <span class="cmd-text">aura --orchestrate "refactor our Express database routing"</span></pre>
+              </div>
+              <p>Aura splits the task. Separate specialized virtual subagents (Researcher, Architect, Coder, Verifier) execute tasks concurrently.</p>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Architect Mode</h3>
+              <p>Ideal for brainstorming and blueprints. Generates specifications and charts, but does not edit any source files.</p>
+              <div class="term-code-block">
+                <pre><span class="cmd-prompt">$</span> <span class="cmd-text">aura --architect "design a payment microservice"</span></pre>
+              </div>
+            </div>
+
+            <div class="terminal-card">
+              <h3>Verify & Analyze Modes</h3>
+              <p><strong>Verify:</strong> Automatically runs test suites and debugs errors until checks pass.</p>
+              <p><strong>Analyze:</strong> Scans system execution history log files to report common failure patterns and optimize token costs.</p>
+            </div>
+          </section>
+
+          <!-- PROVIDERS -->
+          <section class="section-container" id="providers">
+            <div class="sec-label">Chapter 06 // Model Providers</div>
+            <h2 class="sec-title"><span>🖥️</span> Model Brain Index</h2>
+            <p class="sec-subtitle">Aura is model-agnostic. She adapts to whichever brain you feed her. Select the one matching your budget.</p>
+
+            <div class="terminal-card">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Model Provider</th>
+                      <th>Target Models</th>
+                      <th>Best Target Use Case</th>
+                      <th>Expense Bracket</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong style="color:var(--accent-secondary)">Claude</strong> (Anthropic)</td>
+                      <td>Sonnet 3.5, Opus</td>
+                      <td>Deep reasoning, complex logic</td>
+                      <td>Premium tier ($3-15/M)</td>
+                    </tr>
+                    <tr>
+                      <td><strong style="color:var(--accent-info)">GPT</strong> (OpenAI)</td>
+                      <td>gpt-4o, gpt-4o-mini</td>
+                      <td>Versatile, fast, API integrations</td>
+                      <td>Mid tier ($0.15-5/M)</td>
+                    </tr>
+                    <tr>
+                      <td><strong style="color:var(--accent-success)">Gemini</strong> (Google)</td>
+                      <td>Gemini 2.5 Flash / Pro</td>
+                      <td>Extremely large context (1M+ tokens)</td>
+                      <td>Free options / Low cost</td>
+                    </tr>
+                    <tr>
+                      <td><strong>MiMo</strong> / <strong>DeepSeek</strong></td>
+                      <td>MiMo-2.5, DeepSeek Coder</td>
+                      <td>Coding benchmarks, cost savings</td>
+                      <td>Competitive cost</td>
+                    </tr>
+                    <tr>
+                      <td><strong style="color:var(--accent-success)">Ollama</strong> (Local)</td>
+                      <td>Llama 3.2, Qwen 2.5</td>
+                      <td>Private off-grid coding, offline checks</td>
+                      <td><strong style="color:var(--accent-success)">100% Free</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="term-tip-box">
+                <strong>Recommended Configuration:</strong> For developer setups, we suggest starting with <strong>Claude Sonnet</strong> or <strong>GPT-4o</strong>. For private or local environments, set up a local <strong>Ollama Llama 3.2</strong> agent.
+              </div>
+            </div>
+          </section>
+
+          <!-- SAFETY -->
+          <section class="section-container" id="safety">
+            <div class="sec-label">Chapter 07 // Security Settings</div>
+            <h2 class="sec-title"><span>🛡️</span> Safety & Permission Protocols</h2>
+            <p class="sec-subtitle">You define the autonomy levels. Aura respects security borders on your operating system.</p>
+
+            <div class="terminal-card">
+              <h3>autonomy levels config</h3>
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Safety Level</th>
+                      <th>Operational Permissions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span style="color:var(--accent-info); font-weight:bold;">read-only</span></td>
+                      <td>Strictly reads code files. Disables file writes, shell execution, and modifications. Highest safety rating.</td>
+                    </tr>
+                    <tr>
+                      <td><span style="color:var(--accent-secondary); font-weight:bold;">normal</span></td>
+                      <td>Can read and edit files locally, but <strong>prompts for confirmation</strong> before executing shell command tasks.</td>
+                    </tr>
+                    <tr>
+                      <td><span style="color:var(--accent-primary); font-weight:bold;">auto</span></td>
+                      <td>Full autonomous system execution. No permission prompts. Fast but use with caution on trusted projects.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="term-tip-box warning">
+                Aura defaults to <strong>normal mode</strong>. She will never execute potentially dangerous command prompts without asking your consent first. You can always hit 'N' (No) to deny permission.
+              </div>
+            </div>
+          </section>
+
+          <!-- FAQ -->
+          <section class="section-container" id="faq">
+            <div class="sec-label">Chapter 08 // Diagnostics</div>
+            <h2 class="sec-title"><span>❓</span> System FAQ</h2>
+            <p class="sec-subtitle">Frequently asked questions and terminal diagnostics manual.</p>
+
+            <div id="faqList">
+              <!-- FAQs rendered via JS -->
+            </div>
+          </section>
+
+        </div>
+
+        <!-- FOOTER -->
+        <footer>
+          <p>◆ Aura Code v0.6.2 ◆</p>
+          <p>Created by <a href="https://lean-progress-iq-site.vercel.app" target="_blank">Lean Progress IQ</a></p>
+          <p>
+            <a href="https://github.com/milodule3-debug/aura-code" target="_blank">GitHub repository</a> · 
+            <a href="https://www.npmjs.com/package/aura-code" target="_blank">NPM Package</a> · 
+            MIT License
+          </p>
+          <p style="font-size:0.7rem; opacity:0.4; margin-top:1rem;">Praktess framework — Ancient Greek: she who acts and executes.</p>
+        </footer>
+
+      </main>
+
+    </div>
+
+  </div>
+
+  <script>
+    // Audio Synth Web Audio API
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    let soundEnabled = false;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new AudioContext();
+    }
+
+    function playClickSound(freq = 600, duration = 0.03, type = 'sine', volume = 0.015) {
+      if (!soundEnabled) return;
+      try {
+        initAudio();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        console.error("Audio error", e);
+      }
+    }
+
+    function playSuccessChime() {
+      if (!soundEnabled) return;
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          osc.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+          gainNode.gain.setValueAtTime(0.03, now + idx * 0.07);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.07 + 0.3);
+          
+          osc.start(now + idx * 0.07);
+          osc.stop(now + idx * 0.07 + 0.3);
+        });
+      } catch (e) {}
+    }
+
+    // CLI Interactive Mock
+    const consoleHistory = document.getElementById('consoleHistory');
+    const consoleInput = document.getElementById('consoleInput');
+
+    function writeConsoleLine(text, type = 'output') {
+      const line = document.createElement('div');
+      line.className = `console-line ${type}`;
+      
+      if (type === 'input') {
+        line.innerHTML = `<span style="color:var(--accent-primary)">guest@aura-os:~$</span> <span>${text}</span>`;
+      } else {
+        line.innerText = text;
+      }
+      
+      consoleHistory.appendChild(line);
+      consoleHistory.scrollTop = consoleHistory.scrollHeight;
+    }
+
+    function terminalCommand(cmdText) {
+      playClickSound(800, 0.05, 'triangle', 0.02);
+      writeConsoleLine(cmdText, 'input');
+      
+      const cleanCmd = cmdText.trim().toLowerCase();
+      
+      setTimeout(() => {
+        if (cleanCmd === 'help') {
+          writeConsoleLine('Available system commands:', 'output');
+          writeConsoleLine('  aura checklist      - show setup checklist status', 'output');
+          writeConsoleLine('  aura safety         - print safety permission specs', 'output');
+          writeConsoleLine('  aura brains         - list online AI models info', 'output');
+          writeConsoleLine('  theme [name]        - switch styling (matrix, amber, dracula, cyberpunk, aura)', 'output');
+          writeConsoleLine('  crt [on/off]        - toggle screen scanlines overlay', 'output');
+          writeConsoleLine('  clear               - wipe console scroll screen history', 'output');
+        } else if (cleanCmd === 'clear') {
+          consoleHistory.innerHTML = '';
+          writeConsoleLine('Console screen wiped.', 'output');
+        } else if (cleanCmd.startsWith('theme ')) {
+          const themeName = cleanCmd.replace('theme ', '').trim();
+          const themeSelect = document.getElementById('themeSelect');
+          if (['aura', 'matrix', 'amber', 'dracula', 'cyberpunk', 'monochrome'].includes(themeName)) {
+            document.documentElement.setAttribute('data-theme', themeName);
+            themeSelect.value = themeName;
+            writeConsoleLine(`System theme switched to '${themeName}'.`, 'success');
+            playSuccessChime();
+          } else {
+            writeConsoleLine(`Error: Theme '${themeName}' not recognized. Available: aura, matrix, amber, dracula, cyberpunk, monochrome.`, 'error');
+          }
+        } else if (cleanCmd === 'crt' || cleanCmd === 'crt toggle') {
+          toggleCRT();
+        } else if (cleanCmd === 'crt on') {
+          document.body.classList.add('crt-mode');
+          document.getElementById('crtToggle').classList.add('active');
+          writeConsoleLine('CRT Scanlines overlay enabled.', 'success');
+        } else if (cleanCmd === 'crt off') {
+          document.body.classList.remove('crt-mode');
+          document.getElementById('crtToggle').classList.remove('active');
+          writeConsoleLine('CRT Scanlines overlay disabled.', 'output');
+        } else if (cleanCmd === 'aura checklist') {
+          const done = document.getElementById('doneCount').innerText;
+          const total = document.getElementById('totalCount').innerText;
+          writeConsoleLine(`Task checklist status: ${done}/${total} processes verified.`, 'success');
+          scrollToId('todo');
+        } else if (cleanCmd === 'aura safety') {
+          writeConsoleLine('Autonomy access level check: Normal mode (Prompt on dangerous commands)', 'output');
+          scrollToId('safety');
+        } else if (cleanCmd === 'aura brains') {
+          writeConsoleLine('AI brain lookup: Anthropic Claude, OpenAI GPT, Google Gemini, Ollama active.', 'output');
+          scrollToId('providers');
+        } else if (cleanCmd.startsWith('cat ') || cleanCmd.startsWith('bash ')) {
+          const sectionId = cleanCmd.split(' ')[1] || '';
+          writeConsoleLine(`Reading file manual/${sectionId}... OK`, 'success');
+        } else {
+          writeConsoleLine(`Command '${cmdText}' not found. Type 'help' for options.`, 'error');
+        }
+      }, 150);
+    }
+
+    consoleInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const cmd = consoleInput.value;
+        if (cmd) {
+          terminalCommand(cmd);
+          consoleInput.value = '';
+        }
+      } else {
+        // Play keyboard type sound
+        playClickSound(300 + Math.random() * 200, 0.02, 'sine', 0.01);
+      }
     });
-    navLinks.forEach(a => {
-      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+
+    // Theme Selector
+    document.getElementById('themeSelect').addEventListener('change', (e) => {
+      document.documentElement.setAttribute('data-theme', e.target.value);
+      playClickSound(700, 0.05, 'triangle');
     });
-  }
-  
-  window.addEventListener('scroll', highlightNav);
-  highlightNav();
-});
-</script>
+
+    // CRT Toggle
+    function toggleCRT() {
+      const body = document.body;
+      const btn = document.getElementById('crtToggle');
+      if (body.classList.contains('crt-mode')) {
+        body.classList.remove('crt-mode');
+        btn.classList.remove('active');
+        writeConsoleLine('CRT Filter: Off', 'output');
+      } else {
+        body.classList.add('crt-mode');
+        btn.classList.add('active');
+        writeConsoleLine('CRT Filter: On', 'success');
+      }
+      playClickSound(800, 0.05);
+    }
+    document.getElementById('crtToggle').addEventListener('click', toggleCRT);
+
+    // Sound Toggle
+    document.getElementById('soundToggle').addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      const btn = document.getElementById('soundToggle');
+      if (soundEnabled) {
+        btn.classList.add('active');
+        btn.innerText = 'Audio Click [ON]';
+        initAudio();
+        playSuccessChime();
+      } else {
+        btn.classList.remove('active');
+        btn.innerText = 'Audio Click [OFF]';
+      }
+    });
+
+    // Sidebar/Nav Interactivity
+    function runSidebarCommand(command, targetId) {
+      terminalCommand(command);
+      scrollToId(targetId);
+      
+      // Update sidebar active file
+      document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('active'));
+      const activeNav = document.getElementById(`nav-${targetId}`);
+      if (activeNav) activeNav.classList.add('active');
+    }
+
+    function scrollToId(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        // Apply brief glow effect to target section
+        el.style.boxShadow = '0 0 20px var(--accent-primary-glow)';
+        setTimeout(() => {
+          el.style.boxShadow = '';
+        }, 1000);
+      }
+    }
+
+    // Toggle tree folder collapse
+    function toggleFolder(el) {
+      const parent = el.parentElement;
+      const files = parent.querySelector('.tree-files');
+      if (files.style.display === 'none') {
+        files.style.display = 'block';
+        el.innerText = '📁 manual_root/';
+      } else {
+        files.style.display = 'none';
+        el.innerText = '📁 ...';
+      }
+      playClickSound(500, 0.03);
+    }
+
+    // Mobile menu drawer toggle
+    const sidebar = document.getElementById('sidebar');
+    document.getElementById('menuToggle').addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      playClickSound(600, 0.04);
+    });
+
+    // Copy block code helper
+    function copyCode(btn) {
+      const pre = btn.nextElementSibling;
+      const text = pre.innerText.replace(/^[CUSD].*>\s/gm, ''); // Strip prompts
+      navigator.clipboard.writeText(text).then(() => {
+        btn.innerText = '[COPIED!]';
+        playSuccessChime();
+        setTimeout(() => {
+          btn.innerText = '[COPY]';
+        }, 1500);
+      });
+    }
+
+    // Checklist interactive code logic
+    const TODO_DATA = [
+      {id:'t1',cat:'Setup',text:'Install Node.js from nodejs.org (LTS version)',detail:'Go to https://nodejs.org, click the big green LTS button, run the downloaded .msi file, accept defaults, click Install.'},
+      {id:'t2',cat:'Setup',text:'Open Windows Terminal (press Win key, type cmd)',detail:'Press the Windows key on your keyboard (between Ctrl and Alt), type "cmd" or "Terminal", and press Enter.'},
+      {id:'t3',cat:'Setup',text:'Verify Node.js: type node --version',detail:'In the terminal, type: node --version [Enter]. You should see something like v20.11.0.'},
+      {id:'t4',cat:'Setup',text:'Verify npm: type npm --version',detail:'Type: npm --version [Enter]. npm comes with Node.js automatically. You should see 10.x.x or similar.'},
+      {id:'t5',cat:'Setup',text:'Install Aura: npm install -g aura-code',detail:'Type: npm install -g aura-code [Enter]. Wait 1-2 minutes while it downloads. Lots of text scrolling by is completely normal!'},
+      {id:'t6',cat:'Setup',text:'Verify Aura: type aura --version',detail:'Type: aura --version [Enter]. If you see "command not found", close and reopen Terminal and try again.'},
+      {id:'t7',cat:'API Keys',text:'Get an API key from an AI provider',detail:'Sign up at platform.openai.com (OpenAI), console.anthropic.com (Anthropic), or aistudio.google.com (Google). Copy your API key - it starts with "sk-".'},
+      {id:'t8',cat:'API Keys',text:'Set your API key in Terminal',detail:'Type: set ANTHROPIC_API_KEY=sk-ant-... (use your real key). Or set OPENAI_API_KEY=sk-... This connects Aura to an AI brain.'},
+      {id:'t9',cat:'First Steps',text:'Run your first Aura task!',detail:'Type: aura "list the files in this folder" [Enter]. Aura will read your files and tell you about them. Start simple and build confidence!'},
+      {id:'t10',cat:'First Steps',text:'Try a coding task in a project folder',detail:'Navigate to a project: cd your-project. Then try: aura "find all TODOs in the code" or aura "explain what this project does".'},
+      {id:'t11',cat:'Learn',text:'Explore Aura special modes',detail:'aura --orchestrate "complex task" (multi-agent team), aura --architect "design system" (planning only), aura --verify "fix tests" (auto-testing), aura --models (see all AI brains).'},
+      {id:'t12',cat:'Learn',text:'Bookmark this manual page!',detail:'You now have a complete Aura reference! Press Ctrl+D to bookmark. Come back anytime you need help.'}
+    ];
+
+    const STORAGE_KEY = 'aura-manual-todos';
+
+    function loadTodos() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch(e) { return {}; }
+    }
+
+    function saveTodos(state) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+    }
+
+    function updateProgress(state) {
+      const total = TODO_DATA.length;
+      const done = Object.values(state).filter(v => v === true).length;
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      
+      document.getElementById('doneCount').textContent = done;
+      document.getElementById('totalCount').textContent = total;
+      document.getElementById('progressPct').textContent = pct + '%';
+      
+      // Update ASCII terminal progress bar
+      const barLength = 24;
+      const filledLength = Math.round((done / total) * barLength);
+      const emptyLength = barLength - filledLength;
+      const barStr = '[' + '█'.repeat(filledLength) + '.'.repeat(emptyLength) + ']';
+      document.getElementById('progressBarText').textContent = barStr;
+    }
+
+    function renderTodos() {
+      const state = loadTodos();
+      const container = document.getElementById('todoList');
+      
+      container.innerHTML = TODO_DATA.map((todo, i) => {
+        const isDone = state[todo.id] === true;
+        const open = state[todo.id + '_open'] === true;
+        
+        let cls = 'todo-card';
+        if (isDone) cls += ' done';
+        if (open) cls += ' open';
+        
+        return `
+          <div class="${cls}" data-id="${todo.id}">
+            <div class="todo-checkbox-visual" onclick="toggleTodo(event, '${todo.id}')">
+              ${isDone ? '[X]' : '[ ]'}
+            </div>
+            <div class="todo-card-content" onclick="toggleOpen(event, '${todo.id}')">
+              <div class="todo-card-meta">${todo.cat}</div>
+              <div class="todo-title-text">${i + 1}. ${todo.text}</div>
+              <div class="todo-card-detail">${todo.detail}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      updateProgress(state);
+    }
+
+    function toggleTodo(e, id) {
+      e.stopPropagation();
+      const state = loadTodos();
+      state[id] = !state[id];
+      saveTodos(state);
+      renderTodos();
+      
+      if (state[id]) {
+        playSuccessChime();
+        writeConsoleLine(`Success: Checklist step '${id}' completed.`, 'success');
+      } else {
+        playClickSound(400, 0.05);
+        writeConsoleLine(`Checkbox status updated: Checklist step '${id}' reset.`, 'output');
+      }
+    }
+
+    function toggleOpen(e, id) {
+      e.stopPropagation();
+      const state = loadTodos();
+      state[id + '_open'] = !state[id + '_open'];
+      saveTodos(state);
+      renderTodos();
+      playClickSound(500, 0.03, 'sine', 0.01);
+    }
+
+    function resetTodos() {
+      if (confirm('Reset all checklist progress? This cannot be undone.')) {
+        localStorage.removeItem(STORAGE_KEY);
+        renderTodos();
+        writeConsoleLine('Alert: All checklist progress logs cleared.', 'error');
+        playClickSound(300, 0.1, 'triangle', 0.03);
+      }
+    }
+
+    // Interactive FAQs Rendering
+    const FAQ_DATA = [
+      {q: "Do I need to know how to code?", a: "No! Aura is designed to assist both absolute beginners and senior software engineers. You describe requirements in plain English, and the Praktess agent handles files parsing, syntax planning, execution, and verification logs."},
+      {q: "Is Aura Code free to use?", a: "Yes, Aura Code itself is 100% free and open-source under the MIT license. External cloud API models (like Claude or GPT) charge fraction-of-a-cent micro-tokens fees on billing, but local models run entirely offline via Ollama completely free of cost."},
+      {q: "What are the limitations of Aura?", a: "Aura is designed for file edits, system scripts execution, and code formatting. She cannot directly perform video/image processing, drag window frames, control your physical mouse, or browse interactive JS sites unless utilizing specific browser MCP plugins."},
+      {q: "Is my source code secure?", a: "Yes, the program runs locally on your workstation. Files are sent securely over SSL to the designated AI API model endpoints for analysis logs, but are not stored or sold. For completely isolated air-gapped security, configure Ollama local models."},
+      {q: "What if Aura makes a programming mistake?", a: "Aura operates under verification logic: she runs tests after making changes to verify correctness. However, LLMs can still occasionally make minor logical slips. It is highly recommended to run projects under git version control to review diffs and roll back edits if needed."},
+      {q: "How do I perform system updates?", a: "In Windows terminal, run the update command wrapper: <code>npm update -g aura-code</code>. To verify active CLI package details, query: <code>aura --version</code>."}
+    ];
+
+    function renderFaqs() {
+      const container = document.getElementById('faqList');
+      container.innerHTML = FAQ_DATA.map((faq, index) => `
+        <div class="faq-item" id="faq-${index}">
+          <div class="faq-question" onclick="toggleFaq(${index})">
+            <span>⚙️ Q: ${faq.q}</span>
+            <span class="faq-toggle-icon">▶</span>
+          </div>
+          <div class="faq-answer">
+            <p>${faq.a}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function toggleFaq(index) {
+      const el = document.getElementById(`faq-${index}`);
+      el.classList.toggle('open');
+      playClickSound(600, 0.03, 'sine', 0.015);
+    }
+
+    // Active sidebar nav highlighting on scroll
+    document.addEventListener('DOMContentLoaded', () => {
+      renderTodos();
+      renderFaqs();
+      
+      const sections = document.querySelectorAll('section[id]');
+      const contentArea = document.getElementById('contentArea');
+      
+      contentArea.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(s => {
+          const top = s.offsetTop - 150;
+          if (contentArea.scrollTop >= top) {
+            current = s.getAttribute('id');
+          }
+        });
+        
+        if (current) {
+          document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('active'));
+          const activeNav = document.getElementById(`nav-${current}`);
+          if (activeNav) activeNav.classList.add('active');
+        }
+      });
+    });
+  </script>
 </body>
 </html>
