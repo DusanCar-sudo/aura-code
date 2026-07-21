@@ -54,6 +54,7 @@ export interface ProjectConfig {
     ollamaBaseUrl?: string;
     competenceThreshold?: number;
     minAttempts?: number;
+    epsilonProbeRate?: number;
   };
 }
 
@@ -111,6 +112,7 @@ function normalise(raw: unknown): ProjectConfig {
     if (typeof rb.ollamaBaseUrl === 'string') archimedes.ollamaBaseUrl = rb.ollamaBaseUrl;
     if (typeof rb.competenceThreshold === 'number') archimedes.competenceThreshold = rb.competenceThreshold;
     if (typeof rb.minAttempts === 'number' && rb.minAttempts > 0) archimedes.minAttempts = Math.floor(rb.minAttempts);
+    if (typeof rb.epsilonProbeRate === 'number' && rb.epsilonProbeRate >= 0 && rb.epsilonProbeRate <= 1) archimedes.epsilonProbeRate = rb.epsilonProbeRate;
     out.archimedes = archimedes;
   }
   if (Array.isArray(r.providers)) {

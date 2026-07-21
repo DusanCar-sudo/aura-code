@@ -618,6 +618,9 @@ async function main() {
   let archimedesOverride: boolean | undefined = undefined;
   // Runtime Archimedes model override: undefined = defer to .aura.json, string = session override
   let archimedesModelOverride: string | undefined = undefined;
+  // :small1 — force sessions to START with Archimedes, bypassing the competence
+  // gate (verification/escalation still run). Off by default; toggled per session.
+  let small1Override = false;
 
   if (!noSession) {
     if (argv['new-session']) {
@@ -1147,6 +1150,7 @@ let abortController: AbortController | null = null;
       healthTracker,
       archimedesOverride,
       archimedesModelOverride,
+      small1Override,
     };
 
     // Check for REPL commands
@@ -1157,6 +1161,7 @@ let abortController: AbortController | null = null;
       if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
       if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
       if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
+      if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
       if (activeChatId) setChatId(activeChatId);
       return;
     }
@@ -1193,7 +1198,7 @@ let abortController: AbortController | null = null;
           display: tuiDisplay,
         });
         result = wrapperResult.loopResult;
-      } else if (archimedesOverride !== undefined ? archimedesOverride : fileConfig.archimedes?.enabled) {
+      } else if (small1Override || (archimedesOverride !== undefined ? archimedesOverride : fileConfig.archimedes?.enabled)) {
         const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
         if (!baseArchimedesConfig) {
           tuiDisplay.warning(reason);
@@ -1226,6 +1231,7 @@ let abortController: AbortController | null = null;
             initialHistory: activeChatHistory,
             abortSignal,
             healthTracker,
+            forceArchimedes: small1Override,
           });
           const altResult = await alternator.run(input);
           result = altResult.loopResult;
@@ -1364,6 +1370,7 @@ interface ReplCtx {
   healthTracker: ContextHealthTracker;
   archimedesOverride: boolean | undefined;
   archimedesModelOverride: string | undefined;
+  small1Override: boolean;
 }
 
 interface ReplCommandResult {
@@ -1373,6 +1380,7 @@ interface ReplCommandResult {
   newTitle?: string | undefined;
   newArchimedesOverride?: boolean;
   newArchimedesModelOverride?: string;
+  newSmall1Override?: boolean;
 }
 
 /**
@@ -2003,6 +2011,25 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const result = await runBtwQuery(question, buildProvider(c.display), c.ctx);
     console.log(renderBtwAnswer(result.answer, result.tokens));
     return { handled: true };
+  }
+
+  if (input === ':small1' || input === ':small1 on') {
+    const { getEpisodeStats } = await import('../archimedes/index.js');
+    const stats = await getEpisodeStats(c.ctx.root);
+    const attempts = stats.archimedesSuccesses + stats.archimedesFailures;
+    const score = attempts > 0
+      ? `${Math.round((stats.archimedesSuccesses / attempts) * 100)}% over ${attempts} attempt(s)`
+      : 'no recorded attempts yet';
+    c.display.success(
+      `Starting with Archimedes (small1 override — competence gate bypassed, current score: ${score}). ` +
+      `Verification and escalation still apply; attempts update the score normally. :small1 off to revert.`,
+    );
+    return { handled: true, newSmall1Override: true };
+  }
+
+  if (input === ':small1 off') {
+    c.display.success('small1 override: OFF — normal Archimedes competence routing restored.');
+    return { handled: true, newSmall1Override: false };
   }
 
   if (input === ':archon') {

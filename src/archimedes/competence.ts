@@ -40,6 +40,9 @@ function safeConfig(config: ArchimedesConfig): ArchimedesConfig {
     ),
     minAttempts: Math.max(0, config?.minAttempts ?? DEFAULT_ARCHIMEDES_CONFIG.minAttempts),
     enabled: config?.enabled ?? DEFAULT_ARCHIMEDES_CONFIG.enabled,
+    epsilonProbeRate: clamp01(
+      config?.epsilonProbeRate ?? DEFAULT_ARCHIMEDES_CONFIG.epsilonProbeRate,
+    ),
   };
 }
 

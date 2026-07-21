@@ -119,6 +119,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   build: 'Build', config: 'Config', source: 'Source', assets: 'Assets',
   skills: 'Skills', deps: 'Dependencies', git: 'Git', env: 'Environment',
   version: 'Version', memory: 'Memory', hygiene: 'Repo Hygiene',
+  archimedes: 'Archimedes',
 };
 
 export function formatDoctorReport(report: DoctorReport): string {

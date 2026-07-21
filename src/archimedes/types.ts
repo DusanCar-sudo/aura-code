@@ -53,6 +53,13 @@ export interface ArchimedesConfig {
   minAttempts: number;
   /** When false, alternation always escalates to the large model. */
   enabled: boolean;
+  /**
+   * Probability, in [0, 1], of letting Archimedes attempt a task whose pattern
+   * is gated (success rate below `competenceThreshold`). Keeps the competence
+   * score live for gated patterns — without it a gate would freeze permanently,
+   * since scores only move on actual attempts.
+   */
+  epsilonProbeRate: number;
 }
 
 /** Sensible defaults for local Ollama + Qwen coder 1.5B. */
@@ -62,6 +69,7 @@ export const DEFAULT_ARCHIMEDES_CONFIG: ArchimedesConfig = {
   competenceThreshold: 0.7,
   minAttempts: 3,
   enabled: true,
+  epsilonProbeRate: 0.05,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

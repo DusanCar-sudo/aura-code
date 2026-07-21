@@ -9,6 +9,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import type { Finding, Category } from './types.js';
+import type { Episode } from '../archimedes/types.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
+import { getCompetenceReport } from '../archimedes/competence.js';
+import { loadProjectConfig } from '../config/project-config.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -477,6 +481,80 @@ export function checkHygiene(root: string): Finding[] {
   return out;
 }
 
+// ── 12. Archimedes alternator ────────────────────────────────────────────────
+// Gate visibility: which task categories the competence gate is currently
+// blocking, and how often gated work is re-probed (epsilonProbeRate). The
+// real gate matches per task-text pattern (see assessCompetence), so the
+// per-category view here is an approximation for visibility, not the exact
+// routing decision.
+export function checkArchimedes(root: string): Finding[] {
+  const out: Finding[] = [];
+  const cfg = {
+    ...DEFAULT_ARCHIMEDES_CONFIG,
+    ...(loadProjectConfig(root).archimedes ?? {}),
+  };
+
+  out.push({
+    category: 'archimedes', name: 'alternator config',
+    severity: 'ok',
+    message: cfg.enabled
+      ? `Alternator enabled — threshold ${(cfg.competenceThreshold * 100).toFixed(0)}%, min attempts ${cfg.minAttempts}, epsilon probe ${(cfg.epsilonProbeRate * 100).toFixed(0)}% (gated patterns re-tested at this rate).`
+      : 'Alternator disabled in .aura.json — all tasks go straight to the large model.',
+    fixable: false,
+  });
+
+  // Episodes for THIS project (same hash scheme as episodeStore.projectDir)
+  const home = process.env.HOME ?? '/tmp';
+  const hash = Buffer.from(root, 'utf8').toString('base64').slice(0, 8);
+  const epDir = path.join(home, '.aura', 'episodes', hash);
+  const episodes: Episode[] = [];
+  if (exists(epDir)) {
+    try {
+      for (const f of fs.readdirSync(epDir).filter(f => f.endsWith('.json'))) {
+        const ep = readJson<Episode>(path.join(epDir, f));
+        if (ep?.id) episodes.push(ep);
+      }
+    } catch { /* best-effort */ }
+  }
+
+  if (episodes.length === 0) {
+    out.push({
+      category: 'archimedes', name: 'competence', severity: 'warn',
+      message: 'No alternation episodes recorded for this project yet — no competence data.',
+      fixable: false,
+    });
+    return out;
+  }
+
+  const report = getCompetenceReport(episodes);
+  if (report.length === 0) {
+    out.push({
+      category: 'archimedes', name: 'competence', severity: 'warn',
+      message: `${episodes.length} episode(s) recorded, but none with an Archimedes attempt — the score cannot move without attempts.`,
+      fixable: false,
+    });
+    return out;
+  }
+
+  for (const row of report) {
+    const gated = row.count >= cfg.minAttempts && row.successRate < cfg.competenceThreshold;
+    const pct = (row.successRate * 100).toFixed(0);
+    out.push({
+      category: 'archimedes', name: `competence: ${row.category}`,
+      severity: gated ? 'warn' : 'ok',
+      message: gated
+        ? `${row.category}: ${pct}% success over ${row.count} attempt(s) — GATED (below ${(cfg.competenceThreshold * 100).toFixed(0)}% threshold; re-probed ~${(cfg.epsilonProbeRate * 100).toFixed(0)}% of the time, or force with :small1).`
+        : `${row.category}: ${pct}% success over ${row.count} attempt(s).`,
+      detail: gated
+        ? 'Gating is decided per task-text pattern, not per category — this row is an aggregate view.'
+        : undefined,
+      fixable: false,
+    });
+  }
+
+  return out;
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const ALL_CHECKS: Array<{ category: Category; run: (root: string, offline?: boolean) => Finding[] }> = [
@@ -491,4 +569,5 @@ export const ALL_CHECKS: Array<{ category: Category; run: (root: string, offline
   { category: 'version', run: (r, o) => checkVersion(r, o) },
   { category: 'memory', run: (r) => checkMemory(r) },
   { category: 'hygiene', run: (r) => checkHygiene(r) },
+  { category: 'archimedes', run: (r) => checkArchimedes(r) },
 ];
