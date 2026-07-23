@@ -16,6 +16,12 @@ import { assessCompetence, shouldFineTune } from './competence.js';
 import { episodeStore } from './episode-capture.js';
 import type { EpisodeStats } from './episode-capture.js';
 
+// Tools sent to the Archimedes (Ollama) attempt — read-only subset only.
+// Mutating tools (edit_file, write_file, run_shell) are already blocked by the
+// PermissionSystem, but stripping them from the schema saves schema tokens on
+// every one of Archimedes's turns without touching the large-model escalation.
+const ARCHIMEDES_TOOLS = ['read_file', 'list_dir', 'search_code', 'search_semantic'];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Options
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +55,12 @@ export interface AlternatorOptions {
    * competence score move again.
    */
   forceArchimedes?: boolean;
+  /**
+   * Turn budget for the Archimedes attempt (from the session's --max-turns /
+   * config). Only ever tightens the built-in cap of 15 — an explicit wider
+   * budget is meant for the trusted large model, not the unproven local one.
+   */
+  maxTurns?: number;
 }
 
 export interface AlternatorRunResult {
@@ -363,11 +375,14 @@ export class ArchimedesAlternator {
               permissions: new PermissionSystem('read-only'),
               display: this.display,
               disableSpawn: true,
-              maxTurns: 15,
+              maxTurns: Math.min(this.opts.maxTurns ?? 15, 15),
               confirmFn: this.opts.confirmFn,
               initialHistory: this.opts.initialHistory,
               abortSignal: this.opts.abortSignal,
               healthTracker: this.opts.healthTracker,
+              allowedTools: ARCHIMEDES_TOOLS,
+              maxRepetitionsPerTool: 3,
+              toolResultMaxChars: 1_500,
             });
 
             archimedesTokens = loopResult.usage.totalTokens;
