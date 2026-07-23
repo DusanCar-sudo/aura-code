@@ -85,6 +85,18 @@ export interface LoopOptions {
    *  cloud providers keep sticky selectTools() to protect the Anthropic
    *  prompt-cache prefix. */
   toolEviction?: { enabled: boolean; evictAfterTurns?: number };
+  /** Primary-argument repetition limit for small local models (Archimedes).
+   *  When set, the loop breaks early if any (tool_name, primary_arg) pair is
+   *  called this many times — signals a stuck loop that won't self-correct.
+   *  Only the primary argument is tracked (path for file tools, pattern for
+   *  search_code) so reading different line ranges of the same file still
+   *  counts as the same repeated call. Undefined = disabled (default). */
+  maxRepetitionsPerTool?: number;
+  /** Maximum chars kept from a single tool result before it enters history
+   *  (non-error results only — errors keep a higher ceiling for diagnostics).
+   *  Default: 4,000. Set lower (e.g. 1,500) for Archimedes Q&A sessions to
+   *  reduce history noise from large ripgrep / file outputs. */
+  toolResultMaxChars?: number;
 }
 
 export interface LoopResult {
@@ -154,6 +166,35 @@ export function costFor(model: string, input: number, output: number, cachedToke
   const billable = input - cached;
   const cachedRate = p.cachedIn ?? p.in / 10;
   return (billable / 1_000_000) * p.in + (cached / 1_000_000) * cachedRate + (output / 1_000_000) * p.out;
+}
+
+/**
+ * Scan `calls` from the current turn, update `counts`, and return a
+ * human-readable reason string if any (tool_name, primary_arg) pair has now
+ * been called `threshold` or more times, or null if no loop detected.
+ *
+ * Only the primary argument is inspected — `path` for read_file / list_dir /
+ * search_semantic, `pattern` for search_code. Secondary args (start_line,
+ * end_line, …) are intentionally ignored: reading different line ranges of
+ * the same file is the same stuck behaviour, not progress.
+ * Pure except for updating `counts` in place.
+ */
+function checkPrimaryArgRepetition(
+  counts: Map<string, number>,
+  calls: ToolCall[],
+  threshold: number,
+): string | null {
+  for (const call of calls) {
+    const input = call.input as Record<string, unknown>;
+    const primaryArg = String(input.path ?? input.pattern ?? input.query ?? '');
+    const key = `${call.name}:${primaryArg}`;
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    if (n >= threshold) {
+      return `repetition loop — ${call.name}('${primaryArg}') called ${n}x with no new information`;
+    }
+  }
+  return null;
 }
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
@@ -260,6 +301,13 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   // Optional allowlist filter — applied after selectTools so conditional
   // triggers still work, but nothing outside the allowlist is ever sent.
   const allowedToolNames = opts.allowedTools ? new Set(opts.allowedTools) : null;
+
+  // Primary-arg repetition tracking — Archimedes early-exit only.
+  // Null when the option is not set so there is zero overhead on normal runs.
+  const primaryArgCounts = opts.maxRepetitionsPerTool !== undefined
+    ? new Map<string, number>()
+    : null;
+  let primaryArgLoopReason: string | null = null;
 
   while (true) {
     if (turns >= maxTurns) {
@@ -463,6 +511,13 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       stall = detectStall(turnSignatures, profile.stallThreshold);
     }
 
+    // Primary-arg repetition check — Archimedes early-exit (maxRepetitionsPerTool).
+    if (primaryArgCounts && responseToolCalls.length > 0) {
+      primaryArgLoopReason = checkPrimaryArgRepetition(
+        primaryArgCounts, responseToolCalls, opts.maxRepetitionsPerTool!,
+      );
+    }
+
     const toolResults: ToolResult[] = [];
     // One checkpoint per turn, taken lazily before the first mutating call —
     // a turn's writes form one burst, and the engine dedupes identical trees.
@@ -546,10 +601,13 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         // (4K chars ~1K tokens). Oversized results pollute context between
         // compaction cycles — truncate early so every API call carries less
         // dead weight. Errors get a higher ceiling so diagnostics survive.
-        const RESULT_TRUNCATE_AT = result.startsWith('Error:') || result.startsWith('Tool error') ? 8_000 : 4_000;
+        // toolResultMaxChars narrows the normal limit for small-model sessions
+        // (e.g. Archimedes at 1,500 chars) without affecting error diagnostics.
+        const normalLimit = opts.toolResultMaxChars ?? 4_000;
+        const RESULT_TRUNCATE_AT = result.startsWith('Error:') || result.startsWith('Tool error') ? 8_000 : normalLimit;
         if (result.length > RESULT_TRUNCATE_AT) {
           result = result.slice(0, RESULT_TRUNCATE_AT)
-            + `\n[result truncated: ${result.length.toLocaleString()} chars total]`;
+            + `\n[truncated — ${(result.length - RESULT_TRUNCATE_AT).toLocaleString()} chars omitted]`;
         }
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
         // Cache the post-truncation text — that is exactly what lands in
@@ -592,13 +650,19 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       break;
     }
 
+    if (primaryArgLoopReason) {
+      display.warning(`Archimedes repetition loop — escalating early: ${primaryArgLoopReason}`);
+      break;
+    }
+
     display.agentThinking();
   }
 
   await persist(opts.sessionPath, history);
   const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
   const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
-  const reason = stall === 'repeat' ? 'stalled (repeated identical tool calls)'
+  const reason = primaryArgLoopReason ? primaryArgLoopReason
+    : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
     : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
     : `ended after ${turns} turns${widened ? `, after widening once from ${profile.maxTurns}` : ''}`;
   return {

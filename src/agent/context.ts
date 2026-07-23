@@ -109,7 +109,27 @@ function readTruncated(root: string, names: string[], maxChars: number, notFound
   return `(no ${notFoundLabel} found)`;
 }
 
+function loadAuraIgnore(root: string): string[] {
+  const p = path.join(root, '.auraignore');
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, 'utf8')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('#'));
+}
+
+function isAuraIgnored(name: string, patterns: string[]): boolean {
+  return patterns.some(p => {
+    const bare = p.replace(/\/$/, '');
+    // Suffix glob: *.log matches foo.log
+    if (bare.startsWith('*')) return name.endsWith(bare.slice(1));
+    // Exact or prefix match (trailing slash stripped above)
+    return name === bare;
+  });
+}
+
 function buildTree(root: string): string {
+  const auraIgnore = loadAuraIgnore(root);
   const lines: string[] = [path.basename(root) + '/'];
   function walk(dir: string, prefix: string, depth: number) {
     if (depth > 3) return;
@@ -119,6 +139,7 @@ function buildTree(root: string): string {
     const filtered = entries.filter(e =>
       !IGNORE_PATTERNS.some(p => e.name === p || (p.startsWith('*') && e.name.endsWith(p.slice(1))))
       && !e.name.startsWith('.')
+      && !isAuraIgnored(e.name, auraIgnore)
     );
     filtered.sort((a, b) => {
       if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
