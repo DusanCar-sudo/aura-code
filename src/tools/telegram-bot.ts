@@ -927,35 +927,35 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return [
       `💎 Aura Bot — Online`,
       ``,
-      `Komande:`,
-      `/status — Šta trenutno radi u ovom chatu (zadatak, trajanje, potvrde na čekanju) + status sistema`,
-      `/tools — Lista dostupnih alata`,
-      `/provider [model] — Lista AI modelova ili prebaci na drugi model (ova sesija)`,
-      `/memory — Pregled memorije`,
-      `/history — Pregled istorije razgovora`,
-      `/clear — Obriši istoriju razgovora`,
-      `/time — Trenutno vreme`,
-      `/ping — Provera konekcije`,
-      `/whoami — Ko sam ja`,
+      `Commands:`,
+      `/status — What's running in this chat (task, duration, pending approvals) + system status`,
+      `/tools — List available tools`,
+      `/provider [model] — List AI models, or switch model (this session)`,
+      `/memory — View memory`,
+      `/history — View conversation history`,
+      `/clear — Delete conversation history`,
+      `/time — Current time`,
+      `/ping — Connection check`,
+      `/whoami — Who I am`,
       ``,
       `💻 PC Control:`,
-      `/ls <dir> — Lista direktorijuma na tvom PC-ju`,
-      `/read <file> — Čitanje fajla sa tvog PC-ja`,
-      `/sendfile <path> — Pošalji fajl sa tvog PC-ja na Telegram`,
-      `/find <pattern> — Pronađi fajlove na tvom PC-ju`,
-      `/run <cmd> — Izvrši shell komandu na tvom PC-ju`,
-      `/cam — Snimi i pošalji sliku sa kamere (nadzor)`,
+      `/ls <dir> — List a directory on your PC`,
+      `/read <file> — Read a file from your PC`,
+      `/sendfile <path> — Send a file from your PC to Telegram`,
+      `/find <pattern> — Find files on your PC`,
+      `/run <cmd> — Run a shell command on your PC`,
+      `/cam — Capture and send a camera image (surveillance)`,
       `/git — Git status`,
       ``,
-      `🎛 Kontrola zadatka:`,
-      `/stop — Prekini zadatak koji trenutno radi u ovom chatu`,
-      `/approve-all — ⚠️ Auto režim: odobri sve potvrde koje čekaju I sve buduće komande bez pitanja (uključujući destruktivne). Traje dok ne pošalješ /new.`,
-      `/new — Nova sesija: briše istoriju i isključuje auto-approve režim`,
+      `🎛 Task control:`,
+      `/stop — Stop the task currently running in this chat`,
+      `/approve-all — ⚠️ Auto mode: approve all pending confirmations AND all future commands without asking (including destructive ones). Lasts until you send /new.`,
+      `/new — New session: clears history and turns off auto-approve mode`,
       ``,
-      `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
-      `💡 Možeš da tražiš fajlove sa tvog računara i šaljiš ih sebi!`,
+      `💡 I remember conversations permanently — whatever you ask me, I'll recall it next time!`,
+      `💡 You can ask for files from your computer and send them to yourself!`,
       ``,
-      `Ili mi piši bilo šta — odgovoriću!`,
+      `Or just write me anything — I'll reply!`,
     ].join('\n');
   }
 
@@ -1311,7 +1311,16 @@ async function poll(): Promise<void> {
   let offset = loadOffset();
 
   console.log(`[${ts()}] 💎 Aura Telegram Bot started`);
-  console.log(`   Bot: @Aura_Code_bot`);
+  // Resolve identity from the token instead of hardcoding it — this token has
+  // been shared with another bot before, so a banner naming the wrong bot makes
+  // "did the right bot start?" unanswerable from the log alone.
+  let who = '(unknown — getMe failed)';
+  try {
+    who = `@${(await apiPost('getMe')).username}`;
+  } catch (e: any) {
+    console.error(`[${ts()}]   ⚠️ getMe failed: ${e.message}`);
+  }
+  console.log(`   Bot: ${who}`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Long-polling Telegram (30s)…`);
   console.log('');

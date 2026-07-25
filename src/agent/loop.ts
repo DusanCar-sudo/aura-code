@@ -413,7 +413,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             responseToolCalls.push(chunk.call);
             break;
           case 'done':
-            finalResponse = { stopReason: chunk.response.stopReason };
+            finalResponse = chunk.response;
             if (chunk.response.toolCalls.length > 0 && responseToolCalls.length === 0) {
               responseToolCalls.push(...chunk.response.toolCalls);
             }
@@ -495,11 +495,15 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       break;
     }
 
-    history.push({
+    const assistantMsg: HistoryMessage = {
       role: 'assistant',
       content: responseText,
       toolCalls: responseToolCalls,
-    });
+    };
+    if ((finalResponse as any)?.googleParts) {
+      (assistantMsg as any).googleParts = (finalResponse as any).googleParts;
+    }
+    history.push(assistantMsg);
 
     // Record this turn's tool-call signature before executing, so a
     // stall is detected even if every call in the streak errors out.

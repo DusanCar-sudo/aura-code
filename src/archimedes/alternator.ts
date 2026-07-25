@@ -460,6 +460,7 @@ export class ArchimedesAlternator {
             permissions: this.permissions,
             display: this.display,
             disableSpawn: true,
+            maxTurns: this.opts.maxTurns,
             confirmFn: this.opts.confirmFn,
             initialHistory: this.opts.initialHistory,
             abortSignal: this.opts.abortSignal,

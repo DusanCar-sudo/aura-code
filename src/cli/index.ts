@@ -32,7 +32,10 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { runGazelleLoop } from '../agent/gazelle-loop.js';
+import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
+import { runCoderConversation } from '../agent/coder-conversation.js';
+import { compactHistory, estimateContextTokens } from '../agent/compactor.js';
+import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
@@ -45,7 +48,7 @@ import pkg from '../../package.json';
 
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore, type SessionUsage } from '../agent/session-store.js';
-import type { LLMProvider } from '../providers/types.js';
+import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
 import { getApiKey } from '../util/env.js';
@@ -530,6 +533,103 @@ function sessionUsageFrom(result: {
   };
 }
 
+// ── Phase 3: Gazelle ⇄ coder mode orchestrator ───────────────────────────────
+interface GazelleOrchestratorArgs {
+  gzProvider: LLMProvider;
+  display: ReturnType<typeof createTerminalDisplay>;
+  firstMessage?: string;
+  sessionPath?: string;
+  gzCliModel?: string;
+}
+
+/** Strip coder tool-noise from a carried-over history before re-entering
+ *  Gazelle, so its tiny prompt never inherits tool schemas or results. Keeps
+ *  the conversational spine (user turns + assistant prose); a very long coder
+ *  run is additionally compacted as a safety net. */
+function sanitizeForGazelle(history: HistoryMessage[], model: string): HistoryMessage[] {
+  const cleaned: HistoryMessage[] = [];
+  for (const m of history) {
+    if (m.role === 'tool_result') continue;               // drop tool output entirely
+    if (m.role === 'assistant') {
+      if (m.content && m.content.trim()) cleaned.push({ role: 'assistant', content: m.content });
+    } else {
+      cleaned.push(m);                                     // user turns
+    }
+  }
+  const est = estimateContextTokens('', cleaned);
+  if (est > 4000) compactHistory(cleaned, est, model);
+  return cleaned;
+}
+
+/** Gazelle is the front door; :coder (or an accepted escalation offer) hands off
+ *  to the heavy path, and :gazelle (or a conversational turn after a task) hands
+ *  back. History carries across each switch; coder deps load lazily on the first
+ *  switch — that's the Phase-1 setup the user explicitly asked for. */
+async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void> {
+  const input = process.stdin;
+  const output = process.stdout;
+  const interactive = (input as NodeJS.ReadStream).isTTY === true;
+  const reader = createLineReader(input, output, interactive);
+
+  let history: HistoryMessage[] = [];
+  let mode: 'gazelle' | 'coder' = 'gazelle';
+  let carry: string | undefined = a.firstMessage;
+
+  // Lazy coder dependencies — built only on the first switch into coder mode.
+  let coderCtx: Awaited<ReturnType<typeof loadProjectContext>> | undefined;
+  let coderPermissions: PermissionSystem | undefined;
+  let coderProvider: LLMProvider | undefined;
+
+  for (;;) {
+    let outcome: LoopOutcome;
+    if (mode === 'gazelle') {
+      outcome = await runGazelleLoop({
+        provider: a.gzProvider, display: a.display, reader, input, output,
+        initialHistory: history, firstMessage: carry,
+        sessionPath: a.sessionPath, writeMemoryOnExit: false,
+      });
+      carry = undefined;
+      history = outcome.history;
+      if (outcome.action === 'exit') break;
+      if (!coderProvider) {
+        try {
+          a.display.header('Switching to coder mode', 'loading project context, tools, and file access…');
+          coderCtx = await loadProjectContext(cwd);
+          coderPermissions = new PermissionSystem(permissionLevel);
+          coderProvider = buildProvider(a.display);
+        } catch (e) {
+          a.display.error(`Could not enter coder mode: ${String(e)} — staying in conversation.`);
+          continue; // remain in gazelle
+        }
+      }
+      mode = 'coder';
+      carry = outcome.carryMessage;
+    } else {
+      outcome = await runCoderConversation({
+        provider: coderProvider!, ctx: coderCtx!, permissions: coderPermissions!,
+        display: a.display, reader, output, interactive,
+        initialHistory: history, firstMessage: carry,
+        maxTurns: resolved.maxTurns, sessionPath: a.sessionPath,
+        spawnConfig: { apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
+      });
+      carry = undefined;
+      history = outcome.history;
+      if (outcome.action === 'exit') break;
+      history = sanitizeForGazelle(history, a.gzProvider.model); // no coder leakage into lean prompt
+      a.display.success('Back to conversational mode.');
+      mode = 'gazelle';
+      carry = outcome.carryMessage;
+    }
+  }
+
+  reader.close();
+  // One session-end memory write for the whole conversation (gazelle owns memory).
+  if (estimateContextTokens('', history) >= 200) {
+    try { await writeConversationalMemory(history, a.gzProvider.model); }
+    catch { /* best-effort */ }
+  }
+}
+
 async function main() {
   const display = createTerminalDisplay();
 
@@ -561,7 +661,7 @@ async function main() {
     const sessionPath = argv['no-session'] === true
       ? undefined
       : path.join(sessionStore.projectDir(cwd), `gazelle-${sessionStore.generateId()}.json`);
-    await runGazelleLoop({ provider: gzProvider, display, firstMessage, sessionPath });
+    await runGazelleOrchestrator({ gzProvider, display, firstMessage, sessionPath, gzCliModel });
     return;
   }
 
@@ -2846,6 +2946,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --base-url <url>         Custom API endpoint (for Ollama, proxies, etc.)
     --auto                   Auto-approve all tool calls (no confirmation)
     --readonly               Read-only mode (no file writes or shell commands)
+    --gazelle                Lean conversational mode: no tools, no project context
+    --mode gazelle           Same as --gazelle (env: AURA_MODE=gazelle)
     --cwd <path>             Working directory (default: current)
     --models                 List all known model IDs
     --no-session             Disable conversation history persistence
@@ -2917,6 +3019,17 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     }
     CLI flags always override .aura.json.
     Custom providers are OpenAI-compatible endpoints.
+
+  ${chalk.hex(FAINT_HEX)('.auraignore:')}
+    One glob per line; matching directories are left out of the project tree
+    sent to the system prompt. Mirrors .rgignore, which governs search instead.
+
+  ${chalk.hex(FAINT_HEX)('Environment:')}
+    AURA_MODE=gazelle        Start in lean conversational mode
+    AURA_MODEL               Default model (overridden by --model)
+    AURA_FALLBACK_MODEL      Fallback model
+    AURA_MAX_RETRIES         Max retry attempts on 429/5xx
+    AURA_API_RPM / _TPM      Rate-limit caps
 
   ${chalk.hex(FAINT_HEX)('Model examples:')}
     aura -m claude-opus-4-5-20251001  "refactor auth"

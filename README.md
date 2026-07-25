@@ -4,7 +4,7 @@
 
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
-[![Version](https://img.shields.io/badge/version-v0.10.5-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.11.0-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
@@ -39,6 +39,7 @@ aura 'refactor the auth module to use JWT'
 ## Features
 
 - **Autonomous execution** — reads files, edits code, runs shell commands, verifies, retries
+- **Gazelle mode** — a lean conversational path for everything that isn't a coding task; 26x less context per turn
 - **The Archimedes Principle** — a small local model attempts tasks first; the cloud model steps in only when needed
 - **Full TUI** — terminal UI with command palette, diff view, markdown rendering, vim-style input
 - **Persistent memory** — identity, lessons, and project context survive across sessions
@@ -46,6 +47,68 @@ aura 'refactor the auth module to use JWT'
 - **16+ providers** — DeepSeek, Claude, GPT, Gemini, GLM, MiMo, Ollama, OpenRouter and more
 - **Token efficiency** — tiered context strategy, prompt caching, tool relevance gating
 - **MCP support** — Model Context Protocol for external tool connections
+
+---
+
+## Gazelle — conversational mode
+
+Most of what you say to a coding agent isn't a coding task. "What did we decide
+about the auth flow?" doesn't need 25 tool schemas and a project tree — but the
+coding agent sends them anyway, every turn.
+
+Gazelle is the same Aura on a different path: no tool schemas, no project
+context, no Archimedes, no verification gate. Just the conversation.
+
+```bash
+aura --gazelle                 # or: aura --mode gazelle
+AURA_MODE=gazelle aura         # or set it in the environment
+```
+
+### What it costs
+
+Measured on this repo with Aura's own tokenizer (`estimateContextTokens`, the
+same one `:context` reports with):
+
+| Per-turn fixed context | Coder | Gazelle |
+|---|---|---|
+| System prompt + project context | 4,793 | 356 |
+| Tool schemas (25 tools) | 4,574 | 0 |
+| **Total every turn** | **9,367** | **356** |
+
+**26x less context per turn — 9,011 tokens saved on every message.**
+
+Over a whole conversation the gap widens well past that, because the coding
+agent's history also accumulates file contents and tool output while Gazelle's
+does not. How much further depends entirely on how many tools a given session
+calls, so that multiple is an observation about a session, not a number this
+project will quote as a spec.
+
+### Switching mid-session
+
+Neither mode is a dead end, and conversation history carries across:
+
+```
+:coder      → hand off to the full coding agent (tools, project context)
+:gazelle    → drop back to the lean conversational path
+```
+
+Gazelle also notices when it needs tools and offers to switch on its own —
+recognized from its own wording, not a second model call, so the detection is
+free. Answer `y` (or just press Enter) and it hands off with the conversation
+intact.
+
+### Memory
+
+When a Gazelle session ends it writes a rolling situational summary — what you
+were working on, what was unresolved. Not a transcript, not a fact dump. The
+next session opens already knowing where you left off and uses that as
+background, rather than opening with "I recall that…".
+
+### What it isn't
+
+Gazelle can't read files, search code, or run anything. That's the point — it's
+the front door, not the workshop. When a request needs hands, `:coder` is one
+word away.
 
 ---
 
@@ -140,6 +203,8 @@ aura --doctor              # self-diagnostic
 | `--base-url <url>` | Custom API endpoint (Ollama, proxies, etc.) |
 | `--auto` | Auto-approve all tool calls (no confirmation) |
 | `--readonly` | Read-only mode (no file writes or shell commands) |
+| `--gazelle` | [Gazelle mode](#gazelle--conversational-mode): lean conversational path, no tools |
+| `--mode gazelle` | Same as `--gazelle` (env: `AURA_MODE=gazelle`) |
 | `--cwd <path>` | Working directory (default: current) |
 | `--models` | List all known model IDs |
 | `--interactive` | Start the interactive REPL/TUI |
@@ -183,6 +248,13 @@ CLI flags always override `.aura.json`.
 ## REPL commands
 
 Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command palette):
+
+### Modes
+
+| Command | Description |
+|---------|-------------|
+| `:coder` | Switch to full coding-agent mode (tools, project context) |
+| `:gazelle` | Switch to lean conversational mode |
 
 ### Session
 
@@ -317,6 +389,64 @@ The kanban server also exposes MCP tool definitions (`kanban_move_card`, `kanban
 
 - **Task Pipeline:** backlog → todo → in-progress → review → done
 - **Agent Workers:** orchestrator, architect, verifier — concurrent handler slots reflecting real agent state
+
+---
+
+## Running as a service
+
+Unit files live in the repo root: `aura.service` (CLI in a tmux session),
+`aura-telegram.service` (Telegram bot), `rclone-gdrive.service`. They carry
+absolute paths for this machine — adjust `User`, `WorkingDirectory`, and the
+`ExecStart` path before reusing them.
+
+```bash
+cp aura-telegram.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now aura-telegram.service
+```
+
+### Run the compiled build, not `npx tsx`
+
+If you write your own unit for any Aura entrypoint, point `ExecStart` at the
+compiled JS with plain `node`:
+
+```ini
+ExecStart=/usr/bin/node /path/to/aura-code/dist/tools/telegram-bot.js
+```
+
+Not `npx tsx src/tools/telegram-bot.ts`. `tsx` isn't a dependency of this
+project, so npx re-resolves and installs it from the network on **every start** —
+which pins a CPU core at 100% for the life of the unit, bloats `~/.npm/_npx` by
+gigabytes, and never reaches the program's first log line. It looks exactly like
+a hang with no error. This cost one production incident here; the compiled build
+starts in under a second.
+
+Trade-off: `npm run build` is then required after editing `src/`, since nothing
+transpiles on the fly anymore. Use `/usr/bin/node` rather than an nvm path —
+nvm paths pin a node version and break on upgrade.
+
+### Restart policy
+
+```ini
+[Unit]
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Restart=on-failure
+RestartSec=15
+```
+
+`StartLimitIntervalSec` / `StartLimitBurst` cap total restart attempts in a
+window: after 5 failures in 5 minutes systemd gives up instead of looping. Note
+they are **`[Unit]`** directives — systemd silently ignores them under
+`[Service]`, which makes a policy that looks correct do nothing.
+
+Worth knowing what this does and doesn't buy you: the Telegram bot's poll loop
+already handles Telegram 409 Conflicts in-band (5s pause, then exponential
+backoff) and its `uncaughtException` handler deliberately doesn't exit. A bot
+that never exits is never restarted, so restart policy is a guard against
+future failure modes that *do* exit — not a fix for a busy-looping process.
 
 ---
 

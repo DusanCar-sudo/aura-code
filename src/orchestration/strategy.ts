@@ -41,6 +41,8 @@ export interface StrategyRunOptions {
   abortSignal?: AbortSignal;
   /** Shared context-health tracker (the REPL's) — forwarded to inner agent loops. */
   healthTracker?: ContextHealthTracker;
+  /** Session turn budget (--max-turns / config), forwarded to strategies that cap inner loops. */
+  maxTurns?: number;
 }
 
 /** Generalization of AlternatorRunResult. */
@@ -138,6 +140,7 @@ export class ArchimedesAlternatorStrategy extends BaseOrchestrationStrategy {
       initialHistory: opts.initialHistory,
       abortSignal: opts.abortSignal,
       healthTracker: opts.healthTracker,
+      maxTurns: opts.maxTurns,
     });
     const res: AlternatorRunResult = await alternator.run(task);
     return {
