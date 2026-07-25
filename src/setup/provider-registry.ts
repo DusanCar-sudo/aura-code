@@ -141,6 +141,21 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     models: [], // Auto-detect from running Ollama instance
   },
   {
+    name: 'ZenMux',
+    baseUrl: 'https://zenmux.ai/api/v1',
+    envKey: 'ZENMUX_API_KEY',
+    signupUrl: 'https://zenmux.ai',
+    models: [
+      // Free-tier models ($0/Mtok input + output). Same key covers every
+      // model on zenmux.ai/models; paid models need subscription/balance.
+      { id: 'zenmux/anthropic/claude-sonnet-5-free',  label: 'Claude Sonnet 5 (free)',         speed: 'Powerful · free', contextWindow: 200_000 },
+      { id: 'zenmux/moonshotai/kimi-k2.7-code-free',  label: 'Kimi K2.7 Code (free)',          speed: 'Fast · code · free', contextWindow: 128_000 },
+      { id: 'zenmux/moonshotai/kimi-k3-free',         label: 'Kimi K3 (free)',                 speed: 'Fast · free', contextWindow: 128_000 },
+      { id: 'zenmux/stepfun/step-3.7-flash-free',     label: 'StepFun Step 3.7 Flash (free)',  speed: 'Fast · free', contextWindow: 128_000 },
+      { id: 'zenmux/inclusionai/ling-3.0-flash',      label: 'InclusionAI Ling 3.0 Flash',     speed: 'Fast · cheap', contextWindow: 128_000 },
+    ],
+  },
+  {
     name: 'Custom endpoint',
     baseUrl: '', // User provides
     envKey: null,

@@ -42,7 +42,7 @@ export function getCustomProviders(): ProviderDef[] {
  * up against registry entries (which store unprefixed ids).
  */
 function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
+  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|zenmux|inclusionai)\//, '');
 }
 
 /**
@@ -100,6 +100,13 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   if (m.startsWith('gmi/')) return 'GMI_API_KEY';
   if (m.startsWith('kilocode/')) return 'KILOCODE_API_KEY';
   if (m.startsWith('alibaba/')) return 'ALIBABA_API_KEY';
+  // ZenMux routes both 'zenmux/<vendor>/<model>' (canonical) and bare
+  // 'inclusionai/<model>' / '<vendor>/<model>' ids via the ZenMux gateway —
+  // a single API key covers every model listed on zenmux.ai/models.
+  if (
+    m.startsWith('zenmux/')
+    || m.startsWith('inclusionai/')
+  ) return 'ZENMUX_API_KEY';
   return undefined;
 }
 
@@ -141,7 +148,17 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('gmi/')) return 'gmi';
   if (m.startsWith('kilocode/')) return 'kilocode';
   if (m.startsWith('alibaba/')) return 'alibaba';
+  if (m.startsWith('zenmux/')) return 'zenmux';
+  // Bare <vendor>/<model> ids (e.g. inclusionai/ling-3.0-flash) are exposed
+  // through ZenMux as a multi-vendor gateway; treat them as ZenMux so the
+  // api-key resolver and routing land on the right endpoint.
+  if (/^[a-z0-9._-]+\/.+/.test(m) && !looksLikeCloudNativeFamily(m)) return 'zenmux';
   return 'openai-compatible';
+}
+
+/** True for families that should *not* be assimilated into the ZenMux gateway. */
+function looksLikeCloudNativeFamily(m: string): boolean {
+  return /^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|deepseek|claude|gpt-|o[134]|grok|openrouter)\//.test(m);
 }
 
 const FAMILY_API_KEY_ENV: Record<string, string> = {
@@ -167,6 +184,7 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   gmi: 'GMI_API_KEY',
   kilocode: 'KILOCODE_API_KEY',
   alibaba: 'ALIBABA_API_KEY',
+  zenmux: 'ZENMUX_API_KEY',
   'openai-compatible': 'OPENAI_API_KEY',
 };
 
@@ -217,6 +235,7 @@ const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://openrouter.ai/api/v1': 'openrouter',
   'https://api.x.ai/v1': 'xai',
   'https://opencode.ai/zen/v1': 'opencode',
+  'https://zenmux.ai/api/v1': 'zenmux',
 };
 
 function baseUrlFamily(url: string | undefined): string | undefined {
@@ -560,6 +579,21 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     }, 'Local (Ollama)');
   }
 
+  // ── ZenMux (multi-vendor gateway, zenmux.ai) ──────────────────────────────
+  // ZenMux speaks the OpenAI chat-completions wire format and exposes vendor
+  // namespaced ids (e.g. 'anthropic/claude-sonnet-5-free',
+  // 'moonshotai/kimi-k2.7-code-free'). All entries under 'zenmux/' route to
+  // https://zenmux.ai/api/v1 with a single ZENMUX_API_KEY. ZenMux also lists
+  // a tier of $0/Mtok free models we explicitly enumerate in KNOWN_MODELS.
+  if (model.startsWith('zenmux/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('zenmux/', ''),
+      baseUrl: config.baseUrl ?? getEnv('ZENMUX_BASE_URL') ?? 'https://zenmux.ai/api/v1',
+      apiKey: config.apiKey ?? getApiKey('ZENMUX_API_KEY'),
+    }, 'ZenMux');
+  }
+
   // ── OpenAI (default OpenAI-compatible fallback) ───────────────────────────
   // Guard the silent 401 path: an unrecognized model with no baseUrl and no
   // OpenAI key would be sent to api.openai.com and fail — tell the user what
@@ -694,6 +728,18 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'local/qwen2.5-coder-32b-instruct',  name: 'Qwen 2.5 Coder 32B (local)', provider: 'Local', speed: 'Local · code' },
   { id: 'local/llama-3.3-70b-instruct',      name: 'Llama 3.3 70B (local)',      provider: 'Local', speed: 'Local · strong' },
   { id: 'local/mistral-large',               name: 'Mistral Large (local)',      provider: 'Local', speed: 'Local · powerful' },
+
+  // ── ZenMux (zenmux.ai) — multi-vendor gateway, single API key ─────────
+  // Free tier ($0/Mtok input + output). Endpoint: https://zenmux.ai/api/v1
+  // (OpenAI-compatible). Free tier account gives 5 Flows per 5h; paid models
+  // need a subscription or token balance on the same key.
+  { id: 'zenmux/anthropic/claude-sonnet-5-free',   name: 'Claude Sonnet 5 (ZenMux free)',         provider: 'ZenMux', speed: 'Powerful · free' },
+  { id: 'zenmux/moonshotai/kimi-k2.7-code-free',   name: 'Kimi K2.7 Code (ZenMux free)',          provider: 'ZenMux', speed: 'Fast · code · free' },
+  { id: 'zenmux/moonshotai/kimi-k3-free',          name: 'Kimi K3 (ZenMux free)',                 provider: 'ZenMux', speed: 'Fast · free' },
+  { id: 'zenmux/stepfun/step-3.7-flash-free',      name: 'StepFun Step 3.7 Flash (ZenMux free)',  provider: 'ZenMux', speed: 'Fast · free' },
+  { id: 'zenmux/inclusionai/ling-3.0-flash',       name: 'InclusionAI Ling 3.0 Flash (ZenMux)',   provider: 'ZenMux', speed: 'Fast · cheap' },
+  // Bare multi-vendor ids through ZenMux (no zenmux/ prefix) — same key, same gateway.
+  { id: 'inclusionai/ling-3.0-flash',              name: 'InclusionAI Ling 3.0 Flash (ZenMux)',   provider: 'ZenMux', speed: 'Fast · cheap' },
 ];
 
 const LIVE_PREFERRED_PROVIDERS = new Set(['Anthropic', 'OpenAI', 'Google', 'OpenRouter']);
@@ -801,6 +847,7 @@ export function isModelConfigured(modelId: string): boolean {
   if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')) {
     return hasApiKey('OPENAI_API_KEY');
   }
+  if (model.startsWith('zenmux/')) return hasApiKey('ZENMUX_API_KEY');
 
   if (savedCfg?.apiKey && savedCfg.model === modelId) return true;
 
