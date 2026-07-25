@@ -8,7 +8,7 @@ vi.mock('../src/providers/factory.js', () => ({
   getContextWindow: (model: string) => (model === 'test-model' ? WINDOW : undefined),
 }));
 
-const { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } =
+const { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION, countText } =
   await import('../src/agent/compactor.js');
 
 const user = (content: string): HistoryMessage => ({ role: 'user', content });
@@ -17,12 +17,23 @@ const assistant = (content: string, toolCalls?: HistoryMessage extends never ? n
 const toolResult = (name: string, content: string): HistoryMessage =>
   ({ role: 'tool_result', results: [{ id: 't1', name, content, isError: false }] });
 
-/** ~tokens → string (compactor falls back to 3.5 chars/token). */
-const text = (tokens: number) => 'x'.repeat(Math.ceil(tokens * 3.5));
+/**
+ * ~tokens → string, sized by the compactor's own counter.
+ *
+ * Deliberately not `'x'.repeat(tokens * 3.5)`: that hardcoded the char-ratio
+ * fallback, so installing the exact tokenizer (gpt-tokenizer) silently
+ * shrank every fixture below its threshold. A run of identical characters
+ * also BPE-compresses to almost nothing, making the drift far worse than the
+ * ratio difference alone. Varied words tokenize predictably, and measuring a
+ * chunk once keeps this correct under either counting mode.
+ */
+const CHUNK = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do ';
+const CHUNK_TOKENS = countText(CHUNK);
+const text = (tokens: number) => CHUNK.repeat(Math.ceil(tokens / CHUNK_TOKENS));
 
 function bigHistory(): HistoryMessage[] {
-  // 1 task + 5 turns of (user ~900 + assistant + tool_result ~900) ≈ 9,100
-  // tokens under the 3.5-chars/token fallback — above the 7,500 threshold.
+  // 1 task + 5 turns of (user ~900 + assistant + tool_result ~900) ≈ 9,000
+  // tokens by the compactor's own counter — above the 7,500 threshold.
   const h: HistoryMessage[] = [user('original task: refactor the parser')];
   for (let i = 0; i < 5; i++) {
     h.push(user(`instruction ${i} ` + text(900)));

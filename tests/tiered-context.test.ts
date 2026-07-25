@@ -24,7 +24,7 @@ vi.mock('../src/providers/factory.js', () => ({
 }));
 
 const { compactHistoryTiered } = await import('../src/agent/tiered-context.js');
-const { computeTailBoundary } = await import('../src/agent/compactor.js');
+const { computeTailBoundary, countText } = await import('../src/agent/compactor.js');
 
 const user = (content: string): HistoryMessage => ({ role: 'user', content });
 const assistant = (content: string, toolCalls?: any[]): HistoryMessage =>
@@ -32,7 +32,12 @@ const assistant = (content: string, toolCalls?: any[]): HistoryMessage =>
 const toolResult = (name: string, content: string): HistoryMessage =>
   ({ role: 'tool_result', results: [{ id: 't1', name, content, isError: false }] });
 
-const text = (tokens: number) => 'x'.repeat(Math.ceil(tokens * 3.5));
+// Sized by the compactor's own counter rather than a hardcoded char-ratio, so
+// these fixtures stay above the trigger whether or not the exact tokenizer is
+// installed. (A run of identical characters BPE-compresses to near nothing.)
+const CHUNK = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do ';
+const CHUNK_TOKENS = countText(CHUNK);
+const text = (tokens: number) => CHUNK.repeat(Math.ceil(tokens / CHUNK_TOKENS));
 
 function bigHistory(): HistoryMessage[] {
   const h: HistoryMessage[] = [user('original task: refactor the parser')];
@@ -46,8 +51,9 @@ function bigHistory(): HistoryMessage[] {
 
 function estimate(h: HistoryMessage[]): number {
   // Cheap local stand-in for estimateContextTokens (avoids importing the
-  // real system-prompt-aware helper) — same char/3.5 fallback ratio.
-  return h.reduce((sum, m) => sum + JSON.stringify(m).length / 3.5, 0);
+  // real system-prompt-aware helper). Counts via the compactor's own counter
+  // so it tracks whichever mode is active rather than assuming char/3.5.
+  return h.reduce((sum, m) => sum + countText(JSON.stringify(m)), 0);
 }
 
 describe('compactHistoryTiered', () => {
