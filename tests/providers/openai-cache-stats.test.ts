@@ -46,6 +46,29 @@ describe('readCacheStats', () => {
   });
 });
 
+describe('reported flag (guards AURA_DEBUG_CACHE noise)', () => {
+  // cacheMiss falls back to the whole prompt when a provider reports nothing,
+  // which made `cacheMiss > 0` always true and printed a [cache] line on every
+  // streamed chunk — dozens of identical lines per response.
+  it('is false when the provider sends no cache fields at all', () => {
+    const s = readCacheStats(usage({}));
+    expect(s.reported).toBe(false);
+    expect(s.cacheMiss).toBe(100_000);   // inferred, not measured
+  });
+
+  it('is true for the OpenAI-standard dialect, even at a zero hit', () => {
+    expect(readCacheStats(usage({ prompt_tokens_details: { cached_tokens: 0 } })).reported).toBe(true);
+  });
+
+  it('is true for the DeepSeek dialect, even at a zero hit', () => {
+    expect(readCacheStats(usage({ prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 100_000 })).reported).toBe(true);
+  });
+
+  it('is true when only the miss field is present', () => {
+    expect(readCacheStats(usage({ prompt_cache_miss_tokens: 500 })).reported).toBe(true);
+  });
+});
+
 describe('billing impact of the fix', () => {
   // The bug this fixes: a fully-cached GLM turn was billed at the full rate
   // because the standard field was never read.
