@@ -83,6 +83,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
     let finishReason: string | undefined;
+    // AURA_DEBUG_CACHE prints one line per API call. Some providers attach
+    // `usage` to every streamed chunk, so without this the same figures
+    // scrolled dozens of times per response and buried the actual output.
+    let loggedCacheDebug = false;
 
     // CRITICAL: do NOT return early when finish_reason arrives.
     // With stream_options.include_usage, OpenAI sends a trailing usage-only
@@ -91,13 +95,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
       if (chunk.usage) {
-        const { cacheHit, cacheMiss } = readCacheStats(chunk.usage);
+        const { cacheHit, cacheMiss, reported } = readCacheStats(chunk.usage);
         usage = {
           inputTokens: chunk.usage.prompt_tokens ?? 0,
           outputTokens: chunk.usage.completion_tokens ?? 0,
           ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
         };
-        if (process.env.AURA_DEBUG_CACHE && (cacheHit > 0 || cacheMiss > 0)) {
+        // Only when the provider actually reported cache figures: otherwise
+        // `miss` is inferred from the prompt size and printing it would imply
+        // a measured miss where nothing was measured at all.
+        if (process.env.AURA_DEBUG_CACHE && reported && !loggedCacheDebug) {
+          loggedCacheDebug = true;
           console.error(`[cache] hit=${cacheHit} miss=${cacheMiss} input=${chunk.usage.prompt_tokens ?? 0}`);
         }
       }
@@ -255,7 +263,9 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
  *
  * The SDK passes unknown fields through, so both dialects are readable here.
  */
-export function readCacheStats(usage: OpenAI.CompletionUsage): { cacheHit: number; cacheMiss: number } {
+export function readCacheStats(
+  usage: OpenAI.CompletionUsage,
+): { cacheHit: number; cacheMiss: number; reported: boolean } {
   const u = usage as OpenAI.CompletionUsage & {
     prompt_cache_hit_tokens?: number;
     prompt_cache_miss_tokens?: number;
@@ -264,14 +274,21 @@ export function readCacheStats(usage: OpenAI.CompletionUsage): { cacheHit: numbe
 
   // Prefer whichever dialect actually reports a hit; a provider that sends
   // neither yields 0 and cachedTokens stays unset (full-rate billing).
-  const standard = u.prompt_tokens_details?.cached_tokens ?? 0;
-  const deepseek = u.prompt_cache_hit_tokens ?? 0;
-  const cacheHit = Math.max(standard, deepseek);
+  const standard = u.prompt_tokens_details?.cached_tokens;
+  const deepseek = u.prompt_cache_hit_tokens;
+  const cacheHit = Math.max(standard ?? 0, deepseek ?? 0);
 
   const prompt = u.prompt_tokens ?? 0;
   const cacheMiss = u.prompt_cache_miss_tokens ?? Math.max(0, prompt - cacheHit);
 
-  return { cacheHit, cacheMiss };
+  // Whether any cache field was present at all. `cacheMiss` falls back to the
+  // whole prompt when nothing was reported, so callers that would otherwise
+  // read "miss = 20,940" as a measurement need to tell the two apart — an
+  // inferred miss says nothing about whether the provider caches.
+  const reported =
+    standard !== undefined || deepseek !== undefined || u.prompt_cache_miss_tokens !== undefined;
+
+  return { cacheHit, cacheMiss, reported };
 }
 
 // -- Auto-resolution helpers --------------------------------------------------
