@@ -2,7 +2,14 @@ export const DEFAULTS = {
   // No default model — the user picks their own on first run via the wizard.
   // This keeps the codebase provider-agnostic: nothing here assumes a specific vendor.
   defaultModel: undefined as string | undefined,
-  maxTokens: 32000,
+  // NOTE: there is deliberately no `maxTokens` here. Per-call output caps are
+  // per-provider, because each vendor's ceiling differs, and the factory never
+  // passed a value through — so a `maxTokens` on this object was dead config
+  // that disagreed with what actually shipped. The live defaults are:
+  //   openai-compatible.ts  16384
+  //   anthropic.ts           8192
+  //   google.ts              8192
+  // Override per provider via ProviderConfig.maxTokens.
   maxContextFiles: 20,
   maxFileLinesInContext: 300,
   maxDirDepth: 4,

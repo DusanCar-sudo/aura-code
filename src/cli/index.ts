@@ -2594,6 +2594,14 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
+  if (input === '/cost' || input.startsWith('/cost ')) {
+    const { readTokenLog, formatCostReport } = await import('./cost-report.js');
+    const arg = input.startsWith('/cost ') ? input.slice('/cost '.length).trim() : '';
+    const recent = /^\d+$/.test(arg) ? Number(arg) : 20;
+    console.log(formatCostReport(readTokenLog(c.ctx.root), recent));
+    return { handled: true };
+  }
+
   if (input === '/context tune') {
     const u = c.cumulative;
     const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);

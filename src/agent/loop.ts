@@ -416,14 +416,24 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
               usage.outputTokens += outT;
               usage.totalTokens += inT + outT;
               usage.cachedTokens += cachedT;
+              const at = new Date().toISOString();
+              const turnCost = costFor(pricingModel, inT, outT, cachedT);
               turnUsage.push({
                 turn: turns,
-                at: new Date().toISOString(),
+                at,
                 inputTokens: inT,
                 outputTokens: outT,
                 cachedTokens: cachedT,
                 cacheCreationTokens: u.cacheCreationTokens ?? 0,
-                costUsd: costFor(pricingModel, inT, outT, cachedT),
+                costUsd: turnCost,
+              });
+              logTokenUsage(opts.context.root, {
+                turn: turns, ts: at, model: provider.model,
+                input: inT, output: outT,
+                cacheHit: cachedT, cacheWrite: u.cacheCreationTokens ?? 0,
+                hitRatio: inT > 0 ? cachedT / inT : 0,
+                costUsd: turnCost,
+                ...(opts.sessionPath ? { sessionId: path.basename(opts.sessionPath, '.json') } : {}),
               });
             }
             break;
@@ -696,6 +706,39 @@ function logContextMetrics(root: string, entry: Record<string, unknown>): void {
       JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + '\n',
     );
   } catch { /* metrics logging is best-effort */ }
+}
+
+/** One per-call record in <root>/.aura/token-log.jsonl. */
+export interface TokenLogEntry {
+  turn: number;
+  ts: string;
+  model: string;
+  input: number;
+  output: number;
+  cacheHit: number;
+  cacheWrite: number;
+  /** cacheHit / input, 0 when input is 0. The number that actually matters. */
+  hitRatio: number;
+  costUsd: number;
+  sessionId?: string;
+}
+
+/**
+ * Append one line per provider call to <root>/.aura/token-log.jsonl.
+ *
+ * Separate from context-metrics.jsonl (which only records compaction events):
+ * a session can be ruinously expensive without ever compacting, which is
+ * exactly the failure this exists to make visible. Cache hit ratio is the
+ * dominant cost lever — a 98%-cached call costs ~1/10th of an uncached one at
+ * the same token count — but it was previously invisible unless you dug
+ * through session JSON after the fact.
+ */
+function logTokenUsage(root: string, entry: TokenLogEntry): void {
+  try {
+    const dir = path.join(root, '.aura');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'token-log.jsonl'), JSON.stringify(entry) + '\n');
+  } catch { /* logging is best-effort — never break a run over telemetry */ }
 }
 
 function formatCallForConfirmation(call: ToolCall): string {
