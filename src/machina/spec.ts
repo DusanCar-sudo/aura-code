@@ -86,10 +86,10 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
   {
     id: 'compaction-threshold',
     component: 'limit',
-    description: 'The state-space pressure-relief valve: history is compacted on a generational ladder (55%, then 70%, then 85% of the context window), keeping S finite in practice.',
-    file: 'src/agent/compactor.ts',
-    line: 13,
-    mustContain: 'LADDER = [0.55, 0.70, 0.85]',
+    description: 'The state-space pressure-relief valve: history is compacted on a generational ladder (by default 55%, then 70%, then 85% of the context window), keeping S finite in practice. The ladder is user-tunable via .aura.json or /context tune; these are the defaults.',
+    file: 'src/agent/context-policy.ts',
+    line: 23,
+    mustContain: 'DEFAULT_LADDER: readonly number[] = [0.55, 0.70, 0.85]',
   },
   {
     id: 'compaction-check',
