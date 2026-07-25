@@ -4,7 +4,64 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-07-25
+
+The Gazelle release: a lean conversational path alongside the coding agent, so
+the cheap 90% of what you say to Aura stops paying the coding agent's price.
+
+### Added
+- **Gazelle mode** — a lean conversational path alongside the coding agent.
+  No tool schemas, no project context, no Archimedes, no verification gate.
+  Launch with `--gazelle`, `--mode gazelle`, or `AURA_MODE=gazelle`.
+
+  Measured on this repo with Aura's own tokenizer (`estimateContextTokens`),
+  the fixed per-turn context drops from **9,367 tokens** (4,793 system prompt +
+  project context, 4,574 for 25 tool schemas) to **356** — a **26x** reduction,
+  9,011 tokens saved on every single turn. Cumulative savings across a whole
+  conversation are much larger, since the coding agent's history also
+  accumulates file contents and tool output, but that multiple depends entirely
+  on how many tools a given session calls — it is not a fixed spec.
+- **Session-end conversational memory** — a rolling situational summary written
+  when a Gazelle session ends, giving continuity across sessions without a
+  visible memory dump. Gazelle uses it as background knowledge rather than
+  announcing it.
+- **Bidirectional mode switching** — `:coder` hands off to the full coding
+  agent, `:gazelle` drops back to the lean path, and conversation history
+  carries across in both directions. Gazelle also recognizes when a request
+  needs tools and offers to switch on its own, detected from its own response
+  text via a regex rather than an extra classifier call, so the detection costs
+  nothing per turn.
+- `.auraignore` — one glob per line; matching directories are excluded from the
+  project tree sent to the system prompt. Mirrors `.rgignore`, which governs
+  search instead.
+- Archimedes now sees only read-only tools during its attempts (`read_file`,
+  `list_dir`, `search_code`, `search_semantic`) instead of the full registry,
+  cutting the tool-schema cost of every Archimedes turn.
+
+### Fixed
+- `maxTurns` was not propagated from CLI flags into `ArchimedesAlternator` or
+  the large-model escalation fallback, so a single question could run far past
+  `--max-turns` and consume turns (and tokens) that had been explicitly capped.
+- Telegram bot (`aura-telegram.service`) pinned a CPU core at 100% on every
+  start and never came up. The unit ran `npx tsx src/tools/telegram-bot.ts`,
+  but `tsx` is neither a dependency nor present in `node_modules` — so npx
+  resolved and installed it from the network on each start, burning ~110s of
+  CPU per 110s of wall clock and growing `~/.npm/_npx` to 3.1 GB, while the bot
+  never reached its startup banner. It now runs the compiled build with plain
+  `node` (see "Telegram bot service" in the README): startup is under a second
+  at 0.2s CPU. A `Restart=on-failure` / `RestartSec=15` policy with a 5-in-5min
+  retry cap was added as a guard, though the bot's poll loop already handles
+  409 Conflicts in-band and never exits on them.
+- Telegram bot `/help` was Serbian while the rest of its output was English; it
+  is now English throughout. Its startup banner also resolved the bot name from
+  a hardcoded string, which could name the wrong bot after a token change — it
+  now reports the identity `getMe` returns.
+
 ### Changed
+- Google provider calls `generateContent` / `generateContentStream` directly
+  instead of building a `startChat` session and replaying history into it,
+  which removes a redundant split of the last message from the rest of the
+  conversation on every request.
 - **The small-model alternator is renamed from "Ruby" to "Archimedes".**
   The name "Ruby" meant three things at once (the programming language in
   `src/orchestration/ruby-detect.ts`, the pre-Aura product persona, and the

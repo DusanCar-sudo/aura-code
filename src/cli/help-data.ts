@@ -7,6 +7,10 @@
 
 export const HELP_TEXT = [
   '',
+  '  ── Modes ────────────────────────────────────────',
+  '  :coder                  Switch to full coding-agent mode (tools, project context)',
+  '  :gazelle                Switch to lean conversational mode',
+  '',
   '  ── Session ──────────────────────────────────────',
   '  :id                     Show current chat ID',
   '  :sessions               List all saved sessions',
