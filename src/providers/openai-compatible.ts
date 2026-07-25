@@ -91,22 +91,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
       if (chunk.usage) {
-        // DeepSeek reports cache stats via prompt_cache_hit_tokens /
-        // prompt_cache_miss_tokens in the usage object. The OpenAI SDK
-        // passes unknown fields through, so we can read them here.
-        const raw = chunk.usage as OpenAI.CompletionUsage & {
-          prompt_cache_hit_tokens?: number;
-          prompt_cache_miss_tokens?: number;
-        };
-        const cacheHit = raw.prompt_cache_hit_tokens ?? 0;
-        const cacheMiss = raw.prompt_cache_miss_tokens ?? 0;
+        const { cacheHit, cacheMiss } = readCacheStats(chunk.usage);
         usage = {
           inputTokens: chunk.usage.prompt_tokens ?? 0,
           outputTokens: chunk.usage.completion_tokens ?? 0,
-          // Only set cachedTokens when the provider actually reports them
-          // (DeepSeek). Other OpenAI-compatible providers don't set these
-          // fields, so cachedTokens stays undefined and costFor uses the
-          // standard rate for all input tokens.
           ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
         };
         if (process.env.AURA_DEBUG_CACHE && (cacheHit > 0 || cacheMiss > 0)) {
@@ -238,13 +226,10 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
     choice.finish_reason === 'tool_calls' ? 'tools' :
     choice.finish_reason === 'length' ? 'limit' : 'done';
 
-  const u = response.usage as OpenAI.CompletionUsage & {
-    prompt_cache_hit_tokens?: number;
-    prompt_cache_miss_tokens?: number;
-  } | undefined;
+  const u = response.usage;
   if (!u) return { text, toolCalls, stopReason };
 
-  const cacheHit = u.prompt_cache_hit_tokens ?? 0;
+  const { cacheHit } = readCacheStats(u);
   return {
     text, toolCalls, stopReason,
     usage: {
@@ -253,6 +238,40 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
       ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
     },
   };
+}
+
+/**
+ * Read prompt-cache stats from an OpenAI-compatible usage object.
+ *
+ * Two dialects are in the wild and providers pick one:
+ *  - OpenAI standard: `prompt_tokens_details.cached_tokens` (OpenAI itself,
+ *    Zhipu/GLM, and most compatible vendors).
+ *  - DeepSeek: top-level `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`.
+ *
+ * Only the DeepSeek pair used to be read, so every other provider reported no
+ * cache hits and costFor billed the whole prompt at the uncached rate — which
+ * silently overstated cost by up to ~10x on a cached turn and made it
+ * impossible to tell whether caching was working at all.
+ *
+ * The SDK passes unknown fields through, so both dialects are readable here.
+ */
+export function readCacheStats(usage: OpenAI.CompletionUsage): { cacheHit: number; cacheMiss: number } {
+  const u = usage as OpenAI.CompletionUsage & {
+    prompt_cache_hit_tokens?: number;
+    prompt_cache_miss_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+  };
+
+  // Prefer whichever dialect actually reports a hit; a provider that sends
+  // neither yields 0 and cachedTokens stays unset (full-rate billing).
+  const standard = u.prompt_tokens_details?.cached_tokens ?? 0;
+  const deepseek = u.prompt_cache_hit_tokens ?? 0;
+  const cacheHit = Math.max(standard, deepseek);
+
+  const prompt = u.prompt_tokens ?? 0;
+  const cacheMiss = u.prompt_cache_miss_tokens ?? Math.max(0, prompt - cacheHit);
+
+  return { cacheHit, cacheMiss };
 }
 
 // -- Auto-resolution helpers --------------------------------------------------

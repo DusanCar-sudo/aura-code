@@ -207,7 +207,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     finalTask = `${task}\n\n${report}`;
   }
 
-  const profile = getLoopProfile(finalTask, opts.maxTurns);
+  const profile = getLoopProfile(opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
   const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name, finalTask);
@@ -270,11 +270,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const turnSignatures: string[] = [];
   let stall: StallKind | null = null;
 
-  // Adaptive widening: a run that hits its profile ceiling while still
-  // making progress gets ONE upgrade to profile.widenTo instead of dying
-  // with a resume hint. Explicit --max-turns never widens.
-  let maxTurns = profile.maxTurns;
-  let widened = false;
+  // Flat ceiling — checked once per turn, no widening. See loop-profile.ts
+  // for why this replaced the old shape-based ladder.
+  const maxTurns = profile.maxTurns;
 
   // Mutable bag for per-loop state (empty-response retry counter, etc.).
   const loopState: Record<string, number> = {};
@@ -310,17 +308,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   let primaryArgLoopReason: string | null = null;
 
   while (true) {
-    if (turns >= maxTurns) {
-      if (profile.widenTo !== undefined && !widened) {
-        widened = true;
-        maxTurns = profile.widenTo;
-        display.warning(
-          `Turn budget (${profile.maxTurns}) reached with work in progress — widening once to ${maxTurns}.`,
-        );
-      } else {
-        break;
-      }
-    }
+    // Flat turn cap — pi's loop has no equivalent check at all (it runs
+    // until the model stops calling tools); this is the one guard we kept.
+    if (turns >= maxTurns) break;
 
     // Abort check — user requested stop via :stop / Ctrl+C
     if (opts.abortSignal?.aborted) {
@@ -668,7 +658,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const reason = primaryArgLoopReason ? primaryArgLoopReason
     : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
     : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
-    : `ended after ${turns} turns${widened ? `, after widening once from ${profile.maxTurns}` : ''}`;
+    : `ended after ${turns} turns (cap: ${profile.maxTurns})`;
   return {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,

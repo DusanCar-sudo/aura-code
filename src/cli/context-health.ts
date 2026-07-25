@@ -7,10 +7,10 @@ import chalk from 'chalk';
 import { TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
 import type { HistoryMessage } from '../providers/types.js';
 import { estimateContextTokens, countMessage, countText, getRecapGeneration } from '../agent/compactor.js';
+import { getLadder, compactionThreshold } from '../agent/context-policy.js';
 import { getContextWindow } from '../providers/factory.js';
 import { costFor } from '../agent/loop.js';
 
-const LADDER = [0.55, 0.70, 0.85] as const;
 const ROLLOVER_AT_GENERATION = 3;
 const DEFAULT_WINDOW = 128_000;
 
@@ -77,9 +77,12 @@ export class ContextHealthTracker {
     const contextWindow = getContextWindow(this.model) ?? DEFAULT_WINDOW;
     const usagePercent = (estimatedTokens / contextWindow) * 100;
     const recapGeneration = getRecapGeneration(history);
-    const genIndex = Math.min(recapGeneration, LADDER.length - 1);
-    const nextCompactionPercent = Math.round(LADDER[genIndex] * 100);
-    const nextCompactionThreshold = Math.floor(contextWindow * LADDER[genIndex]);
+    const nextCompactionThreshold = compactionThreshold(contextWindow, recapGeneration);
+    // Percent reflects the threshold actually in force, so a capped run shows
+    // the real trigger (e.g. 8% of a 1M window) rather than the ladder rung.
+    const nextCompactionPercent = contextWindow > 0
+      ? Math.round((nextCompactionThreshold / contextWindow) * 100)
+      : 0;
     const tokensUntilCompaction = Math.max(0, nextCompactionThreshold - estimatedTokens);
 
     return {
@@ -117,7 +120,7 @@ function getLargestMessages(history: HistoryMessage[], system: string, n: number
 export function formatContextBar(h: ContextHealth): string {
   const barWidth = 20;
   const filled = Math.max(0, Math.min(barWidth, Math.round((h.usagePercent / 100) * barWidth)));
-  const ladderPos = LADDER.map(r => Math.floor(r * barWidth));
+  const ladderPos = getLadder().map(r => Math.floor(r * barWidth));
   let bar = '';
   for (let i = 0; i < barWidth; i++) {
     if (i < filled) bar += '\u2588';
@@ -138,7 +141,7 @@ export function formatContextDashboard(h: ContextHealth): string {
   const line = '\u2500'.repeat(Math.min(w - 4, 60));
   const barWidth = 30;
   const filled = Math.max(0, Math.min(barWidth, Math.round((h.usagePercent / 100) * barWidth)));
-  const ladderPos = LADDER.map(r => Math.floor(r * barWidth));
+  const ladderPos = getLadder().map(r => Math.floor(r * barWidth));
   let bar = '';
   for (let i = 0; i < barWidth; i++) {
     if (i < filled) bar += '\u2588';
@@ -193,7 +196,7 @@ export function formatContextDashboard(h: ContextHealth): string {
 }
 
 function formatLadder(generation: number): string {
-  const rungs = LADDER.map((r, i) => {
+  const rungs = getLadder().map((r, i) => {
     const pct = (r * 100).toFixed(0) + '%';
     if (i < generation) return chalk.hex('#5a9e6e')(pct + ' \u2713');
     if (i === generation) return chalk.hex('#d4903a')(pct + ' pending');
