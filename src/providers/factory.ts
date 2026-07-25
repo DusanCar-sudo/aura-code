@@ -103,11 +103,20 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   // ZenMux routes both 'zenmux/<vendor>/<model>' (canonical) and bare
   // 'inclusionai/<model>' / '<vendor>/<model>' ids via the ZenMux gateway —
   // a single API key covers every model listed on zenmux.ai/models.
-  if (
-    m.startsWith('zenmux/')
-    || m.startsWith('inclusionai/')
-  ) return 'ZENMUX_API_KEY';
+  if (isZenMuxModel(m)) return 'ZENMUX_API_KEY';
   return undefined;
+}
+
+/**
+ * True for model ids the ZenMux gateway serves.
+ *
+ * Single source of truth shared by apiKeyEnvVarForModel, modelProviderFamily
+ * and createProvider: when key resolution and transport routing disagree, the
+ * result is a request sent to one vendor carrying another vendor's key, which
+ * surfaces as an opaque 401. Callers must lowercase first.
+ */
+function isZenMuxModel(m: string): boolean {
+  return m.startsWith('zenmux/') || m.startsWith('inclusionai/');
 }
 
 /**
@@ -148,17 +157,8 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('gmi/')) return 'gmi';
   if (m.startsWith('kilocode/')) return 'kilocode';
   if (m.startsWith('alibaba/')) return 'alibaba';
-  if (m.startsWith('zenmux/')) return 'zenmux';
-  // Bare <vendor>/<model> ids (e.g. inclusionai/ling-3.0-flash) are exposed
-  // through ZenMux as a multi-vendor gateway; treat them as ZenMux so the
-  // api-key resolver and routing land on the right endpoint.
-  if (/^[a-z0-9._-]+\/.+/.test(m) && !looksLikeCloudNativeFamily(m)) return 'zenmux';
+  if (isZenMuxModel(m)) return 'zenmux';
   return 'openai-compatible';
-}
-
-/** True for families that should *not* be assimilated into the ZenMux gateway. */
-function looksLikeCloudNativeFamily(m: string): boolean {
-  return /^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|deepseek|claude|gpt-|o[134]|grok|openrouter)\//.test(m);
 }
 
 const FAMILY_API_KEY_ENV: Record<string, string> = {
@@ -585,10 +585,14 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   // 'moonshotai/kimi-k2.7-code-free'). All entries under 'zenmux/' route to
   // https://zenmux.ai/api/v1 with a single ZENMUX_API_KEY. ZenMux also lists
   // a tier of $0/Mtok free models we explicitly enumerate in KNOWN_MODELS.
-  if (model.startsWith('zenmux/')) {
+  // Bare vendor ids (e.g. 'inclusionai/ling-3.0-flash') are matched too:
+  // KNOWN_MODELS lists them as selectable, and apiKeyEnvVarForModel already
+  // hands them ZENMUX_API_KEY — without this they fell through to the OpenAI
+  // fallback below and were sent to api.openai.com carrying a ZenMux key.
+  if (isZenMuxModel(model.toLowerCase())) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('zenmux/', ''),
+      model: model.replace(/^zenmux\//, ''),
       baseUrl: config.baseUrl ?? getEnv('ZENMUX_BASE_URL') ?? 'https://zenmux.ai/api/v1',
       apiKey: config.apiKey ?? getApiKey('ZENMUX_API_KEY'),
     }, 'ZenMux');
