@@ -7,6 +7,11 @@ import { sessionStore } from './session-store.js';
 import { compactHistory, estimateContextTokens, countText } from './compactor.js';
 import { getContextWindow } from '../providers/factory.js';
 import { formatProviderError } from './loop.js';
+import { writeConversationalMemory } from './gazelle-memory-writer.js';
+
+// Below this total token count nothing substantive happened, so the one
+// session-end memory rewrite isn't worth its own model call — skip it.
+const MEMORY_MIN_TOKENS = 200;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gazelle loop — the conversational counterpart to runAgentLoop.
@@ -159,4 +164,11 @@ export async function runGazelleLoop(opts: GazelleLoopOptions): Promise<void> {
 
   rl.close();
   printStats();
+
+  // Session-end conversational memory: one cheap rewrite so the next session
+  // opens already knowing where things stand. Awaited (not fire-and-forget)
+  // so it finishes before the process exits, but only when enough happened.
+  if (totalInput + totalOutput >= MEMORY_MIN_TOKENS) {
+    await writeConversationalMemory(history, provider.model);
+  }
 }

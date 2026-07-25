@@ -151,15 +151,20 @@ export function loadUnifiedMemory(opts: UnifiedMemoryOptions = {}): string {
 /** Rolling situational summary. Written in Phase 2; may not exist yet. */
 export const CONVERSATIONAL_FILE = path.join(MEMORY_DIR, 'conversational.md');
 
-/** Per-field cap; the two fields together are further clamped to the total. */
-const GAZELLE_FIELD_CAP = 400;
+// Phase 2 raised the total cap from 800 → 1,000: a populated situation summary
+// runs 400–600 chars and identity ~395, which overflowed 800. 1,000 chars is
+// still tiny (~250 tokens) vs. the coder path's 6,000-char memory block, and it
+// keeps a full situation from crowding out the identity line. Conversational
+// (the more current signal) is read first and gets the larger per-field cap.
+const GAZELLE_CONV_CAP = 600;
+const GAZELLE_IDENTITY_CAP = 400;
 /** Hard cap on identity + conversational combined. */
-const GAZELLE_TOTAL_CAP = 800;
+const GAZELLE_TOTAL_CAP = 1000;
 
 export interface GazelleMemory {
   /** Distilled static facts from identity.json (≤400 chars, '' if none). */
   identity: string;
-  /** Rolling situational summary from conversational.md (≤400 chars, '' if none). */
+  /** Rolling situational summary from conversational.md (≤600 chars, '' if none). */
   conversational: string;
 }
 
@@ -231,8 +236,8 @@ function distillIdentity(maxChars: number): string {
  * takes its share first, and identity gets whatever budget remains.
  */
 export function loadGazelleMemory(): GazelleMemory {
-  const conversational = clip(readText(CONVERSATIONAL_FILE), GAZELLE_FIELD_CAP);
-  const identityBudget = Math.min(GAZELLE_FIELD_CAP, GAZELLE_TOTAL_CAP - conversational.length);
+  const conversational = clip(readText(CONVERSATIONAL_FILE), GAZELLE_CONV_CAP);
+  const identityBudget = Math.min(GAZELLE_IDENTITY_CAP, GAZELLE_TOTAL_CAP - conversational.length);
   const identity = identityBudget > 0 ? distillIdentity(identityBudget) : '';
   return { identity, conversational };
 }
