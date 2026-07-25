@@ -32,6 +32,7 @@ import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
+import { runGazelleLoop } from '../agent/gazelle-loop.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
@@ -73,7 +74,7 @@ import { loadImages, looksVisionCapable } from './image-utils.js';
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -112,6 +113,13 @@ const cliFallbacks: string[] =
       : process.env.AURA_FALLBACK_MODEL
           ? [process.env.AURA_FALLBACK_MODEL]
         : [...FALLBACK_CHAIN];
+
+// Gazelle: lean conversational mode. Accept the --gazelle flag, --mode gazelle,
+// or AURA_MODE=gazelle. Detected here (module scope) so the non-TTY help gate
+// below can let a piped gazelle session through instead of printing help.
+const gazelleMode = argv.gazelle === true
+  || argv.mode === 'gazelle'
+  || process.env.AURA_MODE === 'gazelle';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Help / version
@@ -369,7 +377,7 @@ if (argv.help) {
 // When run with no args + a TTY or piped input, fall through to the REPL/wizard.
 // Skip this gate when --reset-setup is set (the wizard should fire even if env
 // vars make needsWizard() return false).
-if (argv._.length === 0 && !argv.interactive && !argv.doctor && process.stdin.isTTY !== true && !argv['reset-setup']) {
+if (argv._.length === 0 && !argv.interactive && !argv.doctor && !gazelleMode && process.stdin.isTTY !== true && !argv['reset-setup']) {
   if (!needsWizard({})) {
     printHelp();
     process.exit(0);
@@ -524,6 +532,38 @@ function sessionUsageFrom(result: {
 
 async function main() {
   const display = createTerminalDisplay();
+
+  // ── Gazelle: lean conversational mode ──────────────────────────────────────
+  // Radically smaller path than the coding agent: no ProjectContext, no tools,
+  // no Archimedes, no verification gate. Branch HERE — before the wizard,
+  // loadProjectContext(), resolveArchimedesConfig(), and tool selection — so
+  // none of that expensive setup runs. Defaults to the same cloud DeepSeek the
+  // coder path uses on this account — deepseek-v4-flash (api.deepseek.com only
+  // serves the v4 ids; "deepseek-chat" 400s there). Local models stay available
+  // via an explicit -m for anyone who wants them, but they are not the default
+  // and not a fallback tier — there is no fallback tier here at all.
+  if (gazelleMode) {
+    const gzCliModel = typeof argv.model === 'string' ? argv.model : undefined;
+    const gzModel = normalizeModelId(gzCliModel ?? 'deepseek/deepseek-v4-flash');
+    // With an explicit -m, honour the user's saved apiKey/baseUrl; the default
+    // cloud model resolves its own key/URL from the provider registry (env).
+    const gzConfig = gzCliModel
+      ? { model: gzModel, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined }
+      : { model: gzModel };
+    let gzProvider: LLMProvider;
+    try {
+      gzProvider = createResilientProvider(gzConfig, { maxRetries: resolved.maxRetries }, display);
+    } catch (e) {
+      display.error(`Could not initialize Gazelle provider: ${String(e)}`);
+      process.exit(1);
+    }
+    const firstMessage = argv._.length > 0 ? argv._.map(String).join(' ') : undefined;
+    const sessionPath = argv['no-session'] === true
+      ? undefined
+      : path.join(sessionStore.projectDir(cwd), `gazelle-${sessionStore.generateId()}.json`);
+    await runGazelleLoop({ provider: gzProvider, display, firstMessage, sessionPath });
+    return;
+  }
 
   // ── First-run wizard ───────────────────────────────────────────────────────
   // Skip if: --no-setup flag, --api-key on CLI, env var set, or global config exists.
@@ -993,6 +1033,7 @@ async function main() {
           display,
           permissions,
           initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
         });
         const altResult = await alternator.run(task);
         result = altResult.loopResult;
@@ -1232,6 +1273,7 @@ let abortController: AbortController | null = null;
             abortSignal,
             healthTracker,
             forceArchimedes: small1Override,
+            maxTurns: resolved.maxTurns,
           });
           const altResult = await alternator.run(input);
           result = altResult.loopResult;
@@ -2795,6 +2837,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
     aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
     aura ${chalk.hex(TEXT_DIM_HEX)('--interactive')}                      Start interactive REPL
+    aura ${chalk.hex(TEXT_DIM_HEX)('--gazelle')}                          Lean conversational mode (no tools; cloud model)
     aura ${chalk.hex(TEXT_DIM_HEX)('--models')}                           List available models
 
   ${chalk.hex(FAINT_HEX)('Options:')}
