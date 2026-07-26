@@ -190,6 +190,48 @@ describe('tuner rendering', () => {
     const out = strip(renderTuner(initTunerState(), 128_000, 0));
     expect(out).toContain('55% → 70% → 85%');
   });
+
+  it('reports the capped token value, not the uncapped window share', () => {
+    // 1M window, rung 1 = 55% = 550k, but compaction fires at the 80k cap.
+    const out = strip(renderTuner(initTunerState(), 1_000_000, 0));
+    expect(out).toContain('rung 1/3: 55% (80.0k — capped)');
+    expect(out).not.toContain('550.0k');
+  });
+
+  it('warns that the ladder is inert when every rung is above the cap', () => {
+    const out = strip(renderTuner(initTunerState(), 1_000_000, 0));
+    expect(out).toContain('ladder inert');
+    expect(out).toContain('raise context.maxTokens');
+  });
+
+  it('marks only the rungs that the cap actually holds', () => {
+    // 128k window: rung 1 = 70.4k (under the 80k cap), rungs 2-3 are over it.
+    const first = strip(renderTuner(initTunerState(), 128_000, 0));
+    expect(first).toContain('rung 1/3: 55% (70.4k)');
+    expect(first).not.toContain('capped');
+    expect(first).toContain('rungs above 80k are held at the cap');
+
+    const third = strip(renderTuner({ ...initTunerState(), selected: 2 }, 128_000, 0));
+    expect(third).toContain('rung 3/3: 85% (80.0k — capped)');
+  });
+
+  it('leaves the readout uncapped when the cap is disabled', () => {
+    setMaxContextTokens(0);           // 0 disables the cap entirely
+    try {
+      const out = strip(renderTuner(initTunerState(), 1_000_000, 0));
+      expect(out).toContain('550.0k');
+      expect(out).not.toContain('capped');
+      expect(out).not.toContain('ladder inert');
+    } finally {
+      resetLadder();
+    }
+  });
+
+  it('shows no cap note when the window is zero', () => {
+    const out = strip(renderTuner(initTunerState(), 0, 0));
+    expect(out).not.toContain('capped');
+    expect(out).not.toContain('ladder inert');
+  });
 });
 
 describe('key splitting', () => {

@@ -83,7 +83,7 @@ export const HELP_TEXT = [
   '  /stats, /usage          Show token + cost usage this session',
   '  /cost [n]               Cache hit rate + cost per call (default last 20)',
   '  /context                Context health dashboard (window, compaction, cost)',
-  '  /context tune           Adjust when compaction fires (←/→ on the ladder)',
+  '  /context tune, /ct      Adjust when compaction fires (←/→ on the ladder)',
   '  /clear, /reset          Reset cumulative usage stats (history unchanged — see :new)',
   '',
   '  ── General ──────────────────────────────────────',
