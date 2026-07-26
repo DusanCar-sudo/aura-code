@@ -18,6 +18,7 @@ import {
 import { textToSpeech, sendVoiceMessage } from './telegram-voice.js';
 import {
   parseAgentAction, stripDirectives, hasToolCallResidue, claimsDelivery,
+  formatProvenance,
 } from './telegram-actions.js';
 import { getApiKey } from '../util/env.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
@@ -757,6 +758,8 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
     // Which actions genuinely reached an executor this turn. The model's own
     // prose is not evidence that anything ran — this is.
     const executedVerbs: string[] = [];
+    // …and exactly what each one was, so the reply can show its provenance.
+    const executedCalls: string[] = [];
     for (let step = 0; step < AGENT_MAX_STEPS; step++) {
       const response = await raceAbort(provider.complete(systemPrompt, history, []), signal);
       if (response === ABORTED) {
@@ -786,7 +789,15 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
           finalReply = '⚠️ Pokušala sam da izvršim akciju, ali sistem nije prepoznao format — ništa nije izvršeno. Probaj ponovo ili koristi /run <komanda>.';
         } else if (!finalReply) {
           finalReply = '(no response from model)';
-        } else if (executedVerbs.length === 0 && claimsDelivery(finalReply)) {
+        } else if (executedVerbs.length > 0) {
+          // Provenance footer. The model will happily assert findings about
+          // checks it never ran — the first real test of this fix produced
+          // "no cron jobs or timers" off a single `ps aux`, when 14 cron jobs
+          // exist. Semantic verification of arbitrary claims isn't tractable,
+          // but showing exactly what was executed is, and it lets Dušan see
+          // the gap himself instead of trusting the summary.
+          finalReply += '\n\n' + formatProvenance(executedCalls);
+        } else if (claimsDelivery(finalReply)) {
           // The model is claiming a delivery on a turn where no SEND/CAM ran.
           // Flag rather than rewrite: the claim may be about a past turn, but
           // the user must not read it as confirmation of one that just happened.
@@ -821,12 +832,12 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
               toolOut = 'DENIED by user (not approved). Do not retry; suggest an alternative or ask.';
             } else {
               const r = await execShell(arg);
-              executedVerbs.push('RUN');
+              executedVerbs.push('RUN'); executedCalls.push(`RUN: ${arg}`);
               toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
             }
           } else {
             const r = await execShell(arg);
-            executedVerbs.push('RUN');
+            executedVerbs.push('RUN'); executedCalls.push(`RUN: ${arg}`);
             toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
           }
         } else if (verb === 'SEND') {
@@ -843,14 +854,14 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
             }
             // Only after the upload resolved — a throw lands in catch below and
             // must not be recorded as a delivery.
-            executedVerbs.push('SEND');
+            executedVerbs.push('SEND'); executedCalls.push(`SEND: ${path.basename(resolved)}`);
             toolOut = `Sent ${path.basename(resolved)} to the user.`;
           }
         } else { // CAM
           console.error(`[${ts0()}] agent CAM: ${arg || 'default'}`);
           const shot = captureWebcam(arg || undefined);
           await sendPhoto(chatId, shot, 'Camera snapshot');
-          executedVerbs.push('CAM');
+          executedVerbs.push('CAM'); executedCalls.push(`CAM: ${arg || 'default'}`);
           try { fs.unlinkSync(shot); } catch {}
           toolOut = 'Captured a webcam snapshot and sent it to the user.';
         }
@@ -864,9 +875,14 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
 
       if (step === AGENT_MAX_STEPS - 1) {
         const wrap = await raceAbort(provider.complete(systemPrompt, history, []), signal);
-        finalReply = wrap === ABORTED
-          ? '⏹ Stopped.'
-          : stripDirectives(wrap.text || '') || '(done)';
+        if (wrap === ABORTED) {
+          finalReply = '⏹ Stopped.';
+        } else {
+          // Same provenance footer as the normal exit — this path also ends a
+          // turn in which commands ran, so it must not claim more than they show.
+          finalReply = (stripDirectives(wrap.text || '') || '(done)')
+            + '\n\n' + formatProvenance(executedCalls);
+        }
       }
     }
     await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });

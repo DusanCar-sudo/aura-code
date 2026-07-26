@@ -113,3 +113,30 @@ const DELIVERED_RE = /(sent|delivered|attached|done|poslala|poslao|snimila|snimi
 export function claimsDelivery(text: string): boolean {
   return MEDIA_NOUN_RE.test(text) && DELIVERED_RE.test(text);
 }
+
+/** Longest command shown in the provenance footer before truncation. */
+const PROVENANCE_MAX_CHARS = 120;
+
+/**
+ * Render the list of actions that actually executed, appended to any reply
+ * that ran one.
+ *
+ * Why this exists: the first live test of the XML parser executed a single
+ * `ps aux --sort=-%cpu | head -40` and the model reported "no cron jobs or
+ * system timers" — a machine with 14 cron jobs and 7 timers. Nothing about
+ * cron was ever queried. Verifying arbitrary factual claims against command
+ * output is not tractable here, but stating what was actually run is, and it
+ * turns an invisible fabrication into an obvious mismatch the reader catches
+ * in one glance.
+ */
+export function formatProvenance(calls: readonly string[]): string {
+  if (calls.length === 0) return '';
+  const lines = calls.map((c) => {
+    const flat = c.replace(/\s+/g, ' ').trim();
+    const shown = flat.length > PROVENANCE_MAX_CHARS
+      ? flat.slice(0, PROVENANCE_MAX_CHARS - 1) + '…'
+      : flat;
+    return `• \`${shown}\``;
+  });
+  return `🔍 Stvarno izvršeno (${calls.length}):\n${lines.join('\n')}`;
+}

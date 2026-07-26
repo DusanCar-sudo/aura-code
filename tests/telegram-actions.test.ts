@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseAgentAction, stripDirectives, hasToolCallResidue, claimsDelivery,
+  formatProvenance,
 } from '../src/tools/telegram-actions.js';
 
 /**
@@ -133,6 +134,34 @@ describe('hasToolCallResidue', () => {
   it('does not fire on ordinary prose about functions', () => {
     expect(hasToolCallResidue('The function is defined in loop.ts')).toBe(false);
     expect(hasToolCallResidue('a < b and c > d')).toBe(false);
+  });
+});
+
+describe('formatProvenance', () => {
+  it('reproduces the real overclaim case: one ps aux, three domains asserted', () => {
+    // Live test 2026-07-26: the model ran only this, then reported "no cron
+    // jobs or system timers" on a box with 14 cron jobs and 7 timers.
+    const out = formatProvenance(['RUN: ps aux --sort=-%cpu | head -40']);
+    expect(out).toContain('Stvarno izvršeno (1)');
+    expect(out).toContain('ps aux --sort=-%cpu | head -40');
+    expect(out).not.toContain('crontab');   // the gap is visible at a glance
+  });
+
+  it('lists every executed call with a count', () => {
+    const out = formatProvenance(['RUN: uptime', 'CAM: default']);
+    expect(out).toContain('(2)');
+    expect(out).toContain('uptime');
+    expect(out).toContain('CAM: default');
+  });
+
+  it('is empty when nothing ran, so no footer is appended', () => {
+    expect(formatProvenance([])).toBe('');
+  });
+
+  it('truncates a long command and flattens newlines', () => {
+    const out = formatProvenance(['RUN: ' + 'echo x; '.repeat(60)]);
+    expect(out).toContain('…');
+    expect(out.split('\n')).toHaveLength(2);   // header + one bullet
   });
 });
 
