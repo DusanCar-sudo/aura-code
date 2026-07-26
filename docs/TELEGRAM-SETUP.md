@@ -143,6 +143,39 @@ Requires `GROQ_API_KEY` — get a free one at
 
 ---
 
+## Checking what the bot is doing
+
+**journald is the authoritative log.** Use it, not a logfile:
+
+```bash
+journalctl --user -u aura-telegram --since "1 hour ago"
+journalctl --user -u aura-telegram -f            # follow live
+```
+
+Two traps worth knowing:
+
+- **`--user` is required.** `systemctl status aura-telegram` without it reports
+  *"Unit aura-telegram.service could not be found"* — this is a user unit, not
+  a system one.
+- **`~/.aura/telegram-bot.log` may be stale or absent.** It only exists if the
+  unit was generated with the `StandardOutput=append:` lines below. Installs
+  predating that — or hand-written units — write nothing there, so the file can
+  sit weeks out of date while the bot runs normally. An empty tail of it is not
+  evidence that the bot is idle. In July 2026 this cost an investigation its
+  first diagnostic step.
+
+What to grep for:
+
+| Pattern | Meaning |
+|---------|---------|
+| `📩` / `📤` | Inbound message / reply sent |
+| `agent RUN:` / `agent SEND:` / `agent CAM:` | A tool call actually dispatched. **No line here means nothing executed**, whatever the bot claimed in chat |
+| `⚠️ UNPARSED tool-call syntax` | The model emitted a tool-call format the parser didn't recognize — nothing ran |
+| `⚠️ UNVERIFIED delivery claim` | The bot claimed it sent a file/photo on a turn where no send happened |
+| `conflict` / `409` | Another process is polling the same bot token |
+
+---
+
 ## Troubleshooting
 
 ### "Provider error... model X not found" / wrong API used for a task
