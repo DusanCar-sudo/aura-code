@@ -327,7 +327,7 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 | `/stats`, `/usage` | Token + cost usage this session |
 | `/cost [n]` | Cache hit rate + cost per call (default: last 20) |
 | `/context` | Context health dashboard (window, compaction, cost) |
-| `/context tune` | Adjust when compaction fires (←/→ on the ladder) |
+| `/context tune`, `/ct` | Adjust when compaction fires (←/→ on the ladder) |
 | `/clear`, `/reset` | Reset cumulative usage stats — does **not** clear history (use `:clear-history`) |
 | `:help` | Show all commands |
 | `:quit`, `:q`, `/exit` | Exit |
@@ -345,7 +345,10 @@ while being the expensive one. Aura guards this at three levels.
 default cap **80k tokens**. The cap matters on large-window models: as a pure
 share of the window, rung 1 on a 1M-window model sits at 550k, so a session
 can grow indefinitely without ever compacting. Tune the ladder live with
-`/context tune`, or set `context.ladder` / `context.maxTokens` in `.aura.json`.
+`/context tune` (short: `/ct`), or set `context.ladder` / `context.maxTokens`
+in `.aura.json`. On a large-window model the 80k cap is usually what's
+binding, not the ladder — the tuner marks rungs held at the cap and tells you
+when the ladder has no effect at all.
 
 **Session budget.** Two cumulative ceilings across a whole conversation, not
 per agent-loop invocation:

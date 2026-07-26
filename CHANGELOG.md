@@ -4,6 +4,18 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+### Added
+- `/ct` as a short alias for `/context tune`.
+
+### Fixed
+- `/context tune` reported each rung's threshold as an uncapped share of the
+  context window, ignoring `context.maxTokens`. On a 1M-window model it showed
+  `rung 1: 55% (550.0k)` while compaction actually fired at the 80k cap — the
+  same engine/display disagreement `context-policy.ts` was created to prevent,
+  reintroduced in the tuner. Rungs held at the cap now show the effective
+  token value marked `— capped`, and the tuner says outright when every rung
+  is above the cap and moving them can have no effect.
+
 ## [0.12.0] — 2026-07-26
 
 Cost controls. Prompted by a session that spent 27M input tokens over 216

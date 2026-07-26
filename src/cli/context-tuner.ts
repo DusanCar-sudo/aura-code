@@ -11,7 +11,9 @@
  */
 import chalk from 'chalk';
 import { TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
-import { getLadder, setLadder, MIN_RUNG, MAX_RUNG, MIN_GAP } from '../agent/context-policy.js';
+import {
+  getLadder, setLadder, getMaxContextTokens, MIN_RUNG, MAX_RUNG, MIN_GAP,
+} from '../agent/context-policy.js';
 
 /** Percentage-points moved per arrow keypress. Shift-arrow uses COARSE_STEP. */
 export const FINE_STEP = 0.01;
@@ -95,10 +97,19 @@ export function renderTuner(
   const BAR_OFFSET = '  ◆ Context: '.length;
   const caretLine = ' '.repeat(BAR_OFFSET + selectedPos) + chalk.hex('#cc785c')('▲');
 
+  // The rung is a *share of the window*, but compaction actually fires at
+  // min(window * rung, maxContextTokens) — see compactionThreshold(). Reporting
+  // the uncapped product here would tell the user compaction happens at 550k on
+  // a 1M-window model while the engine fires at 80k: the same engine/display
+  // disagreement context-policy.ts exists to prevent.
+  const cap = getMaxContextTokens();
+  const rawRungTok = state.ladder[state.selected] * contextWindow;
+  const isCapped = rawRungTok > cap;
+
   const rungPct = (state.ladder[state.selected] * 100).toFixed(0) + '%';
-  const rungTok = ((state.ladder[state.selected] * contextWindow) / 1000).toFixed(1) + 'k';
+  const rungTok = (Math.min(rawRungTok, cap) / 1000).toFixed(1) + 'k';
   const label = chalk.hex('#cc785c').bold(
-    `rung ${state.selected + 1}/${state.ladder.length}: ${rungPct} (${rungTok})`,
+    `rung ${state.selected + 1}/${state.ladder.length}: ${rungPct} (${rungTok}${isCapped ? ' — capped' : ''})`,
   );
   const hint = chalk.hex(FAINT_HEX)('[←/→ adjust · ⇧ coarse · Tab next · ⏎ save · Esc cancel]');
 
@@ -106,7 +117,20 @@ export function renderTuner(
     '  ladder: ' + state.ladder.map(r => (r * 100).toFixed(0) + '%').join(' → '),
   );
 
-  return [barLine, caretLine + '  ' + label, all, '  ' + hint].join('\n');
+  const lines = [barLine, caretLine + '  ' + label, all];
+
+  // Without this, moving a rung that is entirely above the cap looks like it
+  // does nothing — the one case where the user most needs to be told why.
+  if (Number.isFinite(cap) && state.ladder.some(r => r * contextWindow > cap)) {
+    const capK = (cap / 1000).toFixed(0) + 'k';
+    const note = state.ladder.every(r => r * contextWindow > cap)
+      ? `ladder inert: every rung is above the ${capK} cap — raise context.maxTokens`
+      : `rungs above ${capK} are held at the cap (context.maxTokens)`;
+    lines.push(chalk.hex(FAINT_HEX)('  ' + note));
+  }
+
+  lines.push('  ' + hint);
+  return lines.join('\n');
 }
 
 export interface TunerIO {

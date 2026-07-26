@@ -2613,7 +2613,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === '/context tune') {
+  if (input === '/context tune' || input === '/ct') {
     const u = c.cumulative;
     const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
     const wasInputActive = inputActive;
