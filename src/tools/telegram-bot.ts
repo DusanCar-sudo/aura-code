@@ -16,6 +16,9 @@ import {
   type AudioReplyMode,
 } from './telegram-audio-policy.js';
 import { textToSpeech, sendVoiceMessage } from './telegram-voice.js';
+import {
+  parseAgentAction, stripDirectives, hasToolCallResidue, claimsDelivery,
+} from './telegram-actions.js';
 import { getApiKey } from '../util/env.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
@@ -751,6 +754,9 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
   const signal = runEntry.abort.signal;
   try {
     let finalReply = '';
+    // Which actions genuinely reached an executor this turn. The model's own
+    // prose is not evidence that anything ran — this is.
+    const executedVerbs: string[] = [];
     for (let step = 0; step < AGENT_MAX_STEPS; step++) {
       const response = await raceAbort(provider.complete(systemPrompt, history, []), signal);
       if (response === ABORTED) {
@@ -760,20 +766,39 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       const text = (response.text || '').trim();
 
       // Which action does the model want? RUN (shell), SEND (a file), CAM (webcam).
-      // Models often wrap the directive in markdown — a leading backtick, bullet,
-      // or blockquote — so tolerate those and strip a trailing backtick from the
-      // argument. Without this the action leaks out as visible text.
-      const action = text.match(/(?:^|\n)[ \t`>*_-]*(RUN|SEND|CAM):[ \t]*`?([^\n`]+)/);
+      // Accepts both the bare `RUN:` line and XML tool calls — see parseAgentAction.
+      const action = parseAgentAction(text);
       if (!action) {
-        // No action → this is the answer. Strip any stray directive fragments
-        // so raw "SEND:/RUN:" text never shows to the user.
-        finalReply = (text || '(no response from model)')
-          .replace(/[ \t`>*_-]*(RUN|SEND|CAM):[^\n]*/g, '').replace(/\n{3,}/g, '\n\n').trim()
-          || '(no response from model)';
+        // No action → this is the answer. Strip directive fragments of either
+        // dialect so raw syntax never shows to the user.
+        const hadResidue = hasToolCallResidue(text);
+        if (hadResidue) {
+          // Unparseable tool-call syntax. This is the failure that ran silently
+          // for a week; it must never be quiet again.
+          console.error(
+            `[${ts0()}] ⚠️ UNPARSED tool-call syntax from model (nothing executed): ` +
+            text.slice(0, 500).replace(/\n/g, ' '),
+          );
+        }
+        finalReply = stripDirectives(text) || '';
+
+        if (hadResidue && !finalReply) {
+          finalReply = '⚠️ Pokušala sam da izvršim akciju, ali sistem nije prepoznao format — ništa nije izvršeno. Probaj ponovo ili koristi /run <komanda>.';
+        } else if (!finalReply) {
+          finalReply = '(no response from model)';
+        } else if (executedVerbs.length === 0 && claimsDelivery(finalReply)) {
+          // The model is claiming a delivery on a turn where no SEND/CAM ran.
+          // Flag rather than rewrite: the claim may be about a past turn, but
+          // the user must not read it as confirmation of one that just happened.
+          console.error(
+            `[${ts0()}] ⚠️ UNVERIFIED delivery claim with no action executed: ` +
+            finalReply.slice(0, 200).replace(/\n/g, ' '),
+          );
+          finalReply += '\n\n⚠️ (Ništa nije stvarno poslato u ovoj poruci — nijedna akcija nije izvršena.)';
+        }
         break;
       }
-      const verb = action[1];
-      const arg = (action[2] || '').trim().replace(/`+$/, '').trim();
+      const { verb, arg } = action;
 
       // /stop between the LLM deciding an action and us executing it — don't
       // run the action (a shell command may be destructive; the wait for an
@@ -796,10 +821,12 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
               toolOut = 'DENIED by user (not approved). Do not retry; suggest an alternative or ask.';
             } else {
               const r = await execShell(arg);
+              executedVerbs.push('RUN');
               toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
             }
           } else {
             const r = await execShell(arg);
+            executedVerbs.push('RUN');
             toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
           }
         } else if (verb === 'SEND') {
@@ -814,12 +841,16 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
             } else {
               await sendLocalFile(chatId, resolved);
             }
+            // Only after the upload resolved — a throw lands in catch below and
+            // must not be recorded as a delivery.
+            executedVerbs.push('SEND');
             toolOut = `Sent ${path.basename(resolved)} to the user.`;
           }
         } else { // CAM
           console.error(`[${ts0()}] agent CAM: ${arg || 'default'}`);
           const shot = captureWebcam(arg || undefined);
           await sendPhoto(chatId, shot, 'Camera snapshot');
+          executedVerbs.push('CAM');
           try { fs.unlinkSync(shot); } catch {}
           toolOut = 'Captured a webcam snapshot and sent it to the user.';
         }
@@ -835,7 +866,7 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
         const wrap = await raceAbort(provider.complete(systemPrompt, history, []), signal);
         finalReply = wrap === ABORTED
           ? '⏹ Stopped.'
-          : (wrap.text || '').replace(/^(RUN|SEND|CAM):.*$/m, '').trim() || '(done)';
+          : stripDirectives(wrap.text || '') || '(done)';
       }
     }
     await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });

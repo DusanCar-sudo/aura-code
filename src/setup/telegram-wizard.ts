@@ -346,6 +346,10 @@ async function offerSystemdService(rl: readline.Interface, inputs: SystemdInputs
   console.log(chalk.hex('#e8d5b7')('    systemctl --user daemon-reload'));
   console.log(chalk.hex('#e8d5b7')('    systemctl --user enable --now aura-telegram.service'));
   console.log(chalk.hex('#e8d5b7')('    systemctl --user status aura-telegram.service\n'));
+  // journald is authoritative; the logfile below only exists for units this
+  // wizard generated. Point at the one that always works.
+  console.log(chalk.hex('#8a7768')('  To watch it (works regardless of logfile settings):\n'));
+  console.log(chalk.hex('#e8d5b7')('    journalctl --user -u aura-telegram --since "10 min ago"\n'));
 
   return true;
 }
