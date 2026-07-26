@@ -3,6 +3,8 @@ import type { Display } from '../cli/display.js';
 import type { ProjectContext } from './context.js';
 import type { PermissionSystem } from '../safety/permissions.js';
 import { runAgentLoop } from './loop.js';
+import { SessionBudget, describeBudgetStop } from './session-budget.js';
+import { DEFAULT_MAX_TURNS } from './loop-profile.js';
 import type { LineReader, LoopOutcome } from './gazelle-loop.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,17 +45,38 @@ export interface CoderConversationOptions {
   maxTurns?: number;
   sessionPath?: string;
   spawnConfig?: { apiKey?: string; baseUrl?: string };
+  /** Cumulative guard for the whole conversation. Supplied by the caller when
+   *  the coder loop is one leg of a longer session (e.g. Gazelle ↔ coder
+   *  hand-off) so the budget survives mode switches; otherwise one is created
+   *  here. Never per-segment — that's the bug this exists to prevent. */
+  budget?: SessionBudget;
 }
 
 export async function runCoderConversation(opts: CoderConversationOptions): Promise<LoopOutcome> {
   const { provider, ctx, permissions, display, reader, output, interactive } = opts;
   let history: HistoryMessage[] = [...(opts.initialHistory ?? [])];
 
+  // One budget for the conversation, not one per segment. runAgentLoop's own
+  // maxTurns restarts at zero on every user message while history — and the
+  // per-call input cost it drives — carries forward, so the per-invocation cap
+  // alone cannot bound a multi-segment session.
+  const budget = opts.budget ?? new SessionBudget({
+    maxTurns: opts.maxTurns ?? DEFAULT_MAX_TURNS,
+  });
+
   const runTask = async (task: string): Promise<void> => {
+    const stop = budget.exhausted();
+    if (stop) {
+      display.warning(
+        `${describeBudgetStop(stop)}. Start a fresh session, or raise the ceiling with --max-turns.`,
+      );
+      return;
+    }
     const result = await runAgentLoop({
       provider, task, context: ctx, permissions, display,
       initialHistory: history,
       maxTurns: opts.maxTurns,
+      budget,
       sessionPath: opts.sessionPath,
       spawnConfig: opts.spawnConfig,
     });

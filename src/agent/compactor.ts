@@ -1,21 +1,11 @@
 import type { HistoryMessage } from '../providers/types.js';
 import { getContextWindow } from '../providers/factory.js';
+import { thresholdRatioFor, compactionThreshold, retentionBudget } from './context-policy.js';
 
-/**
- * Escalating trigger ladder, indexed by "recap generation" (how many times
- * the current recap has already been through compaction). Later generations
- * tolerate more fill before firing again — that content is already dense/
- * pre-summarized, so there's less marginal value in acting early. Held at
- * the last value once the ladder is exhausted; ROLLOVER_AT_GENERATION caps
- * how many in-place rounds happen before a full generational flush (see
- * generational-flush.ts) instead of a further round of lossy recompaction.
- */
-const LADDER = [0.55, 0.70, 0.85] as const;
 export const ROLLOVER_AT_GENERATION = 3;
-/** Verbatim recent-history budget kept through compaction, as a share of the
- *  window. 40% preserves interaction nuance over long sequences. Exported so
- *  the tiered strategy (tiered-context.ts) sizes its tail identically. */
-export const RETENTION_RATIO = 0.40;
+/** Re-exported from context-policy (its home) so existing importers — notably
+ *  tiered-context.ts — keep working. */
+export { RETENTION_RATIO } from './context-policy.js';
 export const DEFAULT_WINDOW = 128_000;
 /** Messages kept when no later user turn exists to anchor the tail. */
 const FALLBACK_KEEP = 3;
@@ -24,9 +14,10 @@ const MAX_RESULT_CHARS = 4_000;
 
 /** Exported so the tiered strategy fires on the same escalating trigger as
  *  the default strategy — the two are meant to be A/B-comparable, not to
- *  differ in when they kick in, only in what they do once triggered. */
+ *  differ in when they kick in, only in what they do once triggered.
+ *  The ladder itself lives in context-policy.ts (configurable at runtime). */
 export function thresholdRatio(generation: number): number {
-  return LADDER[Math.min(generation, LADDER.length - 1)];
+  return thresholdRatioFor(generation);
 }
 
 /** Marker prefixing every recap message; also carries the generation number. */
@@ -198,7 +189,7 @@ export interface CompactionExtras {
  * and align their verbatim tail identically (see tiered-context.ts).
  */
 export function computeTailBoundary(history: HistoryMessage[], window: number): number {
-  const retainBudget = Math.floor(window * RETENTION_RATIO);
+  const retainBudget = retentionBudget(window);
   let acc = 0;
   let keepFrom = history.length;
   for (let i = history.length - 1; i >= 1; i--) {
@@ -239,7 +230,7 @@ export function compactHistory(
 ): boolean {
   const generation = getRecapGeneration(history);
   const window = getContextWindow(model) ?? DEFAULT_WINDOW;
-  const threshold = Math.floor(window * thresholdRatio(generation));
+  const threshold = compactionThreshold(window, generation);
 
   if (totalTokens < threshold) return false;
   if (history.length <= 3) return false;

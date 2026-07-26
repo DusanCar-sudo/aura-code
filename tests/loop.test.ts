@@ -31,6 +31,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { runAgentLoop, type TokenUsage } from '../src/agent/loop.js';
+import { DEFAULT_MAX_TURNS } from '../src/agent/loop-profile.js';
 import { PermissionSystem } from '../src/safety/permissions.js';
 import { loadProjectContext } from '../src/agent/context.js';
 import type {
@@ -198,10 +199,14 @@ describe('runAgentLoop', () => {
     expect(result.summary).toMatch(/cycling/);
   });
 
-  it('widens the single-file budget once instead of dying at the ceiling', async () => {
-    // 33 productive (non-repeating) tool turns, then done. A single-file
-    // profile caps at 30, so without widening this would fail at turn 30.
-    const responses: LLMResponse[] = Array.from({ length: 33 }, (_, i) => ({
+  it('stops at the flat default ceiling on a productive but overlong run', async () => {
+    // More productive (non-repeating) tool turns than the cap allows —
+    // nothing a stall detector would catch, since every call has a distinct
+    // signature. The only thing that bounds this run is DEFAULT_MAX_TURNS,
+    // which is the point: the 85-turn healthcheck session looked exactly like
+    // this (105 distinct calls, max 2 consecutive repeats) and ran unbounded
+    // under the old 150.
+    const responses: LLMResponse[] = Array.from({ length: DEFAULT_MAX_TURNS + 5 }, (_, i) => ({
       text: '',
       toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
       stopReason: 'tools' as const,
@@ -211,6 +216,23 @@ describe('runAgentLoop', () => {
     const ctx = await loadProjectContext(tmpDir);
     const result = await runAgentLoop({
       provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+    expect(result.turns).toBe(DEFAULT_MAX_TURNS);
+    expect(result.summary).toMatch(/turns/);
+  });
+
+  it('honours an explicit maxTurns above the default', async () => {
+    const responses: LLMResponse[] = Array.from({ length: 33 }, (_, i) => ({
+      text: '',
+      toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx, maxTurns: 50,
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
     expect(result.success).toBe(true);

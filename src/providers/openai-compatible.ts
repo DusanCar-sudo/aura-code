@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { getApiKey } from '../util/env.js';
 import { safeParseToolArgs } from '../util/json-repair.js';
+import { ThinkTagStripper, readReasoningField, resolveAnswer } from './reasoning.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
   HistoryMessage, LLMResponse, StreamChunk, ToolCall,
@@ -80,9 +81,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
     } as OpenAI.ChatCompletionCreateParamsStreaming);
 
     let textBuffer = '';
+    let reasoningBuffer = '';
+    const stripper = new ThinkTagStripper();
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
     let finishReason: string | undefined;
+    // AURA_DEBUG_CACHE prints one line per API call. Some providers attach
+    // `usage` to every streamed chunk, so without this the same figures
+    // scrolled dozens of times per response and buried the actual output.
+    let loggedCacheDebug = false;
 
     // CRITICAL: do NOT return early when finish_reason arrives.
     // With stream_options.include_usage, OpenAI sends a trailing usage-only
@@ -91,25 +98,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
       if (chunk.usage) {
-        // DeepSeek reports cache stats via prompt_cache_hit_tokens /
-        // prompt_cache_miss_tokens in the usage object. The OpenAI SDK
-        // passes unknown fields through, so we can read them here.
-        const raw = chunk.usage as OpenAI.CompletionUsage & {
-          prompt_cache_hit_tokens?: number;
-          prompt_cache_miss_tokens?: number;
-        };
-        const cacheHit = raw.prompt_cache_hit_tokens ?? 0;
-        const cacheMiss = raw.prompt_cache_miss_tokens ?? 0;
+        const { cacheHit, cacheMiss, reported } = readCacheStats(chunk.usage);
         usage = {
           inputTokens: chunk.usage.prompt_tokens ?? 0,
           outputTokens: chunk.usage.completion_tokens ?? 0,
-          // Only set cachedTokens when the provider actually reports them
-          // (DeepSeek). Other OpenAI-compatible providers don't set these
-          // fields, so cachedTokens stays undefined and costFor uses the
-          // standard rate for all input tokens.
           ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
         };
-        if (process.env.AURA_DEBUG_CACHE && (cacheHit > 0 || cacheMiss > 0)) {
+        // Only when the provider actually reported cache figures: otherwise
+        // `miss` is inferred from the prompt size and printing it would imply
+        // a measured miss where nothing was measured at all.
+        if (process.env.AURA_DEBUG_CACHE && reported && !loggedCacheDebug) {
+          loggedCacheDebug = true;
           console.error(`[cache] hit=${cacheHit} miss=${cacheMiss} input=${chunk.usage.prompt_tokens ?? 0}`);
         }
       }
@@ -122,9 +121,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const delta = choice?.delta;
       if (!delta) continue;
 
+      // Reasoning models split chain-of-thought off into its own field and
+      // leave `content` empty until thinking ends. Collect it — never render
+      // it — so a response whose budget went entirely to thinking still has
+      // something to fall back on instead of surfacing as an empty answer.
+      reasoningBuffer += readReasoningField(delta);
+
       if (delta.content) {
-        textBuffer += delta.content;
-        yield { type: 'text', text: delta.content };
+        // Other stacks put the same trace in-band as <think>…</think>; strip
+        // it here rather than leaking it into the visible answer.
+        const visible = stripper.push(delta.content);
+        if (visible) {
+          textBuffer += visible;
+          yield { type: 'text', text: visible };
+        }
       }
 
       for (const tc of delta.tool_calls ?? []) {
@@ -140,6 +150,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
           yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
         }
       }
+    }
+
+    // Release anything the tag stripper was holding back (a chunk boundary
+    // mid-tag), then decide what the answer actually is.
+    const tail = stripper.flush();
+    if (tail) {
+      textBuffer += tail;
+      yield { type: 'text', text: tail };
+    }
+    const reasoning = reasoningBuffer + stripper.reasoningText;
+    const answer = resolveAnswer(textBuffer, reasoning);
+    if (answer !== textBuffer) {
+      // Content-only-in-reasoning: nothing was streamed to the display, so
+      // emit the fallback now rather than completing with a blank screen.
+      yield { type: 'text', text: answer };
     }
 
     const calls: ToolCall[] = [];
@@ -159,7 +184,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     yield {
       type: 'done',
       response: {
-        text: textBuffer,
+        text: answer,
         toolCalls: calls,
         stopReason,
         usage,
@@ -228,7 +253,14 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
   const choice = response.choices[0];
   if (!choice) return { text: '', toolCalls: [], stopReason: 'done' };
 
-  const text = choice.message.content ?? '';
+  // Same two reasoning shapes as the streaming path — see reasoning.ts.
+  const rawContent = choice.message.content ?? '';
+  const stripper = new ThinkTagStripper();
+  const stripped = stripper.push(rawContent) + stripper.flush();
+  const text = resolveAnswer(
+    stripped,
+    readReasoningField(choice.message) + stripper.reasoningText,
+  );
   const toolCalls: ToolCall[] = (choice.message.tool_calls ?? []).map(tc => {
     const input: Record<string, unknown> = safeParseToolArgs(tc.function.arguments);
     return { id: tc.id, name: tc.function.name, input };
@@ -238,13 +270,10 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
     choice.finish_reason === 'tool_calls' ? 'tools' :
     choice.finish_reason === 'length' ? 'limit' : 'done';
 
-  const u = response.usage as OpenAI.CompletionUsage & {
-    prompt_cache_hit_tokens?: number;
-    prompt_cache_miss_tokens?: number;
-  } | undefined;
+  const u = response.usage;
   if (!u) return { text, toolCalls, stopReason };
 
-  const cacheHit = u.prompt_cache_hit_tokens ?? 0;
+  const { cacheHit } = readCacheStats(u);
   return {
     text, toolCalls, stopReason,
     usage: {
@@ -253,6 +282,49 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
       ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
     },
   };
+}
+
+/**
+ * Read prompt-cache stats from an OpenAI-compatible usage object.
+ *
+ * Two dialects are in the wild and providers pick one:
+ *  - OpenAI standard: `prompt_tokens_details.cached_tokens` (OpenAI itself,
+ *    Zhipu/GLM, and most compatible vendors).
+ *  - DeepSeek: top-level `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`.
+ *
+ * Only the DeepSeek pair used to be read, so every other provider reported no
+ * cache hits and costFor billed the whole prompt at the uncached rate — which
+ * silently overstated cost by up to ~10x on a cached turn and made it
+ * impossible to tell whether caching was working at all.
+ *
+ * The SDK passes unknown fields through, so both dialects are readable here.
+ */
+export function readCacheStats(
+  usage: OpenAI.CompletionUsage,
+): { cacheHit: number; cacheMiss: number; reported: boolean } {
+  const u = usage as OpenAI.CompletionUsage & {
+    prompt_cache_hit_tokens?: number;
+    prompt_cache_miss_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+  };
+
+  // Prefer whichever dialect actually reports a hit; a provider that sends
+  // neither yields 0 and cachedTokens stays unset (full-rate billing).
+  const standard = u.prompt_tokens_details?.cached_tokens;
+  const deepseek = u.prompt_cache_hit_tokens;
+  const cacheHit = Math.max(standard ?? 0, deepseek ?? 0);
+
+  const prompt = u.prompt_tokens ?? 0;
+  const cacheMiss = u.prompt_cache_miss_tokens ?? Math.max(0, prompt - cacheHit);
+
+  // Whether any cache field was present at all. `cacheMiss` falls back to the
+  // whole prompt when nothing was reported, so callers that would otherwise
+  // read "miss = 20,940" as a measurement need to tell the two apart — an
+  // inferred miss says nothing about whether the provider caches.
+  const reported =
+    standard !== undefined || deepseek !== undefined || u.prompt_cache_miss_tokens !== undefined;
+
+  return { cacheHit, cacheMiss, reported };
 }
 
 // -- Auto-resolution helpers --------------------------------------------------

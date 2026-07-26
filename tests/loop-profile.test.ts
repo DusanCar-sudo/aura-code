@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyTask, getLoopProfile, detectStall } from '../src/agent/loop-profile.js';
+import { classifyTask, getLoopProfile, detectStall, DEFAULT_MAX_TURNS, DEFAULT_STALL_THRESHOLD } from '../src/agent/loop-profile.js';
 
 describe('classifyTask', () => {
   it('defaults to single-file', () => {
@@ -18,22 +18,19 @@ describe('classifyTask', () => {
 });
 
 describe('getLoopProfile', () => {
-  it('sizes single-file with a widenTo tier', () => {
-    const p = getLoopProfile('fix the bug in parser.ts');
-    expect(p.shape).toBe('single-file');
-    expect(p.maxTurns).toBe(30);
-    expect(p.stallThreshold).toBe(3);
-    expect(p.widenTo).toBe(80);
+  // Flat cap, no shape-based ladder — see loop-profile.ts for why the old
+  // adaptive sizing was replaced (pi's agent loop has no turn-budget concept
+  // at all; this keeps one flat ceiling as aura's one deliberate departure).
+  it('defaults to a flat ceiling regardless of task shape', () => {
+    const p = getLoopProfile();
+    expect(p.maxTurns).toBe(DEFAULT_MAX_TURNS);
+    expect(p.stallThreshold).toBe(DEFAULT_STALL_THRESHOLD);
   });
 
-  it('gives top-tier shapes no widenTo', () => {
-    expect(getLoopProfile('refactor every file in src').widenTo).toBeUndefined();
-  });
-
-  it('treats an explicit override as a hard ceiling — no widening', () => {
-    const p = getLoopProfile('fix the bug in parser.ts', 12);
+  it('uses an explicit override as the ceiling', () => {
+    const p = getLoopProfile(12);
     expect(p.maxTurns).toBe(12);
-    expect(p.widenTo).toBeUndefined();
+    expect(p.stallThreshold).toBe(DEFAULT_STALL_THRESHOLD);
   });
 });
 

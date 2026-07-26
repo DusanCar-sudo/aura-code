@@ -7,6 +7,7 @@ import { loadAllPlugins } from '../plugins/loader.js';
 const WEB_KEYWORDS = /website|webpage|frontend|front-end|ui component|landing page|homepage|web app|portfolio|hero section|marketing page|site design|visual design|html.*css|make.*page|create.*page|build.*site/;
 
 let _cachedMemory: string | null = null;
+let _cachedConfessions: string | null = null;
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
@@ -15,7 +16,14 @@ export function buildSystemPrompt(ctx: ProjectContext, providerName: string, tas
   const memoryBlock = _cachedMemory ?? (_cachedMemory = loadUnifiedMemory({ projectRoot: ctx.root }));
   // Confessions: permanent lessons extracted from high-cost failures.
   // Loaded separately so they sit above regular memory with elevated priority.
-  const confessionsBlock = loadConfessionsSection();
+  // Memoized like the memory block above: this is a directory scan + stat +
+  // read per call, and more importantly the result sits inside the cacheable
+  // system prefix. A REPL session runs buildSystemPrompt once per task, so an
+  // unmemoized read meant a confession written mid-session silently changed
+  // the prefix between tasks and invalidated the provider's prompt cache.
+  // Trade-off (same one already accepted for memory): new confessions are
+  // picked up on next start, not mid-session.
+  const confessionsBlock = _cachedConfessions ?? (_cachedConfessions = loadConfessionsSection());
   // Plugin skills: inject relevant plugin skills when task matches their domain.
   const pluginBlock = loadPluginSkillsBlock(task);
 
