@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { getApiKey } from '../util/env.js';
 import { safeParseToolArgs } from '../util/json-repair.js';
+import { ThinkTagStripper, readReasoningField, resolveAnswer } from './reasoning.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
   HistoryMessage, LLMResponse, StreamChunk, ToolCall,
@@ -80,6 +81,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
     } as OpenAI.ChatCompletionCreateParamsStreaming);
 
     let textBuffer = '';
+    let reasoningBuffer = '';
+    const stripper = new ThinkTagStripper();
     const toolCallBuilders: Map<number, { id: string; name: string; args: string }> = new Map();
     let usage: { inputTokens: number; outputTokens: number } | undefined;
     let finishReason: string | undefined;
@@ -118,9 +121,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const delta = choice?.delta;
       if (!delta) continue;
 
+      // Reasoning models split chain-of-thought off into its own field and
+      // leave `content` empty until thinking ends. Collect it — never render
+      // it — so a response whose budget went entirely to thinking still has
+      // something to fall back on instead of surfacing as an empty answer.
+      reasoningBuffer += readReasoningField(delta);
+
       if (delta.content) {
-        textBuffer += delta.content;
-        yield { type: 'text', text: delta.content };
+        // Other stacks put the same trace in-band as <think>…</think>; strip
+        // it here rather than leaking it into the visible answer.
+        const visible = stripper.push(delta.content);
+        if (visible) {
+          textBuffer += visible;
+          yield { type: 'text', text: visible };
+        }
       }
 
       for (const tc of delta.tool_calls ?? []) {
@@ -136,6 +150,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
           yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
         }
       }
+    }
+
+    // Release anything the tag stripper was holding back (a chunk boundary
+    // mid-tag), then decide what the answer actually is.
+    const tail = stripper.flush();
+    if (tail) {
+      textBuffer += tail;
+      yield { type: 'text', text: tail };
+    }
+    const reasoning = reasoningBuffer + stripper.reasoningText;
+    const answer = resolveAnswer(textBuffer, reasoning);
+    if (answer !== textBuffer) {
+      // Content-only-in-reasoning: nothing was streamed to the display, so
+      // emit the fallback now rather than completing with a blank screen.
+      yield { type: 'text', text: answer };
     }
 
     const calls: ToolCall[] = [];
@@ -155,7 +184,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     yield {
       type: 'done',
       response: {
-        text: textBuffer,
+        text: answer,
         toolCalls: calls,
         stopReason,
         usage,
@@ -224,7 +253,14 @@ function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
   const choice = response.choices[0];
   if (!choice) return { text: '', toolCalls: [], stopReason: 'done' };
 
-  const text = choice.message.content ?? '';
+  // Same two reasoning shapes as the streaming path — see reasoning.ts.
+  const rawContent = choice.message.content ?? '';
+  const stripper = new ThinkTagStripper();
+  const stripped = stripper.push(rawContent) + stripper.flush();
+  const text = resolveAnswer(
+    stripped,
+    readReasoningField(choice.message) + stripper.reasoningText,
+  );
   const toolCalls: ToolCall[] = (choice.message.tool_calls ?? []).map(tc => {
     const input: Record<string, unknown> = safeParseToolArgs(tc.function.arguments);
     return { id: tc.id, name: tc.function.name, input };
