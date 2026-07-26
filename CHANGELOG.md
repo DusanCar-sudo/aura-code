@@ -4,6 +4,99 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-07-26
+
+Cost controls. Prompted by a session that spent 27M input tokens over 216
+calls and compacted zero times: every guard meant to stop that either measured
+the wrong unit, reset before it could bind, or priced the result wrong
+afterwards. This release fixes the measurement, the ceilings, and the
+reporting, and deletes two features that were never wired up.
+
+### Added
+- **Session-level spend budget** (`src/agent/session-budget.ts`) — cumulative
+  turns *and* cumulative input tokens net of prompt-cache hits, tracked across
+  a whole conversation rather than per `runAgentLoop` call. A coder
+  conversation calls the loop once per user message, so the turn counter used
+  to restart at 1 on every segment while history kept growing: a 30-turn cap
+  on a three-segment conversation still permitted 90 turns. Net-of-cache is
+  the meaningful ceiling, since cache hits bill at a fraction of the standard
+  rate (GLM-5.2: $0.26 vs $1.40 per Mtok) and a raw-token ceiling would stop a
+  cheap well-cached session and an expensive cold one at the same point.
+  Default input ceiling 1M tokens; advisory, not a hard abort — the loop
+  finishes its turn and returns, so the session stays resumable.
+- **Absolute compaction cap.** The compaction ladder was a *share of the
+  context window*, which is the wrong unit for a cost control — on glm-5.2's
+  1M window, rung 1 sits at 550k, so a session growing to 218k never compacted
+  once. Threshold is now `min(window * rung, maxContextTokens)`, default 80k:
+  a no-op where things already worked (at a 128k window rung 1 is 70.4k, below
+  the cap), binding only on 200k/1M-window models. Replaying the investigated
+  session's real per-call deltas: 32.6M → 14.9M input tokens, 7 compactions
+  instead of 0. Retention is additionally clamped to 75% of the actual trigger,
+  since it was window-relative too and would otherwise have re-fired every turn.
+- **`/cost [n]`** (`src/cli/cost-report.ts`) — cache hit rate and cost per
+  call over `.aura/token-log.jsonl`, including what the same input would have
+  cost at a 0% hit rate. Cache hit ratio is the dominant cost lever and was
+  invisible at runtime: one session carried 7.75M tokens uncached at $7.90,
+  then 19.5M tokens at 98% cached for $1.04 — same work, 7.6x cheaper — with
+  nothing in the CLI surfacing the difference while it happened.
+- **`/context tune`** (`src/cli/context-tuner.ts`) — arrow-key editor for the
+  compaction ladder with a live token readout, rungs clamped so they can't
+  cross. Keyboard rather than mouse, deliberately: SGR mouse mode would
+  disable native text selection for the whole session.
+- `.aura.json` gains `context.ladder` and `context.maxTokens`.
+- One-shot REPL nudge when inherited history crosses the compaction threshold,
+  pointing at `:new` / `:clear-history`. The investigated session was 8
+  separate tasks sharing one 218k-token history.
+
+### Changed
+- **Default turn cap 150 → 50.** The shape-based ladder (30 / widen-80 / 80 /
+  150) is replaced by one flat cap. Sizing a cap off task-shape guesses meant
+  `DEFAULTS.maxTurns` flowing through `resolveConfig` was indistinguishable
+  from an explicit `--max-turns`, silently disabling the smaller ceilings it
+  was meant to enforce. Expect `--max-turns` to be routine for real project
+  work now, not just benchmark runs.
+- `/clear` and `/reset` now state that they do **not** clear conversation
+  history. Sitting next to `:clear-history`, which does, the naming was a
+  costly footgun.
+- The compaction ladder was duplicated in `compactor.ts` (what fires) and
+  `context-health.ts` (what the bar draws); both now read from
+  `context-policy.ts`, so the footer can't report thresholds the engine isn't
+  using.
+
+### Removed
+- **`src/kanban/`** (8 files, tests, and `docs/KANBAN-MANUAL.md`) — documented
+  as `aura kanban` but never wired into the CLI, with no imports from anywhere
+  in `src/`. Removed as dead code rather than finished.
+- **`src/archimedes/fine-tune.ts`, `src/archimedes/training-data.ts`** and
+  their re-exports from `archimedes/index.ts` — no call sites. Episode
+  capture, competence routing, and `:mine --refine` (which writes its own
+  `training-data/*.jsonl`) are unaffected.
+- `src/providers/anthropic-oauth-draft.ts` — unused draft.
+- ZenMux provider support, reverted along with the bare vendor-id routing it
+  depended on.
+
+### Fixed
+- **Cache accounting for every OpenAI-compatible provider except DeepSeek.**
+  Only DeepSeek's `prompt_cache_hit_tokens` was read; the OpenAI-standard
+  `prompt_tokens_details.cached_tokens` (used by Zhipu/GLM and most vendors)
+  was parsed nowhere, so cached prompts were billed at the full rate —
+  overstating cost up to ~10x on a cached turn and making it impossible to
+  tell whether caching worked at all. Verified end-to-end against live
+  DeepSeek traffic, where both dialects agree.
+- **GLM pricing** in `PRICING_USD_PER_MTOK` — real published Zhipu rates for
+  `glm-5.2`/`glm-5.1`/`glm-5`, each now with a `cachedIn` entry instead of
+  falling back to an `input/10` guess. `glm-5-turbo` was missing entirely and
+  costed at $0; it is now priced.
+- **Reasoning-model content in the OpenAI-compatible path**
+  (`src/providers/reasoning.ts`). Local reasoning models emit chain-of-thought
+  to a separate `delta.reasoning` / `reasoning_content` field via Ollama's
+  `/v1` endpoint. The provider read only `delta.content`, so a response that
+  spent its whole token budget mid-thought rendered as empty. Both spellings
+  are now read, `<think>` tags are stripped, and the reasoning trace is used
+  as the answer when content is genuinely absent. Applies to all local
+  reasoning models via `/v1`, not just Archimedes.
+- `[cache]` debug output no longer printed on every stream chunk.
+
 ## [0.11.0] — 2026-07-25
 
 The Gazelle release: a lean conversational path alongside the coding agent, so
