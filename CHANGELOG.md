@@ -4,6 +4,8 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-07-26
+
 ### Added
 - `/ct` as a short alias for `/context tune`.
 

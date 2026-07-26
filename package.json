@@ -1,6 +1,6 @@
 {
   "name": "aura-code",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
   "bin": {
     "aura": "dist/cli/index.js",
