@@ -325,10 +325,52 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 | `:viz`, `:dashboard` | Generate and open the memory dashboard |
 | `:doctor` / `:doctor --fix` | Scan Aura itself for issues / attempt repairs |
 | `/stats`, `/usage` | Token + cost usage this session |
+| `/cost [n]` | Cache hit rate + cost per call (default: last 20) |
 | `/context` | Context health dashboard (window, compaction, cost) |
-| `/clear`, `/reset` | Reset cumulative usage stats |
+| `/context tune` | Adjust when compaction fires (←/→ on the ladder) |
+| `/clear`, `/reset` | Reset cumulative usage stats — does **not** clear history (use `:clear-history`) |
 | `:help` | Show all commands |
 | `:quit`, `:q`, `/exit` | Exit |
+
+---
+
+## Cost controls
+
+A long agent session is expensive in a way that isn't visible while it runs.
+The history is resent on every call, so per-call input cost grows linearly and
+total cost grows quadratically — and a session can look fine by turn count
+while being the expensive one. Aura guards this at three levels.
+
+**Compaction threshold.** Compaction fires at `min(window * rung, context.maxTokens)`,
+default cap **80k tokens**. The cap matters on large-window models: as a pure
+share of the window, rung 1 on a 1M-window model sits at 550k, so a session
+can grow indefinitely without ever compacting. Tune the ladder live with
+`/context tune`, or set `context.ladder` / `context.maxTokens` in `.aura.json`.
+
+**Session budget.** Two cumulative ceilings across a whole conversation, not
+per agent-loop invocation:
+
+| Ceiling | Default | What it's for |
+|---------|---------|---------------|
+| Turns | 50 (`--max-turns`) | Coarse backstop for when caching doesn't save you |
+| Input tokens, net of cache hits | 1M | The one that tracks actual spend |
+
+Both are needed because turns are a poor proxy for cost. Cache hits bill at a
+fraction of the standard rate — on GLM-5.2, $0.26 vs $1.40 per Mtok — so a
+well-cached 50-turn session and a cold one cost wildly different amounts for
+the same turn count. The token ceiling measures what you actually pay for; the
+turn cap catches runaway loops. Whichever binds first stops the run, and it
+stops *cleanly*: the current turn finishes and history is persisted, so the
+session stays resumable.
+
+The turn cap is 50, not the previous 150. **Expect `--max-turns` to be routine
+for real project work**, not just something benchmark runs pass.
+
+**Visibility.** `/cost` reports cache hit rate and per-call cost from
+`.aura/token-log.jsonl`, including what the same input would have cost
+uncached. Hit ratio is the dominant lever: in one measured session, 19.5M
+tokens at a 98% hit rate cost $1.04, while 7.75M uncached tokens cost $7.90 —
+the same work, 7.6x cheaper.
 
 ---
 
