@@ -15,7 +15,9 @@ export class AnthropicProvider implements LLMProvider {
 
   constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
-    this.maxTokens = config.maxTokens ?? 8096;
+    // 8192, not 8096 — the latter was a typo for the real API ceiling and
+    // silently cost 96 tokens of output headroom on every call.
+    this.maxTokens = config.maxTokens ?? 8192;
     if (providerName) this.name = providerName;
     this.client = new Anthropic({
       apiKey: config.apiKey ?? getApiKey('ANTHROPIC_API_KEY'),
@@ -173,7 +175,7 @@ function toAnthropicTool(t: ToolDefinition): Anthropic.Tool {
   };
 }
 
-function toAnthropicMessages(history: HistoryMessage[]): Anthropic.MessageParam[] {
+export function toAnthropicMessages(history: HistoryMessage[]): Anthropic.MessageParam[] {
   const out: Anthropic.MessageParam[] = [];
 
   for (const msg of history) {
@@ -201,22 +203,60 @@ function toAnthropicMessages(history: HistoryMessage[]): Anthropic.MessageParam[
     }
   }
 
-  let breakpointCount = 0;
-  for (let i = out.length - 1; i >= 0; i--) {
-    if ((out.length - i) % 4 === 0 && breakpointCount < 2) {
-      const msg = out[i];
-      if (typeof msg.content === 'string') {
-        msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } } as Anthropic.TextBlockParam & CacheControl];
-        breakpointCount++;
-      } else if (Array.isArray(msg.content) && msg.content.length > 0) {
-        const lastBlock = msg.content[msg.content.length - 1] as any;
-        lastBlock.cache_control = { type: 'ephemeral' };
-        breakpointCount++;
-      }
+  // Cache breakpoints go on *stable semantic anchors*, not tail-relative
+  // positions.
+  //
+  // This used to mark every 4th message counting back from the end. Because
+  // history grows by a variable number of messages per turn (one user, one
+  // assistant, then one tool_result per tool call), those positions landed on
+  // a different absolute message almost every call. Anthropic still served
+  // the longest matching prefix, so reads were not destroyed — but each call
+  // wrote a *new* cache entry at a position no later call would reuse, paying
+  // the 1.25x cache-write premium for nothing.
+  //
+  // Anchors here are chosen to have byte-identical prefixes across turns:
+  //   - history[0]: the original task. Never rewritten, not even by
+  //     compaction (both strategies preserve it as the anchor), so this is
+  //     the deepest prefix that is guaranteed stable for the whole session.
+  //   - the recap / fact-log block: everything before it has already been
+  //     collapsed, and both strategies emit it with a fixed marker prefix.
+  //     The tiered strategy is append-only by design, which is exactly the
+  //     shape a prefix cache wants.
+  //
+  // Anthropic allows 4 cache_control blocks per request; system and tools
+  // take one each, leaving two — which is what the two anchors below use.
+  const anchors: number[] = [];
+  if (out.length > 0) anchors.push(0);
+  for (let i = out.length - 1; i >= 1; i--) {
+    if (isCompactionAnchor(out[i])) { anchors.push(i); break; }
+  }
+
+  for (const i of anchors) {
+    const msg = out[i];
+    if (typeof msg.content === 'string') {
+      msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } } as Anthropic.TextBlockParam & CacheControl];
+    } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+      const lastBlock = msg.content[msg.content.length - 1] as any;
+      lastBlock.cache_control = { type: 'ephemeral' };
     }
   }
 
   return out;
+}
+
+/** Markers emitted by the two compaction strategies (compactor.ts /
+ *  tiered-context.ts). Matched by prefix so the generation/count suffix,
+ *  which does change, never affects anchor detection. */
+const COMPACTION_MARKERS = ['[Earlier conversation compacted', '[Context fact log'];
+
+function isCompactionAnchor(msg: Anthropic.MessageParam): boolean {
+  if (msg.role !== 'assistant') return false;
+  const text = typeof msg.content === 'string'
+    ? msg.content
+    : Array.isArray(msg.content)
+      ? (msg.content.find(b => (b as { type?: string }).type === 'text') as { text?: string } | undefined)?.text ?? ''
+      : '';
+  return COMPACTION_MARKERS.some(m => text.startsWith(m));
 }
 
 export function fromAnthropicResponse(response: Anthropic.Message): LLMResponse {

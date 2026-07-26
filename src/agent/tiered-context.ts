@@ -29,10 +29,10 @@ import * as path from 'path';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import { createProvider, getContextWindow } from '../providers/factory.js';
 import { getApiKey, getEnv } from '../util/env.js';
+import { compactionThreshold } from './context-policy.js';
 import {
   RETENTION_RATIO,
   DEFAULT_WINDOW,
-  thresholdRatio,
   computeTailBoundary,
   countMessage,
   countText,
@@ -196,7 +196,7 @@ export async function compactHistoryTiered(
 ): Promise<{ compacted: boolean; metrics?: TieredMetrics }> {
   const log = loadFactLog(sessionPath, history);
   const window = getContextWindow(model) ?? DEFAULT_WINDOW;
-  const threshold = Math.floor(window * thresholdRatio(log.compactionCount));
+  const threshold = compactionThreshold(window, log.compactionCount);
 
   if (totalTokens < threshold) return { compacted: false };
   if (history.length <= 3) return { compacted: false };

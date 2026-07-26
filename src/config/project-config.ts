@@ -47,6 +47,23 @@ export interface ProjectConfig {
   profile?: 'local';
   /** Shadow-git checkpoints before mutating tool calls (default: true). */
   checkpoints?: boolean;
+  /** Context-management policy. */
+  context?: {
+    /**
+     * Compaction trigger ladder as window fractions, ascending — one rung per
+     * recap generation (default [0.55, 0.70, 0.85]). Lower rungs compact
+     * sooner: cheaper per turn, but more summarization passes. Tunable
+     * interactively via `/context tune`.
+     */
+    ladder?: number[];
+    /**
+     * Absolute ceiling in tokens before compaction fires (default 80000).
+     * The ladder alone is window-relative, which stops bounding cost on
+     * large-window models — a 1M-window model wouldn't compact until 550k.
+     * Set 0 to disable and use the ladder alone.
+     */
+    maxTokens?: number;
+  };
   /** Archimedes alternator — small-local-model-first routing (single-task path). */
   archimedes?: {
     enabled?: boolean;
@@ -102,6 +119,18 @@ function normalise(raw: unknown): ProjectConfig {
   if (typeof r.testCommand === 'string') out.testCommand = r.testCommand as string;
   if (r.profile === 'local') out.profile = 'local';
   if (r.checkpoints === true || r.checkpoints === false) out.checkpoints = r.checkpoints as boolean;
+  if (typeof r.context === 'object' && r.context !== null) {
+    const rc = r.context as Record<string, unknown>;
+    if (Array.isArray(rc.ladder)) {
+      const rungs = rc.ladder.filter((x): x is number => typeof x === 'number');
+      // Left un-normalized here; context-policy.setLadder() clamps and orders
+      // it, so one validator owns the invariants rather than two.
+      if (rungs.length > 0) out.context = { ...out.context, ladder: rungs };
+    }
+    if (typeof rc.maxTokens === 'number' && Number.isFinite(rc.maxTokens)) {
+      out.context = { ...out.context, maxTokens: Math.floor(rc.maxTokens as number) };
+    }
+  }
   if (typeof r.archimedes === 'object' && r.archimedes !== null) {
     const rb = r.archimedes as Record<string, unknown>;
     // Only copy present keys — the CLI spreads this over DEFAULT_ARCHIMEDES_CONFIG,

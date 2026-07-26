@@ -13,15 +13,6 @@ export {
   getEpisodeStats,
 } from './episode-capture.js';
 export type { EpisodeStats } from './episode-capture.js';
-export {
-  generateTrainingData,
-  exportJSONL,
-} from './training-data.js';
-export {
-  fineTuneWithOllama,
-  fineTuneWithOpenAI,
-  checkJobStatus,
-} from './fine-tune.js';
 export type {
   Episode,
   ArchimedesConfig,

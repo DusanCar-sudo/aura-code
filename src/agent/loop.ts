@@ -12,6 +12,7 @@ export type { TurnUsage };
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
 import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
+import { describeBudgetStop, type BudgetStop } from './session-budget.js';
 import { createCheckpoint, pruneCheckpoints } from '../checkpoints/engine.js';
 import { DEFAULTS } from '../config/defaults.js';
 import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
@@ -92,6 +93,11 @@ export interface LoopOptions {
    *  search_code) so reading different line ranges of the same file still
    *  counts as the same repeated call. Undefined = disabled (default). */
   maxRepetitionsPerTool?: number;
+  /** Cumulative turn/token guard shared across every runAgentLoop call in one
+   *  conversation. `maxTurns` above only bounds a single invocation; a
+   *  multi-segment coder conversation resets that counter on each user
+   *  message while history (and cost) carries forward. See session-budget.ts. */
+  budget?: import('./session-budget.js').SessionBudget;
   /** Maximum chars kept from a single tool result before it enters history
    *  (non-error results only — errors keep a higher ceiling for diagnostics).
    *  Default: 4,000. Set lower (e.g. 1,500) for Archimedes Q&A sessions to
@@ -148,10 +154,13 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?:
   'gemini-2.5-pro':             { in: 1.25,out: 10  },
   'gemini-2.5-flash':           { in: 0.075,out: 0.3},
   'grok-beta':                  { in: 5,   out: 15  },
-  // Zhipu publishes GLM-5 rates only; 5.1/5.2 assumed equal until announced.
-  'glm-5.2':                    { in: 1,   out: 3.2 },
-  'glm-5.1':                    { in: 1,   out: 3.2 },
-  'glm-5':                      { in: 1,   out: 3.2 },
+  // Published rates, docs.z.ai/guides/overview/pricing (checked 2026-07-26).
+  // 5.1/5.2 were previously carried at the GLM-5 rate on the assumption they
+  // matched; they don't — both input and output were understated.
+  'glm-5.2':                    { in: 1.4, out: 4.4, cachedIn: 0.26 },
+  'glm-5.1':                    { in: 1.4, out: 4.4, cachedIn: 0.26 },
+  'glm-5':                      { in: 1,   out: 3.2, cachedIn: 0.2  },
+  'glm-5-turbo':                { in: 1.2, out: 4,   cachedIn: 0.24 },
   'mimo-v2.5-pro':              { in: 1,   out: 4   },
   'mimo-v2.5':                  { in: 0.5, out: 2   },
   'mimo-v2-flash':              { in: 0.1, out: 0.4 },
@@ -207,7 +216,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     finalTask = `${task}\n\n${report}`;
   }
 
-  const profile = getLoopProfile(finalTask, opts.maxTurns);
+  const profile = getLoopProfile(opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
   const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name, finalTask);
@@ -270,11 +279,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const turnSignatures: string[] = [];
   let stall: StallKind | null = null;
 
-  // Adaptive widening: a run that hits its profile ceiling while still
-  // making progress gets ONE upgrade to profile.widenTo instead of dying
-  // with a resume hint. Explicit --max-turns never widens.
-  let maxTurns = profile.maxTurns;
-  let widened = false;
+  // Flat ceiling — checked once per turn, no widening. See loop-profile.ts
+  // for why this replaced the old shape-based ladder.
+  const maxTurns = profile.maxTurns;
 
   // Mutable bag for per-loop state (empty-response retry counter, etc.).
   const loopState: Record<string, number> = {};
@@ -309,17 +316,19 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     : null;
   let primaryArgLoopReason: string | null = null;
 
+  // Cumulative guard across the whole conversation. Checked alongside the
+  // per-invocation cap below: on a single-segment run the two agree, but on a
+  // multi-segment coder conversation only this one carries forward.
+  let budgetStop: BudgetStop | null = null;
+
   while (true) {
-    if (turns >= maxTurns) {
-      if (profile.widenTo !== undefined && !widened) {
-        widened = true;
-        maxTurns = profile.widenTo;
-        display.warning(
-          `Turn budget (${profile.maxTurns}) reached with work in progress — widening once to ${maxTurns}.`,
-        );
-      } else {
-        break;
-      }
+    // Flat turn cap — pi's loop has no equivalent check at all (it runs
+    // until the model stops calling tools); this is the one guard we kept.
+    if (turns >= maxTurns) break;
+
+    if (opts.budget) {
+      budgetStop = opts.budget.exhausted();
+      if (budgetStop) break;
     }
 
     // Abort check — user requested stop via :stop / Ctrl+C
@@ -329,6 +338,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     turns++;
+    opts.budget?.recordTurn();
     health.incrementTurn();
 
     // Compaction check runs pre-call: estimateContextTokens measures the
@@ -426,14 +436,27 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
               usage.outputTokens += outT;
               usage.totalTokens += inT + outT;
               usage.cachedTokens += cachedT;
+              // Net of cache hits, not raw prompt size — this is the ceiling
+              // that actually tracks cost across conversation segments.
+              opts.budget?.recordCall(inT, cachedT);
+              const at = new Date().toISOString();
+              const turnCost = costFor(pricingModel, inT, outT, cachedT);
               turnUsage.push({
                 turn: turns,
-                at: new Date().toISOString(),
+                at,
                 inputTokens: inT,
                 outputTokens: outT,
                 cachedTokens: cachedT,
                 cacheCreationTokens: u.cacheCreationTokens ?? 0,
-                costUsd: costFor(pricingModel, inT, outT, cachedT),
+                costUsd: turnCost,
+              });
+              logTokenUsage(opts.context.root, {
+                turn: turns, ts: at, model: provider.model,
+                input: inT, output: outT,
+                cacheHit: cachedT, cacheWrite: u.cacheCreationTokens ?? 0,
+                hitRatio: inT > 0 ? cachedT / inT : 0,
+                costUsd: turnCost,
+                ...(opts.sessionPath ? { sessionId: path.basename(opts.sessionPath, '.json') } : {}),
               });
             }
             break;
@@ -668,7 +691,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const reason = primaryArgLoopReason ? primaryArgLoopReason
     : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
     : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
-    : `ended after ${turns} turns${widened ? `, after widening once from ${profile.maxTurns}` : ''}`;
+    : budgetStop ? describeBudgetStop(budgetStop)
+    : `ended after ${turns} turns (cap: ${profile.maxTurns})`;
   return {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,
@@ -706,6 +730,39 @@ function logContextMetrics(root: string, entry: Record<string, unknown>): void {
       JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + '\n',
     );
   } catch { /* metrics logging is best-effort */ }
+}
+
+/** One per-call record in <root>/.aura/token-log.jsonl. */
+export interface TokenLogEntry {
+  turn: number;
+  ts: string;
+  model: string;
+  input: number;
+  output: number;
+  cacheHit: number;
+  cacheWrite: number;
+  /** cacheHit / input, 0 when input is 0. The number that actually matters. */
+  hitRatio: number;
+  costUsd: number;
+  sessionId?: string;
+}
+
+/**
+ * Append one line per provider call to <root>/.aura/token-log.jsonl.
+ *
+ * Separate from context-metrics.jsonl (which only records compaction events):
+ * a session can be ruinously expensive without ever compacting, which is
+ * exactly the failure this exists to make visible. Cache hit ratio is the
+ * dominant cost lever — a 98%-cached call costs ~1/10th of an uncached one at
+ * the same token count — but it was previously invisible unless you dug
+ * through session JSON after the fact.
+ */
+function logTokenUsage(root: string, entry: TokenLogEntry): void {
+  try {
+    const dir = path.join(root, '.aura');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'token-log.jsonl'), JSON.stringify(entry) + '\n');
+  } catch { /* logging is best-effort — never break a run over telemetry */ }
 }
 
 function formatCallForConfirmation(call: ToolCall): string {

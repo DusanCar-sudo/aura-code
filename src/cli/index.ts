@@ -34,6 +34,8 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
 import { runCoderConversation } from '../agent/coder-conversation.js';
+import { SessionBudget } from '../agent/session-budget.js';
+import { DEFAULT_MAX_TURNS } from '../agent/loop-profile.js';
 import { compactHistory, estimateContextTokens } from '../agent/compactor.js';
 import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
@@ -66,10 +68,36 @@ import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } fro
 import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
 import { isAuthError } from '../util/errors.js';
 import { ContextHealthTracker } from './context-health.js';
+import { setLadder, setMaxContextTokens, compactionThreshold } from '../agent/context-policy.js';
+import { getContextWindow } from '../providers/factory.js';
+import { runTuner, type TunerIO } from './context-tuner.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
 import { loadImages, looksVisionCapable } from './image-utils.js';
 
+/**
+ * Feed raw keypresses to the context tuner. The caller must have released
+ * stdin first (stopInput) — this installs its own listener and restores raw
+ * mode on dispose, so the TUI's handler can be reinstalled cleanly after.
+ */
+function makeStdinTunerIO(): TunerIO {
+  return {
+    write: (s) => process.stdout.write(s),
+    columns: () => process.stdout.columns ?? 80,
+    onKey: (handler) => {
+      const wasRaw = process.stdin.isRaw === true;
+      if (process.stdin.isTTY) process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      const listener = (data: string) => handler(data);
+      process.stdin.on('data', listener);
+      return () => {
+        process.stdin.removeListener('data', listener);
+        if (process.stdin.isTTY && !wasRaw) process.stdin.setRawMode(false);
+      };
+    },
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
@@ -458,6 +486,15 @@ const resolved = resolveConfig(
 // Register custom providers from .aura.json
 registerCustomProviders(resolved.providers);
 
+// Install the configured compaction ladder before any loop can run, so the
+// engine and the context bar read the same thresholds from turn one.
+if (fileConfig.context?.ladder) {
+  setLadder(fileConfig.context.ladder);
+}
+if (fileConfig.context?.maxTokens !== undefined) {
+  setMaxContextTokens(fileConfig.context.maxTokens);
+}
+
 const permissionLevel: PermissionLevel = resolved.mode;
 
 // Mutable runtime state — :model command updates this
@@ -580,6 +617,14 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
   let coderPermissions: PermissionSystem | undefined;
   let coderProvider: LLMProvider | undefined;
 
+  // One budget for the entire orchestrated session. Declared out here, not
+  // inside runCoderConversation, because this loop re-enters coder mode on
+  // every gazelle→coder switch — a budget created per call would reset on each
+  // switch and reproduce exactly the per-segment gap it exists to close.
+  const sessionBudget = new SessionBudget({
+    maxTurns: resolved.maxTurns ?? DEFAULT_MAX_TURNS,
+  });
+
   for (;;) {
     let outcome: LoopOutcome;
     if (mode === 'gazelle') {
@@ -610,6 +655,7 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
         display: a.display, reader, output, interactive,
         initialHistory: history, firstMessage: carry,
         maxTurns: resolved.maxTurns, sessionPath: a.sessionPath,
+        budget: sessionBudget,
         spawnConfig: { apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
       });
       carry = undefined;
@@ -820,6 +866,9 @@ async function main() {
   });
 
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  // One-shot-per-session flag for the stale-history nudge below — a session
+  // that's already been warned once shouldn't repeat it every turn.
+  let historyNudgeShown = false;
 
   // ── --build <id>: build from a saved blueprint in dependency order ───────────
   if (typeof argv.build === 'string' && argv.build) {
@@ -1305,6 +1354,25 @@ let abortController: AbortController | null = null;
       if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
       if (activeChatId) setChatId(activeChatId);
       return;
+    }
+
+    // Nudge (once per session): a REPL session's history carries forward
+    // into every new task typed into it, even ones unrelated to what came
+    // before — task 8 in a session otherwise pays to resend task 1's tool
+    // output. Compaction eventually handles this within one task, but nothing
+    // previously told the user they could start clean between tasks. Fires
+    // once, at the same threshold compaction itself would use, so it doesn't
+    // nag on ordinary-sized sessions.
+    if (!historyNudgeShown && activeChatHistory.length > 0) {
+      const window = getContextWindow(runtimeConfig.model ?? resolved.model ?? '') ?? 128_000;
+      const estimated = estimateContextTokens('', activeChatHistory);
+      if (estimated >= compactionThreshold(window, 0)) {
+        historyNudgeShown = true;
+        tuiDisplay.warning(
+          `This session's history is ~${Math.round(estimated / 1000)}k tokens and gets resent on every task. ` +
+          `If this task is unrelated to earlier ones, :new starts fresh (or :clear-history keeps this session id).`,
+        );
+      }
     }
 
     // Run task
@@ -2503,6 +2571,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     c.cumulative.outputTokens = 0;
     c.cumulative.costUsd = 0;
     console.log(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
+    // This zeroes the *displayed* counters only — the underlying history
+    // (what actually gets resent and billed on the next task) is untouched.
+    // Say so explicitly: "reset"/"clear" reads as "start fresh" otherwise,
+    // and a user who believes that will keep paying to resend everything.
+    console.log(chalk.hex(TEXT_DIM_HEX)('    (conversation history is unchanged — use :new or :clear-history to actually reset it)'));
     return { handled: true };
   }
 
@@ -2529,6 +2602,41 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     h.turnCount = u.turns;
     h.toolCallCount = u.toolCalls;
     c.display.contextDashboard?.(h);
+    return { handled: true };
+  }
+
+  if (input === '/cost' || input.startsWith('/cost ')) {
+    const { readTokenLog, formatCostReport } = await import('./cost-report.js');
+    const arg = input.startsWith('/cost ') ? input.slice('/cost '.length).trim() : '';
+    const recent = /^\d+$/.test(arg) ? Number(arg) : 20;
+    console.log(formatCostReport(readTokenLog(c.ctx.root), recent));
+    return { handled: true };
+  }
+
+  if (input === '/context tune') {
+    const u = c.cumulative;
+    const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
+    const wasInputActive = inputActive;
+    if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
+    try {
+      const saved = await runTuner(
+        makeStdinTunerIO(),
+        h.contextWindow,
+        h.estimatedTokens,
+      );
+      if (saved) {
+        const pretty = saved.map(r => (r * 100).toFixed(0) + '%').join(' → ');
+        console.log(chalk.hex('#5a9e6e')(`\n  ✓ Compaction ladder: ${pretty}`));
+        console.log(chalk.hex(TEXT_DIM_HEX)(
+          '    Applies to this session. To persist it, add to .aura.json:\n' +
+          `      "context": { "ladder": [${saved.join(', ')}] }\n`,
+        ));
+      } else {
+        console.log(chalk.hex(TEXT_DIM_HEX)('\n  Cancelled — ladder unchanged.\n'));
+      }
+    } finally {
+      if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
+    }
     return { handled: true };
   }
 
@@ -2602,7 +2710,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const result = await runAgentLoop({
         provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: undefined,
+        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
         spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
       });
 
@@ -2646,7 +2754,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const result = await runAgentLoop({
         provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: undefined,
+        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
         spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
       });
 
@@ -2966,7 +3074,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
-    --max-turns <n>          Max agent loop turns before stopping (default: sized by task shape)
+    --max-turns <n>          Max agent loop turns before stopping (default: 50)
     --moa                    Mixture of agents: parallel read-only domain perspectives + synthesis (exploratory tasks only)
     --image <path>           Attach an image to the initial message (repeatable; png/jpg/webp/gif)
     --analyze                Mine session history for weakness patterns; save report
@@ -3012,7 +3120,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
       ],
       "rateLimitRpm": 30,
       "rateLimitTpm": 1000000,
-      "maxTurns": 150,
+      "maxTurns": 50,
       "maxRetries": 6,
       "fallbacks": ["gpt-4o-mini", "gemini-2.5-flash"],
       "ignore": ["dist/", "*.generated.ts"]
