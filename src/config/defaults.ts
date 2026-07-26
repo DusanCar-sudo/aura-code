@@ -14,7 +14,7 @@ export const DEFAULTS = {
   maxFileLinesInContext: 300,
   maxDirDepth: 4,
   toolTimeout: 30_000,     // 30s max per tool execution
-  maxTurns: 150,            // prevent infinite loops
+  maxTurns: 50,             // prevent infinite loops; matches DEFAULT_MAX_TURNS
   confirmDangerous: true,   // ask before destructive ops
   autoApprove: false,       // --auto flag overrides
   verify: false,            // --verify flag enables post-task verification

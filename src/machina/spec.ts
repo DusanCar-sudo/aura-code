@@ -102,10 +102,10 @@ export const AAM_CLAIMS: VerifiableClaim[] = [
   {
     id: 'max-turns',
     component: 'limit',
-    description: 'T_max — the halting bound that makes the REAL machine decidable (150 turns by default, widening at most once for in-progress work), unlike the unbounded theoretical AAM.',
+    description: 'T_max — the halting bound that makes the REAL machine decidable (50 turns by default, flat: no shape-based ladder and no adaptive widening), unlike the unbounded theoretical AAM. Cumulative spend across conversation segments is bounded separately by SessionBudget.',
     file: 'src/config/defaults.ts',
-    line: 10,
-    mustContain: 'maxTurns: 150',
+    line: 17,
+    mustContain: 'maxTurns: 50',
   },
   {
     id: 'primitives',

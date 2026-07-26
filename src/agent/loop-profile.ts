@@ -41,8 +41,30 @@ export function classifyTask(task: string): TaskShape {
   return 'single-file';
 }
 
-/** Default hard ceiling when neither --max-turns nor .aura.json set one. */
-export const DEFAULT_MAX_TURNS = 150;
+/**
+ * Default hard ceiling when neither --max-turns nor .aura.json set one.
+ *
+ * 50, down from 150. The motivating session ran 85 turns of genuine,
+ * non-repetitive work (105 distinct tool calls, nothing a stall detector
+ * would catch) with a linearly growing resend — 7.2k input tokens on turn 1,
+ * 57.1k on turn 85. 150 sat so far above where real sessions land that it
+ * never bound anything; that run ended on its own.
+ *
+ * It was briefly 30. That was set against a cost signal of $2.25 for the
+ * session, which turned out to be a logging artifact: the provider was
+ * caching ~90% of the prompt, but the client only read DeepSeek's cache
+ * fields and recorded zero hits for Zhipu, so costFor billed every token at
+ * the uncached rate. Real cost was roughly a third of that. 30 would have
+ * truncated legitimate work to solve a problem that wasn't there.
+ *
+ * 50 is the middle ground: still well below where a runaway lands, still
+ * above the ~30 turns a substantial task actually needs. Note this is a
+ * *ceiling*, not a saving — it stops runaways, it does not make a long
+ * legitimate task cheaper. The real cost lever is per-turn resend size
+ * (context-policy.ts) and prompt-cache hit rate. Cumulative token spend is
+ * guarded separately and more meaningfully by SessionBudget.
+ */
+export const DEFAULT_MAX_TURNS = 50;
 
 /** Default stall-detection sensitivity — same for every task, no ladder. */
 export const DEFAULT_STALL_THRESHOLD = 3;

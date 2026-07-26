@@ -34,6 +34,8 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
 import { runCoderConversation } from '../agent/coder-conversation.js';
+import { SessionBudget } from '../agent/session-budget.js';
+import { DEFAULT_MAX_TURNS } from '../agent/loop-profile.js';
 import { compactHistory, estimateContextTokens } from '../agent/compactor.js';
 import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
@@ -615,6 +617,14 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
   let coderPermissions: PermissionSystem | undefined;
   let coderProvider: LLMProvider | undefined;
 
+  // One budget for the entire orchestrated session. Declared out here, not
+  // inside runCoderConversation, because this loop re-enters coder mode on
+  // every gazelle→coder switch — a budget created per call would reset on each
+  // switch and reproduce exactly the per-segment gap it exists to close.
+  const sessionBudget = new SessionBudget({
+    maxTurns: resolved.maxTurns ?? DEFAULT_MAX_TURNS,
+  });
+
   for (;;) {
     let outcome: LoopOutcome;
     if (mode === 'gazelle') {
@@ -645,6 +655,7 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
         display: a.display, reader, output, interactive,
         initialHistory: history, firstMessage: carry,
         maxTurns: resolved.maxTurns, sessionPath: a.sessionPath,
+        budget: sessionBudget,
         spawnConfig: { apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
       });
       carry = undefined;
@@ -2699,7 +2710,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const result = await runAgentLoop({
         provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: undefined,
+        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
         spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
       });
 
@@ -2743,7 +2754,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const result = await runAgentLoop({
         provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: undefined,
+        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
         spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
       });
 
@@ -3063,7 +3074,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
-    --max-turns <n>          Max agent loop turns before stopping (default: 150)
+    --max-turns <n>          Max agent loop turns before stopping (default: 50)
     --moa                    Mixture of agents: parallel read-only domain perspectives + synthesis (exploratory tasks only)
     --image <path>           Attach an image to the initial message (repeatable; png/jpg/webp/gif)
     --analyze                Mine session history for weakness patterns; save report
@@ -3109,7 +3120,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
       ],
       "rateLimitRpm": 30,
       "rateLimitTpm": 1000000,
-      "maxTurns": 150,
+      "maxTurns": 50,
       "maxRetries": 6,
       "fallbacks": ["gpt-4o-mini", "gemini-2.5-flash"],
       "ignore": ["dist/", "*.generated.ts"]
