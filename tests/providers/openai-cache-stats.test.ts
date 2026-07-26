@@ -72,11 +72,17 @@ describe('reported flag (guards AURA_DEBUG_CACHE noise)', () => {
 describe('billing impact of the fix', () => {
   // The bug this fixes: a fully-cached GLM turn was billed at the full rate
   // because the standard field was never read.
-  it('bills a cached GLM turn ~10x cheaper once the field is parsed', () => {
+  // ~4.8x, not the ~10x this once asserted: that figure came from costFor's
+  // `p.in / 10` fallback, which applied while glm-5.2 had no published cached
+  // rate in the table. Zhipu's real rates are $1.40 input / $0.26 cached
+  // (docs.z.ai/guides/overview/pricing), a 5.4x spread on the input portion
+  // and ~4.8x once uncached remainder and output are included.
+  it('bills a 98%-cached GLM turn ~4.8x cheaper once the field is parsed', () => {
     const u = usage({ prompt_tokens_details: { cached_tokens: 98_000 } });
     const before = costFor('glm-5.2', 100_000, 200);                       // cachedTokens undefined
     const after = costFor('glm-5.2', 100_000, 200, readCacheStats(u).cacheHit);
-    expect(after).toBeLessThan(before / 5);
-    expect(before / after).toBeGreaterThan(5);
+    expect(after).toBeLessThan(before / 4);
+    expect(before / after).toBeGreaterThan(4.5);
+    expect(before / after).toBeLessThan(5.5);
   });
 });
