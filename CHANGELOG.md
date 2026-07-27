@@ -4,6 +4,40 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **Streaming responses could hang forever on cloud providers.** An SSE stream
+  can go silent without the TCP connection closing — no error, no terminating
+  chunk, the read simply blocks on data that never arrives. Aura waited
+  indefinitely and showed the user nothing.
+
+  The SDKs do not cover this, despite appearing to. Both `openai` and
+  `@anthropic-ai/sdk` default to a 600s `timeout`, but implement it as
+  `fetch(...).finally(() => clearTimeout(timer))` — and the fetch promise
+  settles when response *headers* arrive, which for a stream is immediate. The
+  timer is cancelled before a single chunk of the body is read, so the
+  documented timeout covers time-to-headers and nothing else.
+
+  Streams are now guarded by an idle timeout measured *between chunks*
+  (`src/providers/stream-timeout.ts`), default **60s**, applied to both the
+  OpenAI-compatible and Anthropic paths. Total-duration limits would be the
+  wrong tool: a legitimate turn can run for minutes through tool calls, but a
+  healthy stream never goes quiet for long once tokens flow. 60s was calibrated
+  against 529 consecutive-turn intervals from this project's own token log
+  (median 3.9s, p90 27s — and those measure whole turns *including* tool
+  execution, so real inter-chunk gaps are far smaller).
+
+  On a stall the underlying request is aborted, so the socket is released
+  rather than leaked. The request is retried once, but **only when nothing has
+  reached the consumer yet** — after text has been yielded the agent loop has
+  already accumulated and displayed it, and re-running would append a second
+  full response, corrupting both the transcript and the token accounting. In
+  that case the stall surfaces as a clear provider error instead of hanging.
+  This mirrors the existing rule in `resilient.ts`, which retries acquisition
+  of the first chunk but never a mid-stream failure.
+
+  Override with `AURA_STREAM_IDLE_MS` (values below 5000 are floored; `0`
+  disables the guard entirely).
+
 ## [0.12.1] — 2026-07-26
 
 ### Added

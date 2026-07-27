@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getApiKey } from '../util/env.js';
+import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
   HistoryMessage, LLMResponse, StreamChunk, ToolCall, ToolResult,
@@ -41,18 +42,47 @@ export class AnthropicProvider implements LLMProvider {
     return fromAnthropicResponse(response);
   }
 
+  /**
+   * Retried once on a stall, and only when nothing has reached the consumer —
+   * see the note on OpenAICompatibleProvider.stream. Re-running after text has
+   * been yielded would duplicate the response.
+   */
   async *stream(
     system: string,
     history: HistoryMessage[],
     tools: ToolDefinition[],
   ): AsyncGenerator<StreamChunk> {
+    let delivered = 0;
+    try {
+      for await (const chunk of this.streamOnce(system, history, tools)) {
+        delivered++;
+        yield chunk;
+      }
+      return;
+    } catch (err) {
+      if (!isStreamStalled(err) || delivered > 0) throw err;
+    }
+    yield* this.streamOnce(system, history, tools);
+  }
+
+  private async *streamOnce(
+    system: string,
+    history: HistoryMessage[],
+    tools: ToolDefinition[],
+  ): AsyncGenerator<StreamChunk> {
     const messages = toAnthropicMessages(history);
-    const stream = this.client.messages.stream({
+    // Lets the idle guard tear down the socket instead of leaking it.
+    const controller = new AbortController();
+    const rawStream = this.client.messages.stream({
       model: this.model,
       max_tokens: this.maxTokens,
       system: toCachedSystem(system),
       tools: toCachedTools(tools),
       messages,
+    }, { signal: controller.signal });
+    const stream = withIdleTimeout(rawStream, {
+      idleMs: streamIdleMs(),
+      onStall: () => controller.abort(),
     });
 
     interface PendingTool {

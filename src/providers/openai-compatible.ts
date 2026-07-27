@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { getApiKey } from '../util/env.js';
 import { safeParseToolArgs } from '../util/json-repair.js';
 import { ThinkTagStripper, readReasoningField, resolveAnswer } from './reasoning.js';
+import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
   HistoryMessage, LLMResponse, StreamChunk, ToolCall,
@@ -61,13 +62,42 @@ export class OpenAICompatibleProvider implements LLMProvider {
     return fromOpenAIResponse(response);
   }
 
+  /**
+   * A stalled stream is retried exactly once, and only when nothing has
+   * reached the consumer yet. Once text has been yielded, the loop has already
+   * accumulated it and displayed it — re-running the request would append a
+   * second full response, corrupting both the transcript and the token count.
+   * In that case the stall surfaces as an error instead, which the agent loop
+   * reports as a provider failure rather than hanging forever.
+   */
   async *stream(
     system: string,
     history: HistoryMessage[],
     tools: ToolDefinition[],
   ): AsyncGenerator<StreamChunk> {
+    let delivered = 0;
+    try {
+      for await (const chunk of this.streamOnce(system, history, tools)) {
+        delivered++;
+        yield chunk;
+      }
+      return;
+    } catch (err) {
+      if (!isStreamStalled(err) || delivered > 0) throw err;
+    }
+    // Nothing was delivered, so this retry cannot duplicate output.
+    yield* this.streamOnce(system, history, tools);
+  }
+
+  private async *streamOnce(
+    system: string,
+    history: HistoryMessage[],
+    tools: ToolDefinition[],
+  ): AsyncGenerator<StreamChunk> {
     const messages = toOpenAIMessages(system, history);
-    const stream = await this.client.chat.completions.create({
+    // Lets the idle guard tear down the socket instead of leaking it.
+    const controller = new AbortController();
+    const rawStream = await this.client.chat.completions.create({
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
@@ -78,7 +108,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
       stream: true,
       stream_options: { include_usage: true },
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
-    } as OpenAI.ChatCompletionCreateParamsStreaming);
+    } as OpenAI.ChatCompletionCreateParamsStreaming, { signal: controller.signal });
+    const stream = withIdleTimeout(rawStream, {
+      idleMs: streamIdleMs(),
+      onStall: () => controller.abort(),
+    });
 
     let textBuffer = '';
     let reasoningBuffer = '';
