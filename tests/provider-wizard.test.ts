@@ -2,6 +2,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+// The save path calls saveKey() -> key-store.ts, which resolves its file with
+// os.homedir(). XDG_CONFIG_HOME does not affect that, so isolating only XDG let
+// these tests write 'sk-test-key' into the developer's REAL ~/.aura/keys.json,
+// clobbering their DeepSeek credential. Redirect homedir as well — the same
+// pattern tests/telegram-safety.test.ts and tests/unified-memory.test.ts use.
+// vi.hoisted() runs before the hoisted vi.mock() below, avoiding a TDZ error.
+const TEST_HOME = vi.hoisted(() => `/tmp/aura-provider-wizard-home-${Date.now()}`);
+vi.mock('os', async () => {
+  const actual = await vi.importActual('os');
+  return { ...(actual as any), homedir: () => TEST_HOME };
+});
 import {
   PROVIDER_REGISTRY,
   findProviderByName,
