@@ -25,6 +25,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
+    "@vercel/connect": "^0.4.3",
     "chalk": "^4.1.2",
     "express": "^5.2.1",
     "glob": "^10.4.5",
