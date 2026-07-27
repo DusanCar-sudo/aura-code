@@ -25,13 +25,11 @@ const REAL_DREAM = `# Dream — 2026-06-26
 
 ## Open threads
 
-- [todo] Finish implementing the kanban board from existing HTML file.
-
 - [todo] Fix the \`HistoryMessage\` type error in \`src/cli/index.ts:1789\`.
 
 ## Tomorrow brief
 
-Be ready to continue the kanban board implementation. Also fix the build error in \`src/cli/index.ts\` and deploy the website.
+Fix the build error in \`src/cli/index.ts\` and deploy the website.
 `;
 
 describe('parseDreamMarkdown — real dream file', () => {

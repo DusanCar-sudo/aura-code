@@ -45,7 +45,7 @@ const DREAM_B = `# Dream — 2026-06-24
 
 ## Open threads
 - [todo] build real-time telemetry
-- [todo] transcribe the kanban recording
+
 - [safety] confirm the safety toggle persists across sessions
 
 ## Tomorrow brief
