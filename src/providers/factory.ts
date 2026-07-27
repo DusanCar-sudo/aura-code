@@ -255,13 +255,18 @@ export function resolveProviderTransport(
     };
   }
   if (globalModel === model) {
-    return {
-      baseUrl: opts.baseUrl ?? globalCfg?.baseUrl,
-      apiKey: opts.apiKey,
-    };
+    let baseUrl: string | undefined = opts.baseUrl ?? globalCfg?.baseUrl;
+    if (baseUrl) {
+      const knownFamily = baseUrlFamily(baseUrl);
+      const mismatchedKnownFamily = knownFamily !== undefined && knownFamily !== modelProviderFamily(model);
+      if (mismatchedKnownFamily) {
+        baseUrl = undefined;
+      }
+    }
+    return { baseUrl, apiKey: opts.apiKey };
   }
 
-  let baseUrl = opts.baseUrl;
+  let baseUrl: string | undefined = opts.baseUrl;
   if (baseUrl) {
     const tiedToOther =
       (saved?.baseUrl && baseUrl === saved.baseUrl && savedModel && savedModel !== model)
