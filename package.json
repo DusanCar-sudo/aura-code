@@ -13,6 +13,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "prepublishOnly": "npm run clean && npm run build",
     "build": "tsc",
     "dev": "ts-node src/cli/index.ts",
     "start": "node dist/cli/index.js",
