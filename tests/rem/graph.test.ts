@@ -69,8 +69,8 @@ describe('parseDreamFile', () => {
 
     expect(night.date).toBe('2026-06-24');
     expect(night.episodeCount).toBe(69);
-    // 3 lessons + 3 open-threads tagged bullets = 6 occurrences
-    expect(night.occurrences).toHaveLength(6);
+    // 3 lessons + 2 open-threads tagged bullets = 5 occurrences
+    expect(night.occurrences).toHaveLength(5);
     expect(night.occurrences.map(o => o.tag)).toEqual(
       expect.arrayContaining(['configuration', 'safety', 'tooling', 'todo']),
     );
@@ -161,9 +161,9 @@ describe('buildRemGraph', () => {
       // distinct tags across both nights: error, todo, configuration, safety, tooling
       expect(tagNodes).toHaveLength(5);
 
-      // "todo" appears once in DREAM_A + twice in DREAM_B → total 3, across 2 nights.
+      // "todo" appears once in DREAM_A + once in DREAM_B → total 2, across 2 nights.
       const todo = graph.topTags.find(t => t.tag === 'todo');
-      expect(todo).toMatchObject({ count: 3, nights: 2 });
+      expect(todo).toMatchObject({ count: 2, nights: 2 });
 
       // "safety" appears twice on 2026-06-24 only (Lessons + Open threads).
       const safety = graph.topTags.find(t => t.tag === 'safety');
