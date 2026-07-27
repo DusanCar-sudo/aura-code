@@ -5,6 +5,26 @@ All notable changes to Aura Code are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`npm test` sent a real Telegram voice message and overwrote a real API
+  key.** Two tests reached outside their sandbox on any machine with a
+  configured bot:
+
+  `tests/telegram-voice-live.test.ts` was gated `skipIf(isCI || !hasTelegramConfig)`
+  — it skipped on CI and ran everywhere else, firing a live voice note at
+  `telegram.json:default_chat_id` on every run. The sends left no trace in the
+  bot's journal or session history (they came from the vitest process, not the
+  bot service), which made them look like unexplained "the bot keeps sending me
+  audio every few hours" behaviour. Now opt-in via `AURA_LIVE_VOICE_TEST=1`,
+  and it requires an explicit `AURA_TEST_CHAT_ID` rather than falling back to a
+  real person's chat.
+
+  `tests/provider-wizard.test.ts` isolated `XDG_CONFIG_HOME` but not
+  `os.homedir()`, which is what `key-store.ts` uses — so `saveKey()` wrote the
+  fixture `sk-test-key` into the developer's real `~/.aura/keys.json`,
+  replacing their DeepSeek credential. It now mocks `os.homedir()` like the
+  other filesystem-touching tests.
+
+
 - **Streaming responses could hang forever on cloud providers.** An SSE stream
   can go silent without the TCP connection closing — no error, no terminating
   chunk, the read simply blocks on data that never arrives. Aura waited
