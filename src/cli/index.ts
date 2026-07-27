@@ -34,7 +34,7 @@ import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
 import { runCoderConversation } from '../agent/coder-conversation.js';
-import { SessionBudget } from '../agent/session-budget.js';
+import { SessionBudget, describeBudgetStop } from '../agent/session-budget.js';
 import { DEFAULT_MAX_TURNS } from '../agent/loop-profile.js';
 import { compactHistory, estimateContextTokens } from '../agent/compactor.js';
 import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
@@ -1329,6 +1329,21 @@ let abortController: AbortController | null = null;
 
   let tuiInputHistory = [];
 
+  // One budget for the whole REPL process, not one per user message. Each
+  // message starts a fresh runAgentLoop whose own turn counter restarts at
+  // zero, while the history — and therefore the input cost of every call —
+  // carries forward, so a per-segment counter cannot bound cumulative spend.
+  //
+  // Token ceiling only. maxTurns is deliberately omitted (SessionBudget reads
+  // that as Infinity), because a cumulative *turn* cap is the wrong guard for
+  // interactive use: a human types every message and watches every response.
+  // Measured on a real 96-minute REPL session — 58 turns across 9 messages,
+  // 86% cache hit rate, $0.50 total — a 50-turn ceiling would have interrupted
+  // a cheap, supervised session for crossing an arbitrary count. The
+  // per-invocation maxTurns guard still applies within each message and is
+  // what actually catches a runaway loop (that session peaked at 19).
+  const replBudget = new SessionBudget({});
+
   async function processLine(input: string) {
     const replCtx = {
       rl: null,
@@ -1375,6 +1390,16 @@ let abortController: AbortController | null = null;
       }
     }
 
+    // Refuse the next task rather than aborting one mid-response — same
+    // contract as runCoderConversation's runTask.
+    const budgetStop = replBudget.exhausted();
+    if (budgetStop) {
+      tuiDisplay.warning(
+        `${describeBudgetStop(budgetStop)}. Start a fresh session with :new, or :clear-history to keep this session id.`,
+      );
+      return;
+    }
+
     // Run task
     let result;
     abortController = createAbortController();
@@ -1394,6 +1419,7 @@ let abortController: AbortController | null = null;
             context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
             maxTurns: resolved.maxTurns,
+            budget: replBudget,
             abortSignal,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
@@ -1416,6 +1442,7 @@ let abortController: AbortController | null = null;
             context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
             maxTurns: resolved.maxTurns,
+            budget: replBudget,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
               baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -1452,6 +1479,7 @@ let abortController: AbortController | null = null;
           context: ctx, permissions, display: tuiDisplay,
           initialHistory: activeChatHistory,
           maxTurns: resolved.maxTurns,
+          budget: replBudget,
           spawnConfig: {
             apiKey: runtimeConfig.apiKey,
             baseUrl: runtimeConfig.baseUrl ?? undefined,
