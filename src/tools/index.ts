@@ -193,7 +193,7 @@ const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
   web_search:   /\b(web.?search|search|look up|find online|google|latest|current|news|recent)\b/i,
   memory:       /\b(remember|recall|memory|forget|note|store|what did|last time)\b/i,
   mcp:          /\b(mcp|tool server|external tool|connect to)\b/i,
-  github:       /\bgit\b|\bgithub\b|\bpr\b|pull[ .-]?request|\bcommit\b|\brepo\b|\bbranch\b|\bfork\b|\bclone\b|\bgh\b/i,
+  github:       /\bgit\b|\bgithub\b|\b(pr|prs)\s*#?\d+|pull[ .-]?request|\bcommit\b|\brepo\b|\bbranch\b|\bfork\b|\bclone\b|\bgh\b/i,
 };
 
 /** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy). */
