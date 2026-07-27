@@ -78,10 +78,21 @@ describe('selectTools relevance gate', () => {
 
   it('selected tools preserve TOOL_DEFINITIONS order and cover all 25 when everything triggers', () => {
     const everything = Object.values({
-      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr clone fork repo branch',
+      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr #42 clone fork repo branch',
     }).join(' ');
     const sent = names(everything);
     expect(sent).toEqual(TOOL_DEFINITIONS.map(t => t.name));
+  });
+
+  it('PR with number triggers github tool', () => {
+    expect(names('review PR #12 and merge it')).toContain('github');
+    expect(names('PR 42 is ready')).toContain('github');
+    expect(names('check the PRs #7, #8')).toContain('github');
+  });
+
+  it('bare PR without number does not trigger github tool', () => {
+    expect(names('our PR strategy needs work')).not.toContain('github');
+    expect(names('the PR manager approved it')).not.toContain('github');
   });
 
   it('gate ignores tool_result content', () => {
