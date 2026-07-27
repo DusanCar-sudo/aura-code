@@ -369,6 +369,13 @@ turn cap catches runaway loops. Whichever binds first stops the run, and it
 stops *cleanly*: the current turn finishes and history is persisted, so the
 session stays resumable.
 
+**In the interactive REPL, only the token ceiling is cumulative.** You are
+typing every message and watching every response, so a session-wide *turn*
+cap would interrupt a cheap, supervised conversation for crossing a count
+that says nothing about its cost — one real 96-minute session ran 58 turns at
+a 86% cache hit rate for $0.50. The per-message `--max-turns` guard still
+applies and is what actually catches a runaway loop.
+
 The turn cap is 50, not the previous 150. **Expect `--max-turns` to be routine
 for real project work**, not just something benchmark runs pass.
 

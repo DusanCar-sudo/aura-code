@@ -206,6 +206,82 @@ describe('TUI cursor preservation', () => {
     expect(output).not.toContain('A');
   });
 
+  // ── v0.12.2 scroll-mode regressions ──────────────────────────────────────
+
+  it('treats SS3 arrow keys as arrows, not Escape plus stray letters', () => {
+    // Terminals in application-cursor mode send \x1bOA for Up. That fell through
+    // to the bare-Escape branch: Escape entered scroll mode and "O"/"A" were
+    // typed into the input as literal text.
+    initTui();
+    startInput();
+    process.stdin.emit('data', 'hello');
+    chunks = [];
+
+    process.stdin.emit('data', '\x1bOA');
+
+    const output = chunks.join('');
+    expect(output).not.toContain('-- SCROLL --');
+    expect(stripAnsi(output)).not.toMatch(/hello[OA]/);
+  });
+
+  it('waits for the final byte of a split SS3 sequence', () => {
+    initTui();
+    startInput();
+    process.stdin.emit('data', 'hi');
+    chunks = [];
+
+    process.stdin.emit('data', '\x1bO');   // torn read — no final byte yet
+    process.stdin.emit('data', 'B');
+
+    const output = chunks.join('');
+    expect(output).not.toContain('-- SCROLL --');
+    expect(stripAnsi(output)).not.toMatch(/hi[OB]/);
+  });
+
+  it('types q when leaving scroll mode instead of swallowing it', () => {
+    initTui();
+    startInput();
+    writeOutput('one line');
+    // Up-arrow on an empty input enters scroll mode directly. (Entering via a
+    // lone Esc would leave a second Esc buffered, which exits again.)
+    process.stdin.emit('data', '\x1b[A');
+    chunks = [];
+
+    process.stdin.emit('data', 'q');
+
+    expect(stripAnsi(chunks.join(''))).toContain('q');
+  });
+
+  it('still treats i as the documented insert command, not text', () => {
+    // The scroll indicator advertises "i/Enter/Esc insert", so i must not type.
+    initTui();
+    startInput();
+    writeOutput('one line');
+    process.stdin.emit('data', '\x1b[A');
+    chunks = [];
+
+    process.stdin.emit('data', 'i');
+
+    // Leaves scroll mode without inserting the character into the input box.
+    const box = stripAnsi(chunks.join('')).match(/\u2502 ([^\u2502]*)/);
+    expect(box?.[1] ?? '').not.toMatch(/^i/);
+  });
+
+  it('applies a resize that arrived while an overlay held the screen', () => {
+    initTui();
+    startInput();
+    stopInput();                       // overlay takes the screen
+    chunks = [];
+
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 100 });
+    Object.defineProperty(process.stdout, 'rows', { configurable: true, value: 30 });
+    process.stdout.emit('resize');
+    expect(chunks.join('')).toBe('');  // dropped while inactive…
+
+    startInput();                      // …and replayed on resume
+    expect(chunks.join('')).toContain('\x1b[1;23r');
+  });
+
   it('collapses a multi-line bracketed paste into a placeholder and expands it on submit', () => {
     initTui();
     startInput();
