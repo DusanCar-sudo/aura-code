@@ -1,11 +1,11 @@
-// Dumps Ruby competence + episode stats as one JSON object on stdout.
+// Dumps Archimedes competence + episode stats as one JSON object on stdout.
 // Read-only over the episode store — used by the 50-day trial dashboard
 // to capture daily competence-by-category and verification catch rate.
 //
 // Usage: npx ts-node scripts/dump-ruby-stats.ts [projectRoot]
 
-import { loadEpisodes, getEpisodeStats } from '../src/ruby/index.js';
-import { getCompetenceReport } from '../src/ruby/competence.js';
+import { loadEpisodes, getEpisodeStats } from '../src/archimedes/index.js';
+import { getCompetenceReport } from '../src/archimedes/competence.js';
 
 async function main(): Promise<void> {
   const projectRoot = process.argv[2] ?? process.cwd();
@@ -14,16 +14,22 @@ async function main(): Promise<void> {
   const competence = getCompetenceReport(episodes);
   const episodeStats = await getEpisodeStats(projectRoot);
 
-  const rubyAttempts = episodeStats.rubySuccesses + episodeStats.rubyFailures;
-  const verificationCatchRate = rubyAttempts === 0
-    ? 0
-    : episodeStats.rubyFailures / rubyAttempts;
+  const attempts = episodeStats.archimedesSuccesses + episodeStats.archimedesFailures;
+  const verificationCatchRate = attempts === 0
+    ? null
+    : episodeStats.archimedesFailures / attempts;
 
   const out = {
     timestamp: new Date().toISOString(),
     projectRoot,
     competence,
-    episodeStats,
+    episodeStats: {
+      total: episodeStats.total,
+      archimedesSuccesses: episodeStats.archimedesSuccesses,
+      archimedesFailures: episodeStats.archimedesFailures,
+      largeModelInterventions: episodeStats.largeModelInterventions,
+      readyForFineTune: episodeStats.readyForFineTune,
+    },
     verificationCatchRate,
   };
 
