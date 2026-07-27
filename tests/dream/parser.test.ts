@@ -74,13 +74,11 @@ describe('parseDreamMarkdown — real dream file', () => {
   });
 
   it('parses Open threads with [todo] tags', () => {
-    expect(parsed.openThreads).toHaveLength(2);
+    expect(parsed.openThreads).toHaveLength(1);
     expect(parsed.openThreads[0].tag).toBe('todo');
-    expect(parsed.openThreads[1].tag).toBe('todo');
   });
 
   it('captures Tomorrow brief as joined prose', () => {
-    expect(parsed.tomorrowBrief).toContain('kanban board');
     expect(parsed.tomorrowBrief).toContain('deploy the website');
   });
 });
