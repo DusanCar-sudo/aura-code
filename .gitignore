@@ -71,4 +71,3 @@ Empty File
 /aura-code
 
 # GitHub integration implementation (local config — example template is committed instead)
-src/integrations/github.ts
