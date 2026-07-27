@@ -187,6 +187,8 @@ function restoreCursor(): void { rawWrite('\x1b[u'); }
 
 let altScreenActive = false;
 let resizeHandlerAttached = false;
+/** A resize that arrived while an overlay held the screen, replayed on startInput(). */
+let pendingResize = false;
 export function enterAltScreen(): void {
   altScreenActive = true;
   rawWrite('\x1b[?1049h');
@@ -644,7 +646,14 @@ function redrawLiveView(): void {
 }
 
 function handleResize(): void {
-  if (!inputActive) return;
+  if (!inputActive) {
+    // An overlay (palette, session switcher, context tuner, confirm prompt)
+    // owns the screen. Dropping the event outright left the scroll region set
+    // to the old geometry once the overlay closed, so output landed on the
+    // wrong rows. Remember it and re-apply when input resumes.
+    pendingResize = true;
+    return;
+  }
   if (fullscreenPrompt) {
     rawWrite('\x1b[2J\x1b[H');
     return;
@@ -950,7 +959,9 @@ function handleScrollKey(key: string): void {
     case '\x15': case '\x1b[5~': scrollOffset += half; break;
     case '\x04': case '\x1b[6~': scrollOffset -= half; break;
     case 'G': scrollOffset = 0; break;
-    case 'i': case 'q': case '\x1b': case '\r': case '\n': case '\x03':
+    // 'q' is intentionally absent: it is not advertised as a scroll command,
+    // so handleKey now treats it as ordinary text (see the note there).
+    case 'i': case '\x1b': case '\r': case '\n': case '\x03':
       exitScrollMode();
       return;
     default: return;
@@ -960,7 +971,15 @@ function handleScrollKey(key: string): void {
 
 function handleKey(key: string): void {
   if (scrollMode) {
-    if (isPrintableText(key) && key !== 'i' && key !== 'q') {
+    // Any printable character leaves scroll mode and is then typed normally —
+    // it falls through to the input handling below rather than being consumed.
+    //
+    // `i` is the one exception, and deliberately so: the scroll indicator
+    // advertises "i/Enter/Esc insert", so it is a documented vim-style command
+    // and swallowing it is what the user asked for. `q` used to be excluded
+    // too, but it is advertised nowhere — typing a word beginning with "q"
+    // silently lost its first letter.
+    if (isPrintableText(key) && key !== 'i') {
       exitScrollMode();
     } else {
       handleScrollKey(key);
@@ -1047,6 +1066,21 @@ function rawHandler(data: string): void {
           i += m[0].length;
           continue;
         }
+        // SS3 (\x1bO<final>) — what terminals send for arrow keys in
+        // application cursor mode. Without this the sequence fell through to
+        // the bare-Escape branch below: Escape put the TUI into scroll mode
+        // and the remaining "O" and final letter were typed into the input as
+        // literal text. Pressing Up could flip the screen and corrupt the
+        // line. Normalized to CSI so the rest of handleKey matches one form,
+        // exactly as context-tuner.ts's splitKeys already does.
+        if (stdinBuffer[i + 1] === 'O') {
+          // Wait for the final byte rather than emitting a bare Escape — the
+          // sequence may be split across reads.
+          if (i + 2 >= stdinBuffer.length) break;
+          handleKey('\x1b[' + stdinBuffer[i + 2]);
+          i += 3;
+          continue;
+        }
         handleKey('\x1b');
         i += 1;
         continue;
@@ -1074,6 +1108,10 @@ export function startInput(): void {
   rawWrite('\x1b[?2004h'); // enable bracketed paste
   stdinHandler = rawHandler;
   process.stdin.on('data', stdinHandler);
+  if (pendingResize) {
+    pendingResize = false;
+    handleResize();   // inputActive is true now, so this applies the geometry
+  }
 }
 
 export function stopInput(): void {

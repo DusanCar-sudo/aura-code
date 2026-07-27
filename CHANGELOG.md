@@ -4,7 +4,59 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.12.2] — 2026-07-27
+
+### Added
+- **Cumulative token ceiling now covers the plain REPL session.** Previously
+  only the gazelle orchestrator's coder-conversation path held a
+  `SessionBudget`; the REPL passed none, so `recordTurn`/`recordCall` were
+  no-ops and net-of-cache spend was never tracked across messages. One budget
+  now lives for the life of the REPL process.
+
+  Turn-count enforcement is deliberately **not** extended here. The
+  per-invocation `maxTurns` guard already holds correctly in the REPL, and a
+  cumulative turn cap is the wrong instrument for interactive use where a
+  human types every message and watches every response. Measured on a real
+  96-minute session — 58 turns across 9 messages, 86% cache hit rate, $0.50
+  total, peak 19 turns in any single message — a 50-turn session cap would
+  have interrupted that for crossing a count that said nothing about its cost.
+
 ### Fixed
+- **TUI: SS3-encoded arrow keys corrupted the input and flipped the screen.**
+  Terminals in application-cursor mode send `\x1bOA` for Up. The input parser
+  handled CSI (`\x1b[A`) but not SS3, so the sequence fell through to the
+  bare-Escape branch: Escape entered scroll mode and the remaining `O` and
+  final letter were typed into the input as literal text. Pressing an arrow
+  key could flip the display to the scroll view and inject garbage.
+
+  This is very likely the real cause of the "response stalled, then typing
+  fixed it" reports — the live view was frozen in scroll mode, not the network
+  connection. Typing a printable character exits scroll mode and redraws,
+  which is exactly the observed "fix". Normalized the same way
+  `context-tuner.ts`'s `splitKeys` already did, including waiting for the
+  final byte when the sequence is split across reads.
+- **TUI: typing `q` to leave scroll mode silently dropped the character** — a
+  word beginning with "q" lost its first letter. `q` was excluded from the
+  printable-exit path but advertised nowhere. `i` remains excluded on purpose:
+  the scroll indicator documents "i/Enter/Esc insert", so it is a deliberate
+  vim-style command.
+- **TUI: terminal resizes during an overlay were dropped entirely.** While a
+  command palette, session switcher, context tuner, or confirmation prompt
+  held the screen, `handleResize` returned early and the event was lost,
+  leaving the scroll region set to the old geometry once the overlay closed.
+  The resize is now recorded and applied when input resumes.
+
+### Known follow-ups (not in this release)
+- **ESC timeout.** A lone Escape stays buffered until the next byte arrives,
+  so pressing Esc alone does nothing until another key is pressed. Fixing it
+  needs a ~25–50 ms timer to disambiguate Escape from the start of a sequence;
+  a fixed timeout can misfire on slow terminals and high-latency SSH, so it is
+  deferred to its own pass rather than rushed into a patch release.
+- **Archimedes alternator has no budget wired in at all.** `alternator.run()`
+  accepts no budget in its options interface, so neither ceiling applies to
+  that path. Closing it needs a signature change.
+
+### Fixed (previously unreleased)
 - **`npm test` sent a real Telegram voice message and overwrote a real API
   key.** Two tests reached outside their sandbox on any machine with a
   configured bot:
