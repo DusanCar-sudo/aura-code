@@ -76,9 +76,9 @@ describe('selectTools relevance gate', () => {
     }
   });
 
-  it('selected tools preserve TOOL_DEFINITIONS order and cover all 24 when everything triggers', () => {
+  it('selected tools preserve TOOL_DEFINITIONS order and cover all 25 when everything triggers', () => {
     const everything = Object.values({
-      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url',
+      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr clone fork repo branch',
     }).join(' ');
     const sent = names(everything);
     expect(sent).toEqual(TOOL_DEFINITIONS.map(t => t.name));
