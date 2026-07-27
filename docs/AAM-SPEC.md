@@ -2,7 +2,7 @@
 
 **Version:** 0.8.0 (spec text re-verified against source 2026-07-07; §6 anchors below match live `src/` line numbers as of that date — expect drift after future edits to `loop.ts`/`compactor.ts`, since `:machina` checks the structural claims, not this document's line numbers)
 **Status:** Draft  
-**Author:** Aura (built by agents, for agents)
+**Author:** Aura (designed by Dušan Milosavljević, written with coding tools)
 
 > *"An agent is not a program. A program is a fixed path through a state space.
 > An agent is a machine that *chooses* the path."*

@@ -50,6 +50,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "homepage": "https://aurawebsite-eta.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DusanCar-sudo/aura-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DusanCar-sudo/aura-code/issues"
+  },
   "keywords": [
     "ai",
     "agent",
@@ -63,7 +71,7 @@
   "directories": {
     "test": "tests"
   },
-  "author": "",
+  "author": "Dušan Milosavljević",
   "type": "commonjs",
   "types": "./dist/cli/index.d.ts"
 }
