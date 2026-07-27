@@ -369,6 +369,14 @@ session stays resumable.
 The turn cap is 50, not the previous 150. **Expect `--max-turns` to be routine
 for real project work**, not just something benchmark runs pass.
 
+**Stalled streams.** A cloud provider's SSE stream can go silent without the
+connection closing — no error, no end-of-stream, just nothing. The provider
+SDKs don't catch this: their `timeout` option only covers time-to-headers, not
+the streamed body. Aura applies its own idle timeout **between chunks**
+(default 60s); on a stall it aborts the request and retries once, but only if
+nothing has been displayed yet — retrying after partial output would duplicate
+the response. Tune with `AURA_STREAM_IDLE_MS` (ms; `0` disables).
+
 **Visibility.** `/cost` reports cache hit rate and per-call cost from
 `.aura/token-log.jsonl`, including what the same input would have cost
 uncached. Hit ratio is the dominant lever: in one measured session, 19.5M
