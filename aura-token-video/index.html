@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;800&display=swap" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #09090b; font-family: "Inter", sans-serif; }
+      .scene { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 120px; opacity: 0; visibility: hidden; }
+      
+      .bg-gradient { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.15), transparent 70%); z-index: -2; }
+      
+      .grid-bg {
+        position: absolute; inset: 0;
+        background-image: linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+        background-size: 60px 60px;
+        mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
+        z-index: -1;
+      }
+      
+      .title { font-size: 110px; font-weight: 800; color: #f8fafc; text-align: center; line-height: 1.1; margin-bottom: 40px; }
+      .subtitle { font-size: 54px; font-weight: 400; color: #94a3b8; text-align: center; max-width: 1400px; line-height: 1.4; }
+      
+      .accent { background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+      
+      .feature-list { display: flex; flex-direction: column; gap: 32px; align-items: flex-start; margin-top: 60px; }
+      .feature-item { display: flex; align-items: center; gap: 32px; font-size: 48px; color: #e2e8f0; font-weight: 500; }
+      .feature-icon { width: 64px; height: 64px; border-radius: 16px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.5); display: flex; align-items: center; justify-content: center; color: #60a5fa; font-size: 32px; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="197" data-width="1920" data-height="1080">
+      
+      <audio id="narration" data-start="0" data-duration="197" data-track-index="2" src="reply_audio.wav" data-volume="1"></audio>
+      
+      <div class="grid-bg"></div>
+      <div class="bg-gradient"></div>
+
+      <!-- Scene 1: Flash Attention (0 - 56) -->
+      <div id="scene1" class="clip scene" data-start="0" data-duration="56" data-track-index="1">
+        <h1 class="title">Is <span class="accent">Flash Attention</span> Possible Here?</h1>
+        <p class="subtitle">Aura Code is an API client, not an inference engine. Flash Attention happens on the GPU level of the model provider or local engine.</p>
+      </div>
+
+      <!-- Scene 2: Implemented Optimizations (56 - 134) -->
+      <div id="scene2" class="clip scene" data-start="56" data-duration="78" data-track-index="1">
+        <h1 class="title">What we <span class="accent">already do</span> to save tokens</h1>
+        <div class="feature-list">
+          <div class="feature-item feature-item-1">
+            <div class="feature-icon">1</div>
+            Prompt Caching (up to 90% savings)
+          </div>
+          <div class="feature-item feature-item-2">
+            <div class="feature-icon">2</div>
+            History Compaction & Context Trimming
+          </div>
+          <div class="feature-item feature-item-3">
+            <div class="feature-icon">3</div>
+            "Confession" Anti-Loop System
+          </div>
+          <div class="feature-item feature-item-4">
+            <div class="feature-icon">4</div>
+            Rust Token Killer (RTK) Proxy Hook
+          </div>
+        </div>
+      </div>
+
+      <!-- Scene 3: Future Possibilities (134 - 197) -->
+      <div id="scene3" class="clip scene" data-start="134" data-duration="63" data-track-index="1">
+        <h1 class="title">What <span class="accent">more</span> we can build</h1>
+        <div class="feature-list">
+          <div class="feature-item feature-item-s3-1">
+            <div class="feature-icon">A</div>
+            Dynamic Model Routing (Small models for planning)
+          </div>
+          <div class="feature-item feature-item-s3-2">
+            <div class="feature-icon">B</div>
+            Semantic Code Search (RAG instead of full file reads)
+          </div>
+          <div class="feature-item feature-item-s3-3">
+            <div class="feature-icon">C</div>
+            Aggressive Native Shell Truncation
+          </div>
+          <div class="feature-item feature-item-s3-4">
+            <div class="feature-icon">D</div>
+            Sliding Window Prompt Caching
+          </div>
+        </div>
+      </div>
+      
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      const enterEase = "power3.out";
+      
+      // -- SCENE 1 --
+      tl.set("#scene1", { visibility: "visible", opacity: 1 }, 0);
+      tl.from("#scene1 .title", { y: 60, opacity: 0, duration: 1.2, ease: enterEase }, 0.5);
+      tl.from("#scene1 .subtitle", { y: 40, opacity: 0, duration: 1.0, ease: enterEase }, 0.8);
+      
+      // Scene 1 Exit
+      tl.to("#scene1 .title", { y: -40, opacity: 0, duration: 0.8, ease: "power2.inOut" }, 55.2);
+      tl.to("#scene1 .subtitle", { y: -30, opacity: 0, duration: 0.8, ease: "power2.inOut" }, 55.4);
+      tl.set("#scene1", { visibility: "hidden" }, 56);
+
+      // -- SCENE 2 --
+      tl.set("#scene2", { visibility: "visible", opacity: 1 }, 56);
+      tl.from("#scene2 .title", { y: 60, opacity: 0, duration: 1.2, ease: enterEase }, 56.5);
+      
+      // Stagger items based on audio pacing roughly
+      tl.from(".feature-item-1", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 59);
+      tl.from(".feature-item-2", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 67);
+      tl.from(".feature-item-3", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 76);
+      tl.from(".feature-item-4", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 92);
+      
+      // Scene 2 Exit
+      tl.to("#scene2", { opacity: 0, y: -40, duration: 0.8, ease: "power2.inOut" }, 133.2);
+      tl.set("#scene2", { visibility: "hidden" }, 134);
+
+      // -- SCENE 3 --
+      tl.set("#scene3", { visibility: "visible", opacity: 1 }, 134);
+      tl.from("#scene3 .title", { y: 60, opacity: 0, duration: 1.2, ease: enterEase }, 134.5);
+      
+      tl.from(".feature-item-s3-1", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 138);
+      tl.from(".feature-item-s3-2", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 153);
+      tl.from(".feature-item-s3-3", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 167);
+      tl.from(".feature-item-s3-4", { x: -40, opacity: 0, duration: 0.8, ease: enterEase }, 181);
+      
+      // Scene 3 Exit (Fade to black)
+      tl.to("#scene3", { opacity: 0, duration: 1.5, ease: "power1.inOut" }, 195);
+      
+      // Subtle pulsing background
+      tl.to(".bg-gradient", { background: "radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.2), transparent 70%)", duration: 10, ease: "sine.inOut", repeat: 19, yoyo: true }, 0);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

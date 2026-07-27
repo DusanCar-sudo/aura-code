@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>quantum physics and the role of computation — Ecclesia</title>
+<style>
+  :root {
+    --bg: #fdf6f0; --card: #fffaf5; --text: #3e2f24; --muted: #8a7768;
+    --accent: #cc785c; --accent-2: #5a9e6e; --border: #e8d5c8;
+    --code-bg: #f4ede6; --bq: #cc785c; --hr: #e0cebc;
+    --shadow: 0 2px 12px rgba(62,47,36,0.06); --radius: 12px;
+    --serif: 'Georgia', 'Times New Roman', serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1b18; --card: #26221e; --text: #ede0cc; --muted: #9e8e80;
+      --accent: #e08a6e; --accent-2: #6db880; --border: #3a322a;
+      --code-bg: #2c2722; --bq: #e08a6e; --hr: #3a322a;
+      --shadow: 0 2px 12px rgba(0,0,0,0.25);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--serif); line-height: 1.75; font-size: 18px; }
+  .container { max-width: 780px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  .hero { text-align: center; padding: 3rem 0 2.5rem; border-bottom: 2px solid var(--border); margin-bottom: 2.5rem; }
+  .hero .badge { display: inline-block; background: var(--accent); color: #fff; font-family: var(--sans); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.3em 1em; border-radius: 100px; margin-bottom: 1.25rem; }
+  .hero h1 { font-family: var(--sans); font-size: 2.4rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+  .hero .meta { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 2.5rem 3rem; }
+  @media (max-width: 640px) { .card { padding: 1.5rem; border-radius: 8px; } .hero h1 { font-size: 1.7rem; } .container { padding: 1.5rem 0.75rem 3rem; } }
+  .card h1, .card h2, .card h3 { font-family: var(--sans); margin: 2rem 0 0.75rem; line-height: 1.3; }
+  .card h2:first-child { margin-top: 0; }
+  .card h2 { font-size: 1.45rem; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; }
+  .card h3 { font-size: 1.1rem; color: var(--accent-2); }
+  .card p { margin: 0.85rem 0; }
+  .card a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); }
+  .card ul, .card ol { margin: 0.85rem 0; padding-left: 1.8rem; }
+  .card li { margin: 0.4rem 0; }
+  .card code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.4em; border-radius: 4px; border: 1px solid var(--border); }
+  .card hr { border: none; border-top: 1px solid var(--hr); margin: 2rem 0; }
+  .footer { text-align: center; margin-top: 2.5rem; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); opacity: 0.7; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="hero">
+    <div class="badge">Ecclesia &middot; 5 agents</div>
+    <h1>quantum physics and the role of computation</h1>
+    <div class="meta">2026-07-12</div>
+  </header>
+  <article class="card">
+<h2>Convergent findings</h2>
+<p>All five agents independently affirm:</p>
+<ol>
+<li><strong>Feynman/Manin’s foundational argument (1981–1982):</strong> Classical computers cannot efficiently simulate quantum systems due to exponential Hilbert space growth, motivating quantum computers as tools for physics. This is the most frequently cited link between quantum physics and computation.</li>
+<li><strong>Church–Turing–Deutsch principle:</strong> David Deutsch and others extended the classical Church–Turing thesis, asserting that a universal computing device can simulate any physical process. This is broadly accepted as a theoretical foundation.</li>
+<li><strong>Current quantum computers remain in the NISQ era:</strong> No existing quantum device has demonstrated a practical speedup for a commercially or scientifically useful problem. Error correction, qubit coherence, and scaling to fault-tolerant logical qubits are unresolved bottlenecks.</li>
+<li><strong>Quantum simulation is the most concrete near-term application:</strong> Simulating quantum many-body systems (e.g., lattice gauge theories, non-equilibrium dynamics) is widely seen as the application most likely to yield early advantage, with analog and digital approaches competing.</li>
+<li><strong>Digital physics (universe as computer) is speculative and faces experimental obstacles:</strong> Models that treat the universe as a digital computation violate continuous symmetries (Lorentz, rotational) and belong to local-hidden-variable classes already falsified by Bell tests. This is noted by agents 4 and 5, and not contested by others.</li>
+<li><strong>Recent error-correction milestones (e.g., Google Willow, Dec 2024):</strong> Below-threshold error correction has been demonstrated, but large-scale fault tolerance requires millions of physical qubits—a goal years away. All agents agree this is progress but not a solution.</li>
+</ol>
+<h2>Contested</h2>
+<p><strong>Existence of any quantum advantage (narrow or practical):</strong><br>While all agents agree no commercial or general-purpose advantage has been shown, two agents report specific demonstrations:  </p>
+<ul>
+<li>Agent 1 cites QAOA with parameter transfer outperforming classical methods in multi-objective optimization.  </li>
+<li>Agent 5 cites an exponential quantum speedup for simulating coupled classical oscillators (2023).<br>The other three agents either deny any practical advantage or treat such claims as disputed (e.g., Google Sycamore 2019 supremacy opposed by IBM). Thus, a 2-of-5 minority reports narrow advantage tasks; the majority holds that all demonstrated advantages remain synthetic or non‑general.</li>
+</ul>
+<p><strong>Timeline to fault‑tolerant quantum computing:</strong><br>Agent 3, citing improved qLDPC codes and neutral‑atom architectures, suggests Shor’s algorithm may require only tens of thousands of qubits, bringing fault tolerance closer. Agents 1, 2, and 4 emphasize that current best estimates require millions of physical qubits (based on surface‑code overhead), and that no architecture has yet shown a clear path. This split (1 agent optimistic, 3 cautious, 1 neutral) reflects genuine uncertainty.</p>
+<p><strong>Efficient classical simulation of NISQ devices:</strong><br>Agent 2 argues that matrix product state (MPS) algorithms can simulate noisy quantum circuits up to ~54 qubits with linear cost, challenging the assumption that NISQ devices are exponentially hard to simulate. No other agent directly addresses this claim; it stands as a minority technical point that undercuts one rationale for near‑term quantum advantage.</p>
+<h2>Minority signal</h2>
+<ul>
+<li><strong>Landauer’s principle (Agent 5):</strong> The thermodynamic cost of erasing one bit (minimum k_B T ln 2) is an experimentally confirmed link between information theory and the second law, yet it remains absent from the other four agents’ analyses. This principle grounds all physical computation in quantum thermodynamics and is worth surfacing as a rigorous constraint often overlooked in performance comparisons.  </li>
+<li><strong>Potential 1,000‑qubit ceiling (Agent 2):</strong> A preliminary, unverified analysis (phys.org, 451 error) suggests quantum computer performance may hit a fundamental ceiling around 1,000 qubits. This claim is disputed and regionally restricted but, if confirmed, would drastically alter scaling expectations. It is flagged for attention but not yet credible.</li>
+</ul>
+<h2>Verdict</h2>
+<p>Quantum physics and computation are reciprocally linked: quantum mechanics provides the physical substrate for both classical and quantum computing, and the need to simulate quantum systems is the primary motivation for building quantum computers. However, the practical crossover—where quantum computers outperform classical ones on scientifically or commercially useful problems—has not yet occurred. Current NISQ devices remain limited by error rates and qubit coherence; fault-tolerant machines with demonstrated advantage are likely years away, and their ultimate qubit requirements remain contested. Foundational principles (Church–Turing–Deutsch) are well established, but speculative extensions like digital physics are experimentally unsupported.  </p>
+<p><strong>Confidence:</strong> High (4/5) on the current limitations and foundational links; moderate (3/5) on the timeline and precise qubit counts needed for fault tolerance; low (2/5) on claims of specific narrow advantages, as these remain disputed or unvalidated at scale.</p>
+<h2>Sources</h2>
+<ul>
+<li>Aaronson, S. (2014). <em>Quantum Computing Since Democritus</em>. Cambridge University Press. (Cited by Agent 5)</li>
+<li>Bennett, C. H. (2003). &quot;Notes on Landauer’s principle, reversible computation, and Maxwell’s Demon.&quot; <em>Studies in History and Philosophy of Modern Physics</em>, 34(3), 501–510. (Cited by Agent 5)</li>
+<li>CERN Quantum Technology Initiative (2025). Hybrid classical‑quantum simulation strategies. (Agent 1)</li>
+<li>Deutsch, D. (1985). &quot;Quantum theory, the Church–Turing principle and the universal quantum computer.&quot; <em>Proceedings of the Royal Society of London A</em>, 400(1818), 97–117. (Agents 2, 4, 5)</li>
+<li>Feynman, R. P. (1982). &quot;Simulating physics with computers.&quot; <em>International Journal of Theoretical Physics</em>, 21(6–7), 467–488. (Agents 1, 2, 3, 4, 5)</li>
+<li>Google Quantum AI (2025). &quot;Quantum error correction below the surface code threshold.&quot; <em>Nature</em>, 638, 920–926. (Willow processor, 2024) (Agents 3, 4)</li>
+<li><em>Nature Computational Science</em> editorial (December 2025). On error correction, QAOA, QML challenges, and the “when” debate. (Agent 1)</li>
+<li><em>Phys. Rev. X</em> 10, 041038 (2020). Zhou et al. – Classical simulation of noisy quantum computers with matrix product states. (Agent 2)</li>
+<li><em>Phys. Rev. X</em> 13, 041041 (2023). Exponential quantum speedup for coupled classical oscillators. (Agent 5)</li>
+<li><em>Quanta Magazine</em> (September 2025, April 2026). Analog vs. digital quantum simulation; new advances in Shor’s algorithm. (Agent 3)</li>
+<li>Savage, M. J. (2025). &quot;Quantum simulations of fundamental physics.&quot; arXiv:2503.23233. (Agent 2)</li>
+<li>ScienceDaily / DOE (November 2025). Largest digital quantum simulation of nuclear physics on &gt;100 qubits. (Agent 1)</li>
+<li>Wikipedia: &quot;Church–Turing–Deutsch principle&quot;, &quot;Digital physics&quot;, &quot;Noisy intermediate-scale quantum computing&quot;, &quot;Quantum computing&quot;, &quot;Quantum complexity theory&quot;, &quot;Quantum simulation&quot;, &quot;Quantum supremacy&quot; (multiple agents, cross‑checked)</li>
+<li>Woerner et al. (cited in <em>Nature Computational Science</em> Dec 2025). QAOA with parameter transfer outperforming classical methods. (Agent 1)</li>
+<li>Various arXiv preprints (e.g., arXiv:2403.02240, 2025) on quantum advantage debates. (Agent 1)</li>
+</ul>
+<hr>
+<h2>Raw panel findings</h2>
+<h3>Agent 1</h3>
+<ul>
+<li><p>Quantum computers have demonstrated the ability to simulate fundamental nuclear physics on more than 100 qubits, preparing complex initial states that classical supercomputers cannot handle, achieving what researchers call the largest digital quantum simulation ever completed (ScienceDaily/DOE, Nov. 2025).</p>
+</li>
+<li><p>A central challenge to practical quantum advantage remains error susceptibility: qubits are extremely fragile and prone to decoherence, making fault-tolerant quantum error correction with low qubit overhead a critical unsolved problem for scaling (Nature Computational Science editorial, Dec. 2025).</p>
+</li>
+<li><p>Hybrid classical-quantum simulation strategies are emerging as the most viable near-term approach, applying quantum circuits to computationally intractable subproblems (e.g., parton shower dynamics, collective neutrino oscillations) while classical methods handle the rest (CERN Quantum Technology Initiative, 2025).</p>
+</li>
+<li><p>The Quantum Approximate Optimization Algorithm (QAOA) with a parameter transfer approach has been shown to outperform classical methods in certain multi-objective optimization tasks, sharpening the debate on practical quantum advantage for real-world problems (Nature Computational Science, Dec. 2025, citing Woerner et al.).</p>
+</li>
+<li><p>Quantum machine learning (QML) faces significant hurdles including barren plateaus (gradient vanishing during training at scale) and high encoding costs for classical datasets—these challenges limit near-term applicability despite theoretical promise (Nature Computational Science, Dec. 2025, citing Deng et al.).</p>
+</li>
+<li><p>Quantum mechanics has already fundamentally reshaped computation through semiconductor physics (enabling transistors and Moore’s Law); its second impact through quantum computing is still emerging but faces scaling, error correction, and coherence bottlenecks that remain unresolved (Nature Computational Science editorial, Dec. 2025).</p>
+</li>
+<li><p>A key open debate in the field is <em>when</em> (not if) quantum computers will surpass classical digital counterparts for commercially or scientifically useful problems, with no consensus milestone yet achieved for practical advantage beyond narrow demonstrations (Nature Computational Science editorial, Dec. 2025; arXiv:2403.02240, 2025).</p>
+</li>
+</ul>
+<p>Stance: Quantum physics and computation are deeply reciprocal—quantum mechanics enables both classical and quantum computing hardware, while quantum computers are now beginning to simulate physical systems beyond classical reach, but practical, scalable advantage remains constrained by error correction, coherence, and algorithmic overhead.</p>
+<h3>Agent 2</h3>
+<ul>
+<li>The Church–Turing–Deutsch principle holds that a universal computing device can simulate every physical process, forming the foundational link between quantum physics and computation (Wikipedia, &quot;Church–Turing–Deutsch principle&quot;).</li>
+<li>Feynman’s 1982 insight that quantum systems cannot be efficiently simulated by classical computers motivated the development of quantum computation as a tool for physics; this remains the central argument for building quantum computers (Savage, arXiv:2503.23233).</li>
+<li>Classical algorithms using matrix product states (MPS) can simulate noisy quantum computers with up to ~54 qubits at a cost that scales only linearly with qubit count and depth, challenging the assumption that today’s NISQ devices are exponentially hard to simulate (Zhou et al., Phys. Rev. X 10, 041038, 2020).</li>
+<li>A recent analysis (2026) published in PNAS argues that quantum computer performance may hit a fundamental ceiling around 1,000 qubits, though the claim is disputed and regionally restricted (phys.org, 451 error — unable to verify full text; finding is preliminary).</li>
+<li>No-go theorems (no-cloning, no-deletion) place fundamental limits on quantum information processing regardless of hardware advances (Springer Nature Link, &quot;Limitations of Quantum Computers&quot;).</li>
+<li>Logical (error-corrected) qubits have been demonstrated by IBM, Quantinuum-Microsoft, Google-AI, and others, suggesting fault-tolerant quantum computers capable of useful physics simulations may arrive soon, but no architecture has yet shown clear advantage for practical problems (Savage, arXiv:2503.23233).</li>
+<li>Quantum computers are uniquely positioned to simulate non-equilibrium quantum dynamics and systems with sign problems that defeat classical high-performance computing, especially in high-energy and nuclear physics (Savage, arXiv:2503.23233).</li>
+<li>1+1D models (e.g., Schwinger model) have been simulated on quantum hardware with &gt;100 qubits, but scaling to 3+1D gauge theories remains a major open challenge due to gauge digitization and state preparation costs (Savage, arXiv:2503.23233).</li>
+</ul>
+<p>Stance: Quantum computation is both a product of and a tool for quantum physics, but the practical crossover from theoretical promise to demonstrable advantage remains contested and contingent on solving noise, scaling, and algorithmic overhead.</p>
+<h3>Agent 3</h3>
+<ul>
+<li>Richard Feynman (1981) argued that classical computers cannot efficiently simulate quantum systems due to exponential complexity, motivating the construction of quantum computers to &quot;simulate nature&quot; (Wikipedia: Quantum computing § History; also Wikipedia: Quantum supremacy § Background).</li>
+<li>In December 2024, Google’s Willow processor demonstrated quantum error correction below the surface code threshold for the first time, with a distance-7 logical qubit exceeding the lifetime of its best physical qubit by 2.4× (Nature, 638, 920–926, 2025, &quot;Quantum error correction below the surface code threshold&quot;).</li>
+<li>The 2019 Google Sycamore &quot;quantum supremacy&quot; claim—that a 53-qubit circuit sampling task would take a supercomputer 10,000 years—was disputed by IBM, which argued the same calculation could be done in ~2.5 days with optimized classical algorithms, highlighting ongoing uncertainty about when genuine advantage is achieved (Wikipedia: Quantum supremacy; disputed claim).</li>
+<li>Analog quantum simulators (e.g., trapped atoms simulating quantum fields) are competing with digital (programmable) quantum computers; both approaches have recently simulated 2D electromagnetic fields and early-universe dynamics, but neither has yet solved an industrially useful problem beyond classical reach (Quanta Magazine, Sept 2025, &quot;Analog vs. Digital: The Race Is On To Simulate Our Quantum Universe&quot;).</li>
+<li>As of 2025–2026, researchers have shown that Shor’s algorithm (for breaking RSA encryption) could require only tens of thousands of qubits rather than millions, due to improved qLDPC error-correcting codes and neutral-atom architectures—but experimental demonstration remains years away (Quanta Magazine, April 2026, &quot;New Advances Bring the Era of Quantum Computers Closer Than Ever&quot;).</li>
+<li>The physical Church–Turing thesis is challenged by quantum computation: David Deutsch (1985) described a quantum Turing machine, and subsequent work shows that quantum computers can solve specific problems (e.g., factoring, simulating quantum physics) with no known classical polynomial-time algorithm, implying a broader computational landscape than classical models suggest (Wikipedia: Quantum computing § History; Quantum computing § Theory).</li>
+<li>Current state-of-the-art quantum processors (hundreds of qubits) remain in the NISQ (noisy intermediate-scale) regime; no existing quantum computer has demonstrated a practical speedup for a real-world application, and skepticism persists about whether fault-tolerant, large-scale machines will be built within the next decade (Wikipedia: Quantum computing; Quanta Magazine articles on quantum computing tag, 2025–2026).</li>
+</ul>
+<p>Stance: Quantum computation is both a product of and a response to quantum physics—it derives its power from quantum mechanics and is necessary to simulate it, but practical, general-purpose quantum advantage has not yet been achieved, and fundamental engineering obstacles remain unresolved.</p>
+<h3>Agent 4</h3>
+<ul>
+<li><p><strong>Feynman&#39;s 1982 conjecture (origin of quantum computing as simulation):</strong> Richard Feynman and Yuri Manin independently proposed that quantum mechanics cannot be efficiently simulated on classical computers because Hilbert space dimension grows exponentially with particle count — and therefore a quantum computer (a &quot;universal quantum simulator&quot;) is needed to simulate nature. This is the foundational argument linking quantum physics and computation. (Wikipedia, <em>Quantum computing</em>; <em>Simulation of quantum systems</em>; Feynman 1981 lecture &quot;Simulating Physics with Computers&quot;)</p>
+</li>
+<li><p><strong>The Church–Turing–Deutsch principle (physical computation thesis):</strong> David Deutsch (1985) and Stephen Wolfram (1985) independently proposed that a universal computing device can simulate every physical process — a stronger, physical version of the Church–Turing thesis. Deutsch specifically argued that only a quantum computer can satisfy this principle because classical Turing machines cannot handle real numbers required by classical physics. This remains a foundational claim, not experimentally proven in general. (Wikipedia, <em>Church–Turing–Deutsch principle</em>; Deutsch 1985 <em>Proc. R. Soc.</em>)</p>
+</li>
+<li><p><strong>Quantum supremacy/advantage is proven but narrow:</strong> Google&#39;s 2019 Sycamore experiment (53/54 qubits) claimed a task that would take a classical supercomputer 10,000 years — IBM disputed this, showing 2.5 days on Summit. In December 2024, Google&#39;s Willow chip achieved below-threshold quantum error correction, a 30-year milestone. However, all demonstrated supremacy tasks are synthetic (random circuit sampling, boson sampling), not practically useful. The field remains in the NISQ (Noisy Intermediate-Scale Quantum) era. (Wikipedia, <em>Quantum supremacy</em>; <em>Noisy intermediate-scale quantum computing</em>)</p>
+</li>
+<li><p><strong>The &quot;universe is a computer&quot; thesis is speculative and faces experimental falsification:</strong> Digital physics (Zuse 1969, Fredkin 1978) posits the universe is a computation device — e.g. a cellular automaton. However, such models violate continuous symmetries (rotational, Lorentz, gauge invariance) central to known physics. Crucially, they belong to local-hidden-variable classes already experimentally disqualified by Bell test violations. (Wikipedia, <em>Digital physics</em>; Bell&#39;s theorem constraints)</p>
+</li>
+<li><p><strong>Complexity-class separation (BQP vs. BPP) is suspected but unproven:</strong> Quantum computers belong to the complexity class BQP. It is widely believed that BQP strictly contains BPP (problems efficiently solvable by probabilistic classical computers), but no proof exists. Shor&#39;s factoring algorithm and Grover&#39;s search provide concrete speedups over best-known classical algorithms, but these are not proofs that no classical algorithm could match them — Shor&#39;s result would imply BQP ⊄ P if factoring is not in P. (Wikipedia, <em>Quantum computing</em> complexity section; Shor 1994; Grover 1996)</p>
+</li>
+<li><p><strong>Quantum simulation is the most concrete near-term application:</strong> Quantum simulators — purpose-built devices using trapped ions, ultracold atoms, or superconducting circuits — have already produced time crystals and quantum spin liquids in the lab, solving many-body problems intractable on classical supercomputers beyond ~30 particles. These are not universal quantum computers but special-purpose analog devices. (Wikipedia, <em>Quantum simulator</em>; NIST trapped-ion experiments)</p>
+</li>
+<li><p><strong>Quantum error correction crossed a milestone but large-scale fault tolerance remains distant:</strong> Google Willow&#39;s 2024 result achieved below-threshold error correction — errors decrease as qubits increase — but scaling to the ~1,000 logical qubits needed for practical algorithms (e.g. breaking 2048-bit RSA) requires millions of physical qubits. Current devices have at most ~1,180 physical qubits (Atom Computing, 2023). (Wikipedia, <em>Noisy intermediate-scale quantum computing</em>; <em>Quantum supremacy</em>)</p>
+</li>
+<li><p><strong>Global government investment reached ~$10B by April 2025, but commercial quantum advantage is not yet demonstrated for real problems:</strong> National governments (US, China, EU) have collectively invested ~$10B in quantum computing research as of April 2025. Despite this, no quantum computer has outperformed classical computers on any commercially useful task (drug design, optimization, cryptography). All demonstrations remain scientific milestones. (Wikipedia, <em>Quantum computing</em>)</p>
+</li>
+</ul>
+<p><strong>Stance:</strong> Computation is the only known framework in which quantum physics can be efficiently expressed and explored, but strong claims — that the universe fundamentally <em>is</em> a computation, or that quantum computers will soon outperform classical ones on real problems — remain unproven and, in the case of digital physics, face direct experimental contradiction.</p>
+<h3>Agent 5</h3>
+<ul>
+<li>Feynman (1982) and Manin (1980) independently proposed that a quantum computer could simulate quantum physics exponentially faster than a classical computer, because Hilbert space dimension grows exponentially with particle number, making classical simulation intractable beyond ~30 particles. (Wikipedia: Quantum simulation; Wikipedia: Quantum computing, history section)</li>
+<li>The Church–Turing–Deutsch principle (Deutsch 1985, Wolfram 1985) states that a universal computing device can simulate every physical process — a stronger, physical version of the Church–Turing thesis that directly links computability to physics. (Wikipedia: Church–Turing–Deutsch principle)</li>
+<li>Landauer&#39;s principle (1961) sets a thermodynamic floor: erasing one bit of information dissipates at least k_B T ln 2 energy. This principle connects information theory directly to the second law of thermodynamics, and has been experimentally confirmed in both classical and quantum regimes. (Wikipedia: Landauer&#39;s principle; Bennett 2003)</li>
+<li>Physicist Charles Bennett has argued that &quot;a classical computer is a quantum computer&quot; — since all physical hardware is made of quantum atoms, the real question is not where quantum speedups come from, but where classical slowdowns originate. (Wikipedia: Quantum computing, quoting Bennett)</li>
+<li>Quantum complexity theory defines BQP (bounded-error quantum polynomial time) as the class of problems efficiently solvable by a quantum computer. It is unknown whether BQP = BPP, but strong evidence suggests quantum computers can solve some problems (e.g., factoring, quantum simulation) exponentially faster. (Wikipedia: Quantum complexity theory)</li>
+<li>Digital physics — the speculation that the universe itself is a digital computation — faces experimental challenges: existing models violate continuous symmetries (Lorentz, rotational) and belong to local hidden-variable theories disqualified by Bell test experiments. (Wikipedia: Digital physics; Aaronson 2014)</li>
+<li>Recent work (2023) demonstrated an exponential quantum speedup in simulating coupled classical oscillators, showing that quantum advantage is not limited to quantum-physics problems but can extend to certain classical dynamics. (arXiv:2303.13012; Phys. Rev. X 13, 041041)</li>
+</ul>
+<p>Stance: Computation and quantum physics are deeply intertwined — quantum mechanics both motivates the search for new computational models and imposes fundamental physical limits on all computation, making the two fields inseparable at the foundational level.</p>
+
+  </article>
+  <footer class="footer"><p>Generated by Aura Code &middot; Ecclesia &middot; Inspired by DeerFlow</p></footer>
+</div>
+</body>
+</html>
