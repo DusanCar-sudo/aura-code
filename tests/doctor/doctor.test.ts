@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -8,6 +8,24 @@ import { checkBuild, checkConfig, checkSource, checkDeps, checkGit, checkHygiene
 import type { Finding } from '../../src/doctor/types.js';
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
+
+// runDoctor() persists its report to $HOME/.aura/doctor-report.json (see
+// src/doctor/index.ts). Six calls in this file were each overwriting the
+// developer's real report. Redirect HOME for the whole file — src reads
+// process.env.HOME directly, so this is enough and no os mock is needed.
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-doctor-home-'));
+let origHome: string | undefined;
+
+beforeAll(() => {
+  origHome = process.env.HOME;
+  process.env.HOME = TEST_HOME;
+});
+
+afterAll(() => {
+  if (origHome === undefined) delete process.env.HOME;
+  else process.env.HOME = origHome;
+  fs.rmSync(TEST_HOME, { recursive: true, force: true });
+});
 
 function strip(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -198,8 +216,8 @@ describe('Aura Doctor — broken install in temp dir', () => {
 
   it('runDoctor writes a report to ~/.aura/doctor-report.json', async () => {
     await runDoctor({ projectRoot: tmp, offline: true });
-    const home = process.env.HOME ?? os.homedir();
-    const reportPath = path.join(home, '.aura', 'doctor-report.json');
+    // Asserted against the redirected HOME, never the real one.
+    const reportPath = path.join(TEST_HOME, '.aura', 'doctor-report.json');
     expect(fs.existsSync(reportPath)).toBe(true);
     const saved = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
     expect(saved.timestamp).toBeGreaterThan(0);
