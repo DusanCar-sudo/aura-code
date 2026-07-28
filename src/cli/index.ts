@@ -62,6 +62,7 @@ import { getApiKey } from '../util/env.js';
 import { needsWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
 import { runWebWizard } from '../setup/web-wizard.js';
+import { platformWarning } from '../util/platform.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
@@ -684,6 +685,15 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
 
 async function main() {
   const display = createTerminalDisplay();
+
+  // Native Windows silently degrades both safety and usability (POSIX-only
+  // shell lists). Say so before any work starts rather than letting it be
+  // discovered mid-session. Not fatal — someone who understands the tradeoff
+  // can still proceed.
+  const platWarn = platformWarning();
+  if (platWarn) {
+    console.warn(chalk.hex('#b15439')('\n  ⚠ ' + platWarn.split('\n').join('\n  ') + '\n'));
+  }
 
   // ── Gazelle: lean conversational mode ──────────────────────────────────────
   // Radically smaller path than the coding agent: no ProjectContext, no tools,
