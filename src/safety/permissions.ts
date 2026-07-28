@@ -146,15 +146,32 @@ export function getSharedReadline(): readline.Interface | null {
 // use readline at all — it needs its own raw-mode-safe prompt. cli/index.ts
 // registers one via setConfirmHandler() when TUI mode starts; confirm()
 // prefers it over readline whenever it's set.
-let confirmHandler: ((message: string) => Promise<boolean>) | null = null;
+let confirmHandler: ConfirmHandler | null = null;
 
-export function setConfirmHandler(fn: ((message: string) => Promise<boolean>) | null): void {
+/**
+ * Structured description of what is being approved, alongside the rendered
+ * prose. Terminal handlers only need the message; a remote client (the
+ * protocol's approval.request) needs the tool name and arguments so it can
+ * render a real modal and offer "always allow this tool" — deriving those by
+ * regexing the prose is guesswork, and the prose is formatted for humans
+ * ("$ npm install", "overwrite /path/x").
+ *
+ * Optional so every existing caller and handler keeps working unchanged.
+ */
+export interface ConfirmContext {
+  toolName: string;
+  input: Record<string, unknown>;
+}
+
+export type ConfirmHandler = (message: string, ctx?: ConfirmContext) => Promise<boolean>;
+
+export function setConfirmHandler(fn: ConfirmHandler | null): void {
   confirmHandler = fn;
 }
 
 /** Ask user to confirm in the terminal. Returns true if approved. */
-export async function confirm(message: string): Promise<boolean> {
-  if (confirmHandler) return confirmHandler(message);
+export async function confirm(message: string, ctx?: ConfirmContext): Promise<boolean> {
+  if (confirmHandler) return confirmHandler(message, ctx);
   const rl = sharedRl ?? readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => {
     rl.question(`\n⚠️  ${message} [y/N] `, answer => {

@@ -8,6 +8,8 @@ import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setConfirmHandler } from '../safety/permissions.js';
 import { Session } from './session.js';
 import { SessionBudget } from '../agent/session-budget.js';
+import { ProtocolHandler } from '../protocol/handler.js';
+import type { Frame } from '../protocol/types.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
@@ -127,9 +129,31 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     // the README — this server is deliberately single-user.
     setConfirmHandler((message: string) => askClient(ws, message));
 
+    // Protocol handler for frame-shaped clients (aura-droid and any other
+    // non-browser consumer). The built-in browser UI still speaks the older
+    // `type:`-tagged messages below, so the two are dispatched by shape:
+    // a `kind` field means a protocol frame, `type` means the legacy path.
+    // Same socket, same auth, one message schema shared with `aura sidecar`.
+    const protocol = new ProtocolHandler({
+      defaultModel: opts.model,
+      defaultApiKey: opts.apiKey,
+      defaultBaseUrl: opts.baseUrl,
+      defaultProjectRoot: opts.cwd,
+      send: (frame) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame)); },
+    });
+
     ws.on('message', async (raw) => {
-      let msg: { type: string; task?: string; model?: string; id?: string; approved?: boolean };
+      let msg: {
+        kind?: string;
+        type: string; task?: string; model?: string; id?: string; approved?: boolean;
+      };
       try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+      if (msg.kind === 'req' || msg.kind === 'res' || msg.kind === 'evt') {
+        await protocol.handle(msg as unknown as Frame);
+        return;
+      }
+
       if (msg.type === 'confirm_response' && typeof msg.id === 'string') {
         pendingConfirms.get(msg.id)?.(msg.approved === true);
         return;
@@ -154,6 +178,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     });
 
     ws.on('close', () => {
+      protocol.dispose();
       // Deny anything still waiting — nobody is left to answer.
       for (const resolve of pendingConfirms.values()) resolve(false);
       pendingConfirms.clear();
