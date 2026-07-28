@@ -37,11 +37,54 @@
  *  caches well bills a small fraction of this, while a cold one reaches it. */
 export const DEFAULT_MAX_INPUT_TOKENS = 1_000_000;
 
+/** Env override for the token ceiling, for the case the default is wrong for
+ *  the work at hand (a large planned refactor that legitimately bills past 1M).
+ *
+ *    unset / empty  → DEFAULT_MAX_INPUT_TOKENS. Unchanged for anyone who has
+ *                     not opted in; the guard is not something you can disable
+ *                     by accident.
+ *    0              → Infinity, i.e. no token ceiling. An explicit opt-out.
+ *    positive N     → N billed input tokens.
+ *
+ *  A malformed value falls back to the default rather than to unlimited —
+ *  failing open on a typo would remove the guard silently, which is the one
+ *  outcome this must never have. */
+export const SESSION_BUDGET_ENV = 'AURA_SESSION_BUDGET';
+
+let warnedBadBudgetEnv = false;
+
+export function maxInputTokensFromEnv(
+  raw: string | undefined = process.env[SESSION_BUDGET_ENV],
+): number {
+  const trimmed = raw?.trim();
+  if (!trimmed) return DEFAULT_MAX_INPUT_TOKENS;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    if (!warnedBadBudgetEnv) {
+      warnedBadBudgetEnv = true;
+      process.stderr.write(
+        `${SESSION_BUDGET_ENV}="${trimmed}" is not a non-negative number — ` +
+        `using the default ceiling of ${DEFAULT_MAX_INPUT_TOKENS.toLocaleString()}. ` +
+        `Set 0 for no ceiling.\n`,
+      );
+    }
+    return DEFAULT_MAX_INPUT_TOKENS;
+  }
+  return parsed === 0 ? Infinity : parsed;
+}
+
+/** Test seam: the bad-value warning fires once per process. */
+export function resetBudgetEnvWarning(): void {
+  warnedBadBudgetEnv = false;
+}
+
 export interface SessionBudgetLimits {
   /** Cumulative turns across all segments. Undefined = no turn ceiling. */
   maxTurns?: number;
-  /** Cumulative input tokens net of prompt-cache hits. Defaults to
-   *  DEFAULT_MAX_INPUT_TOKENS; pass Infinity to disable. */
+  /** Cumulative input tokens net of prompt-cache hits. When omitted, falls
+   *  back to AURA_SESSION_BUDGET and then to DEFAULT_MAX_INPUT_TOKENS; pass
+   *  Infinity to disable. An explicit value always beats the env var, so a
+   *  caller that has computed a ceiling keeps it. */
   maxInputTokens?: number;
 }
 
@@ -63,7 +106,7 @@ export class SessionBudget {
 
   constructor(limits: SessionBudgetLimits = {}) {
     this.maxTurns = limits.maxTurns ?? Infinity;
-    this.maxInputTokens = limits.maxInputTokens ?? DEFAULT_MAX_INPUT_TOKENS;
+    this.maxInputTokens = limits.maxInputTokens ?? maxInputTokensFromEnv();
   }
 
   get turnsUsed(): number { return this.turns; }
@@ -76,6 +119,21 @@ export class SessionBudget {
   }
 
   recordTurn(): void { this.turns++; }
+
+  /** Drop the accumulated totals, keeping the configured ceilings.
+   *
+   *  The budget bounds one *conversation*, but it lives on the REPL process,
+   *  which outlives any single conversation. `:new` mints a fresh session id
+   *  and empty history — the resent history that made the previous
+   *  conversation expensive is gone, and the next call bills a cold prompt —
+   *  so carrying its total forward charges the new conversation for spend it
+   *  did not incur. Without this the ceiling is effectively per-process:
+   *  once reached, every subsequent session starts already exhausted and the
+   *  ":new to start fresh" remedy the exhaustion message offers does nothing. */
+  reset(): void {
+    this.turns = 0;
+    this.inputTokens = 0;
+  }
 
   /** Called once per provider call with that call's prompt size and how much
    *  of it the provider served from cache. Only the uncached remainder counts

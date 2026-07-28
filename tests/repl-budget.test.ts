@@ -24,7 +24,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { runAgentLoop } from '../src/agent/loop.js';
-import { SessionBudget, DEFAULT_MAX_INPUT_TOKENS } from '../src/agent/session-budget.js';
+import {
+  SessionBudget, DEFAULT_MAX_INPUT_TOKENS,
+  maxInputTokensFromEnv, resetBudgetEnvWarning,
+} from '../src/agent/session-budget.js';
 import { PermissionSystem } from '../src/safety/permissions.js';
 import { loadProjectContext } from '../src/agent/context.js';
 import type {
@@ -62,6 +65,7 @@ describe('REPL session budget', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-repl-budget-'));
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
     vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
+    vi.stubEnv('AURA_SESSION_BUDGET', '');   // ignore an exported override
   });
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -123,6 +127,41 @@ describe('REPL session budget', () => {
     expect(DEFAULT_MAX_INPUT_TOKENS).toBe(1_000_000);
   });
 
+  it('starts a new session from zero, so :new clears an exhausted budget', async () => {
+    // The reported bug: `:new` minted a session id and emptied history but the
+    // total lived on the REPL process, so the next message was refused before
+    // it ran — and the exhaustion message recommends `:new` as the way out.
+    const budget = new SessionBudget({ maxInputTokens: 2_500 });
+    for (const n of [1, 2, 3]) {
+      if (budget.exhausted()) break;
+      await run(new FakeProvider([reply(`msg ${n}`, 1000)]), budget);
+    }
+    expect(budget.exhausted()).not.toBeNull();     // blocked, as it was for real
+
+    budget.reset();                                // what `:new` now does
+
+    expect(budget.inputTokensUsed).toBe(0);
+    expect(budget.turnsUsed).toBe(0);
+    expect(budget.exhausted()).toBeNull();
+
+    // and the next message actually runs rather than being refused
+    const r = await run(new FakeProvider([reply('after :new', 1000)]), budget);
+    expect(r.turns).toBe(1);
+    expect(budget.inputTokensUsed).toBe(1000);     // counted from zero, not 3000+
+  });
+
+  it('keeps the configured ceilings across a reset', () => {
+    // A reset must clear what was spent, not what is allowed — otherwise `:new`
+    // would quietly widen or drop the guard.
+    const budget = new SessionBudget({ maxTurns: 7, maxInputTokens: 2_500 });
+    budget.recordCall(2_600);
+    budget.recordTurn();
+    budget.reset();
+    expect(budget.maxTurns).toBe(7);
+    expect(budget.maxInputTokens).toBe(2_500);
+    expect(budget.exhausted()).toBeNull();
+  });
+
   it('leaves the per-invocation maxTurns guard intact', async () => {
     // The guard that actually catches a runaway loop within one message.
     const budget = new SessionBudget({});
@@ -141,5 +180,53 @@ describe('REPL session budget', () => {
     });
     expect(r.turns).toBe(3);                       // capped within the message
     expect(budget.turnsUsed).toBe(3);              // and counted toward the session
+  });
+});
+
+describe('AURA_SESSION_BUDGET override', () => {
+  beforeEach(() => { resetBudgetEnvWarning(); });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('keeps the 1M default when unset or empty', () => {
+    expect(maxInputTokensFromEnv(undefined)).toBe(DEFAULT_MAX_INPUT_TOKENS);
+    expect(maxInputTokensFromEnv('')).toBe(DEFAULT_MAX_INPUT_TOKENS);
+    expect(maxInputTokensFromEnv('   ')).toBe(DEFAULT_MAX_INPUT_TOKENS);
+  });
+
+  it('treats 0 as no ceiling', () => {
+    expect(maxInputTokensFromEnv('0')).toBe(Infinity);
+  });
+
+  it('accepts an explicit ceiling', () => {
+    expect(maxInputTokensFromEnv('5000000')).toBe(5_000_000);
+    expect(maxInputTokensFromEnv(' 250000 ')).toBe(250_000);
+  });
+
+  it('falls back to the default on a malformed value, never to unlimited', () => {
+    // Failing open on a typo would silently remove the guard — the one
+    // outcome this must not have.
+    for (const bad of ['lots', '-1', 'NaN', '1e', '1,000,000']) {
+      expect(maxInputTokensFromEnv(bad)).toBe(DEFAULT_MAX_INPUT_TOKENS);
+    }
+  });
+
+  it('is read by the constructor when no explicit ceiling is passed', () => {
+    vi.stubEnv('AURA_SESSION_BUDGET', '0');
+    expect(new SessionBudget({}).maxInputTokens).toBe(Infinity);
+    vi.stubEnv('AURA_SESSION_BUDGET', '4000000');
+    expect(new SessionBudget({}).maxInputTokens).toBe(4_000_000);
+  });
+
+  it('never overrides an explicit ceiling from the caller', () => {
+    vi.stubEnv('AURA_SESSION_BUDGET', '0');
+    expect(new SessionBudget({ maxInputTokens: 2_500 }).maxInputTokens).toBe(2_500);
+  });
+
+  it('does not disable the guard for anyone who has not opted in', () => {
+    vi.stubEnv('AURA_SESSION_BUDGET', '');
+    const budget = new SessionBudget({});
+    expect(budget.maxInputTokens).toBe(DEFAULT_MAX_INPUT_TOKENS);
+    budget.recordCall(DEFAULT_MAX_INPUT_TOKENS);
+    expect(budget.exhausted()).toMatchObject({ kind: 'tokens' });
   });
 });

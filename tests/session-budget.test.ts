@@ -92,6 +92,12 @@ function scriptedReader(lines: string[]) {
 const devNull = { write: () => true } as unknown as NodeJS.WritableStream;
 
 describe('SessionBudget', () => {
+  // The default-ceiling assertions below read the real environment through
+  // maxInputTokensFromEnv, so a developer with AURA_SESSION_BUDGET exported in
+  // their shell would otherwise fail this suite.
+  beforeEach(() => { vi.stubEnv('AURA_SESSION_BUDGET', ''); });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
   it('binds on cumulative turns', () => {
     const b = new SessionBudget({ maxTurns: 3 });
     expect(b.exhausted()).toBeNull();
