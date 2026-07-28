@@ -71,3 +71,6 @@ Empty File
 /aura-code
 
 # GitHub integration implementation (local config — example template is committed instead)
+
+# Installer build output (packaging/)
+build/
