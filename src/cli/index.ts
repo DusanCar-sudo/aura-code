@@ -50,12 +50,18 @@ import pkg from '../../package.json';
 
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
 import { sessionStore, type SessionUsage } from '../agent/session-store.js';
+import {
+  handleSessionCommand,
+  type ChatState,
+  type ReplCommandResult,
+} from './repl-session-commands.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
 import { getApiKey } from '../util/env.js';
 import { needsWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
 import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
+import { runWebWizard } from '../setup/web-wizard.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
@@ -105,7 +111,7 @@ function makeStdinTunerIO(): TunerIO {
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -2339,81 +2345,13 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':resume' || input === ':resume ') {
-    const latest = sessionStore.findLatestSession(c.chatState.projectRoot);
-    if (!latest) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions to resume.\n'));
-      return { handled: true };
-    }
-    c.budget.reset();   // a different conversation, so a different total
-    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
-    return { handled: true, newChatId: latest.id, newHistory: latest.history, newTitle: latest.title };
-  }
-
-  if (input.startsWith(':resume ')) {
-    const id = input.slice(':resume '.length).trim();
-    const loaded = await sessionStore.loadSession(c.chatState.projectRoot, id);
-    if (!loaded) {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
-      return { handled: true };
-    }
-    c.budget.reset();   // a different conversation, so a different total
-    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
-    return { handled: true, newChatId: loaded.id, newHistory: loaded.history, newTitle: loaded.title };
-  }
-
-  if (input === ':new') {
-    const newId = sessionStore.generateId();
-    // History is dropped, so the spend that history drove must be dropped with
-    // it — otherwise the budget is a process ceiling wearing a session's name
-    // and this command cannot clear an exhausted one.
-    c.budget.reset();
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
-    return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
-  }
-
-  if (input === ':history') {
-    const turns = Math.floor(c.chatState.activeChatHistory.length / 2);
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
-    return { handled: true };
-  }
-
-  if (input === ':clear-history') {
-    // Same reasoning as :new — only the session id survives. The exhaustion
-    // message offers this as the other way out, so it has to work too.
-    c.budget.reset();
-    console.log(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
-    return { handled: true, newHistory: [] };
-  }
-
-  if (input === ':save' || input.startsWith(':save ')) {
-    const title = input.startsWith(':save ') ? input.slice(':save '.length).trim() : undefined;
-    const cs = c.chatState;
-    if (!cs.activeChatId) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No active session to save (--no-session mode).\n'));
-      return { handled: true };
-    }
-    const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
-    return { handled: true, newTitle: session.title };
-  }
-
-  if (input.startsWith(':delete ')) {
-    const id = input.slice(':delete '.length).trim();
-    const deleted = await sessionStore.deleteSession(c.chatState.projectRoot, id);
-    if (deleted) {
-      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
-      if (id === c.chatState.activeChatId) {
-        const newId = sessionStore.generateId();
-        c.budget.reset();   // deleting the active session starts a fresh one
-        console.log(chalk.hex(TEXT_DIM_HEX)(`  Starting new session: ${newId}\n`));
-        return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
-      }
-    } else {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
-    }
-    return { handled: true };
-  }
+  // Session/history commands (:resume, :resume <id>, :new, :history,
+  // :clear-history, :save, :delete) live in repl-session-commands.ts so they
+  // can be tested without importing this self-executing module. Called from
+  // the exact position those branches occupied — moving this call earlier
+  // would let them shadow commands declared above.
+  const sessionCmd = await handleSessionCommand(input, c);
+  if (sessionCmd) return sessionCmd;
 
   // ── Model / API commands ─────────────────────────────────────────────────
 
@@ -3086,6 +3024,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
   ${chalk.hex(FAINT_HEX)('Usage:')}
     aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
     aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
+    aura ${chalk.hex(TEXT_DIM_HEX)('setup')}                              Configure provider, model, and API key
+    aura ${chalk.hex(TEXT_DIM_HEX)('setup --web')}                        Same, as a browser page (used by installers)
     aura ${chalk.hex(TEXT_DIM_HEX)('--interactive')}                      Start interactive REPL
     aura ${chalk.hex(TEXT_DIM_HEX)('--gazelle')}                          Lean conversational mode (no tools; cloud model)
     aura ${chalk.hex(TEXT_DIM_HEX)('--models')}                           List available models
@@ -3208,6 +3148,28 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
 
 if (argv.doctor === true) {
   // --doctor runs async above and exits on completion; don't start main().
+} else if (argv._[0] === 'setup') {
+  // `aura setup --web` is what the desktop installers launch as their final
+  // step: a browser page beats dropping someone who just clicked through an
+  // installer into a terminal prompt. Without --web, fall through to the
+  // existing TUI wizard.
+  if (argv.web === true) {
+    const port = Number(argv.port ?? argv.p ?? 7338);
+    runWebWizard({ port, open: argv.open !== false })
+      .then(result => {
+        if (result) console.log(`  Saved: ${result.provider} · ${result.model}\n`);
+        else console.log('  Setup skipped — run `aura setup --web` any time.\n');
+        process.exit(0);
+      })
+      .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+  } else {
+    runProviderWizard()
+      .then(cfg => {
+        if (cfg) console.log(`\n  Saved: ${cfg.provider} · ${cfg.model}\n`);
+        process.exit(0);
+      })
+      .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+  }
 } else if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);
   // Use the *resolved* config, not raw argv: argv.model is undefined unless

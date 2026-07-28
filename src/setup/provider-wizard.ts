@@ -362,8 +362,13 @@ const askSecretInput = askInput;
 /**
  * Save the provider config to ~/.config/aura-code/config.json and export
  * the API key env var for the current process.
+ *
+ * Exported so non-TUI front ends (the `setup --web` wizard the installers
+ * launch) persist through exactly this path — key store, global config, and
+ * provider.json all written the same way, rather than each caller
+ * reimplementing three writes and drifting.
  */
-function saveProviderConfig(config: ProviderConfig): void {
+export function saveProviderConfig(config: ProviderConfig): void {
   // Find the matching provider entry to get apiKeyEnv
   const entry = PROVIDER_REGISTRY.find(p => p.name === config.provider);
   const apiKeyEnv = entry?.envKey ?? '';
