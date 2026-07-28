@@ -32,6 +32,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { runAgentLoop, type TokenUsage } from '../src/agent/loop.js';
 import { DEFAULT_MAX_TURNS } from '../src/agent/loop-profile.js';
+import { SessionBudget } from '../src/agent/session-budget.js';
 import { PermissionSystem } from '../src/safety/permissions.js';
 import { loadProjectContext } from '../src/agent/context.js';
 import type {
@@ -330,5 +331,83 @@ describe('runAgentLoop', () => {
     });
     expect(result.success).toBe(false);
     expect(result.turns).toBe(5);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session budget enforcement — the ceiling `aura serve` now applies too.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('runAgentLoop — session budget', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-budget-'));
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+    vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+    vi.unstubAllEnvs();
+  });
+
+  it('refuses to start a turn when the budget is already exhausted', async () => {
+    const provider = new FakeProvider([
+      { text: 'should never be reached', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 100 });
+    budget.recordCall(500, 0); // 500 billed against a 100 ceiling
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.summary).toContain('token budget exhausted');
+    expect(result.turns).toBe(0);          // no turn was started
+    expect(provider.responses).toHaveLength(1); // no response was consumed
+  });
+
+  it('runs normally while the budget has room', async () => {
+    const provider = new FakeProvider([
+      { text: 'all done', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 1_000_000 });
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.turns).toBe(1);
+  });
+
+  it('reports the budget stop, not the turn cap, as the reason', async () => {
+    const provider = new FakeProvider([
+      { text: 'a', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 10 });
+    budget.recordCall(11, 0);
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget, maxTurns: 50,
+    });
+
+    expect(result.summary).toContain('token budget exhausted');
+    expect(result.summary).not.toContain('cap: 50');
+  });
+
+  it('cache hits do not count against the ceiling', async () => {
+    const budget = new SessionBudget({ maxInputTokens: 100_000 });
+    budget.recordCall(500_000, 450_000); // 50k billed, not 500k
+    expect(budget.inputTokensUsed).toBe(50_000);
+    expect(budget.exhausted()).toBeNull();
   });
 });
