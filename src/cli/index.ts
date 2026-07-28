@@ -1356,6 +1356,7 @@ let abortController: AbortController | null = null;
       archimedesOverride,
       archimedesModelOverride,
       small1Override,
+      budget: replBudget,
     };
 
     // Check for REPL commands
@@ -1609,6 +1610,9 @@ interface ReplCtx {
   archimedesOverride: boolean | undefined;
   archimedesModelOverride: string | undefined;
   small1Override: boolean;
+  /** The REPL-process budget, so commands that start a conversation over can
+   *  clear its totals. See SessionBudget.reset. */
+  budget: SessionBudget;
 }
 
 interface ReplCommandResult {
@@ -2341,6 +2345,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions to resume.\n'));
       return { handled: true };
     }
+    c.budget.reset();   // a different conversation, so a different total
     console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
     return { handled: true, newChatId: latest.id, newHistory: latest.history, newTitle: latest.title };
   }
@@ -2352,12 +2357,17 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
       return { handled: true };
     }
+    c.budget.reset();   // a different conversation, so a different total
     console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
     return { handled: true, newChatId: loaded.id, newHistory: loaded.history, newTitle: loaded.title };
   }
 
   if (input === ':new') {
     const newId = sessionStore.generateId();
+    // History is dropped, so the spend that history drove must be dropped with
+    // it — otherwise the budget is a process ceiling wearing a session's name
+    // and this command cannot clear an exhausted one.
+    c.budget.reset();
     console.log(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
     return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
   }
@@ -2369,6 +2379,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':clear-history') {
+    // Same reasoning as :new — only the session id survives. The exhaustion
+    // message offers this as the other way out, so it has to work too.
+    c.budget.reset();
     console.log(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
     return { handled: true, newHistory: [] };
   }
@@ -2392,6 +2405,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
       if (id === c.chatState.activeChatId) {
         const newId = sessionStore.generateId();
+        c.budget.reset();   // deleting the active session starts a fresh one
         console.log(chalk.hex(TEXT_DIM_HEX)(`  Starting new session: ${newId}\n`));
         return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
       }
@@ -3187,6 +3201,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     AURA_API_TPM         Default token rate limit (Gemini)
     AURA_MAX_RETRIES     Default max retry attempts
     AURA_FALLBACK_MODEL  Comma-separated fallback models
+    AURA_SESSION_BUDGET  Cumulative billed input-token ceiling per conversation
+                         (default 1000000; 0 = no ceiling)
 `);
 }
 
