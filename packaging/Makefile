@@ -5,6 +5,7 @@
 #   make -C packaging deb       Debian/Ubuntu package
 #   make -C packaging rpm       Fedora/RHEL package (needs rpmbuild)
 #   make -C packaging linux     both
+#   make -C packaging windows   Windows .exe — installs into WSL (needs iscc)
 #   make -C packaging clean
 #
 # All targets package the same staged tree, so the artifacts stay identical
@@ -16,7 +17,7 @@ BUILD     := $(REPO_ROOT)/build
 STAGE     := $(BUILD)/stage
 DIST      := $(BUILD)/dist
 
-.PHONY: all stage deb rpm linux clean help
+.PHONY: all stage deb rpm linux windows clean help
 
 help:
 	@sed -n '4,10p' $(MAKEFILE_LIST) | sed 's/^# \?//'
@@ -35,6 +36,11 @@ rpm: $(STAGE)/app
 	@./linux/build-rpm.sh
 
 linux: deb rpm
+
+# The Windows installer carries the .deb and installs it into WSL, so it
+# depends on the Linux package rather than a separate Windows build.
+windows: deb
+	@./windows/build-exe.sh
 
 clean:
 	@rm -rf $(BUILD)

@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { isNativeWindows, isWSL } from '../util/platform.js';
 import type { Finding, Category } from './types.js';
 import type { Episode } from '../archimedes/types.js';
 import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
@@ -310,6 +311,26 @@ export function checkEnv(root: string): Finding[] {
   const out: Finding[] = [];
   const auraPath = path.join(root, '.aura.json');
   const aura = readJson<{ providers?: Array<{ name?: string; apiKeyEnv?: string }> }>(auraPath);
+
+  // Platform support — native Windows degrades the shell guardrails in ways
+  // that are invisible until something goes wrong, so surface it here too.
+  if (isNativeWindows()) {
+    out.push({
+      category: 'env', name: 'platform',
+      severity: 'warn',
+      message: 'Running natively on Windows — shell safety lists are POSIX-only, '
+        + 'so nothing is auto-approved and the dangerous-command denylist misses '
+        + 'del /s /q, rd /s, and Remove-Item -Recurse -Force. Run Aura inside WSL.',
+      fixable: false,
+    });
+  } else {
+    out.push({
+      category: 'env', name: 'platform',
+      severity: 'ok',
+      message: isWSL() ? 'Running under WSL.' : `Running on ${process.platform}.`,
+      fixable: false,
+    });
+  }
 
   const knownEnvVars = [
     'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY',
