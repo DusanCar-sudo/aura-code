@@ -110,16 +110,23 @@ describe('REPL session budget', () => {
     expect(budget.exhausted()).toBeNull();
   });
 
-  it('still stops on the token ceiling', async () => {
+  it('still stops on the token ceiling — before overshooting it', async () => {
+    // The predictive check stops the turn whose prompt WOULD cross the
+    // ceiling, so the session is refused while cumulative spend is still
+    // under the limit. Asserting `inputTokensUsed >= limit` would be
+    // asserting the overshoot we deliberately removed.
     const budget = new SessionBudget({ maxInputTokens: 2_500 });
+    const results = [];
     for (const n of [1, 2, 3]) {
       if (budget.exhausted()) break;
-      await run(new FakeProvider([reply(`msg ${n}`, 1000)]), budget);
+      results.push(await run(new FakeProvider([reply(`msg ${n}`, 1000)]), budget));
     }
-    const stop = budget.exhausted();
-    expect(stop).not.toBeNull();
-    expect(stop!.kind).toBe('tokens');
-    expect(budget.inputTokensUsed).toBeGreaterThanOrEqual(2_500);
+
+    const blocked = results.find(r => !r.success);
+    expect(blocked).toBeDefined();
+    expect(blocked!.summary).toContain('token budget');
+    expect(blocked!.turns).toBe(0);                       // never sent
+    expect(budget.inputTokensUsed).toBeLessThan(2_500);   // never overshot
   });
 
   it('defaults to the 1M net-of-cache ceiling', () => {
@@ -132,11 +139,14 @@ describe('REPL session budget', () => {
     // total lived on the REPL process, so the next message was refused before
     // it ran — and the exhaustion message recommends `:new` as the way out.
     const budget = new SessionBudget({ maxInputTokens: 2_500 });
+    const results = [];
     for (const n of [1, 2, 3]) {
       if (budget.exhausted()) break;
-      await run(new FakeProvider([reply(`msg ${n}`, 1000)]), budget);
+      results.push(await run(new FakeProvider([reply(`msg ${n}`, 1000)]), budget));
     }
-    expect(budget.exhausted()).not.toBeNull();     // blocked, as it was for real
+    // Blocked, as it was for real — now via the pre-call check, so the
+    // refusal shows up on the run rather than in exhausted().
+    expect(results.some(r => !r.success && /token budget/.test(r.summary))).toBe(true);
 
     budget.reset();                                // what `:new` now does
 

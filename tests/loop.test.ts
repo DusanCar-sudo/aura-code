@@ -411,3 +411,113 @@ describe('runAgentLoop — session budget', () => {
     expect(budget.exhausted()).toBeNull();
   });
 });
+
+describe('runAgentLoop — predictive budget check', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-predict-'));
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+    vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+    vi.unstubAllEnvs();
+  });
+
+  it('stops BEFORE the call when the next turn would exceed the ceiling', async () => {
+    const provider = new FakeProvider([
+      { text: 'must never be sent', toolCalls: [], stopReason: 'done' },
+    ]);
+    // Headroom exists (0 of 200 used) so exhausted() passes, but the system
+    // prompt + context alone is far larger than 200 tokens, so the predictive
+    // check must catch it.
+    const budget = new SessionBudget({ maxInputTokens: 200 });
+    const ctx = await loadProjectContext(tmpDir);
+
+    expect(budget.exhausted()).toBeNull(); // not yet over — the old check would proceed
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(false);
+    // Worded as a projection, not as spend — nothing was billed.
+    expect(result.summary).toContain('token budget reached');
+    expect(result.summary).toContain('was not sent');
+    // Zero overshoot: the provider was never called, so nothing was billed.
+    expect(provider.responses).toHaveLength(1);
+    expect(budget.inputTokensUsed).toBe(0);
+    expect(result.turns).toBe(0);
+  });
+
+  it('does not fire when the next turn fits', async () => {
+    const provider = new FakeProvider([
+      { text: 'all done', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 1_000_000 });
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.turns).toBe(1);
+  });
+
+  it('an unlimited budget is never blocked by the predictive check', async () => {
+    const provider = new FakeProvider([
+      { text: 'all done', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: Infinity });
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('SessionBudget.wouldExceed', () => {
+  it('projects the next call against the ceiling', () => {
+    const b = new SessionBudget({ maxInputTokens: 1000 });
+    b.recordCall(900, 0);
+    expect(b.wouldExceed(50)).toBeNull();          // 950 ≤ 1000
+    expect(b.wouldExceed(200)).not.toBeNull();     // 1100 > 1000
+  });
+
+  it('reports the projected total, not the spent total', () => {
+    const b = new SessionBudget({ maxInputTokens: 1000 });
+    b.recordCall(900, 0);
+    expect(b.wouldExceed(500)).toEqual({ kind: 'tokens', used: 1400, limit: 1000, projected: true });
+  });
+
+  it('never fires for an unlimited ceiling', () => {
+    const b = new SessionBudget({ maxInputTokens: Infinity });
+    expect(b.wouldExceed(Number.MAX_SAFE_INTEGER)).toBeNull();
+  });
+
+  it('treats a negative estimate as zero', () => {
+    const b = new SessionBudget({ maxInputTokens: 1000 });
+    b.recordCall(500, 0);
+    expect(b.wouldExceed(-100)).toBeNull();
+  });
+
+  it('unrecordTurn undoes a turn and never goes negative', () => {
+    const b = new SessionBudget({ maxTurns: 5 });
+    b.recordTurn();
+    expect(b.turnsUsed).toBe(1);
+    b.unrecordTurn();
+    expect(b.turnsUsed).toBe(0);
+    b.unrecordTurn();
+    expect(b.turnsUsed).toBe(0);
+  });
+});
