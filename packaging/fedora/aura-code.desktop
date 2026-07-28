@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Ruby Code
+Name=Aura
 Comment=Model-agnostic AI coding agent web interface
-Exec=ruby-code serve --open
+Exec=aura serve --open
 Icon=utilities-terminal
 Terminal=true
 Type=Application

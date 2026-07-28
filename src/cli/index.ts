@@ -3210,7 +3210,28 @@ if (argv.doctor === true) {
   // --doctor runs async above and exits on completion; don't start main().
 } else if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);
-  startServer({ port, cwd, model: argv.model, apiKey: argv['api-key'] ?? undefined, baseUrl: argv['base-url'] ?? undefined, open: argv.open !== false }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+  // Use the *resolved* config, not raw argv: argv.model is undefined unless
+  // -m or AURA_MODEL was given, so serving on a wizard-configured setup used
+  // to hand createProvider an undefined model and throw on the first task.
+  // runtimeConfig carries the same CLI > .aura.json > global-config > wizard
+  // precedence the interactive path uses.
+  if (!runtimeConfig.model) {
+    // Fail here rather than at the first task: the server would otherwise
+    // start, look healthy, and only break once a client sends something.
+    console.error(chalk.hex('#b15439')(
+      '\nNo model configured. Run `aura` once to complete setup, '
+      + 'or pass `aura serve -m <model>`.\n',
+    ));
+    process.exit(1);
+  }
+  startServer({
+    port,
+    cwd,
+    model: runtimeConfig.model,
+    apiKey: runtimeConfig.apiKey,
+    baseUrl: runtimeConfig.baseUrl,
+    open: argv.open !== false,
+  }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {
   main().catch(e => { console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`)); process.exit(1); });
 }
