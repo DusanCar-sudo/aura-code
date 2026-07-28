@@ -1591,13 +1591,9 @@ let abortController: AbortController | null = null;
 // REPL command handler
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ChatState {
-  projectRoot: string;
-  activeChatId: string | undefined;
-  activeChatHistory: import('../providers/types.js').HistoryMessage[];
-  activeChatTitle: string | undefined;
-  noSession: boolean;
-}
+// ChatState and ReplCommandResult are defined in repl-session-commands.ts and
+// imported above — that module owns them because it is the one that can be
+// loaded without executing this file.
 
 interface ReplCtx {
   // Shared REPL readline. Interactive commands must reuse this instead of
@@ -1619,16 +1615,6 @@ interface ReplCtx {
   /** The REPL-process budget, so commands that start a conversation over can
    *  clear its totals. See SessionBudget.reset. */
   budget: SessionBudget;
-}
-
-interface ReplCommandResult {
-  handled: boolean;
-  newChatId?: string | undefined;
-  newHistory?: import('../providers/types.js').HistoryMessage[];
-  newTitle?: string | undefined;
-  newArchimedesOverride?: boolean;
-  newArchimedesModelOverride?: string;
-  newSmall1Override?: boolean;
 }
 
 /**
@@ -3146,7 +3132,14 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
 `);
 }
 
-if (argv.doctor === true) {
+// Only dispatch when run as the entry point, not when imported. Note this
+// guard is necessary but NOT sufficient to make this module safe to import:
+// the env-file load at the top of this file and the config loading at module
+// scope still run on import. Prefer extracting logic into a side-effect-free
+// module (see repl-session-commands.ts) over importing this one.
+if (require.main !== module) {
+  // imported, not executed — dispatch nothing
+} else if (argv.doctor === true) {
   // --doctor runs async above and exits on completion; don't start main().
 } else if (argv._[0] === 'setup') {
   // `aura setup --web` is what the desktop installers launch as their final
