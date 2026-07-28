@@ -7,6 +7,7 @@ import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setConfirmHandler } from '../safety/permissions.js';
 import { Session } from './session.js';
+import { SessionBudget } from '../agent/session-budget.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
@@ -65,6 +66,12 @@ export async function startServer(opts: ServeOptions): Promise<void> {
 
   const ctx = await loadProjectContext(opts.cwd);
   const session = new Session();
+  // The spend ceiling the CLI paths already apply (cli/index.ts:631, :1361).
+  // Without it this path was unbounded: runAgentLoop only enforces a budget
+  // when one is passed, so every task served over the socket ran with no
+  // cumulative token ceiling at all. Defaults to AURA_SESSION_BUDGET, else
+  // DEFAULT_MAX_INPUT_TOKENS. Reset alongside the conversation it bounds.
+  const budget = new SessionBudget({});
 
   console.log('\n  Aura \u2014 web client');
   console.log('  Project : ' + ctx.name + ' \u00b7 ' + ctx.language);
@@ -128,7 +135,22 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         return;
       }
       if (msg.type === 'task' && msg.task) await runTask(ws, msg.task, msg.model ?? opts.model);
-      if (msg.type === 'reset') { session.reset(); send(ws, { type: 'reset_ok' }); }
+      if (msg.type === 'reset') {
+        // The budget bounds one conversation, and reset starts a new one —
+        // carrying the old total forward would leave every later conversation
+        // starting already exhausted. Same rationale as SessionBudget.reset().
+        session.reset();
+        budget.reset();
+        send(ws, { type: 'reset_ok' });
+      }
+      if (msg.type === 'usage') {
+        send(ws, {
+          type: 'usage',
+          inputTokensUsed: budget.inputTokensUsed,
+          maxInputTokens: budget.maxInputTokens,
+          turnsUsed: budget.turnsUsed,
+        });
+      }
     });
 
     ws.on('close', () => {
@@ -189,6 +211,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     const result = await runAgentLoop({
       provider, task, context: ctx,
       permissions: new PermissionSystem('normal'), display,
+      budget,
     });
     session.addAssistant(result.summary, result.turns, result.toolCallCount);
     send(ws, { type: 'done', success: result.success, text: result.summary, turns: result.turns, toolCount: result.toolCallCount });
