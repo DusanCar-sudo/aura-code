@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { executePlan, synthesise, parseReviewVerdict } from '../../src/orchestration/executor.js';
+import { executePlan, synthesise, parseReviewVerdict, reviewFallbackCount, resetReviewFallbackCount } from '../../src/orchestration/executor.js';
 import type {
   ExecutionPlan,
   PlanStep,
@@ -595,13 +595,17 @@ describe('parseReviewVerdict', () => {
   });
 
   it('falls back to severity when blocking is absent — critical blocks', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const raw = '{"issues":[{"severity":"critical","description":"sqli","location":"a.ts:1"}]}';
     expect(parseReviewVerdict(raw)?.blocking).toBe(true);
+    warn.mockRestore();
   });
 
   it('falls back to severity when blocking is absent — minor does not block', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const raw = '{"issues":[{"severity":"minor","description":"nit","location":"a.ts:1"}]}';
     expect(parseReviewVerdict(raw)?.blocking).toBe(false);
+    warn.mockRestore();
   });
 
   it('an explicit blocking:false wins over a critical severity', () => {
@@ -787,5 +791,42 @@ describe('executePlan — reviewer revise edge', () => {
     // Nothing retryable → the review fails rather than looping.
     expect(calls.filter(c => c === 'research')).toHaveLength(1);
     expect(result.steps.find(s => s.id === 'review')?.status).toBe('failed');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Severity fallback — fails closed, and is observable
+// ─────────────────────────────────────────────────────────────────────────────
+describe('parseReviewVerdict — missing blocking field', () => {
+  beforeEach(() => { resetReviewFallbackCount(); });
+
+  it('counts each fallback so a flaky reviewer prompt is visible', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    expect(reviewFallbackCount()).toBe(0);
+
+    parseReviewVerdict('{"issues":[{"severity":"major","description":"x","location":"a.ts:1"}]}');
+    expect(reviewFallbackCount()).toBe(1);
+
+    parseReviewVerdict('{"issues":[]}');
+    expect(reviewFallbackCount()).toBe(2);
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(String(warn.mock.calls[0][0])).toContain('omitted the required "blocking" field');
+    warn.mockRestore();
+  });
+
+  it('does not count when blocking is present', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    parseReviewVerdict('{"issues":[],"blocking":false}');
+    expect(reviewFallbackCount()).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('fails CLOSED — a major issue with no blocking field blocks', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const v = parseReviewVerdict('{"issues":[{"severity":"major","description":"x","location":"a.ts:1"}]}');
+    expect(v?.blocking).toBe(true);
+    warn.mockRestore();
   });
 });

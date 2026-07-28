@@ -90,12 +90,20 @@ export interface SessionBudgetLimits {
 
 export type BudgetStop =
   | { kind: 'turns'; used: number; limit: number }
-  | { kind: 'tokens'; used: number; limit: number };
+  /** `projected` marks a pre-call stop: `used` is what the next turn WOULD
+   *  reach, not what has been billed. Without the distinction the message
+   *  reports a projection as spend. */
+  | { kind: 'tokens'; used: number; limit: number; projected?: boolean };
 
 export function describeBudgetStop(stop: BudgetStop): string {
-  return stop.kind === 'turns'
-    ? `session turn budget exhausted (${stop.used}/${stop.limit} turns across this conversation)`
-    : `session token budget exhausted (${stop.used.toLocaleString()}/${stop.limit.toLocaleString()} billed input tokens across this conversation)`;
+  if (stop.kind === 'turns') {
+    return `session turn budget exhausted (${stop.used}/${stop.limit} turns across this conversation)`;
+  }
+  if (stop.projected) {
+    return `session token budget reached — the next turn would need ${stop.used.toLocaleString()} ` +
+      `billed input tokens against a ${stop.limit.toLocaleString()} ceiling, so it was not sent`;
+  }
+  return `session token budget exhausted (${stop.used.toLocaleString()}/${stop.limit.toLocaleString()} billed input tokens across this conversation)`;
 }
 
 export class SessionBudget {
@@ -119,6 +127,10 @@ export class SessionBudget {
   }
 
   recordTurn(): void { this.turns++; }
+
+  /** Undo a recordTurn() for a turn that was aborted before any provider
+   *  call — see the predictive check in loop.ts. Never goes below zero. */
+  unrecordTurn(): void { this.turns = Math.max(0, this.turns - 1); }
 
   /** Drop the accumulated totals, keeping the configured ceilings.
    *
@@ -150,6 +162,31 @@ export class SessionBudget {
     }
     if (this.inputTokens >= this.maxInputTokens) {
       return { kind: 'tokens', used: this.inputTokens, limit: this.maxInputTokens };
+    }
+    return null;
+  }
+
+  /**
+   * Would sending a prompt of `estimatedInputTokens` push this session past
+   * the ceiling? Checked after compaction and immediately before the provider
+   * call, so a turn that cannot fit is never sent.
+   *
+   * `exhausted()` alone only notices *after* the overshooting call has been
+   * billed — input tokens are charged when the request is sent, so stopping
+   * afterwards saves nothing on that call. This closes the gap to zero
+   * overshoot without giving up resumability: the loop still returns
+   * normally, history is still persisted.
+   *
+   * The estimate is a lower bound on what will be billed (it does not model
+   * per-provider prompt scaffolding) and ignores cache hits, which are not
+   * knowable before the call. That direction is deliberate: predicting a
+   * cheaper turn than we get would defeat the purpose.
+   */
+  wouldExceed(estimatedInputTokens: number): BudgetStop | null {
+    if (!Number.isFinite(this.maxInputTokens)) return null;
+    const projected = this.inputTokens + Math.max(0, estimatedInputTokens);
+    if (projected > this.maxInputTokens) {
+      return { kind: 'tokens', used: projected, limit: this.maxInputTokens, projected: true };
     }
     return null;
   }

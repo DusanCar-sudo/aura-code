@@ -396,6 +396,21 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       }
     }
 
+    // Predictive ceiling check — runs AFTER compaction, so it measures the
+    // payload we are actually about to send rather than the pre-compaction
+    // one. exhausted() above only notices an overshoot once the offending
+    // call has already been billed; this stops before it. Costs one
+    // tokenizer pass over the same text compaction just measured.
+    if (opts.budget) {
+      const projected = opts.budget.wouldExceed(estimateContextTokens(system, history));
+      if (projected) {
+        budgetStop = projected;
+        turns--;           // this turn never happened — no call was made
+        opts.budget.unrecordTurn();
+        break;
+      }
+    }
+
     display.contextBar?.(health.snapshot(usage.inputTokens, usage.outputTokens));
 
     let responseText = '';

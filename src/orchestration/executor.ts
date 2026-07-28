@@ -218,6 +218,19 @@ export async function synthesise(
 const MAX_REVIEW_RETRIES = 1;
 
 /**
+ * How often the `blocking` field was absent and the severity net caught it.
+ * A non-zero count means the reviewer prompt is not reliably producing the
+ * required field — the fallback is a safety net, not the intended path.
+ */
+let severityFallbackCount = 0;
+
+/** Number of times the severity fallback has fired this process. */
+export function reviewFallbackCount(): number { return severityFallbackCount; }
+
+/** Test seam. */
+export function resetReviewFallbackCount(): void { severityFallbackCount = 0; }
+
+/**
  * Parse the reviewer's structured verdict.
  *
  * Returns `null` when the output is not parseable as a verdict. A null result
@@ -225,6 +238,11 @@ const MAX_REVIEW_RETRIES = 1;
  * has failed to give us a decision, and guessing "probably blocking" from
  * unparseable text is exactly the prose-inference that makes retry loops
  * unbounded.
+ *
+ * When the object parses but omits `blocking`, we fall back to severity and
+ * fail CLOSED (critical/major ⇒ blocking). With the retry cap at 1 the cost
+ * of a wrong block is one extra coder run; the cost of wrongly passing is a
+ * broken step silently marked done.
  */
 export function parseReviewVerdict(raw: string | undefined): ReviewVerdict | null {
   if (!raw) return null;
@@ -253,11 +271,17 @@ export function parseReviewVerdict(raw: string | undefined): ReviewVerdict | nul
 
   // Prefer the reviewer's explicit call. Fall back to severity only when the
   // field is absent entirely — that is still structured data, not prose.
-  const blocking =
-    typeof obj.blocking === 'boolean'
-      ? obj.blocking
-      : issues.some(i => i.severity === 'critical' || i.severity === 'major');
+  if (typeof obj.blocking === 'boolean') {
+    return { issues, blocking: obj.blocking };
+  }
 
+  severityFallbackCount++;
+  const blocking = issues.some(i => i.severity === 'critical' || i.severity === 'major');
+  process.stderr.write(
+    `[orchestration] reviewer omitted the required "blocking" field ` +
+    `(occurrence ${severityFallbackCount}); falling back to severity → ` +
+    `blocking=${blocking}. The reviewer prompt should be producing this.\n`,
+  );
   return { issues, blocking };
 }
 
