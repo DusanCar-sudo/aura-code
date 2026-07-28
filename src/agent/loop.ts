@@ -584,7 +584,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
         if (perm.needsConfirm) {
           const desc = formatCallForConfirmation(call);
-          const approved = await (opts.confirmFn ?? confirm)(`Allow: ${desc}?`);
+          const approved = await (opts.confirmFn ?? confirm)(
+            `Allow: ${desc}?`,
+            { toolName: call.name, input: call.input },
+          );
           if (!approved) {
             display.toolBlocked(call.name, 'denied by user');
             toolResults.push({ id: call.id, name: call.name, content: 'User denied this action.', isError: true });

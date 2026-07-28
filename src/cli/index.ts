@@ -44,6 +44,7 @@ import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandl
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
 import { startServer } from '../server/index.js';
+import { runSidecar } from '../protocol/stdio.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
 import pkg from '../../package.json';
@@ -3020,6 +3021,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
   ${chalk.hex(FAINT_HEX)('Usage:')}
     aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
     aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
+    aura ${chalk.hex(TEXT_DIM_HEX)('sidecar')}                            Engine over stdio (NDJSON) — see docs/PROTOCOL.md
     aura ${chalk.hex(TEXT_DIM_HEX)('setup')}                              Configure provider, model, and API key
     aura ${chalk.hex(TEXT_DIM_HEX)('setup --web')}                        Same, as a browser page (used by installers)
     aura ${chalk.hex(TEXT_DIM_HEX)('--interactive')}                      Start interactive REPL
@@ -3173,6 +3175,28 @@ if (require.main !== module) {
       })
       .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
   }
+} else if (argv._[0] === 'sidecar') {
+  // stdio transport: the client spawns this as a child process and speaks
+  // newline-delimited JSON over the pipes. Same message schema as `serve`
+  // (see docs/PROTOCOL.md); only the framing differs.
+  //
+  // Every diagnostic goes to stderr — stdout is the frame stream. A model
+  // is NOT required up front: the client can supply one per session.create,
+  // which is how Mathetes' per-agent provider/model wizard works.
+  if (!runtimeConfig.model) {
+    console.error(
+      'aura sidecar: no default model configured — '
+      + 'clients must pass `model` on session.create.',
+    );
+  }
+  runSidecar({
+    defaultModel: runtimeConfig.model ?? '',
+    defaultApiKey: runtimeConfig.apiKey,
+    defaultBaseUrl: runtimeConfig.baseUrl,
+    defaultProjectRoot: cwd,
+  })
+    .then(() => process.exit(0))
+    .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);
   // Use the *resolved* config, not raw argv: argv.model is undefined unless
