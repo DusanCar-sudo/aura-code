@@ -15,13 +15,14 @@
   "scripts": {
     "prepublishOnly": "npm run clean && npm run build",
     "build": "tsc",
+    "postbuild": "node scripts/fix-bin-perms.js",
     "dev": "ts-node src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "repair-anchors": "tsc && node dist/machina/repair.js"
+    "repair-anchors": "npm run build && node dist/machina/repair.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
