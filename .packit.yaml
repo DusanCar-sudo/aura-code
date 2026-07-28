@@ -1,10 +1,10 @@
-specfile_path: packaging/fedora/ruby-code.spec
+specfile_path: packaging/fedora/aura-code.spec
 files_to_sync:
-  - packaging/fedora/ruby-code.spec
+  - packaging/fedora/aura-code.spec
   - .packit.yaml
 
-upstream_package_name: ruby-code
-downstream_package_name: ruby-code
+upstream_package_name: aura-code
+downstream_package_name: aura-code
 
 srpm_build_deps:
   - npm
@@ -18,7 +18,7 @@ jobs:
 
   - job: copr_build
     trigger: commit
-    branch: main
+    branch: master
     targets:
       - fedora-44-x86_64
       - fedora-rawhide-x86_64

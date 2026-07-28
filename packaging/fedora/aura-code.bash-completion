@@ -1,12 +1,12 @@
-# bash completion for ruby-code
+# bash completion for aura
 
-_ruby_code() {
+_aura() {
     local cur prev words cword
     _init_completion || return
 
     case $prev in
         -m|--model)
-            local models=$(ruby-code --models 2>/dev/null | awk '/^[[:space:]]+[a-zA-Z]/ {print $1}')
+            local models=$(aura --models 2>/dev/null | awk '/^[[:space:]]+[a-zA-Z]/ {print $1}')
             COMPREPLY=($(compgen -W "$models" -- "$cur"))
             return
             ;;
@@ -46,4 +46,4 @@ _ruby_code() {
 
     COMPREPLY=($(compgen -f -d -- "$cur"))
 } &&
-complete -F _ruby_code ruby-code
+complete -F _aura aura

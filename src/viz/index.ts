@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { openExternal } from '../util/open.js';
 import type { ExecutionPlan } from '../orchestration/types.js';
 import type { ChatSession } from '../agent/session-store.js';
 
@@ -1479,11 +1480,5 @@ export function generateDashboard(projectRoot: string): string {
 }
 
 export function openDashboard(filePath: string): void {
-  try {
-    const opener =
-      process.platform === 'darwin' ? 'open' :
-      process.platform === 'win32'  ? 'start' :
-      'xdg-open';
-    execSync(`${opener} "${filePath}"`, { stdio: 'ignore' });
-  } catch { /* ignore if no browser */ }
+  openExternal(filePath);
 }

@@ -5,11 +5,12 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createProvider, KNOWN_MODELS } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { PermissionSystem } from '../safety/permissions.js';
+import { PermissionSystem, setConfirmHandler } from '../safety/permissions.js';
 import { Session } from './session.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
+import { openExternal } from '../util/open.js';
 
 export interface ServeOptions {
   port: number; cwd: string; model: string;
@@ -81,13 +82,60 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   }));
   app.post('/api/reset', (_req, res) => { session.reset(); res.json({ ok: true }); });
 
+  // ── Remote tool approval ───────────────────────────────────────────────
+  // Without this, PermissionSystem('normal') falls back to confirm(), which
+  // reads the *server's* stdin — so a remote client asking for a file write
+  // blocks on a y/N prompt it cannot see, and hangs forever when the server
+  // runs headless (systemd). Route the prompt to the client that asked.
+  const pendingConfirms = new Map<string, (approved: boolean) => void>();
+  const CONFIRM_TIMEOUT_MS = 120_000;
+
+  function askClient(ws: WebSocket, message: string): Promise<boolean> {
+    if (ws.readyState !== WebSocket.OPEN) return Promise.resolve(false);
+    const id = crypto.randomUUID();
+    return new Promise<boolean>(resolve => {
+      let settled = false;
+      const finish = (approved: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        pendingConfirms.delete(id);
+        resolve(approved);
+      };
+      // Deny on silence rather than blocking the agent indefinitely.
+      const timer = setTimeout(() => {
+        send(ws, { type: 'confirm_timeout', id });
+        finish(false);
+      }, CONFIRM_TIMEOUT_MS);
+      pendingConfirms.set(id, finish);
+      send(ws, { type: 'confirm_request', id, message });
+    });
+  }
+
   wss.on('connection', (ws) => {
     send(ws, { type: 'connected' });
+
+    // Tie approvals to the socket that owns the run. A second client
+    // connecting takes over prompting; see the single-Session caveat in
+    // the README — this server is deliberately single-user.
+    setConfirmHandler((message: string) => askClient(ws, message));
+
     ws.on('message', async (raw) => {
-      let msg: { type: string; task?: string; model?: string };
+      let msg: { type: string; task?: string; model?: string; id?: string; approved?: boolean };
       try { msg = JSON.parse(raw.toString()); } catch { return; }
+      if (msg.type === 'confirm_response' && typeof msg.id === 'string') {
+        pendingConfirms.get(msg.id)?.(msg.approved === true);
+        return;
+      }
       if (msg.type === 'task' && msg.task) await runTask(ws, msg.task, msg.model ?? opts.model);
       if (msg.type === 'reset') { session.reset(); send(ws, { type: 'reset_ok' }); }
+    });
+
+    ws.on('close', () => {
+      // Deny anything still waiting — nobody is left to answer.
+      for (const resolve of pendingConfirms.values()) resolve(false);
+      pendingConfirms.clear();
+      setConfirmHandler(null);
     });
   });
 
@@ -147,7 +195,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   }
 
   server.listen(opts.port, host, () => {
-    if (opts.open) { try { require('child_process').exec('xdg-open ' + JSON.stringify(tokenizedUrl)); } catch {} }
+    if (opts.open) openExternal(tokenizedUrl);
     console.log('  Ready \u2192 ' + tokenizedUrl + '  (Ctrl+C to stop)\n');
   });
 }
@@ -206,6 +254,14 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
 .tk::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c);flex-shrink:0;animation:p 1.2s infinite}
 .sk{background:var(--s);border:1px solid var(--l2);border-left:2px solid var(--c);border-radius:6px;padding:13px 16px;color:var(--inks);line-height:1.65;white-space:pre-wrap}
 .cur{display:inline-block;width:8px;height:14px;background:var(--c);margin-left:2px;animation:bk 1s steps(1) infinite;vertical-align:text-bottom}
+.cf{background:#1a1008;border:1px solid var(--l2);border-left:2px solid #d4903a;border-radius:8px;padding:12px 15px;margin:4px 0}
+.cfm{color:var(--ink);font-size:13px;line-height:1.5;margin-bottom:10px}
+.cfb{display:flex;gap:8px;align-items:center}
+.cfb button{border:none;border-radius:6px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer}
+.cfy{background:var(--g);color:#fff}
+.cfn{background:var(--f);color:var(--ink)}
+.cfa{color:var(--g);font-size:12px;font-family:monospace}
+.cfd{color:var(--cd);font-size:12px;font-family:monospace}
 .plc{border:1px solid var(--l2);border-radius:10px;padding:14px 16px;margin:4px 0}
 .plh{color:var(--c);font-weight:700;font-size:13px;margin-bottom:8px}
 .plg{color:var(--m);font-size:12px;margin-bottom:10px}
@@ -275,8 +331,28 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
     if (d.type === 'text_end' || d.type === 'done') { fn(); if (d.type === 'done') idle(); sc(); return; }
     if (d.type === 'tool_call') { rt(); var e = mk('div','mt'); e.innerHTML = '<div class="tn">' + ic(d.name) + ' ' + d.name + '</div><div class="ti">' + ex(si(d.name, d.input)) + '</div><div class="tr">running\u2026</div>'; ch.appendChild(e); tEl = e; sc(); return; }
     if (d.type === 'tool_result') { if (tEl) { var r = tEl.querySelector('.tr'), ls = d.result.split('\\n'); r.textContent = ls.length > 5 ? ls.slice(0,5).join('\\n') + '\\n\u2026(+' + (ls.length-5) + ' lines)' : d.result; } tEl = null; return; }
+    if (d.type === 'confirm_request') { cfr(d.id, d.message); sc(); return; }
+    if (d.type === 'confirm_timeout') { var t = document.getElementById('cf-' + d.id); if (t) { t.querySelector('.cfb').innerHTML = '<span class="cfd">timed out — denied</span>'; } return; }
+    if (d.type === 'tool_blocked') { var e = mk('div','sy'); e.textContent = 'blocked: ' + (d.name||'') + ' — ' + (d.reason||''); ch.appendChild(e); sc(); return; }
     if (d.type === 'error' || d.type === 'warning') { var e = mk('div','sy'); e.textContent = d.message || d.reason || ''; ch.appendChild(e); if (d.type === 'error') idle(); sc(); return; }
     if (d.type === 'reset_ok') { ch.innerHTML = ''; }
+  }
+
+  // Approval prompt — the agent is blocked until one of these is clicked
+  // (or it times out server-side and denies).
+  function cfr(id, message) {
+    var e = mk('div','cf'); e.id = 'cf-' + id;
+    e.innerHTML = '<div class="cfm">' + ex(message) + '</div>'
+      + '<div class="cfb"><button class="cfy">Allow</button><button class="cfn">Deny</button></div>';
+    ch.appendChild(e);
+    function answer(ok) {
+      ws.send(JSON.stringify({ type: 'confirm_response', id: id, approved: ok }));
+      e.querySelector('.cfb').innerHTML = ok
+        ? '<span class="cfa">allowed</span>'
+        : '<span class="cfd">denied</span>';
+    }
+    e.querySelector('.cfy').onclick = function() { answer(true); };
+    e.querySelector('.cfn').onclick = function() { answer(false); };
   }
 
   function rp(plan) {
