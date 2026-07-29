@@ -5,7 +5,7 @@
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Website](https://img.shields.io/badge/website-aurawebsite--eta.vercel.app-6ed0ea?style=flat-square)](https://aurawebsite-eta.vercel.app)
-[![Version](https://img.shields.io/badge/version-v0.13.1-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.12.9-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
@@ -105,11 +105,9 @@ recognized from its own wording, not a second model call, so the detection is
 free. Answer `y` (or just press Enter) and it hands off with the conversation
 intact.
 
-Both commands work in the ordinary `aura` REPL too, not just a session started
-with `--gazelle`: the TUI stays where it is and swaps only what a turn does, and
-the status line grows a `gazelle` marker so the cheap path is never a guess. In
-the REPL, Enter submits a line rather than accepting an offer, so a reply that
-wants tools points at `:coder` instead.
+Both commands belong to a session started with `--gazelle`. Typed into the
+ordinary `aura` REPL they currently do nothing useful — see the known-issue note
+under [REPL commands](#repl-commands).
 
 ### Memory
 
@@ -269,6 +267,10 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 |---------|-------------|
 | `:coder` | Switch to full coding-agent mode (tools, project context) |
 | `:gazelle` | Switch to lean conversational mode |
+
+> **Known issue:** these two only work inside a session started with
+> `--gazelle`. In the plain REPL they are not handled and get sent to the model
+> as a task. Fix reverted in 0.12.9 pending investigation.
 
 ### Session
 
