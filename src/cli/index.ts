@@ -31,8 +31,9 @@ process.on('unhandledRejection', (reason) => {
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
-import { runAgentLoop } from '../agent/loop.js';
+import { runAgentLoop, costFor } from '../agent/loop.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
+import { createGazelleChat, type GazelleChat } from '../agent/gazelle-chat.js';
 import { runCoderConversation } from '../agent/coder-conversation.js';
 import { SessionBudget, describeBudgetStop } from '../agent/session-budget.js';
 import { DEFAULT_MAX_TURNS } from '../agent/loop-profile.js';
@@ -56,7 +57,9 @@ import {
   handleSessionCommand,
   type ChatState,
   type ReplCommandResult,
+  type ReplMode,
 } from './repl-session-commands.js';
+import { handleModeCommand } from './repl-mode-commands.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
@@ -1362,6 +1365,118 @@ let abortController: AbortController | null = null;
   // what actually catches a runaway loop (that session peaked at 19).
   const replBudget = new SessionBudget({});
 
+  // ── Mode: coder (full agent) ⇄ gazelle (lean conversation) ────────────────
+  // :help has advertised both since Gazelle landed, but only the --gazelle
+  // orchestrator implemented them — typed in here they fell through and were
+  // sent to the model as a *task*. The switch happens inside this TUI rather
+  // than handing off to runGazelleLoop, because that loop opens a readline on
+  // the same stdin the TUI holds in raw mode, and two readers on one stream
+  // double every keypress (see the ReplCtx.rl comment). Only what a turn *does*
+  // changes: no tools, no ProjectContext, no Archimedes, no verification gate.
+  let replMode: ReplMode = 'coder';
+  let gazelleChat: GazelleChat | null = null;
+  // The TUI keeps accepting input while a reply streams and does not await
+  // processLine, so a second line can arrive mid-turn. Two concurrent respond()
+  // calls would interleave their pushes into one history array and send a
+  // malformed conversation on the next request; a mode switch would drop the
+  // chat whose reply is still arriving. Both wait for the turn to land.
+  let gazelleTurnInFlight = false;
+
+  const refreshStatusLine = (): void => {
+    setStatusLine([
+      provider.name, runtimeConfig.model, permissionLevel,
+      ...(replMode === 'gazelle' ? ['gazelle'] : []),
+    ].filter(Boolean).join(' · '));
+  };
+
+  /** Seed a chat from the conversation so far, minus coder tool noise — the
+   *  lean prompt must never inherit tool schemas or results. The provider is a
+   *  thunk so a mid-conversation :model switch applies to the next reply. */
+  const makeGazelleChat = (): GazelleChat => createGazelleChat({
+    provider: () => buildProvider(tuiDisplay),
+    display: tuiDisplay,
+    initialHistory: sanitizeForGazelle(activeChatHistory, runtimeConfig.model ?? resolved.model ?? ''),
+    sessionPath,
+  });
+
+  const enterMode = (next: ReplMode): void => {
+    // Switching out from under a streaming reply loses the rest of it and
+    // reports the pre-turn totals ("0 tokens over 1 message"), because the
+    // assistant half of the exchange has not landed yet.
+    if (gazelleTurnInFlight) {
+      tuiDisplay.warning(`Still answering — send :${next} again once the reply lands.`);
+      return;
+    }
+    replMode = next;
+    if (next === 'gazelle') {
+      gazelleChat = makeGazelleChat();
+      tuiDisplay.success('Conversational (Gazelle) mode — no tools, no project context. :coder switches back.');
+    } else {
+      // Only worth a line if something was actually said — an immediate
+      // :gazelle → :coder otherwise reports "0 tokens over 0 message(s)".
+      if (gazelleChat && gazelleChat.totals().messages > 0) {
+        tuiDisplay.warning(gazelleChat.statsLine());
+      }
+      gazelleChat = null;
+      tuiDisplay.success('Coder mode — tools and project context.');
+    }
+    refreshStatusLine();
+  };
+
+  /** One lean conversational turn, in place of the whole agent loop. */
+  const runGazelleTurn = async (input: string): Promise<void> => {
+    const chat = gazelleChat;
+    if (!chat) { enterMode('coder'); return; }
+    if (gazelleTurnInFlight) {
+      tuiDisplay.warning('Still answering — one conversational turn at a time.');
+      return;
+    }
+
+    gazelleTurnInFlight = true;
+    let turn;
+    try {
+      turn = await chat.respond(input);
+    } finally {
+      gazelleTurnInFlight = false;
+    }
+    if (turn.failed) return;
+
+    // :new, :resume, :clear-history and :compact re-seed the chat, and can land
+    // while this reply is still streaming. The conversation we just answered on
+    // is then no longer the REPL's, so writing it back would resurrect history
+    // the user just discarded. The call was still billed, so it is still counted.
+    const stillCurrent = gazelleChat === chat;
+
+    // Carry the conversation into the REPL's own history so :coder, :new and
+    // session persistence all see it — one conversation, two modes.
+    if (stillCurrent) {
+      activeChatHistory = [...chat.history];
+      if (activeChatId && !noSession) {
+        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
+      }
+    }
+
+    // Gazelle turns bill real tokens, so they count against the session
+    // ceiling and show up in /stats — a mode that spent invisibly would let a
+    // long chat sail past a budget the coder path respects.
+    replBudget.recordCall(turn.inputTokens);
+    replBudget.recordTurn();
+    const pricingModel = runtimeConfig.model ?? resolved.model ?? 'unknown';
+    const cost = costFor(pricingModel, turn.inputTokens, turn.outputTokens);
+    cumulative.turns += 1;
+    cumulative.inputTokens += turn.inputTokens;
+    cumulative.outputTokens += turn.outputTokens;
+    cumulative.costUsd += cost;
+    printUsageFooter(tuiDisplay, { inputTokens: turn.inputTokens, outputTokens: turn.outputTokens }, cost);
+
+    // Gazelle said, in its own words, that it needs tools. The reader-driven
+    // loop can accept that with a bare Enter; here Enter submits a line, so
+    // point at :coder instead of inventing a pending-answer state.
+    if (stillCurrent && turn.needsTools) {
+      writeOutput(chalk.hex(FAINT_HEX)('  ↳ needs tools? :coder switches to the full agent — this conversation carries over.'));
+    }
+  };
+
   async function processLine(input: string) {
     const replCtx = {
       rl: null,
@@ -1375,6 +1490,7 @@ let abortController: AbortController | null = null;
       archimedesModelOverride,
       small1Override,
       budget: replBudget,
+      mode: replMode,
     };
 
     // Check for REPL commands
@@ -1386,7 +1502,36 @@ let abortController: AbortController | null = null;
       if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
       if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
       if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
+      // Must come after newHistory: entering gazelle seeds its chat from the
+      // current history, and :resume/:new arrive as a command result too.
+      if (cmdResult.newMode !== undefined) {
+        enterMode(cmdResult.newMode);
+      } else if (cmdResult.newHistory !== undefined && replMode === 'gazelle') {
+        // :new, :resume, :clear-history and :compact all replace the REPL's
+        // history. The live chat holds its own copy, so without re-seeding it
+        // would keep answering from the conversation the user just discarded.
+        gazelleChat = makeGazelleChat();
+      }
       if (activeChatId) setChatId(activeChatId);
+      return;
+    }
+
+    // In gazelle mode a plain line is conversation, not a task — none of the
+    // coder-path machinery below (verification, Archimedes, tools) applies.
+    if (replMode === 'gazelle') {
+      const stop = replBudget.exhausted();
+      if (stop) {
+        tuiDisplay.warning(
+          `${describeBudgetStop(stop)}. Start a fresh session with :new, or :clear-history to keep this session id.`,
+        );
+        return;
+      }
+      try {
+        await runGazelleTurn(input);
+      } catch (err) {
+        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+        writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+      }
       return;
     }
 
@@ -1627,6 +1772,9 @@ interface ReplCtx {
   /** The REPL-process budget, so commands that start a conversation over can
    *  clear its totals. See SessionBudget.reset. */
   budget: SessionBudget;
+  /** Which loop typed lines currently run through — read by :gazelle/:coder to
+   *  answer "already there", and by the commands that redraw the status line. */
+  mode: ReplMode;
 }
 
 /**
@@ -1669,7 +1817,9 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
     }
     console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
     // Update the TUI status line so the model change is immediately visible.
-    setStatusLine([test.name, newModel, permissionLevel].filter(Boolean).join(' · '));
+    // The mode marker has to be re-appended — setStatusLine replaces the line.
+    setStatusLine([test.name, newModel, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
+      .filter(Boolean).join(' · '));
     // Remember the choice for the next session. The saved baseUrl belongs to
     // the wizard-configured model — keep it only when switching back to that
     // model, otherwise the factory's per-provider default applies.
@@ -2308,6 +2458,15 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
+  // ── Modes ────────────────────────────────────────────────────────────────
+  // :coder / :gazelle. The REPL owns the switch itself (see enterMode); these
+  // only report the intent. In repl-mode-commands.ts so they can be tested —
+  // being unreachable from a test is how they stayed advertised-but-unhandled.
+  {
+    const modeResult = handleModeCommand(input, { mode: c.mode, display: c.display });
+    if (modeResult) return modeResult;
+  }
+
   // ── Session commands ─────────────────────────────────────────────────────
 
   if (input === ':id') {
@@ -2473,7 +2632,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
           console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
         } else {
           await postModelSwitch(c);
-          setStatusLine([resolved.model ?? modelId, permissionLevel].filter(Boolean).join(' · '));
+          setStatusLine([resolved.model ?? modelId, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
+            .filter(Boolean).join(' · '));
           if (fileConfig.model && fileConfig.model !== modelId) {
             writeOutput(chalk.hex(TEXT_DIM_HEX)(
               `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
