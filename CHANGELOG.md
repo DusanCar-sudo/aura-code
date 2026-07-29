@@ -4,7 +4,11 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
-## [0.12.10] — 2026-07-29
+## [0.13.0] — 2026-07-29
+
+Carries the RTK token work from 0.12.9 plus the fix below. Briefly tagged
+`v0.12.10` before being renumbered; same content, no npm release under that
+number.
 
 ### Fixed
 - **A reply that collapses into repeating one phrase is now cut off, not paid
