@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { pickLanAddress } from '../server/lan.js';
+import { pickLanAddress, tailscaleAddress } from '../server/lan.js';
 import { createPairingCode, loadDevices, revokeDevice, devicesPath, pendingPairings } from '../server/devices.js';
 
 const CYAN = '#3fb9d8';
@@ -66,19 +66,33 @@ function addNamedDevice(name: string, port: number): number {
   const minutes = Math.max(1, Math.round((new Date(pairing.expiresAt).getTime() - Date.now()) / 60_000));
 
   const wifi = pickLanAddress();
+  const ts = tailscaleAddress();
 
   heading(`Pairing "${pairing.name}"`);
   console.log('  Type this code into the phone:\n');
   console.log('    ' + chalk.hex(CYAN).bold(pairing.code.split('').join(' ')) + '\n');
   console.log('  On that phone, open Aura and enter:\n');
-  if (wifi) {
+  if (ts) {
+    console.log('    Address  ' + chalk.bold(ts.address)
+      + chalk.dim('   (Tailscale — works on any network)'));
+  } else if (wifi) {
     console.log('    Address  ' + chalk.bold(wifi.address) + chalk.dim(`   (Wi-Fi, ${wifi.iface})`));
   } else {
     console.log('    Address  ' + chalk.bold('127.0.0.1') + chalk.dim('   (over USB)'));
   }
   console.log('    Port     ' + chalk.bold(String(port)));
   console.log('    Code     ' + chalk.bold(pairing.code) + '\n');
-  if (wifi) {
+  if (ts) {
+    console.log('  Needs ' + chalk.hex(CYAN)('aura serve --tailscale')
+      + ' here, and Tailscale installed on the');
+    console.log('  phone, signed into the same account. Then it works from anywhere —');
+    console.log('  mobile data included, nothing exposed to the internet.');
+    if (wifi) {
+      console.log('  ' + chalk.dim(`Same Wi-Fi only: use ${wifi.address} with `)
+        + chalk.hex(CYAN)('aura serve --lan'));
+    }
+    console.log('');
+  } else if (wifi) {
     console.log('  Wi-Fi needs the server started with '
       + chalk.hex(CYAN)('aura serve --lan') + '. Same network, no cable.');
     console.log('  ' + chalk.dim('Over USB instead: use 127.0.0.1 and run ')
