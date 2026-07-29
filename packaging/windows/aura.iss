@@ -1,30 +1,30 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 ; Aura — Windows installer (Inno Setup 6)
 ;
-; Windows support is WSL-based. Aura's shell guardrails are POSIX strings, so
-; a native Windows install would auto-approve nothing and its dangerous-command
-; denylist would miss `del /s /q`, `rd /s`, `format`, and
-; `Remove-Item -Recurse -Force`. Rather than ship that, this installer puts the
-; Linux build inside the user's WSL distro and leaves Windows-side shortcuts
-; that launch through wsl.exe.
+; Native Windows. This used to install the Linux build into WSL, because the
+; shell guardrails were POSIX strings and a native run recognised none of
+; `del /s /q`, `rd /s`, `format`, or `Remove-Item -Recurse -Force`, while
+; auto-approving nothing. Both lists now screen cmd.exe and PowerShell
+; (config/defaults.ts), so the WSL detour is no longer buying anything and the
+; installer is an ordinary one: a private Node runtime, the app, a launcher on
+; PATH.
 ;
-; So the payload here is small: the .deb, a couple of scripts, and the
-; shortcuts. The heavy lifting happens inside WSL at install time.
+; Payload comes from packaging\windows\stage-windows.ps1, which must run first.
 ;
-; Build:  iscc packaging\windows\aura.iss
-; Expects build\dist\aura-code_<version>_all.deb to exist (make -C packaging deb).
+; Build:  iscc /DAppVersion=0.12.2 packaging\windows\aura.iss
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName        "Aura"
-; Version comes from the build script, which reads package.json:
-;   iscc /DAppVersion=0.12.2 aura.iss
-; The fallback only exists so the script can be opened in the Inno IDE.
+; Version comes from the build script, which reads package.json. The fallback
+; only exists so the script can be opened in the Inno IDE.
 #ifndef AppVersion
   #define AppVersion   "0.0.0-dev"
 #endif
+#ifndef StageDir
+  #define StageDir     "..\..\build\stage-win"
+#endif
 #define AppPublisher   "Dusan Milosavljevic"
 #define AppURL         "https://github.com/DusanCar-sudo/aura-code"
-#define DebFile        "aura-code_" + AppVersion + "_all.deb"
 
 [Setup]
 AppId={{8C4E2A91-5B3D-4F7E-9A21-6D8F0C3B7E45}
@@ -41,105 +41,112 @@ OutputBaseFilename=AuraCode-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-; WSL is 64-bit only.
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; Installing per-user avoids a UAC prompt and lets PATH be the user's own,
+; which is the variable a plain `aura` in a terminal actually resolves against.
 PrivilegesRequired=lowest
 LicenseFile=..\..\LICENSE
+; Tells Explorer to broadcast the environment change, so a newly opened
+; terminal sees `aura` without a sign-out.
+ChangesEnvironment=yes
+UninstallDisplayName={#AppName} {#AppVersion}
+UninstallDisplayIcon={app}\aura.cmd
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Tasks]
+Name: "addtopath"; Description: "Add Aura to PATH (recommended)"; GroupDescription: "Integration:"
+
 [Files]
-Source: "..\..\build\dist\{#DebFile}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "install-into-wsl.sh";         DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\README.md";             DestDir: "{app}"; Flags: ignoreversion isreadme
+; recursesubdirs + createallsubdirs: the staged tree is a real directory
+; structure (runtime, app, node_modules), not a flat file list.
+Source: "{#StageDir}\node\*"; DestDir: "{app}\node"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\app\*";  DestDir: "{app}\app";  Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\aura.cmd"; DestDir: "{app}";    Flags: ignoreversion
+Source: "..\..\README.md";      DestDir: "{app}";    Flags: ignoreversion isreadme
+Source: "..\..\LICENSE";        DestDir: "{app}";    Flags: ignoreversion
 
 [Icons]
-; Shortcuts run through wsl.exe — there is no Windows-native aura binary.
-Name: "{group}\Aura Setup";   Filename: "wsl.exe"; Parameters: "aura setup --web"; Comment: "Choose a provider and enter an API key"
-Name: "{group}\Aura Shell";   Filename: "wsl.exe"; Parameters: "--cd ~ -- bash -lc ""aura; exec bash"""; Comment: "Open a shell with Aura ready"
+Name: "{group}\Aura Setup"; Filename: "{app}\aura.cmd"; Parameters: "setup --web"; \
+  Comment: "Choose a provider and enter an API key"
+Name: "{group}\Aura"; Filename: "{app}\aura.cmd"; \
+  Comment: "Start Aura in the current folder"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 [Run]
-; Install into WSL, then open the setup page. Both are shown as wizard
-; checkboxes so an offline user can skip and do it later.
-Filename: "wsl.exe"; \
-  Parameters: "-- bash -lc ""bash '$(wslpath '{app}\install-into-wsl.sh')' '$(wslpath '{app}\{#DebFile}')'"""; \
-  StatusMsg: "Installing Aura into WSL (this downloads Node if needed)..."; \
-  Flags: shellexec waituntilterminated; \
-  Check: WSLIsReady
-
-Filename: "wsl.exe"; Parameters: "aura setup --web"; \
+; The wizard is a browser page rather than a terminal prompt: someone who has
+; just clicked through an installer should not be dropped into a TUI.
+Filename: "{app}\aura.cmd"; Parameters: "setup --web"; \
   Description: "Configure Aura now (choose provider, enter API key)"; \
-  Flags: postinstall shellexec nowait skipifsilent; \
-  Check: WSLIsReady
+  Flags: postinstall shellexec nowait skipifsilent
 
 [Code]
-var
-  WSLAvailable: Boolean;
-  WSLChecked: Boolean;
+const
+  EnvKey = 'Environment';
 
-{ Run a command and capture whether it succeeded. }
-function RunHidden(const Cmd, Params: string; var ResultCode: Integer): Boolean;
-begin
-  Result := Exec(Cmd, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-end;
-
-{ True when WSL exists AND has at least one installed distribution.
-  `wsl.exe -l -q` exits non-zero when WSL is present but has no distro, which
-  is the case that would otherwise fail confusingly halfway through install. }
-function DetectWSL(): Boolean;
+{ True when Dir is not already a PATH entry. Compared with delimiters on both
+  sides so that C:\Tools\Aura is not treated as present because C:\Tools\Aura2
+  happens to be. }
+function NeedsAddPath(const Dir: string): Boolean;
 var
-  Code: Integer;
+  Existing: string;
 begin
-  Result := False;
-  if not FileExists(ExpandConstant('{sys}\wsl.exe')) then
+  if not RegQueryStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Existing) then
+  begin
+    Result := True;
     Exit;
-  if RunHidden(ExpandConstant('{sys}\wsl.exe'), '-l -q', Code) then
-    Result := (Code = 0);
+  end;
+  Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Existing) + ';') = 0;
 end;
 
-function WSLIsReady(): Boolean;
+procedure AddToPath(const Dir: string);
+var
+  Existing: string;
 begin
-  if not WSLChecked then
-  begin
-    WSLAvailable := DetectWSL();
-    WSLChecked := True;
-  end;
-  Result := WSLAvailable;
+  if not NeedsAddPath(Dir) then
+    Exit;
+  if not RegQueryStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Existing) then
+    Existing := '';
+  if (Existing <> '') and (Existing[Length(Existing)] <> ';') then
+    Existing := Existing + ';';
+  { expandsz, because a user PATH commonly contains %USERPROFILE% and rewriting
+    it as a plain string would freeze those references at today's values. }
+  RegWriteExpandStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Existing + Dir);
 end;
 
-function InitializeSetup(): Boolean;
+procedure RemoveFromPath(const Dir: string);
+var
+  Existing, Cleaned: string;
+  P: Integer;
 begin
-  Result := True;
-  if not WSLIsReady() then
-  begin
-    { Explain rather than silently installing something that cannot run.
-      Continuing is allowed: the files land on disk and the user can finish
-      after enabling WSL. }
-    Result := MsgBox(
-      'Aura on Windows runs inside WSL (Windows Subsystem for Linux), which does'  #13#10
-      'not appear to be set up on this PC.'                                        #13#10 #13#10
-      'Aura''s command-safety rules are written for Linux shells. Running it'      #13#10
-      'natively on Windows would stop for confirmation on every command and'      #13#10
-      'would not recognise destructive commands such as del /s /q or'             #13#10
-      'Remove-Item -Recurse -Force. So WSL is required, not merely preferred.'    #13#10 #13#10
-      'To set it up, open PowerShell as Administrator and run:'                    #13#10 #13#10
-      '    wsl --install'                                                          #13#10 #13#10
-      'Restart when prompted, then run this installer again.'                      #13#10 #13#10
-      'Continue anyway and finish setup later?',
-      mbConfirmation, MB_YESNO) = IDYES;
-  end;
+  if not RegQueryStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Existing) then
+    Exit;
+  Cleaned := ';' + Existing + ';';
+  P := Pos(';' + Uppercase(Dir) + ';', Uppercase(Cleaned));
+  if P = 0 then
+    Exit;
+  Delete(Cleaned, P, Length(Dir) + 1);
+  { Strip the delimiters this function added, leaving the user's own PATH
+    shape intact rather than accumulating stray semicolons across upgrades. }
+  if (Length(Cleaned) > 0) and (Cleaned[1] = ';') then Delete(Cleaned, 1, 1);
+  if (Length(Cleaned) > 0) and (Cleaned[Length(Cleaned)] = ';') then
+    Delete(Cleaned, Length(Cleaned), 1);
+  RegWriteExpandStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Cleaned);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssPostInstall) and (not WSLIsReady()) then
-    MsgBox(
-      'Files were copied, but Aura was not installed into WSL.'          #13#10 #13#10
-      'Once WSL is available, open a WSL terminal and run:'              #13#10 #13#10
-      '    bash "' + ExpandConstant('{app}') + '\install-into-wsl.sh"'   #13#10 #13#10
-      '(or reinstall Aura and it will do this for you).',
-      mbInformation, MB_OK);
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('addtopath') then
+    AddToPath(ExpandConstant('{app}'));
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  { Uninstalling has to undo the PATH entry as well; Inno does not track
+    registry values written from code, so leaving this out would strand a
+    dead directory on every user's PATH forever. }
+  if CurUninstallStep = usUninstall then
+    RemoveFromPath(ExpandConstant('{app}'));
 end;
