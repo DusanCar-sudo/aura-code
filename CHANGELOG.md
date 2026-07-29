@@ -4,6 +4,37 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.13.5] — 2026-07-29
+
+Versions step by 0.0.5 from here on: 0.13.5, 0.14.0, 0.14.5, and so on.
+
+### Added
+- **`:gazelle` and `:coder` work in the ordinary REPL again.** Restored
+  unchanged from v0.13.1, which was withdrawn on suspicion of causing a task to
+  loop on one step. It wasn't: 0.13.0 traced that to `step-3.5-flash` collapsing
+  into repetition inside a single streamed reply, with nothing in the harness to
+  stop it. The mode branch never ran in coder mode — it was inert while
+  `replMode === 'coder'`, and the coder path beneath it was untouched — so with
+  the real cause fixed there is nothing left to hold it back.
+
+  `:help` and the README have advertised both commands since Gazelle landed,
+  while only the `--gazelle` orchestrator implemented them; typed into the plain
+  REPL they fell through the command handler and were sent to the model as a
+  *task*. Now the TUI switches in place: the machinery of a Gazelle turn lives in
+  `agent/gazelle-chat.ts`, independent of how input arrives, so the TUI can drive
+  it without opening a second readline on stdin it already holds in raw mode
+  (two readers on one stream double every keypress). Lean turns share the REPL's
+  conversation — carried both ways, coder tool noise stripped on the way in —
+  count against the session token ceiling, and appear in `/stats`; the status
+  line gains a `gazelle` marker. A mode switch or second message arriving while a
+  reply is still streaming waits for it rather than interleaving two
+  conversations into one history.
+
+  The commands live in `cli/repl-mode-commands.ts` because nothing in
+  `cli/index.ts` can be imported by a test, which is how a command stayed
+  advertised and unimplemented without anything going red. One of the tests walks
+  `:help`'s Modes section and asserts every command it lists is handled.
+
 ## [0.13.0] — 2026-07-29
 
 Carries the RTK token work from 0.12.9 plus the fix below. Briefly tagged
