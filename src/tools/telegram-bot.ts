@@ -10,6 +10,7 @@ import * as https from 'https';
 import { exec, execSync, execFileSync } from 'child_process';
 import { createProvider, registerCustomProviders, getAllModels, isModelConfigured } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
+import { rtkWrap } from '../util/rtk.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
 import {
   normalizeAudioMode, shouldSendAudio, stripForSpeech, DEFAULT_AUDIO_MIN_CHARS,
@@ -727,6 +728,9 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
     'You run on Dušan\'s Linux PC and have real abilities. To act, emit ONE line',
     'that is JUST the action (nothing else in that reply); the system performs it,',
     'sends you the result, and you then give your natural answer:',
+    '  • `SEARCH: <query>` — search the web / internet for real-time information,',
+    '    current events, prices, news, or anything you don\'t know. Always try',
+    '    SEARCH first when you need up-to-date info you lack.',
     '  • `RUN: <shell command>` — inspect the PC (ps, free -h, df -h, ls, cat,',
     '    grep, git status…). Prefer read-only commands.',
     '  • `SEND: <file path>` — send a file to Dušan on Telegram (images go as',
@@ -735,7 +739,8 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
     '  • `CAM: [device]` — capture a webcam snapshot (default /dev/video0, the',
     '    integrated camera) and send it. Use for surveillance / "show me the room"',
     '    / "take a photo" requests.',
-    'NEVER claim you cannot send files or take photos — you can, via SEND and CAM.',
+    'NEVER claim you cannot search the internet, send files or take photos — you',
+    'can, via SEARCH, SEND, and CAM.',
     'Only use an action when needed; for normal conversation just reply directly.',
   ].join('\n');
 
@@ -857,6 +862,11 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
             executedVerbs.push('SEND'); executedCalls.push(`SEND: ${path.basename(resolved)}`);
             toolOut = `Sent ${path.basename(resolved)} to the user.`;
           }
+        } else if (verb === 'SEARCH') {
+          console.error(`[${ts0()}] agent SEARCH: ${arg}`);
+          const result = await webSearch(arg);
+          executedVerbs.push('SEARCH'); executedCalls.push(`SEARCH: ${arg}`);
+          toolOut = result;
         } else { // CAM
           console.error(`[${ts0()}] agent CAM: ${arg || 'default'}`);
           const shot = captureWebcam(arg || undefined);
@@ -907,7 +917,9 @@ const pendingFileOps = new Map<string, { op: string; path: string }>();
 
 function execShell(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    exec(command, { cwd: cwd ?? DEFAULT_CWD, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err: any, stdout: string, stderr: string) => {
+    // Through RTK when installed (compressed output, far fewer tokens); the
+    // bare command when it isn't, so the bot works on a machine without it.
+    exec(rtkWrap(command), { cwd: cwd ?? DEFAULT_CWD, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err: any, stdout: string, stderr: string) => {
       resolve({
         stdout: stdout?.toString() ?? '',
         stderr: stderr?.toString() ?? '',
@@ -957,6 +969,52 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
     return result.trim() || `No matches for "${pattern}"`;
   } catch {
     return `No matches for "${pattern}" (or rg not installed)`;
+  }
+}
+
+/**
+ * Web search via DuckDuckGo's lite HTML interface (no API key needed).
+ */
+async function webSearch(query: string, maxResults = 5): Promise<string> {
+  try {
+    const params = new URLSearchParams({ q: query, kl: 'wt-wt' });
+    const resp = await new Promise<any>((resolve, reject) => {
+      const req = https.get(
+        'https://html.duckduckgo.com/html/?' + params.toString(),
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve(data));
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    });
+    // Parse the HTML results
+    const results: string[] = [];
+    const linkRe = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const snippetRe = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    let match: RegExpExecArray | null;
+    const titles: string[] = [];
+    const urls: string[] = [];
+    while ((match = linkRe.exec(resp)) !== null) {
+      urls.push(match[1].replace(/&amp;/g, '&'));
+      titles.push(match[2].replace(/<[^>]+>/g, '').trim());
+    }
+    const snippets: string[] = [];
+    while ((match = snippetRe.exec(resp)) !== null) {
+      snippets.push(match[1].replace(/<[^>]+>/g, '').trim());
+    }
+    for (let i = 0; i < Math.min(maxResults, titles.length); i++) {
+      const snippet = i < snippets.length ? snippets[i] : '';
+      results.push(`${i + 1}. ${titles[i]}\n   ${urls[i]}\n   ${snippet}`);
+    }
+    return results.length > 0
+      ? results.join('\n\n')
+      : `No search results for: "${query}"`;
+  } catch (e: any) {
+    return `Search error: ${e.message}`;
   }
 }
 
