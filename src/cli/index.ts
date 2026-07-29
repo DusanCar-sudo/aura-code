@@ -3125,6 +3125,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     AURA_MAX_RETRIES         Max retry attempts on 429/5xx
     AURA_API_RPM / _TPM      Rate-limit caps
     AURA_RTK=0               Don't route shell/git output through RTK
+    AURA_REPETITION_GUARD=0  Don't cut off replies that collapse into a loop
 
   ${chalk.hex(FAINT_HEX)('Model examples:')}
     aura -m claude-opus-4-5-20251001  "refactor auth"

@@ -20,7 +20,22 @@ import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_
 import { maybeRollover } from './generational-flush.js';
 import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.js';
 import { detectFrustration } from './affect.js';
+import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
+
+/** How many times one task may have its reply cut off for collapsing into
+ *  repetition before the run gives up on the model. Two, because the first
+ *  correction usually lands and a third attempt is just paying for the same
+ *  failure again. */
+const MAX_REPETITION_RETRIES = 2;
+
+/** Sent after a collapsed reply is cut off. Names the failure, then aims the
+ *  model at the tool call it was narrating instead of making. */
+const REPETITION_CORRECTION =
+  'Your previous reply collapsed: it repeated the same phrase over and over until it was cut off. ' +
+  'Do not describe or narrate what you are about to write. Make the tool call directly — ' +
+  'call write_file once with the complete file content. If the file is genuinely too large for one ' +
+  'call, write a first section with write_file and append the rest with follow-up edit_file calls.';
 
 /**
  * Provider errors can carry entire HTML error pages (e.g. a 404 from a
@@ -416,6 +431,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     let responseText = '';
     const responseToolCalls: ToolCall[] = [];
     let finalResponse: { stopReason: 'done' | 'tools' | 'limit' } | null = null;
+    // Watches for a reply that collapses into repeating one phrase. Left to run
+    // to the output cap, that costs a full max_tokens of output and returns
+    // nothing usable — see repetition-guard.ts.
+    const repGuard = createRepetitionGuard();
+    let repetition: Repetition | null = null;
 
     try {
       let tools = evictionEnabled
@@ -423,11 +443,15 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         : selectTools(opts.task, history, includedTools);
       if (allowedToolNames) tools = tools.filter(t => allowedToolNames.has(t.name));
       const stream = provider.stream(system, history, tools);
-      for await (const chunk of stream) {
+      streamLoop: for await (const chunk of stream) {
         switch (chunk.type) {
           case 'text':
             display.streamText(chunk.text);
             responseText += chunk.text;
+            // Breaking out returns the generator, which aborts the request, so
+            // the provider stops generating (and billing) the rest of the loop.
+            repetition = repGuard.push(chunk.text);
+            if (repetition) break streamLoop;
             break;
           case 'tool_start':
             display.toolStart(chunk.name, chunk.id);
@@ -490,6 +514,44 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     if (responseText) display.streamEnd();
+
+    // The reply collapsed into a repeating phrase and was cut off. Two things
+    // matter here: the degenerate text must not reach history (a model shown its
+    // own loop continues it), and the turn is worth one more attempt with the
+    // collapse named explicitly — the task itself is usually still doable.
+    if (repetition) {
+      loopState._repetitionRetries = ((loopState._repetitionRetries as number) ?? 0) + 1;
+      const attempts = loopState._repetitionRetries as number;
+      display.warning(
+        `Reply collapsed — ${describeRepetition(repetition)}. Cut it off` +
+        (attempts <= MAX_REPETITION_RETRIES ? ' and retrying with a correction…' : '.'),
+      );
+      if (attempts <= MAX_REPETITION_RETRIES) {
+        // A short, honest stand-in keeps role alternation valid for providers
+        // that require it, without feeding the loop back to the model. Only the
+        // text from before the collapse is kept — a model shown even a handful
+        // of copies of its own loop tends to carry on with it.
+        const collapseAt = responseText.indexOf(repetition.unit);
+        const preamble = (collapseAt > 0 ? responseText.slice(0, collapseAt) : '').trim().slice(0, 200);
+        history.push({
+          role: 'assistant',
+          content: `${preamble ? `${preamble}\n` : ''}[reply cut off: ${describeRepetition(repetition)}]`,
+        });
+        history.push({ role: 'user', content: REPETITION_CORRECTION });
+        display.agentThinking();
+        continue;
+      }
+      await persist(opts.sessionPath, history);
+      return {
+        success: false,
+        summary:
+          `The model's reply collapsed into repetition ${attempts}× in a row ` +
+          `(${describeRepetition(repetition)}). This is a model failure, not a task failure — ` +
+          `try a narrower step, or a stronger model with --model / :model.`,
+        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+      };
+    }
 
     // Guard: an empty response with no tools and stop reason "done"
     // usually means the provider returned a silent error / rate-limit /
