@@ -28,6 +28,14 @@ export interface SpecialistOptions {
   display: Display;
   /** Optional abort signal for cancellation. */
   signal?: AbortSignal;
+  /**
+   * Where to send tool-approval prompts for this step.
+   *
+   * Without it the loop falls back to the process-global `confirm()`, which
+   * belongs to whoever registered it last — with two clients connected that
+   * is the wrong person, and on a headless server it is nobody at all.
+   */
+  confirmFn?: (message: string) => Promise<boolean>;
 }
 
 /** Structured result returned by every specialist. */
@@ -67,6 +75,7 @@ export async function runResearcher(opts: SpecialistOptions): Promise<Specialist
       display: opts.display,
       maxTurns: 10,
       pricingModel: opts.provider.model,
+      confirmFn: opts.confirmFn,
     });
 
     return {
@@ -104,6 +113,7 @@ export async function runReviewer(opts: SpecialistOptions): Promise<SpecialistRe
       display: opts.display,
       maxTurns: 10,
       pricingModel: opts.provider.model,
+      confirmFn: opts.confirmFn,
     });
 
     return {
@@ -141,6 +151,7 @@ export async function runCoder(opts: SpecialistOptions): Promise<SpecialistResul
       display: opts.display,
       maxTurns: DEFAULTS.maxTurns,
       pricingModel: opts.provider.model,
+      confirmFn: opts.confirmFn,
     });
 
     return {

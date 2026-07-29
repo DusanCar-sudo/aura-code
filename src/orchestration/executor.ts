@@ -27,6 +27,12 @@ export interface ExecutorOptions {
   signal?: AbortSignal;
   /** Maximum steps running concurrently. Defaults to 3. */
   maxParallel?: number;
+  /**
+   * Where to send tool-approval prompts raised by plan steps. Forwarded to
+   * every specialist so an approval reaches the client that asked for the
+   * plan, rather than the process-global handler.
+   */
+  confirmFn?: (message: string) => Promise<boolean>;
 }
 
 /**
@@ -80,7 +86,7 @@ export async function executePlan(opts: ExecutorOptions): Promise<ExecutionPlan>
 
     const settled = await Promise.allSettled(
       batch.map(step =>
-        runSpecialist({ provider, context, perception, step, memory: [...memory], display, signal }),
+        runSpecialist({ provider, context, perception, step, memory: [...memory], display, signal, confirmFn: opts.confirmFn }),
       ),
     );
 
