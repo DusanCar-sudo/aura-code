@@ -4,7 +4,23 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
-## [0.13.1] — 2026-07-29
+## [0.12.9] — 2026-07-29
+
+Supersedes **v0.13.1**, which was tagged earlier the same day and withdrawn —
+see "Reverted" below. This release is v0.13.1 minus the REPL mode switch: the
+RTK token work and the Telegram search verb, nothing else.
+
+### Reverted
+- **`:gazelle` / `:coder` in the plain REPL is withdrawn.** Shipped in v0.13.1;
+  pulled after a coder-mode task looped on one step ("Writing the HTML
+  structure…" repeated until it hit the token ceiling, ending after 7 turns).
+  The mode branch is inert while `replMode === 'coder'` and the coder path was
+  unchanged beneath it, so the loop is probably not from this — but a release is
+  not the place to find out. `:coder` and `:gazelle` again work only inside a
+  session started with `--gazelle`; in the plain REPL they are unhandled and get
+  sent to the model as a task, as before. Under investigation; RTK's compression
+  of `run_shell` output is the first suspect, since a model that cannot see
+  whether a write landed will retry it.
 
 ### Changed
 - **Shell and git tool output now goes through RTK — 80% fewer input tokens per
@@ -49,25 +65,6 @@ All notable changes to Aura Code are documented here.
   snippets. The action prompt tells the agent to reach for it first when it
   lacks up-to-date information, and the "never claim you cannot…" instruction
   now covers searching alongside sending and photographing.
-
-### Fixed
-- **`:gazelle` and `:coder` now work in the ordinary REPL.** `:help` has listed
-  both at the top of its "Modes" section since Gazelle landed, but the switch
-  existed only inside the `--gazelle` orchestrator's stdin loops. Typed into the
-  normal `aura` REPL they matched no branch, fell through the command handler,
-  and were sent to the model as a *task* — the agent went to work on the literal
-  string ":gazelle". The REPL now switches in place: the machinery of a Gazelle
-  turn moved out of `runGazelleLoop` into `agent/gazelle-chat.ts` so the TUI can
-  drive it without opening a second readline on the stdin it already holds in
-  raw mode (two readers on one stream double every keypress). Lean turns share
-  the REPL's conversation — carried both ways, minus coder tool noise on the way
-  in — count against the session token ceiling, and appear in `/stats`; the
-  status line gains a `gazelle` marker. A switch or a second message that lands
-  while a reply is still streaming waits for it rather than interleaving two
-  conversations into one history. The two commands live in
-  `cli/repl-mode-commands.ts` because nothing in `cli/index.ts` can be imported
-  by a test — which is how a command stayed advertised and unimplemented at the
-  same time without anything going red.
 
 ## [0.12.2] — 2026-07-27
 
