@@ -52,17 +52,23 @@ export function isWSL(): boolean {
  */
 export function platformWarning(): string | null {
   if (!isNativeWindows()) return null;
+  // The safety lists now screen cmd.exe and PowerShell as well as POSIX
+  // (config/defaults.ts), so this is no longer the blocking hazard it was.
+  // What remains is coverage: the shell guardrails are the part that has been
+  // tested, and the rest of the toolchain has had far less exercise here than
+  // on Linux and macOS. Say that, rather than implying either that Windows is
+  // unusable or that it is as well-trodden as the others.
   return [
-    'Running natively on Windows is not supported.',
+    'Windows support is newer than the Linux and macOS paths.',
     '',
-    "  Aura's shell safety lists are POSIX-only, so on Windows:",
-    '    · no command is auto-approved — every one stops for confirmation',
-    '    · the dangerous-command denylist misses del /s /q, rd /s, format,',
-    '      and Remove-Item -Recurse -Force',
+    '  Shell guardrails do cover cmd.exe and PowerShell — del /s, rd /s,',
+    '  format, Remove-Item -Recurse, shadow-copy deletion and',
+    '  download-and-execute are all blocked, and ordinary reads like dir',
+    '  and Get-ChildItem run without prompting.',
     '',
-    '  Run Aura inside WSL instead:',
+    '  The rest of the toolchain has seen less use here. If you hit',
+    '  something odd, WSL is the best-tested route:',
     '',
     '      wsl --install          (once, in an admin PowerShell)',
-    '      wsl                    (then install and run Aura in there)',
   ].join('\n');
 }
