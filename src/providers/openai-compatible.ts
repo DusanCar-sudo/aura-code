@@ -125,6 +125,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // scrolled dozens of times per response and buried the actual output.
     let loggedCacheDebug = false;
 
+    // A consumer that stops early — the repetition guard cutting off a reply
+    // that collapsed into a loop — returns this generator, running this finally.
+    // Without the abort the request stays open and the provider keeps generating
+    // (and billing) the rest of its max_tokens into a socket nobody reads.
+    let drained = false;
+    try {
     // CRITICAL: do NOT return early when finish_reason arrives.
     // With stream_options.include_usage, OpenAI sends a trailing usage-only
     // chunk AFTER the finish_reason chunk. Returning early drops it -- usage
@@ -184,6 +190,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
           yield { type: 'tool_input', id: builder.id, partial: tc.function.arguments };
         }
       }
+    }
+    drained = true;
+    } finally {
+      // Only when the consumer walked away mid-stream; aborting a request that
+      // already finished would be a no-op at best and an error at worst.
+      if (!drained) controller.abort();
     }
 
     // Release anything the tag stripper was holding back (a chunk boundary

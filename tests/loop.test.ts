@@ -55,6 +55,22 @@ const noopDisplay: Display = {
   summary: () => {},
 };
 
+/**
+ * Bulk model prose of roughly `chars` characters, for the tests that need a
+ * turn fat enough to trigger compaction. Deliberately varied: these fixtures
+ * used `'y'.repeat(10_000)`, which the repetition guard now (correctly) reads as
+ * a collapsed reply and cuts off — a model emitting ten thousand identical
+ * characters is the exact failure that guard exists for. Only the volume
+ * mattered here, and the token count is unchanged.
+ */
+function bulkProse(chars: number): string {
+  let out = '';
+  for (let i = 0; out.length < chars; i++) {
+    out += `Turn ${i}: inspected module ${i % 7} and adjusted the ${i % 5} handler accordingly. `;
+  }
+  return out.slice(0, chars);
+}
+
 class FakeProvider implements LLMProvider {
   name = 'Fake';
   model = 'fake-model';
@@ -244,7 +260,7 @@ describe('runAgentLoop', () => {
   it('compacts history mid-run and keeps the executive digest + full toolCallLog', async () => {
     // ~2,900 tokens of prose per turn (3.5 chars/token fallback) against a
     // 10k window (mocked above): the 75% trigger fires after ~3 turns.
-    const fat = 'y'.repeat(10_000);
+    const fat = bulkProse(10_000);
     const responses: LLMResponse[] = Array.from({ length: 5 }, (_, i) => ({
       text: fat,
       toolCalls: [{ id: `c${i}`, name: 'write_file', input: { path: `f${i}.ts`, content: 'x' } }],
@@ -277,7 +293,7 @@ describe('runAgentLoop', () => {
     // current, so this should compact repeatedly, escalate generations, and
     // eventually roll over (ROLLOVER_AT_GENERATION = 3) rather than produce
     // a 4th lossy in-place recap.
-    const fat = 'y'.repeat(10_000);
+    const fat = bulkProse(10_000);
     const responses: LLMResponse[] = Array.from({ length: 14 }, (_, i) => ({
       text: fat,
       toolCalls: [{ id: `c${i}`, name: 'write_file', input: { path: `f${i}.ts`, content: 'x' } }],
