@@ -4,6 +4,44 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.12.10] — 2026-07-29
+
+### Fixed
+- **A reply that collapses into repeating one phrase is now cut off, not paid
+  for to the last token.** `stepfun/step-3.5-flash`, asked to build a large HTML
+  page, narrated `Writing the HTML structure... ` several hundred times, spent
+  its entire 16,384-token output allowance, returned `stopReason: 'limit'`, and
+  the run ended having written nothing. It reproduced on every attempt in the
+  session. Nothing in the harness noticed: text chunks were appended and printed
+  regardless of what they contained, and the only backstop was the model's own
+  output cap.
+
+  `agent/repetition-guard.ts` watches the stream's tail for an exactly periodic
+  cycle — which is what a collapsed model emits, and what ordinary prose never
+  does — and trips after ~1,200 characters of it. The loop then:
+
+  - **stops reading**, which returns the generator and aborts the HTTP request,
+    so the provider stops generating (and billing) the remaining output. The
+    openai-compatible adapter had no cleanup on early exit; it now aborts its
+    controller in a `finally` unless the stream drained normally;
+  - **keeps the loop out of history** — only the text from before the collapse
+    survives, plus a one-line marker. A model shown even a few copies of its own
+    loop carries on with it, which is why every later turn in that session
+    repeated too;
+  - **retries with the failure named**, telling the model to make the
+    `write_file` call it was narrating instead of describing it. Twice, then it
+    gives up and says plainly that this is a model failure and suggests a
+    stronger `--model`, rather than implying the task was at fault.
+
+  `AURA_REPETITION_GUARD=0` disables it. The thresholds are set so ordinary
+  output cannot reach them, but nobody should have to wait for a release to
+  switch off something that truncates replies.
+
+  Two compaction fixtures used `'y'.repeat(10_000)` as filler and now trip the
+  guard on purpose — a model emitting ten thousand identical characters is
+  exactly this bug. They use varied prose of the same length instead; the token
+  volume they depend on is unchanged.
+
 ## [0.12.9] — 2026-07-29
 
 Supersedes **v0.13.1**, which was tagged earlier the same day and withdrawn —
