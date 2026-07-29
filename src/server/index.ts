@@ -8,7 +8,9 @@ import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js';
-import { pickLanAddress, ensureLanCert, shortFingerprint } from './lan.js';
+import {
+  pickLanAddress, ensureLanCert, shortFingerprint, tailscaleAddress, tailscaleDnsName,
+} from './lan.js';
 import { Session } from './session.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { ProtocolHandler } from '../protocol/handler.js';
@@ -25,6 +27,8 @@ export interface ServeOptions {
   lan?: boolean;
   /** Bind this LAN address specifically instead of the auto-detected one. */
   lanAddress?: string;
+  /** Also listen on the Tailscale address, reachable from any network. */
+  tailscale?: boolean;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
@@ -50,22 +54,48 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   // machine also has a Tailscale address and a container bridge, and
   // wildcard-binding would publish the agent on both without saying so.
   // TLS-only, because over Wi-Fi the stream is source code and shell output.
-  let lanServer: https.Server | null = null;
-  let lan: { address: string; iface: string; fingerprint: string } | null = null;
+  const lanServers: { server: https.Server; address: string; iface: string; kind: string }[] = [];
+  let lanFingerprint: string | null = null;
 
-  if (opts.lan) {
-    const picked = pickLanAddress(opts.lanAddress);
-    if (!picked) {
-      throw new Error(
-        opts.lanAddress
-          ? `No local network interface has the address ${opts.lanAddress}.`
-          : 'No local network interface found — is Wi-Fi connected?',
-      );
+  if (opts.lan || opts.tailscale) {
+    const targets: { address: string; iface: string; kind: string }[] = [];
+
+    if (opts.lan || opts.lanAddress) {
+      const picked = pickLanAddress(opts.lanAddress);
+      if (!picked) {
+        throw new Error(
+          opts.lanAddress
+            ? `No interface has the address ${opts.lanAddress}.`
+            : 'No local network interface found — is Wi-Fi connected?',
+        );
+      }
+      targets.push({ ...picked, kind: 'Wi-Fi' });
     }
-    const { cert, key, fingerprint } = ensureLanCert(picked.address);
-    lanServer = https.createServer({ cert, key }, app);
-    lan = { address: picked.address, iface: picked.iface, fingerprint };
-    allowedOrigins.add(`https://${picked.address}:${opts.port}`);
+
+    if (opts.tailscale) {
+      const ts = tailscaleAddress();
+      if (!ts) {
+        throw new Error(
+          'No Tailscale address found — is Tailscale installed and running? '
+          + 'Check with `tailscale status`.',
+        );
+      }
+      if (!targets.some(t => t.address === ts.address)) {
+        targets.push({ ...ts, kind: 'Tailscale' });
+      }
+    }
+
+    // One certificate covering every address this machine answers on, so the
+    // phone's pin survives moving between Wi-Fi and Tailscale.
+    const dnsNames = [tailscaleDnsName()].filter((d): d is string => !!d);
+    const { cert, key, fingerprint } = ensureLanCert(targets.map(t => t.address), dnsNames);
+    lanFingerprint = fingerprint;
+
+    for (const t of targets) {
+      lanServers.push({ server: https.createServer({ cert, key }, app), ...t });
+      allowedOrigins.add(`https://${t.address}:${opts.port}`);
+    }
+    for (const d of dnsNames) allowedOrigins.add(`https://${d}:${opts.port}`);
   }
 
   /**
@@ -116,7 +146,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   };
 
   server.on('upgrade', onUpgrade);
-  lanServer?.on('upgrade', onUpgrade);
+  for (const l of lanServers) l.server.on('upgrade', onUpgrade);
 
   app.use(express.json());
 
@@ -193,12 +223,14 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   console.log('  Model   : ' + opts.model);
   console.log('  URL     : ' + tokenizedUrl);
   console.log('  (bound to 127.0.0.1; the URL includes a single-session access token)');
-  if (lan) {
-    console.log('\n  Wi-Fi   : ' + lan.address + ':' + opts.port + `  (${lan.iface}, TLS)`);
-    console.log('  Identity: ' + shortFingerprint(lan.fingerprint)
+  for (const l of lanServers) {
+    console.log(`\n  ${l.kind.padEnd(9)}: ${l.address}:${opts.port}  (${l.iface}, TLS)`);
+  }
+  if (lanFingerprint) {
+    console.log('  Identity : ' + shortFingerprint(lanFingerprint)
       + '   \u2190 the phone shows this after pairing; they must match');
-    console.log('  Anyone on this network can reach the port, but needs a pairing');
-    console.log('  code from `aura devices add` to get in.');
+    console.log('  Reaching the port is not enough \u2014 a pairing code from');
+    console.log('  `aura devices add` is still required to get in.');
   }
   console.log('');
 
@@ -409,10 +441,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     console.log('  Ready \u2192 ' + tokenizedUrl + '  (Ctrl+C to stop)\n');
   });
 
-  if (lanServer && lan) {
-    const bound = lan;
-    lanServer.listen(opts.port, bound.address, () => {
-      console.log(`  Ready \u2192 https://${bound.address}:${opts.port}  (Wi-Fi, phones)\n`);
+  for (const l of lanServers) {
+    l.server.listen(opts.port, l.address, () => {
+      console.log(`  Ready \u2192 https://${l.address}:${opts.port}  (${l.kind}, phones)\n`);
     });
   }
 }

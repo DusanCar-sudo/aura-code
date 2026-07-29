@@ -31,26 +31,64 @@ const NON_LAN = /^(tailscale|docker|br-|veth|virbr|vmnet|vboxnet|tun|tap|wg|utun
 
 export interface LanAddress { iface: string; address: string }
 
-/** Candidate LAN addresses, most likely first. Empty when only loopback exists. */
-export function lanAddresses(): LanAddress[] {
+/** Every non-loopback IPv4 on the machine, including tunnels and bridges. */
+export function allAddresses(): LanAddress[] {
   const found: LanAddress[] = [];
   for (const [iface, addrs] of Object.entries(os.networkInterfaces())) {
-    if (!addrs || NON_LAN.test(iface)) continue;
+    if (!addrs) continue;
     for (const a of addrs) {
       if (a.family !== 'IPv4' || a.internal) continue;
       found.push({ iface, address: a.address });
     }
   }
+  return found;
+}
+
+/** Candidate LAN addresses, most likely first. Empty when only loopback exists. */
+export function lanAddresses(): LanAddress[] {
+  const found = allAddresses().filter(a => !NON_LAN.test(a.iface));
   // Wireless first: a phone pairing over Wi-Fi is the case this exists for.
   const rank = (i: string): number => (/^(wl|wlan|wlp|en0)/i.test(i) ? 0 : 1);
   return found.sort((x, y) => rank(x.iface) - rank(y.iface));
 }
 
-/** Pick the address to bind, honouring an explicit override. */
+/**
+ * The Tailscale address, if the daemon is up.
+ *
+ * Excluded from [lanAddresses] on purpose — auto-detecting it would publish
+ * the agent to the whole tailnet without the user saying so. Reaching it
+ * requires asking for it by name, which is what makes that deliberate.
+ */
+export function tailscaleAddress(): LanAddress | null {
+  return allAddresses().find(a => /^(tailscale|ts)\d*$/i.test(a.iface))
+    ?? allAddresses().find(a => a.address.startsWith('100.'))
+    ?? null;
+}
+
+/**
+ * Pick the address to bind, honouring an explicit override.
+ *
+ * An explicitly named address is searched across *all* interfaces, tunnels
+ * included: naming it is the deliberate act that auto-detection must not
+ * perform on the user's behalf.
+ */
 export function pickLanAddress(preferred?: string): LanAddress | null {
-  const all = lanAddresses();
-  if (preferred) return all.find(a => a.address === preferred) ?? null;
-  return all[0] ?? null;
+  if (preferred) return allAddresses().find(a => a.address === preferred) ?? null;
+  return lanAddresses()[0] ?? null;
+}
+
+/** The machine's MagicDNS name, so a cert can cover it too. Null if unavailable. */
+export function tailscaleDnsName(): string | null {
+  try {
+    const out = execFileSync('tailscale', ['status', '--json'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3000,
+    }).toString();
+    const name = (JSON.parse(out) as { Self?: { DNSName?: string } }).Self?.DNSName;
+    return name ? name.replace(/\.$/, '') : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface LanCert { cert: string; key: string; fingerprint: string }
@@ -59,12 +97,14 @@ function fingerprintOf(certPem: string): string {
   return new crypto.X509Certificate(certPem).fingerprint256;
 }
 
-/** True when the cert still covers this IP and is not near expiry. */
-function certCovers(certPem: string, ip: string): boolean {
+/** True when the cert still covers every name given and is not near expiry. */
+function certCovers(certPem: string, ips: string[], dnsNames: string[]): boolean {
   try {
     const x = new crypto.X509Certificate(certPem);
-    // subjectAltName reads like "IP Address:192.168.1.5" (or DNS:...).
-    if (!(x.subjectAltName ?? '').includes(ip)) return false;
+    // subjectAltName reads like "IP Address:192.168.1.5, DNS:host.ts.net".
+    const san = x.subjectAltName ?? '';
+    for (const ip of ips) if (!san.includes(`IP Address:${ip}`)) return false;
+    for (const dns of dnsNames) if (!san.includes(`DNS:${dns}`)) return false;
     const validTo = new Date(x.validTo).getTime();
     return Number.isFinite(validTo) && validTo - Date.now() > 7 * 24 * 3600_000;
   } catch {
@@ -79,17 +119,22 @@ function certCovers(certPem: string, ip: string): boolean {
  * re-paired — that is the correct failure: a changed key is exactly what
  * pinning is meant to notice.
  */
-export function ensureLanCert(ip: string): LanCert {
+export function ensureLanCert(ips: string[], dnsNames: string[] = []): LanCert {
   const certPath = CERT_PATH();
   const keyPath = KEY_PATH();
 
   try {
     const cert = fs.readFileSync(certPath, 'utf8');
     const key = fs.readFileSync(keyPath, 'utf8');
-    if (certCovers(cert, ip)) return { cert, key, fingerprint: fingerprintOf(cert) };
+    if (certCovers(cert, ips, dnsNames)) return { cert, key, fingerprint: fingerprintOf(cert) };
   } catch {
     // Missing or unreadable — fall through and issue a new one.
   }
+
+  const san = [
+    ...ips.map(ip => `IP:${ip}`),
+    ...dnsNames.map(d => `DNS:${d}`),
+  ].join(',');
 
   fs.mkdirSync(configDir(), { recursive: true });
   try {
@@ -100,10 +145,12 @@ export function ensureLanCert(ip: string): LanCert {
       '-keyout', keyPath,
       '-out', certPath,
       '-days', '825',
-      '-subj', `/CN=Aura (${ip})`,
-      // The phone connects to a bare IP, so the address has to be an IP SAN;
-      // a CN alone is ignored by every modern TLS stack.
-      '-addext', `subjectAltName=IP:${ip}`,
+      '-subj', `/CN=Aura (${ips[0]})`,
+      // The phone connects to a bare IP, so each address has to be an IP SAN;
+      // a CN alone is ignored by every modern TLS stack. Covering every
+      // address at once keeps the fingerprint — and so the phone's pin —
+      // stable when the same machine is reached over Wi-Fi or over Tailscale.
+      '-addext', `subjectAltName=${san}`,
       '-addext', 'basicConstraints=critical,CA:FALSE',
       '-addext', 'keyUsage=critical,digitalSignature,keyEncipherment',
       '-addext', 'extendedKeyUsage=serverAuth',
