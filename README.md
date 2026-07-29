@@ -5,7 +5,7 @@
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Website](https://img.shields.io/badge/website-aurawebsite--eta.vercel.app-6ed0ea?style=flat-square)](https://aurawebsite-eta.vercel.app)
-[![Version](https://img.shields.io/badge/version-v0.12.1-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.13.1-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
@@ -36,6 +36,11 @@ npm install -g aura-code
 export DEEPSEEK_API_KEY=sk-...
 aura 'refactor the auth module to use JWT'
 ```
+
+Optional but worth it: with **RTK** (Rust Token Killer) on `PATH`, Aura's shell
+and git tools route through it, compressing command output before it reaches the
+context window — 80% fewer input tokens per session, measured. Without it they
+run the bare command exactly as before. `AURA_RTK=0` opts out.
 
 ---
 
@@ -99,6 +104,12 @@ Gazelle also notices when it needs tools and offers to switch on its own —
 recognized from its own wording, not a second model call, so the detection is
 free. Answer `y` (or just press Enter) and it hands off with the conversation
 intact.
+
+Both commands work in the ordinary `aura` REPL too, not just a session started
+with `--gazelle`: the TUI stays where it is and swaps only what a turn does, and
+the status line grows a `gazelle` marker so the cheap path is never a guess. In
+the REPL, Enter submits a line rather than accepting an offer, so a reply that
+wants tools points at `:coder` instead.
 
 ### Memory
 
