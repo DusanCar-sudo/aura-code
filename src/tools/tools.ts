@@ -6,6 +6,7 @@ import * as path from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { IGNORE_PATTERNS } from '../config/defaults.js';
 import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
+import { rtkWrap } from '../util/rtk.js';
 
 export interface ListDirInput { path: string; recursive: boolean; depth: number }
 
@@ -148,7 +149,9 @@ export function runShell(input: RunShellInput, projectCwd: string): string {
   const timeout = input.timeout ?? 30_000;
 
   try {
-    const result = execSync(input.command, {
+    // Through RTK when it's installed — its compressed output is what keeps a
+    // long session's context from filling with raw terminal noise.
+    const result = execSync(rtkWrap(input.command), {
       cwd: workDir,
       encoding: 'utf8',
       timeout,
@@ -209,9 +212,9 @@ function detectTestCommand(cwd: string, fileOrPattern?: string): string {
 
 export function gitStatus(cwd: string): string {
   try {
-    const status = execSync('git status --short', { cwd, encoding: 'utf8' }).trim();
-    const log    = execSync('git log --oneline -5', { cwd, encoding: 'utf8' }).trim();
-    const branch = execSync('git branch --show-current', { cwd, encoding: 'utf8' }).trim();
+    const status = execSync(rtkWrap('git status --short'), { cwd, encoding: 'utf8' }).trim();
+    const log    = execSync(rtkWrap('git log --oneline -5'), { cwd, encoding: 'utf8' }).trim();
+    const branch = execSync(rtkWrap('git branch --show-current'), { cwd, encoding: 'utf8' }).trim();
     return [
       `Branch: ${branch}`,
       '',
@@ -228,7 +231,7 @@ export function gitDiff(input: GitDiffInput, cwd: string): string {
   try {
     const staged = input.staged ? '--staged ' : '';
     const file   = input.path ? `-- ${JSON.stringify(input.path)}` : '';
-    const diff   = execSync(`git diff ${staged}${file}`, { cwd, encoding: 'utf8' });
+    const diff   = execSync(rtkWrap(`git diff ${staged}${file}`), { cwd, encoding: 'utf8' });
     return diff.trim() || `No ${input.staged ? 'staged ' : ''}changes${input.path ? ` in ${input.path}` : ''}`;
   } catch (e) { return `Git error: ${String(e)}`; }
 }
