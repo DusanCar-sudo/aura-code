@@ -655,6 +655,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             toolResults.push({ id: call.id, name: call.name, content: 'User denied this action.', isError: true });
             continue;
           }
+          // Remember it, so writing the same file across several turns asks
+          // once. Without this the approval is forgotten immediately and the
+          // prompt repeats until the user stops reading it.
+          if (perm.approvalKey) opts.permissions.approveForSession(perm.approvalKey);
         }
 
         if (opts.checkpoints !== false && !checkpointedThisTurn && MUTATING_TOOLS.has(call.name)) {
