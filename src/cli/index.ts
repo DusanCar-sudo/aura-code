@@ -45,6 +45,7 @@ import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
 import { startServer } from '../server/index.js';
 import { runSidecar } from '../protocol/stdio.js';
+import { runDevices } from './devices-command.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
 import pkg from '../../package.json';
@@ -3022,6 +3023,9 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
     aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
     aura ${chalk.hex(TEXT_DIM_HEX)('sidecar')}                            Engine over stdio (NDJSON) — see docs/PROTOCOL.md
+    aura ${chalk.hex(TEXT_DIM_HEX)('devices')}                            List phones paired to this desktop
+    aura ${chalk.hex(TEXT_DIM_HEX)('devices add <name>')}                 Pair a phone; prints its token once
+    aura ${chalk.hex(TEXT_DIM_HEX)('devices revoke <id>')}               Cut a phone off
     aura ${chalk.hex(TEXT_DIM_HEX)('setup')}                              Configure provider, model, and API key
     aura ${chalk.hex(TEXT_DIM_HEX)('setup --web')}                        Same, as a browser page (used by installers)
     aura ${chalk.hex(TEXT_DIM_HEX)('--interactive')}                      Start interactive REPL
@@ -3196,6 +3200,14 @@ if (require.main !== module) {
     defaultProjectRoot: cwd,
   })
     .then(() => process.exit(0))
+    .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+} else if (argv._[0] === 'devices') {
+  // Pairing credentials for phones. Each device gets its own token so that
+  // two people sharing one desktop keep separate conversations, budgets and
+  // approval prompts — and so one of them can be cut off without disturbing
+  // the other or restarting the server.
+  runDevices(String(argv._[1] ?? 'list'), argv._.slice(2).map(String), Number(argv.port ?? argv.p ?? 7337))
+    .then(code => process.exit(code))
     .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);

@@ -5,7 +5,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createProvider, KNOWN_MODELS } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
-import { PermissionSystem, setConfirmHandler } from '../safety/permissions.js';
+import { PermissionSystem } from '../safety/permissions.js';
+import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js';
 import { Session } from './session.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { ProtocolHandler } from '../protocol/handler.js';
@@ -38,14 +39,32 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   ]);
   const tokenizedUrl = `http://${host}:${opts.port}/?token=${token}`;
 
+  /**
+   * Who is on the other end.
+   *
+   * The per-run token is the browser UI's own credential and identifies no
+   * particular person, so every holder of it shares one identity. A paired
+   * device gets its own, which is what lets two people share this server
+   * without sharing a conversation, a budget, or each other's approval
+   * prompts.
+   */
+  interface ClientIdentity { id: string; name: string }
+
+  function identify(provided: string | undefined): ClientIdentity | null {
+    if (!provided) return null;
+    if (provided === token) return { id: 'local', name: 'this computer' };
+    const device = findDeviceByToken(provided);
+    return device ? { id: `device:${device.id}`, name: device.name } : null;
+  }
+
   const wss = new WebSocketServer({
     server,
     verifyClient: (info: { origin: string; req: http.IncomingMessage; secure: boolean }) => {
-      // Reject the handshake unless the token matches and (for browser
-      // clients that send one) the Origin is our own page.
+      // Reject the handshake unless the token names a known client and (for
+      // browser clients that send one) the Origin is our own page.
       try {
         const reqUrl = new URL(info.req.url ?? '/', `http://${host}:${opts.port}`);
-        if (reqUrl.searchParams.get('token') !== token) return false;
+        if (!identify(reqUrl.searchParams.get('token') ?? undefined)) return false;
       } catch { return false; }
       const origin = info.origin;
       if (origin && !allowedOrigins.has(origin)) return false;
@@ -57,23 +76,71 @@ export async function startServer(opts: ServeOptions): Promise<void> {
 
   // Auth gate for all HTTP routes \u2014 token via ?token= (initial navigation)
   // or the X-Aura-Token header (API calls from the page).
+  // Deliberately ahead of the auth gate: a phone redeeming a pairing code has
+  // no token yet — that is the whole point of the exchange. The code itself is
+  // the credential here, and it is single-use, short-lived, and attempt-capped
+  // (see devices.ts), so this is not an open door.
+  app.post('/api/pair', (req, res) => {
+    const code = String((req.body as { code?: unknown } | undefined)?.code ?? '');
+    if (!code.trim()) {
+      res.status(400).json({ error: 'Missing pairing code.' });
+      return;
+    }
+    const paired = redeemPairingCode(code);
+    if (!paired) {
+      // Same answer for unknown, expired, and exhausted: distinguishing them
+      // would tell a guesser which codes are worth continuing to try.
+      res.status(401).json({ error: 'That pairing code is not valid. Generate a new one with `aura devices add`.' });
+      return;
+    }
+    console.log(`\n  Paired "${paired.device.name}" (${paired.device.id})\n`);
+    res.json({ token: paired.token, device: { id: paired.device.id, name: paired.device.name } });
+  });
+
   app.use((req, res, next) => {
     const provided = (req.query.token as string | undefined) ?? req.header('x-aura-token');
-    if (provided !== token) {
+    const who = identify(provided);
+    if (!who) {
       res.status(401).send('Unauthorized: missing or invalid token.');
       return;
     }
+    // Carried so /api/history and /api/reset act on the caller's own
+    // conversation instead of a single shared one.
+    (req as express.Request & { auraClient?: ClientIdentity }).auraClient = who;
     next();
   });
 
+  function clientOf(req: express.Request): ClientIdentity {
+    // The gate above rejects anything unidentified, so this is always set.
+    return (req as express.Request & { auraClient?: ClientIdentity }).auraClient!;
+  }
+
   const ctx = await loadProjectContext(opts.cwd);
-  const session = new Session();
-  // The spend ceiling the CLI paths already apply (cli/index.ts:631, :1361).
-  // Without it this path was unbounded: runAgentLoop only enforces a budget
-  // when one is passed, so every task served over the socket ran with no
-  // cumulative token ceiling at all. Defaults to AURA_SESSION_BUDGET, else
-  // DEFAULT_MAX_INPUT_TOKENS. Reset alongside the conversation it bounds.
-  const budget = new SessionBudget({});
+
+  /**
+   * Conversation and spend, per client.
+   *
+   * These used to be one shared pair. With two phones paired that means one
+   * person's turns enter the other's context and one person's usage exhausts
+   * the other's ceiling, so they are keyed by identity. The project context
+   * stays shared — it describes the checkout, which genuinely is common.
+   *
+   * The budget is the spend ceiling the CLI paths already apply
+   * (cli/index.ts:631, :1361); without it runAgentLoop enforces none at all.
+   * Defaults to AURA_SESSION_BUDGET, else DEFAULT_MAX_INPUT_TOKENS. Reset
+   * alongside the conversation it bounds.
+   */
+  interface ClientState { session: Session; budget: SessionBudget }
+  const clients = new Map<string, ClientState>();
+
+  function stateFor(who: ClientIdentity): ClientState {
+    let state = clients.get(who.id);
+    if (!state) {
+      state = { session: new Session(), budget: new SessionBudget({}) };
+      clients.set(who.id, state);
+    }
+    return state;
+  }
 
   console.log('\n  Aura \u2014 web client');
   console.log('  Project : ' + ctx.name + ' \u00b7 ' + ctx.language);
@@ -85,21 +152,36 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     res.setHeader('Content-Type', 'text/html');
     res.send(buildUI(ctx.name, opts.model, token));
   });
-  app.get('/api/history', (_req, res) => res.json(session.getDisplay()));
-  app.get('/api/project', (_req, res) => res.json({
+  app.get('/api/history', (req, res) => res.json(stateFor(clientOf(req)).session.getDisplay()));
+  app.get('/api/project', (req, res) => res.json({
     name: ctx.name, language: ctx.language, model: opts.model, models: KNOWN_MODELS,
+    // Lets a phone show which device it is paired as, so two people sharing
+    // a desktop can tell whose client they are looking at.
+    device: clientOf(req).name,
   }));
-  app.post('/api/reset', (_req, res) => { session.reset(); res.json({ ok: true }); });
+  app.post('/api/reset', (req, res) => {
+    const state = stateFor(clientOf(req));
+    state.session.reset();
+    state.budget.reset();
+    res.json({ ok: true });
+  });
 
   // ── Remote tool approval ───────────────────────────────────────────────
   // Without this, PermissionSystem('normal') falls back to confirm(), which
   // reads the *server's* stdin — so a remote client asking for a file write
   // blocks on a y/N prompt it cannot see, and hangs forever when the server
   // runs headless (systemd). Route the prompt to the client that asked.
-  const pendingConfirms = new Map<string, (approved: boolean) => void>();
+  //
+  // The pending map is per connection, created below. A server-wide map keyed
+  // by uuid would let one client answer a prompt raised by another's run
+  // simply by echoing back an id it observed.
   const CONFIRM_TIMEOUT_MS = 120_000;
 
-  function askClient(ws: WebSocket, message: string): Promise<boolean> {
+  function askClient(
+    ws: WebSocket,
+    pendingConfirms: Map<string, (approved: boolean) => void>,
+    message: string,
+  ): Promise<boolean> {
     if (ws.readyState !== WebSocket.OPEN) return Promise.resolve(false);
     const id = crypto.randomUUID();
     return new Promise<boolean>(resolve => {
@@ -121,13 +203,28 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     });
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // verifyClient already rejected anything unidentified, so re-deriving the
+    // identity here cannot fail — but fall back to the local identity rather
+    // than crashing the connection if the URL is somehow unparseable.
+    let who: ClientIdentity = { id: 'local', name: 'this computer' };
+    try {
+      const reqUrl = new URL(req.url ?? '/', `http://${host}:${opts.port}`);
+      who = identify(reqUrl.searchParams.get('token') ?? undefined) ?? who;
+    } catch { /* keep the fallback */ }
+    if (who.id.startsWith('device:')) touchDevice(who.id.slice('device:'.length));
+
+    const state = stateFor(who);
     send(ws, { type: 'connected' });
 
-    // Tie approvals to the socket that owns the run. A second client
-    // connecting takes over prompting; see the single-Session caveat in
-    // the README — this server is deliberately single-user.
-    setConfirmHandler((message: string) => askClient(ws, message));
+    // Approvals belong to this socket alone. Previously this registered a
+    // process-global handler, so the client that connected most recently
+    // received *everyone's* prompts — your mother's phone could be asked to
+    // approve a shell command your agent wanted to run — and any client
+    // hanging up cleared the handler for whoever was still connected,
+    // silently dropping the agent back to the desktop's unread stdin.
+    const pendingConfirms = new Map<string, (approved: boolean) => void>();
+    const confirmFn = (message: string): Promise<boolean> => askClient(ws, pendingConfirms, message);
 
     // Protocol handler for frame-shaped clients (aura-droid and any other
     // non-browser consumer). The built-in browser UI still speaks the older
@@ -158,35 +255,45 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         pendingConfirms.get(msg.id)?.(msg.approved === true);
         return;
       }
-      if (msg.type === 'task' && msg.task) await runTask(ws, msg.task, msg.model ?? opts.model);
+      if (msg.type === 'task' && msg.task) {
+        await runTask(ws, state, confirmFn, msg.task, msg.model ?? opts.model);
+      }
       if (msg.type === 'reset') {
         // The budget bounds one conversation, and reset starts a new one —
         // carrying the old total forward would leave every later conversation
         // starting already exhausted. Same rationale as SessionBudget.reset().
-        session.reset();
-        budget.reset();
+        state.session.reset();
+        state.budget.reset();
         send(ws, { type: 'reset_ok' });
       }
       if (msg.type === 'usage') {
         send(ws, {
           type: 'usage',
-          inputTokensUsed: budget.inputTokensUsed,
-          maxInputTokens: budget.maxInputTokens,
-          turnsUsed: budget.turnsUsed,
+          inputTokensUsed: state.budget.inputTokensUsed,
+          maxInputTokens: state.budget.maxInputTokens,
+          turnsUsed: state.budget.turnsUsed,
         });
       }
     });
 
     ws.on('close', () => {
       protocol.dispose();
-      // Deny anything still waiting — nobody is left to answer.
+      // Deny anything still waiting on *this* socket — nobody is left to
+      // answer it. Other clients' prompts live in their own maps and are
+      // deliberately untouched.
       for (const resolve of pendingConfirms.values()) resolve(false);
       pendingConfirms.clear();
-      setConfirmHandler(null);
     });
   });
 
-  async function runTask(ws: WebSocket, task: string, model: string): Promise<void> {
+  async function runTask(
+    ws: WebSocket,
+    state: ClientState,
+    confirmFn: (message: string) => Promise<boolean>,
+    task: string,
+    model: string,
+  ): Promise<void> {
+    const { session, budget } = state;
     session.addUser(task);
     let provider;
     try { provider = createProvider({ model, apiKey: opts.apiKey, baseUrl: opts.baseUrl } as ProviderConfig); }
@@ -221,7 +328,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         const plan = await createPlan({ provider, context: ctx, task });
         send(ws, { type: 'plan_created', plan });
 
-        const executedPlan = await executePlan({ provider, context: ctx, plan, display });
+        const executedPlan = await executePlan({ provider, context: ctx, plan, display, confirmFn });
         const text = executedPlan.outcome ?? 'Plan completed.';
         const success = executedPlan.status === 'done';
         send(ws, { type: 'plan_done', outcome: text, success });
@@ -237,6 +344,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       provider, task, context: ctx,
       permissions: new PermissionSystem('normal'), display,
       budget,
+      confirmFn,
     });
     session.addAssistant(result.summary, result.turns, result.toolCallCount);
     send(ws, { type: 'done', success: result.success, text: result.summary, turns: result.turns, toolCount: result.toolCallCount });
