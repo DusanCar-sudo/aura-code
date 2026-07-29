@@ -14,6 +14,7 @@ import { BROWSER_DEFINITION, browserTool } from './browser.js';
 import { WEB_SEARCH_DEFINITION, webSearch } from './web-search.js';
 import { HTTP_REQUEST_DEFINITION, httpRequest } from './http-request.js';
 import { MEMORY_DEFINITION, memoryTool } from './memory.js';
+import { RECALL_DEFINITION, recallTool } from './recall.js';
 import { CLIPBOARD_DEFINITION, clipboardTool } from './clipboard.js';
 import { NOTIFY_DEFINITION, notifyTool } from './notify.js';
 import { IMAGE_READ_DEFINITION, imageRead } from './image-read.js';
@@ -158,6 +159,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   WEB_SEARCH_DEFINITION,
   HTTP_REQUEST_DEFINITION,
   MEMORY_DEFINITION,
+  RECALL_DEFINITION,
   CLIPBOARD_DEFINITION,
   NOTIFY_DEFINITION,
   IMAGE_READ_DEFINITION,
@@ -329,6 +331,7 @@ export async function executeTool(
       case 'web_search':   return webSearch({ query: input.query as string, max_results: input.max_results as number | undefined, region: input.region as string | undefined });
       case 'http_request': return httpRequest({ url: input.url as string, method: input.method as any, headers: input.headers as Record<string, string> | undefined, body: input.body as string | undefined, json: input.json, max_chars: input.max_chars as number | undefined, timeout_ms: input.timeout_ms as number | undefined });
       case 'memory':       return memoryTool(input as any);
+      case 'recall':       return recallTool(input as any);
       case 'clipboard':    return clipboardTool(input as any);
       case 'notify':       return notifyTool(input as any);
       case 'image_read':   return imageRead(input as any);
