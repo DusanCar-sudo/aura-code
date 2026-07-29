@@ -11,6 +11,7 @@ import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js'
 import {
   pickLanAddress, ensureLanCert, shortFingerprint, tailscaleAddress, tailscaleDnsName,
 } from './lan.js';
+import { addEpisode, recentEpisodes } from '../agent/episodic-memory.js';
 import { Session } from './session.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { ProtocolHandler } from '../protocol/handler.js';
@@ -245,6 +246,39 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     // a desktop can tell whose client they are looking at.
     device: clientOf(req).name,
   }));
+  /**
+   * Memos recorded on a phone, filed into episodic memory.
+   *
+   * The phone is where thinking-aloud happens; the desktop is where the agent
+   * can search it. Idempotent by the phone's own id, so a re-sync after a
+   * dropped connection does not leave the same memo in recall three times.
+   */
+  app.post('/api/memo', (req, res) => {
+    const body = (req.body ?? {}) as {
+      id?: unknown; text?: unknown; title?: unknown; at?: unknown; tags?: unknown;
+    };
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!text) {
+      res.status(400).json({ error: 'Missing text.' });
+      return;
+    }
+    const episode = addEpisode({
+      id: typeof body.id === 'string' ? body.id : undefined,
+      kind: 'memo',
+      title: typeof body.title === 'string' ? body.title : undefined,
+      text,
+      at: typeof body.at === 'string' ? body.at : undefined,
+      // Tagged with the device so recall can say where a thought came from.
+      tags: [
+        ...(Array.isArray(body.tags) ? body.tags.filter((t): t is string => typeof t === 'string') : []),
+        clientOf(req).name,
+      ],
+    });
+    res.json({ id: episode.id, title: episode.title });
+  });
+
+  app.get('/api/memos', (_req, res) => res.json(recentEpisodes(50)));
+
   app.post('/api/reset', (req, res) => {
     const state = stateFor(clientOf(req));
     state.session.reset();
