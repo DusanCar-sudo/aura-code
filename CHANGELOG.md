@@ -4,6 +4,71 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.13.1] — 2026-07-29
+
+### Changed
+- **Shell and git tool output now goes through RTK — 80% fewer input tokens per
+  session.** RTK was installed on the machine, but its Claude hook only rewrites
+  commands typed at a terminal. Aura's own tools shell out through Node's
+  `exec`/`execSync` directly, so `run_shell`, the `git` tool, and the Telegram
+  bot's `execShell` bypassed the proxy entirely: raw `git diff`, `git log` and
+  `grep` output landed in the context window uncompressed, and the bloat
+  compounded as a session grew. Each of those call sites now prefixes `rtk `
+  (skipped when the command already starts with it), and `gitStatus`/`gitDiff`
+  invoke `rtk git …` explicitly.
+
+  Measured over the same three tasks — an uncommitted-changes review, a
+  TypeScript compiler-API audit, and a changelog web page build — run four times
+  as the patches went in:
+
+  | Run | State | Input tokens | Turns | Tool calls |
+  |---|---|---|---|---|
+  | 1 | no RTK (raw node exec) | 1,286,806 | 40 | 60 |
+  | 2 | `telegram-bot.ts` patched | 946,293 | 39 | 70 |
+  | 3 | `tools.ts` patched | 397,519 | 16 | 28 |
+  | 4 | fully optimized | **253,039** | **13** | **23** |
+
+  80.3% fewer input tokens and 67.5% fewer turns for identical work. Compressed
+  summaries don't just cost less than raw terminal noise — the model converges
+  faster on them. Full write-up in `rtk-optimization-report.md`.
+
+  **RTK stays optional.** Prefixing unconditionally would have made it a hard
+  runtime dependency of a published package — every `run_shell` call on a machine
+  without it returning "rtk: command not found". `util/rtk.ts` probes `PATH` once
+  per process (a filesystem scan, no `which` subprocess) and passes the bare
+  command through when RTK isn't there. `AURA_RTK=0` forces the raw command even
+  when it is installed, which is what you want when checking exactly what a tool
+  ran; `AURA_RTK=1` skips the probe.
+
+### Added
+- **`SEARCH:` for the Telegram bot.** The bot could run shell commands, send
+  files and take webcam stills, but had no way to look anything up — so it
+  answered questions about current events from stale weights, or claimed it
+  could not search at all. `SEARCH: <query>` now hits DuckDuckGo's lite HTML
+  endpoint (no API key, no SDK) and returns the top five titles, URLs and
+  snippets. The action prompt tells the agent to reach for it first when it
+  lacks up-to-date information, and the "never claim you cannot…" instruction
+  now covers searching alongside sending and photographing.
+
+### Fixed
+- **`:gazelle` and `:coder` now work in the ordinary REPL.** `:help` has listed
+  both at the top of its "Modes" section since Gazelle landed, but the switch
+  existed only inside the `--gazelle` orchestrator's stdin loops. Typed into the
+  normal `aura` REPL they matched no branch, fell through the command handler,
+  and were sent to the model as a *task* — the agent went to work on the literal
+  string ":gazelle". The REPL now switches in place: the machinery of a Gazelle
+  turn moved out of `runGazelleLoop` into `agent/gazelle-chat.ts` so the TUI can
+  drive it without opening a second readline on the stdin it already holds in
+  raw mode (two readers on one stream double every keypress). Lean turns share
+  the REPL's conversation — carried both ways, minus coder tool noise on the way
+  in — count against the session token ceiling, and appear in `/stats`; the
+  status line gains a `gazelle` marker. A switch or a second message that lands
+  while a reply is still streaming waits for it rather than interleaving two
+  conversations into one history. The two commands live in
+  `cli/repl-mode-commands.ts` because nothing in `cli/index.ts` can be imported
+  by a test — which is how a command stayed advertised and unimplemented at the
+  same time without anything going red.
+
 ## [0.12.2] — 2026-07-27
 
 ### Added
