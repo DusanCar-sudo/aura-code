@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { pickLanAddress } from '../server/lan.js';
 import { createPairingCode, loadDevices, revokeDevice, devicesPath, pendingPairings } from '../server/devices.js';
 
 const CYAN = '#3fb9d8';
@@ -64,14 +65,27 @@ function addNamedDevice(name: string, port: number): number {
   const pairing = createPairingCode(name);
   const minutes = Math.max(1, Math.round((new Date(pairing.expiresAt).getTime() - Date.now()) / 60_000));
 
+  const wifi = pickLanAddress();
+
   heading(`Pairing "${pairing.name}"`);
   console.log('  Type this code into the phone:\n');
   console.log('    ' + chalk.hex(CYAN).bold(pairing.code.split('').join(' ')) + '\n');
   console.log('  On that phone, open Aura and enter:\n');
-  console.log('    Address  ' + chalk.bold('127.0.0.1') + chalk.dim('   (over USB)'));
+  if (wifi) {
+    console.log('    Address  ' + chalk.bold(wifi.address) + chalk.dim(`   (Wi-Fi, ${wifi.iface})`));
+  } else {
+    console.log('    Address  ' + chalk.bold('127.0.0.1') + chalk.dim('   (over USB)'));
+  }
   console.log('    Port     ' + chalk.bold(String(port)));
   console.log('    Code     ' + chalk.bold(pairing.code) + '\n');
-  console.log('  Over USB, first run:  ' + chalk.hex(CYAN)(`adb reverse tcp:${port} tcp:${port}`) + '\n');
+  if (wifi) {
+    console.log('  Wi-Fi needs the server started with '
+      + chalk.hex(CYAN)('aura serve --lan') + '. Same network, no cable.');
+    console.log('  ' + chalk.dim('Over USB instead: use 127.0.0.1 and run ')
+      + chalk.hex(CYAN)(`adb reverse tcp:${port} tcp:${port}`) + '\n');
+  } else {
+    console.log('  Over USB, first run:  ' + chalk.hex(CYAN)(`adb reverse tcp:${port} tcp:${port}`) + '\n');
+  }
   console.log(chalk.dim(`  Valid ${minutes} minutes, once. The phone swaps it for a long token`));
   console.log(chalk.dim('  and stores that, so nobody ever types the long one.') + '\n');
   return 0;

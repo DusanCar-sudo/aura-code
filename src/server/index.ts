@@ -1,4 +1,5 @@
 import * as http from 'http';
+import * as https from 'https';
 import * as crypto from 'crypto';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -7,6 +8,7 @@ import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js';
+import { pickLanAddress, ensureLanCert, shortFingerprint } from './lan.js';
 import { Session } from './session.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { ProtocolHandler } from '../protocol/handler.js';
@@ -19,6 +21,10 @@ import { openExternal } from '../util/open.js';
 export interface ServeOptions {
   port: number; cwd: string; model: string;
   apiKey?: string; baseUrl?: string; open: boolean;
+  /** Also listen on the local network, over TLS, for phones on the same Wi-Fi. */
+  lan?: boolean;
+  /** Bind this LAN address specifically instead of the auto-detected one. */
+  lanAddress?: string;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
@@ -39,6 +45,29 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   ]);
   const tokenizedUrl = `http://${host}:${opts.port}/?token=${token}`;
 
+  // ── Optional LAN listener ──────────────────────────────────────────────
+  // A second server on the *specific* LAN address, never 0.0.0.0: this
+  // machine also has a Tailscale address and a container bridge, and
+  // wildcard-binding would publish the agent on both without saying so.
+  // TLS-only, because over Wi-Fi the stream is source code and shell output.
+  let lanServer: https.Server | null = null;
+  let lan: { address: string; iface: string; fingerprint: string } | null = null;
+
+  if (opts.lan) {
+    const picked = pickLanAddress(opts.lanAddress);
+    if (!picked) {
+      throw new Error(
+        opts.lanAddress
+          ? `No local network interface has the address ${opts.lanAddress}.`
+          : 'No local network interface found — is Wi-Fi connected?',
+      );
+    }
+    const { cert, key, fingerprint } = ensureLanCert(picked.address);
+    lanServer = https.createServer({ cert, key }, app);
+    lan = { address: picked.address, iface: picked.iface, fingerprint };
+    allowedOrigins.add(`https://${picked.address}:${opts.port}`);
+  }
+
   /**
    * Who is on the other end.
    *
@@ -57,20 +86,37 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     return device ? { id: `device:${device.id}`, name: device.name } : null;
   }
 
-  const wss = new WebSocketServer({
-    server,
-    verifyClient: (info: { origin: string; req: http.IncomingMessage; secure: boolean }) => {
-      // Reject the handshake unless the token names a known client and (for
-      // browser clients that send one) the Origin is our own page.
-      try {
-        const reqUrl = new URL(info.req.url ?? '/', `http://${host}:${opts.port}`);
-        if (!identify(reqUrl.searchParams.get('token') ?? undefined)) return false;
-      } catch { return false; }
-      const origin = info.origin;
-      if (origin && !allowedOrigins.has(origin)) return false;
-      return true;
-    },
-  });
+  // noServer, because the same WebSocket layer has to serve two listeners:
+  // the loopback HTTP server and, when enabled, the TLS LAN server.
+  const wss = new WebSocketServer({ noServer: true });
+
+  function handshakeAllowed(req: http.IncomingMessage): boolean {
+    // Reject unless the token names a known client and (for browser clients
+    // that send one) the Origin is our own page.
+    try {
+      const reqUrl = new URL(req.url ?? '/', `http://${host}:${opts.port}`);
+      if (!identify(reqUrl.searchParams.get('token') ?? undefined)) return false;
+    } catch { return false; }
+    const origin = req.headers.origin;
+    if (origin && !allowedOrigins.has(origin)) return false;
+    return true;
+  }
+
+  const onUpgrade = (
+    req: http.IncomingMessage,
+    socket: import('net').Socket,
+    head: Buffer,
+  ): void => {
+    if (!handshakeAllowed(req)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+  };
+
+  server.on('upgrade', onUpgrade);
+  lanServer?.on('upgrade', onUpgrade);
 
   app.use(express.json());
 
@@ -146,7 +192,15 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   console.log('  Project : ' + ctx.name + ' \u00b7 ' + ctx.language);
   console.log('  Model   : ' + opts.model);
   console.log('  URL     : ' + tokenizedUrl);
-  console.log('  (bound to 127.0.0.1; the URL includes a single-session access token)\n');
+  console.log('  (bound to 127.0.0.1; the URL includes a single-session access token)');
+  if (lan) {
+    console.log('\n  Wi-Fi   : ' + lan.address + ':' + opts.port + `  (${lan.iface}, TLS)`);
+    console.log('  Identity: ' + shortFingerprint(lan.fingerprint)
+      + '   \u2190 the phone shows this after pairing; they must match');
+    console.log('  Anyone on this network can reach the port, but needs a pairing');
+    console.log('  code from `aura devices add` to get in.');
+  }
+  console.log('');
 
   app.get('/', (_req, res) => {
     res.setHeader('Content-Type', 'text/html');
@@ -354,6 +408,13 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     if (opts.open) openExternal(tokenizedUrl);
     console.log('  Ready \u2192 ' + tokenizedUrl + '  (Ctrl+C to stop)\n');
   });
+
+  if (lanServer && lan) {
+    const bound = lan;
+    lanServer.listen(opts.port, bound.address, () => {
+      console.log(`  Ready \u2192 https://${bound.address}:${opts.port}  (Wi-Fi, phones)\n`);
+    });
+  }
 }
 
 function send(ws: WebSocket, data: object): void {
