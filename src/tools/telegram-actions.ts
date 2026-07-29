@@ -23,7 +23,7 @@
  * calls poll() at module scope and would start a second live bot instance.
  */
 
-export type ActionVerb = 'RUN' | 'SEND' | 'CAM';
+export type ActionVerb = 'RUN' | 'SEND' | 'CAM' | 'SEARCH';
 export interface ParsedAction {
   verb: ActionVerb;
   arg: string;
@@ -45,6 +45,7 @@ function verbFromFunctionName(name: string): ActionVerb | null {
     case 'run': case 'shell': case 'bash': return 'RUN';
     case 'send': case 'send_file': case 'sendfile': return 'SEND';
     case 'cam': case 'webcam': case 'camera': return 'CAM';
+    case 'search': case 'websearch': case 'web_search': return 'SEARCH';
     default: return null;
   }
 }
@@ -83,7 +84,7 @@ export function parseAgentAction(text: string): ParsedAction | null {
   // Bare format. Models often wrap the directive in markdown — a leading
   // backtick, bullet, or blockquote — so tolerate those and strip a trailing
   // backtick from the argument.
-  const bare = text.match(/(?:^|\n)[ \t`>*_-]*(RUN|SEND|CAM):[ \t]*`?([^\n`]+)/);
+  const bare = text.match(/(?:^|\n)[ \t`>*_-]*(RUN|SEND|CAM|SEARCH):[ \t]*`?([^\n`]+)/);
   if (bare) {
     return {
       verb: bare[1] as ActionVerb,
