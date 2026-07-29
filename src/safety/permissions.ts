@@ -17,6 +17,14 @@ export interface PermissionResult {
   allowed: boolean;
   reason?: string;
   needsConfirm?: boolean;
+  /**
+   * Set when an approval should be remembered for the rest of the run.
+   *
+   * The caller passes it back to [approveForSession] once the user says yes,
+   * so the same target is not asked about twice. Without it a task that writes
+   * one file over several turns would prompt on every turn.
+   */
+  approvalKey?: string;
 }
 
 export class PermissionSystem {
@@ -77,11 +85,20 @@ export class PermissionSystem {
       }
     }
 
+    // Writing a file is destructive — it overwrites whatever was there — and
+    // this was returning plain `allowed` on both branches, so the session
+    // lookup below decided nothing and no write was ever confirmed. The intent
+    // is visible either side of it: the lookup itself, and the `overwrite
+    // <path>` string in the agent loop's formatCallForConfirmation, which had
+    // no way to ever be displayed.
+    //
+    // Keyed by path so a task editing one file over several turns asks once,
+    // not once per turn.
     if (toolName === 'write_file') {
       const path = String(input.path ?? '');
       const key = `write:${path}`;
       if (this.sessionApprovals.has(key)) return { allowed: true };
-      return { allowed: true };
+      return { allowed: true, needsConfirm: true, approvalKey: key };
     }
 
     return { allowed: true };

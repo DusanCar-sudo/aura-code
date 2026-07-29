@@ -40,9 +40,51 @@ describe('PermissionSystem — normal mode', () => {
     expect(r.needsConfirm).toBeFalsy();
   });
 
-  it('allows write_file without confirm (confirmation handled at display level)', () => {
-    const r = p.check('write_file', { path: 'a.txt', content: 'x' });
+  it('confirms write_file — it overwrites whatever was there', () => {
+    // This previously returned plain `allowed`, so no write was ever
+    // confirmed. The comment here used to claim the display layer handled it;
+    // it does not, and never did.
+    const fresh = new PermissionSystem('normal');
+    const r = fresh.check('write_file', { path: 'a.txt', content: 'x' });
     expect(r.allowed).toBe(true);
+    expect(r.needsConfirm).toBe(true);
+    expect(r.approvalKey).toBe('write:a.txt');
+  });
+
+  it('remembers an approved path for the rest of the run', () => {
+    const fresh = new PermissionSystem('normal');
+    const first = fresh.check('write_file', { path: 'a.txt', content: 'x' });
+    expect(first.needsConfirm).toBe(true);
+
+    fresh.approveForSession(first.approvalKey!);
+
+    // A task editing one file over several turns must ask once, not per turn.
+    const second = fresh.check('write_file', { path: 'a.txt', content: 'y' });
+    expect(second.allowed).toBe(true);
+    expect(second.needsConfirm).toBeFalsy();
+  });
+
+  it('approving one path does not approve another', () => {
+    const fresh = new PermissionSystem('normal');
+    fresh.approveForSession('write:a.txt');
+
+    const other = fresh.check('write_file', { path: 'b.txt', content: 'x' });
+    expect(other.needsConfirm).toBe(true);
+    expect(other.approvalKey).toBe('write:b.txt');
+  });
+
+  it('still refuses write_file outright in read-only mode', () => {
+    const ro = new PermissionSystem('read-only');
+    ro.approveForSession('write:a.txt');
+    // A session approval must not promote a tool past the mode itself.
+    expect(ro.check('write_file', { path: 'a.txt', content: 'x' }).allowed).toBe(false);
+  });
+
+  it('auto mode still writes without prompting', () => {
+    const auto = new PermissionSystem('auto');
+    const r = auto.check('write_file', { path: 'a.txt', content: 'x' });
+    expect(r.allowed).toBe(true);
+    expect(r.needsConfirm).toBeFalsy();
   });
 
   it('allows edit_file without explicit confirm flag', () => {
