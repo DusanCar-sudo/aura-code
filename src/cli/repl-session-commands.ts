@@ -30,6 +30,10 @@ export interface ChatState {
   noSession: boolean;
 }
 
+/** Which loop a typed line runs through: the full tool-using agent, or lean
+ *  conversation. See the :gazelle/:coder branches in index.ts. */
+export type ReplMode = 'coder' | 'gazelle';
+
 export interface ReplCommandResult {
   handled: boolean;
   newChatId?: string | undefined;
@@ -38,6 +42,7 @@ export interface ReplCommandResult {
   newArchimedesOverride?: boolean;
   newArchimedesModelOverride?: string;
   newSmall1Override?: boolean;
+  newMode?: ReplMode;
 }
 
 /** The slice of ReplCtx these commands touch. Declared structurally rather
