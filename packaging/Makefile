@@ -5,7 +5,7 @@
 #   make -C packaging deb       Debian/Ubuntu package
 #   make -C packaging rpm       Fedora/RHEL package (needs rpmbuild)
 #   make -C packaging linux     both
-#   make -C packaging windows   Windows .exe — installs into WSL (needs iscc)
+#   make -C packaging windows   Windows .exe — native (stage on Windows first)
 #   make -C packaging clean
 #
 # All targets package the same staged tree, so the artifacts stay identical
@@ -37,9 +37,11 @@ rpm: $(STAGE)/app
 
 linux: deb rpm
 
-# The Windows installer carries the .deb and installs it into WSL, so it
-# depends on the Linux package rather than a separate Windows build.
-windows: deb
+# Native Windows now, so this no longer depends on the .deb. The payload must
+# be staged on Windows by windows/stage-windows.ps1 — build-exe.sh explains
+# how if it is missing. CI does the whole thing on windows-latest; see
+# .github/workflows/release-windows.yml.
+windows:
 	@./windows/build-exe.sh
 
 clean:

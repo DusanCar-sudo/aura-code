@@ -2,10 +2,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Install Aura inside a WSL distribution.
 #
-# Invoked by the Windows installer with a WSL path to the .deb. Also runnable
-# by hand if the installer ran before WSL was set up:
+# No longer called by the Windows installer — that installs natively now the
+# shell guardrails cover cmd.exe and PowerShell. Kept because WSL is still the
+# better-trodden route on Windows, and the startup notice points there when
+# something behaves oddly. Run it by hand against the .deb:
 #
-#     bash install-into-wsl.sh /mnt/c/Program\ Files/Aura/aura-code_0.12.2_all.deb
+#     bash install-into-wsl.sh /mnt/c/Users/you/Downloads/aura-code_0.12.2_all.deb
 #
 # The .deb depends on nodejs (>= 18). Distro repos often carry something older
 # (Ubuntu 22.04 ships Node 12), so this checks the *actual* version rather than
