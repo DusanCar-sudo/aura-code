@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { isNativeWindows, isWSL, platformWarning } from '../../src/util/platform.js';
 
-// Windows support is deliberately WSL-only: the shell guardrails
-// (SAFE_SHELL_COMMANDS, DANGEROUS_PATTERNS) are POSIX strings, so a native
-// Windows run auto-approves nothing and its denylist misses the destructive
-// cmd/PowerShell commands. These tests pin the detection that warns about it.
+// Windows is no longer WSL-only: the shell guardrails now screen cmd.exe and
+// PowerShell too (config/defaults.ts). The notice that remains is about
+// coverage, not safety, and these tests pin both the detection and the fact
+// that it no longer overstates the risk.
 
 function setPlatform(value: string): void {
   Object.defineProperty(process, 'platform', { value, configurable: true });
@@ -53,14 +53,22 @@ describe('platform detection', () => {
 });
 
 describe('platformWarning', () => {
-  it('warns on native Windows and points at WSL', () => {
+  it('notes newer Windows support and still offers WSL as the fallback', () => {
     setPlatform('win32');
     const w = platformWarning();
     expect(w).toBeTruthy();
-    expect(w).toMatch(/not supported/i);
     expect(w).toMatch(/wsl --install/);
-    // It must name the specific gap, not just say "unsupported".
+    // It must say what is actually covered rather than just "be careful".
     expect(w).toMatch(/Remove-Item/);
+  });
+
+  it('no longer claims Windows is unsupported', () => {
+    setPlatform('win32');
+    const w = platformWarning()!;
+    // The guardrails cover cmd and PowerShell now; leaving the old wording in
+    // place would push users to WSL for a hazard that has been fixed.
+    expect(w).not.toMatch(/not supported/i);
+    expect(w).not.toMatch(/POSIX-only/i);
   });
 
   it('is silent on supported platforms', () => {

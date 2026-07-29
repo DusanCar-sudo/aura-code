@@ -62,6 +62,62 @@ export const DANGEROUS_PATTERNS: RegExp[] = [
   /\bsource\s+\/dev\//,
 ];
 
+/**
+ * The same screen for cmd.exe and PowerShell.
+ *
+ * Every pattern above is POSIX — rm, dd, mkfs, chmod — and none of them can
+ * match anything cmd.exe or PowerShell would run, so on Windows the denylist
+ * caught nothing at all. `del /s /q C:\` and `format C: /y` went straight
+ * through.
+ *
+ * Applied on every platform rather than switched by process.platform: Git
+ * Bash, WSL invoked from a Windows shell, and Windows containers all mean the
+ * running shell is a poor proxy for which syntax can reach the OS, and a
+ * PowerShell string is inert on Linux anyway. Screening both costs nothing
+ * and removes the chance of guessing wrong.
+ */
+export const WINDOWS_DANGEROUS_PATTERNS: RegExp[] = [
+  // Recursive delete: del /s, rd /s, rmdir /s. The /s is what makes it the
+  // equivalent of rm -rf rather than a single-file removal.
+  /\b(?:del|erase)\b[^|&;]*\s\/s\b/i,
+  /\b(?:rd|rmdir)\b[^|&;]*\s\/s\b/i,
+  // PowerShell's Remove-Item and its aliases (ri, rm, del, rd) with -Recurse.
+  /\b(?:remove-item|ri)\b[^|&;]*\s-recurse\b/i,
+  /\bget-childitem\b[^|&;]*\|\s*(?:remove-item|ri|rm|del)\b/i,
+  // Whole-volume operations.
+  /\bformat\s+[a-z]:/i,
+  /\bformat-volume\b/i,
+  /\bclear-disk\b/i,
+  /\bdiskpart\b/i,
+  // Shadow-copy and backup destruction — the signature move of ransomware,
+  // and never something a coding agent has cause to do.
+  /\bvssadmin\b[^|&;]*\bdelete\b/i,
+  /\bwbadmin\b[^|&;]*\bdelete\b/i,
+  /\bcipher\b[^|&;]*\s\/w\b/i,
+  // Boot configuration and registry hives.
+  /\bbcdedit\b/i,
+  /\breg\s+delete\s+"?hk(?:lm|cr|u|ey_local_machine|ey_classes_root)\b/i,
+  /\bremove-item\b[^|&;]*\bhk(?:lm|cr):/i,
+  // Ownership and ACL takeovers across a tree.
+  /\btakeown\b[^|&;]*\s\/r\b/i,
+  /\bicacls\b[^|&;]*\/grant\s+\S*everyone/i,
+  // Download-and-execute, the PowerShell counterpart of `curl … | sh`.
+  /\|\s*(?:iex|invoke-expression)\b/i,
+  /\b(?:iex|invoke-expression)\s*\(/i,
+  /\b(?:iwr|invoke-webrequest|curl|wget)\b[^|&;]*\|\s*(?:iex|invoke-expression)\b/i,
+  /\bdownloadstring\s*\(/i,
+  // Living-off-the-land download vectors.
+  /\bcertutil\b[^|&;]*-urlcache\b/i,
+  /\bbitsadmin\b[^|&;]*\/transfer\b/i,
+  /\bmshta\b\s+https?:/i,
+  /\bregsvr32\b[^|&;]*\/i:\s*https?:/i,
+  // Turning script signing off wholesale.
+  /\bset-executionpolicy\b[^|&;]*\b(?:bypass|unrestricted)\b/i,
+  // Power state, matching the POSIX shutdown/reboot entries above.
+  /\b(?:stop-computer|restart-computer)\b/i,
+  /\bshutdown\b[^|&;]*\s\/[srfp]\b/i,
+];
+
 // Commands whose output is inspection-only and safe to auto-approve in normal
 // mode. Interpreters and package-runners (node, python, npx, npm run, …) are
 // deliberately NOT here: whitelisting an interpreter is equivalent to
@@ -75,6 +131,27 @@ export const SAFE_SHELL_COMMANDS = [
   'git status', 'git log', 'git diff', 'git show',
   'git add', 'git commit', 'git branch',
   'mkdir', 'cp', 'mv', 'touch',
+];
+
+/**
+ * Inspection-only commands on cmd.exe and PowerShell.
+ *
+ * Without these the safe list matched nothing a Windows shell runs, so every
+ * `dir` and every `type` raised a confirmation. That is not merely annoying:
+ * a prompt on each harmless listing trains the user to approve without
+ * reading, which is precisely the habit that makes the prompt on a genuinely
+ * destructive command worthless.
+ *
+ * Read-only by construction. Nothing here writes, deletes, or evaluates a
+ * string — no powershell/cmd/wmic, for the same reason node and python are
+ * absent from the POSIX list above.
+ */
+export const WINDOWS_SAFE_SHELL_COMMANDS = [
+  'dir', 'type', 'findstr', 'where', 'whoami', 'hostname', 'ver', 'tree', 'fc',
+  // PowerShell verbs, all Get-* or otherwise non-mutating.
+  'get-childitem', 'get-content', 'get-location', 'get-command', 'get-item',
+  'get-date', 'get-host', 'select-string', 'measure-object', 'test-path',
+  'compare-object', 'resolve-path',
 ];
 
 /**

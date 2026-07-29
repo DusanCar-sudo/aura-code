@@ -1,5 +1,15 @@
 import * as readline from 'readline';
-import { DANGEROUS_PATTERNS, SAFE_SHELL_COMMANDS } from '../config/defaults.js';
+import {
+  DANGEROUS_PATTERNS, SAFE_SHELL_COMMANDS,
+  WINDOWS_DANGEROUS_PATTERNS, WINDOWS_SAFE_SHELL_COMMANDS,
+} from '../config/defaults.js';
+
+// Screened together on every platform. See WINDOWS_DANGEROUS_PATTERNS for why
+// this is not switched on process.platform: the running shell is a poor proxy
+// for which syntax can reach the OS once Git Bash and WSL are in play, and the
+// other platform's syntax is inert anyway.
+const ALL_DANGEROUS = [...DANGEROUS_PATTERNS, ...WINDOWS_DANGEROUS_PATTERNS];
+const ALL_SAFE = [...SAFE_SHELL_COMMANDS, ...WINDOWS_SAFE_SHELL_COMMANDS];
 
 export type PermissionLevel = 'read-only' | 'normal' | 'auto';
 
@@ -102,7 +112,7 @@ export class PermissionSystem {
   }
 
   private isDangerous(cmd: string): boolean {
-    return DANGEROUS_PATTERNS.some(p => p.test(cmd));
+    return ALL_DANGEROUS.some(p => p.test(cmd));
   }
 
   private isSafe(cmd: string): boolean {
@@ -118,7 +128,7 @@ export class PermissionSystem {
     const lower = trimmed.toLowerCase();
     // Anchor to a whole-command match so `curlx …` doesn't match `curl` and
     // `lscpu` doesn't match `ls`.
-    return SAFE_SHELL_COMMANDS.some(s => lower === s || lower.startsWith(s + ' '));
+    return ALL_SAFE.some(s => lower === s || lower.startsWith(s + ' '));
   }
 }
 
