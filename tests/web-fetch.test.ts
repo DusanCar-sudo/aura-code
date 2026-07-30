@@ -261,3 +261,68 @@ describe('webFetch — truncation', () => {
     expect(result).toContain('truncated');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPA-fallback detection
+//
+// Static hosts answer every unmatched path with index.html and HTTP 200, never a
+// 404. A request for /style.css therefore "succeeds", and after stripHtml() the
+// body reads as ordinary prose with nothing marking it as the wrong file. That
+// is what stalled a real run: five fetches (/style.css, /index.css, / at two
+// different max_chars, / with explicit headers) all returned byte-identical
+// HTML, and the agent kept guessing new paths against a host that answers 200 to
+// all of them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('web_fetch asset/content-type mismatch', () => {
+  const spaHtml = '<html><body><h1>Landing page</h1><p>Welcome</p></body></html>';
+
+  it('warns when a .css request returns HTML', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(spaHtml, { contentType: 'text/html; charset=utf-8' }));
+    const result = await webFetch({ url: 'https://example.com/style.css' });
+    expect(result).toContain('WARNING: requested .css');
+    expect(result).toContain('index.html');
+    expect(result).toContain('do not guess further variants');
+  });
+
+  it('warns for the other asset extensions too', async () => {
+    for (const ext of ['js', 'mjs', 'json', 'xml', 'svg']) {
+      mockFetch.mockResolvedValueOnce(mockResponse(spaHtml, { contentType: 'text/html' }));
+      const result = await webFetch({ url: `https://example.com/app.${ext}` });
+      expect(result, ext).toContain(`WARNING: requested .${ext}`);
+    }
+  });
+
+  it('stays silent when the asset arrives with the right type', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse('body{color:red}', { contentType: 'text/css' }));
+    const result = await webFetch({ url: 'https://example.com/style.css' });
+    expect(result).not.toContain('WARNING');
+    expect(result).toContain('body{color:red}');
+  });
+
+  it('stays silent for JSON served as JSON', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse('{"a":1}', { contentType: 'application/json' }));
+    const result = await webFetch({ url: 'https://example.com/data.json' });
+    expect(result).not.toContain('WARNING');
+  });
+
+  it('stays silent on an extensionless URL that returns HTML', async () => {
+    // The normal case — asking for a page and getting a page.
+    mockFetch.mockResolvedValueOnce(mockResponse(spaHtml, { contentType: 'text/html' }));
+    const result = await webFetch({ url: 'https://example.com/' });
+    expect(result).not.toContain('WARNING');
+  });
+
+  it('stays silent when a non-HTML type comes back for an asset', async () => {
+    // Wrong type but not the SPA-fallback signature; no claim to make.
+    mockFetch.mockResolvedValueOnce(mockResponse('x', { contentType: 'application/octet-stream' }));
+    const result = await webFetch({ url: 'https://example.com/style.css' });
+    expect(result).not.toContain('WARNING');
+  });
+
+  it('puts the warning above the body, not buried after it', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(spaHtml, { contentType: 'text/html' }));
+    const result = await webFetch({ url: 'https://example.com/style.css' });
+    expect(result.indexOf('WARNING')).toBeLessThan(result.indexOf('Landing page'));
+  });
+});
