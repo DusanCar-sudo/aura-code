@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
 import { selectTools, selectToolsWithEviction, executeTool } from '../tools/index.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -160,6 +161,72 @@ function callSignature(name: string, input: Record<string, unknown>): string {
   return `${name}(${keys.map(k => `${k}=${JSON.stringify(input[k])}`).join(',')})`;
 }
 
+/**
+ * Tools worth checking for byte-identical results across *different* inputs.
+ *
+ * Distinct from CACHEABLE_READ_TOOLS, and deliberately so: these are the
+ * non-deterministic fetchers, which must never be served from cache. This is
+ * detection, not caching — the call still executes and the model still gets a
+ * fresh result. All that is added is a note when the bytes are ones it has
+ * already seen.
+ *
+ * The case that motivated it: an SPA host (Vercel, Netlify, most static hosts)
+ * answers *every* unmatched path with index.html and HTTP 200. An agent hunting
+ * for a stylesheet fetched /style.css, /index.css, / with different max_chars —
+ * five distinct URLs, five "successful" 200s, byte-identical HTML every time.
+ * The signature cache could not see it (different inputs ⇒ different keys) and
+ * stall detection compares calls rather than results, so nothing noticed until
+ * the calls themselves repeated verbatim. Meanwhile each identical payload was
+ * re-injected into context at full size.
+ */
+const CONTENT_DEDUPE_TOOLS = new Set([
+  'web_fetch', 'web_search', 'http_request',
+]);
+
+/**
+ * Cheap fingerprint of a fetch result's *payload*, ignoring its metadata block.
+ *
+ * Not cryptographic — only equality matters.
+ *
+ * Every tool in CONTENT_DEDUPE_TOOLS prints a metadata preamble terminated by a
+ * blank line (`HTTP 200`, `Content-Type: …`, `URL: …`, and any warning), then the
+ * body. That preamble echoes the request, so hashing the whole string would make
+ * two fetches of the same page look different purely because their URLs differ —
+ * which is exactly the case this check exists to catch. So the preamble is
+ * dropped and only the payload is hashed. Results with no blank line are hashed
+ * whole.
+ */
+function contentHash(text: string): string {
+  const sep = text.indexOf('\n\n');
+  const body = sep === -1 ? text : text.slice(sep + 2);
+  return crypto.createHash('sha1').update(body).digest('hex');
+}
+
+/**
+ * The " Type :resume …" tail appended to a stalled loop's summary.
+ *
+ * Exported for tests, and kept honest about two things the old inline version
+ * got wrong. The command is `:resume` — the REPL matches colon-prefixed input
+ * and has no slash-command dispatcher, so `/continue` was never a command and
+ * typing it just sent the literal text to the model as a prompt. And an id is
+ * only quoted when it is a real session id; `latest.json` is a per-project
+ * scratch file every run overwrites, so "resume session latest" pointed at
+ * whichever task happened to finish last rather than at this one.
+ */
+export function resumeHintFor(sessionPath: string | undefined): string {
+  if (!sessionPath) return '';
+  // The loop's crash-safety file is `<id>.run.json`, held apart from the session
+  // record `<id>.json` because the two carry different shapes (see the
+  // sessionPath comment in cli/index.ts). The id to resume is the same either
+  // way, so the marker suffix comes off before validating.
+  const id = path.basename(sessionPath, '.json').replace(/\.run$/, '');
+  // Ids come from sessionStore.generateId(): 8 hex chars, '-', base36 stamp.
+  const isRealId = /^(gazelle-)?[0-9a-f]{8}-[0-9a-z]+$/.test(id);
+  return isRealId
+    ? ` Type :resume ${id} to continue this session.`
+    : ' Type :resume to continue the most recent session.';
+}
+
 const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number }> = {
   'claude-opus-4-5-20251001':   { in: 15,  out: 75  },
   'claude-sonnet-4-5-20251001': { in: 3,   out: 15  },
@@ -307,6 +374,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   // by exact call signature and dropped wholesale the moment anything mutates
   // the workspace, so a hit can never serve stale content.
   const readCache = new Map<string, string>();
+
+  // content hash -> the call signature that first produced it, for the
+  // non-deterministic fetchers. Lets an identical *result* from a different
+  // *input* be named as such instead of silently re-injected; see
+  // CONTENT_DEDUPE_TOOLS. Never used to skip a call.
+  const seenContent = new Map<string, string>();
 
   // Sticky set of triggered conditional tools — survives history compaction.
   const includedTools = new Set<string>();
@@ -727,6 +800,22 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         if (cached === undefined && cacheable && !isError) {
           readCache.set(sig, result);
         }
+        // Byte-identical result from a *different* call — an SPA fallback, a
+        // redirect that collapses several URLs onto one page, or a search that
+        // keeps returning the same hits. The result stands (these tools are
+        // never served from cache); it is only labelled, so the model stops
+        // guessing at new inputs that resolve to content it already has.
+        if (CONTENT_DEDUPE_TOOLS.has(call.name) && !isError) {
+          const hash = contentHash(result);
+          const firstSig = seenContent.get(hash);
+          if (firstSig === undefined) {
+            seenContent.set(hash, sig);
+          } else if (firstSig !== sig) {
+            result += `\n\n[identical to the earlier ${firstSig} result — byte for byte.`
+              + ` Different inputs are resolving to the same content, so guessing further`
+              + ` variants will not yield anything new. Change approach.]`;
+          }
+        }
         toolCallLog.push({ name: call.name, input: call.input });
         if (!isError) execQueue.push(call.name, call.input, turns);
 
@@ -770,8 +859,16 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   }
 
   await persist(opts.sessionPath, history);
-  const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
-  const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
+  // The hint has to name a command that exists and an id that resolves, or it
+  // sends the user somewhere that cannot work. It previously read
+  // "Type /continue to resume session <id>": there is no /continue — the REPL
+  // has no slash commands at all, only colon ones — so the text went to the
+  // model as an ordinary user message and came back as an unrelated answer
+  // about whatever the model could infer. The id was wrong too: sessionPath is
+  // a fixed `latest.json` per project, so basename() yielded the literal
+  // "latest" rather than a session id, and `:resume latest` would have loaded
+  // whichever run last touched that shared file.
+  const resumeHint = resumeHintFor(opts.sessionPath);
   const reason = primaryArgLoopReason ? primaryArgLoopReason
     : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
     : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'

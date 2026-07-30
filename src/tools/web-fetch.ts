@@ -44,6 +44,50 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max) + `\n\n... [truncated — ${text.length} chars total, showing first ${max}]`;
 }
 
+/** Extension on the URL path, lowercased, without the dot. '' when there is none. */
+function pathExtension(u: URL): string {
+  const last = u.pathname.split('/').pop() ?? '';
+  const dot = last.lastIndexOf('.');
+  return dot === -1 ? '' : last.slice(dot + 1).toLowerCase();
+}
+
+const EXPECTED_TYPE: Record<string, RegExp> = {
+  css:  /css/,
+  js:   /javascript|ecmascript/,
+  mjs:  /javascript|ecmascript/,
+  json: /json/,
+  xml:  /xml/,
+  svg:  /svg/,
+  csv:  /csv|plain/,
+  txt:  /plain/,
+};
+
+/**
+ * Warning line when the URL asked for a specific asset type and HTML came back.
+ *
+ * Static hosts (Vercel, Netlify, GitHub Pages, most SPA setups) answer every
+ * unmatched path with index.html and HTTP 200 rather than a 404. So a request
+ * for /style.css "succeeds", and after stripHtml() the body reads as ordinary
+ * prose — nothing in the result says the file was never there. An agent hunting
+ * for a stylesheet can burn a dozen turns guessing paths against a host that
+ * will answer 200 to all of them. Content-Type is already in the header block,
+ * but as one line among several it gets skimmed past; this states the mismatch
+ * as a finding.
+ */
+function typeMismatchWarning(url: string, contentType: string): string | null {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return null; }
+  const ext = pathExtension(parsed);
+  const expected = EXPECTED_TYPE[ext];
+  if (!expected || expected.test(contentType)) return null;
+  if (!/html/.test(contentType)) return null;
+  return `WARNING: requested .${ext} but the server returned ${contentType || 'HTML'}.`
+    + ` Static hosts answer unmatched paths with index.html and HTTP 200, so this`
+    + ` is very likely the site's fallback page and not the asset you asked for.`
+    + ` The file is probably not at this path — do not guess further variants;`
+    + ` read the site's source repository or the <link>/<script> tags on the page.`;
+}
+
 function stripHtml(html: string): string {
   // Remove script and style blocks
   let text = html.replace(/<script[\s\S]*?<\/script>/gi, '');
@@ -130,6 +174,10 @@ export async function webFetch(input: WebFetchInput): Promise<string> {
     }
     headerLines.push(`URL: ${url}`);
     headerLines.push('');
+
+    // Sits above the body, where a skimmed result still shows it.
+    const mismatch = typeMismatchWarning(url, contentType);
+    if (mismatch) headerLines.splice(headerLines.length - 1, 0, mismatch);
 
     const headerBlock = headerLines.join('\n');
 
