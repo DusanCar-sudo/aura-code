@@ -134,6 +134,17 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    name: 'StepFun',
+    baseUrl: 'https://api.stepfun.com/v1',
+    envKey: 'STEPFUN_API_KEY',
+    signupUrl: 'https://platform.stepfun.com',
+    models: [
+      { id: 'step-3.7-flash', label: 'Step 3.7 Flash', speed: 'Powerful · multimodal reasoning', contextWindow: 128_000 },
+      { id: 'step-3.5-flash', label: 'Step 3.5 Flash', speed: 'Fast · reasoning + agentic', contextWindow: 128_000 },
+      { id: 'step-3.5-flash-2603', label: 'Step 3.5 Flash 2603', speed: 'Fast · agent-optimized', contextWindow: 128_000 },
+    ],
+  },
+  {
     name: 'Ollama (local, free)',
     baseUrl: 'http://localhost:11434/v1',
     envKey: null, // No API key needed
