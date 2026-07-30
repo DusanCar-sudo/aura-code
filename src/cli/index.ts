@@ -1,4 +1,14 @@
 #!/usr/bin/env node
+// Node 20+ enables Happy Eyeballs (autoSelectFamily) by default. On hosts that
+// publish AAAA records while the machine has no usable IPv6 route, the attempt
+// stalls instead of falling back to IPv4, and every request surfaces as the
+// unhelpful "ApiError: Connection error" (seen with StepFun, whose endpoints
+// are dual-stack). Opt out so provider calls always reach IPv4.
+// Set AURA_AUTOSELECT_FAMILY=1 to restore Node's default behaviour.
+import * as _net from 'net';
+if (process.env.AURA_AUTOSELECT_FAMILY !== '1') {
+  try { _net.setDefaultAutoSelectFamily(false); } catch { /* Node < 19.4 */ }
+}
 // Auto-load ~/.secrets/agents.env so provider keys work when Aura runs as a binary
 import * as _fs from 'fs';
 import * as _path from 'path';
