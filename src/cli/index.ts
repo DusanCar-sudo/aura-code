@@ -877,9 +877,29 @@ async function main() {
     }
   }
 
-  // Legacy sessionPath kept for single-task one-shot mode
-  const sessionPath = noSession ? undefined : path.join(sessionStore.defaultDir(),
-    projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80), 'latest.json');
+  // The loop's mid-run crash-safety file, one per session.
+  //
+  // It used to be a fixed `latest.json` per project directory — a single file
+  // every run in that directory overwrote. Launching Aura from one directory for
+  // several unrelated tasks had them all collide there, and a stalled loop's
+  // "resume session latest" therefore named whichever run finished last rather
+  // than the one that stalled. Keying it to activeChatId (set by every
+  // !noSession branch above) makes it per-conversation.
+  //
+  // Deliberately NOT `${activeChatId}.json`: that is the session record, written
+  // by upsertSession as a full ChatSession (id, title, createdAt, usage). The
+  // loop persists through sessionStore.save(), which writes a bare
+  // {savedAt, version, history} — and loadSession casts whatever it reads to
+  // ChatSession without validating. Sharing the path would let a mid-run save
+  // strip a session's identity and its accumulated usage totals, and `:resume`
+  // would then come back with an undefined id. The `.run` suffix keeps the two
+  // shapes in separate files.
+  //
+  // Nothing read the old `latest.json`: confess.ts:122 is its only other
+  // mention and it filters the name out.
+  const sessionPath = noSession || !activeChatId
+    ? undefined
+    : path.join(sessionStore.projectDir(projectRoot), `${activeChatId}.run.json`);
 
   // ── Startup banner ──────────────────────────────────────────────────────────
   renderBanner({
