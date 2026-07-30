@@ -648,6 +648,11 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'glm-5.1',         name: 'GLM-5.1',         provider: 'Zhipu', speed: 'Powerful · agentic' },
   { id: 'glm-5',           name: 'GLM-5',           provider: 'Zhipu', speed: 'Powerful · 744B MoE' },
 
+  // ── StepFun ──────────────────────────────────────────────────────────────
+  { id: 'stepfun/step-3.7-flash',      name: 'Step 3.7 Flash',      provider: 'StepFun', speed: 'Powerful · multimodal reasoning' },
+  { id: 'stepfun/step-3.5-flash',      name: 'Step 3.5 Flash',      provider: 'StepFun', speed: 'Fast · reasoning + agentic' },
+  { id: 'stepfun/step-3.5-flash-2603', name: 'Step 3.5 Flash 2603', provider: 'StepFun', speed: 'Fast · agent-optimized' },
+
   // ── xAI Grok ────────────────────────────────────────────────────────────
   { id: 'grok-2',            name: 'Grok 2',            provider: 'xAI', speed: 'Powerful' },
   { id: 'grok-2-mini',       name: 'Grok 2 mini',       provider: 'xAI', speed: 'Fast · cheap' },

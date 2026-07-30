@@ -313,6 +313,19 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
         }));
       }
 
+      case 'stepfun': {
+        const key = getApiKey('STEPFUN_API_KEY');
+        if (!key) return [];
+        const base = process.env.STEPFUN_BASE_URL ?? 'https://api.stepfun.com/v1';
+        const r = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `stepfun/${m.id}`, name: m.id }));
+      }
+
       default:
         return [];
     }
@@ -348,7 +361,7 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'kimi',         name: 'Kimi / Moonshot',           desc: 'Coding Plan, global & China endpoints',         envKey: 'MOONSHOT_API_KEY' },
   { id: 'minimax',      name: 'MiniMax',                   desc: 'Global, OAuth Coding Plan & China',             envKey: 'MINIMAX_API_KEY' },
   { id: 'qwen',         name: 'Qwen Cloud / DashScope',    desc: 'Qwen + multi-provider',                         envKey: 'DASHSCOPE_API_KEY' },
-  { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY' },
+  { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY',     liveFetch: true },
   { id: 'tencent',      name: 'Tencent TokenHub',          desc: 'Hy3 Preview via tokenhub.tencentmaas.com',      envKey: 'TENCENT_API_KEY' },
   { id: 'fireworks',    name: 'Fireworks AI',              desc: 'OpenAI-compatible direct model API',            envKey: 'FIREWORKS_API_KEY',   liveFetch: true },
   { id: 'arcee',        name: 'Arcee AI',                  desc: 'Trinity models, direct API',                    envKey: 'ARCEE_API_KEY' },
