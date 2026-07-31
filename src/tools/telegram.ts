@@ -142,13 +142,27 @@ async function doSendPhoto(config: TelegramConfig, input: TelegramInput): Promis
   if (!chatId) return 'Error: chat_id required';
   if (!input.photo) return 'Error: photo required';
 
-  const body: Record<string, unknown> = {
-    chat_id: chatId,
-    photo: input.photo,
-  };
+  // If it's a local file, upload via multipart/form-data
+  const absPhoto = path.isAbsolute(input.photo) ? input.photo : path.resolve(process.cwd(), input.photo);
+  if (fs.existsSync(absPhoto)) {
+    const buf = fs.readFileSync(absPhoto);
+    const blob = new Blob([buf], { type: 'image/jpeg' });
+    const form = new FormData();
+    form.append('chat_id', chatId);
+    form.append('photo', blob, path.basename(absPhoto));
+    if (input.caption) form.append('caption', input.caption);
+    if (input.parse_mode) form.append('parse_mode', input.parse_mode);
+
+    const url = `${API_BASE}/bot${config.bot_token}/sendPhoto`;
+    const response = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(30_000) });
+    const data = await response.json() as any;
+    if (!data.ok) throw new Error(`Telegram API error: ${data.description ?? 'Unknown error'} (code: ${data.error_code})`);
+    return `Photo sent to ${chatId} (msg_id: ${data.result.message_id})`;
+  }
+  // Otherwise treat as URL or file_id
+  const body: Record<string, unknown> = { chat_id: chatId, photo: input.photo };
   if (input.caption) body.caption = input.caption;
   if (input.parse_mode) body.parse_mode = input.parse_mode;
-
   const result = await api(config.bot_token, 'sendPhoto', body);
   return `Photo sent to ${chatId} (msg_id: ${result.message_id})`;
 }
@@ -178,12 +192,25 @@ async function doSendDocument(config: TelegramConfig, input: TelegramInput): Pro
   if (!chatId) return 'Error: chat_id required';
   if (!input.document) return 'Error: document required';
 
-  const body: Record<string, unknown> = {
-    chat_id: chatId,
-    document: input.document,
-  };
-  if (input.caption) body.caption = input.caption;
+  // If it's a local file, upload via multipart/form-data
+  if (fs.existsSync(input.document)) {
+    const buf = fs.readFileSync(input.document);
+    const blob = new Blob([buf]);
+    const form = new FormData();
+    form.append('chat_id', chatId);
+    form.append('document', blob, path.basename(input.document));
+    if (input.caption) form.append('caption', input.caption);
 
+    const url = `${API_BASE}/bot${config.bot_token}/sendDocument`;
+    const response = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(30_000) });
+    const data = await response.json() as any;
+    if (!data.ok) throw new Error(`Telegram API error: ${data.description ?? 'Unknown error'} (code: ${data.error_code})`);
+    return `Document sent to ${chatId} (msg_id: ${data.result.message_id})`;
+  }
+
+  // Otherwise treat as URL or file_id
+  const body: Record<string, unknown> = { chat_id: chatId, document: input.document };
+  if (input.caption) body.caption = input.caption;
   const result = await api(config.bot_token, 'sendDocument', body);
   return `Document sent to ${chatId} (msg_id: ${result.message_id})`;
 }

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 
@@ -25,8 +26,8 @@ export interface HermesStatus {
   gatewayStateExists: boolean;
 }
 
-const HERMES_HOME = process.env.HERMES_HOME ?? '/home/dusanmilosavljevic/.hermes';
-const HERMES_WORKSPACE = process.env.HERMES_WORKSPACE ?? '/home/dusanmilosavljevic/hermes-workspace';
+const HERMES_HOME = process.env.HERMES_HOME ?? path.join(os.homedir(), '.hermes');
+const HERMES_WORKSPACE = process.env.HERMES_WORKSPACE ?? path.join(os.homedir(), 'hermes-workspace');
 
 const harnesses = [
   {

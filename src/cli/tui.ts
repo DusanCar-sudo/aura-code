@@ -89,6 +89,15 @@ let bannerLines: string[] = [];
 let lastPromptStartRow: number | null = null;
 let lastPromptScreenRows: number | null = null;
 
+// ── Mouse tracking (scroll mode only) ─────────────────────────────────────
+
+let mouseTracking = false;
+let mouseSelection: { startLine: number; startCol: number; endLine: number; endCol: number } | null = null;
+let mouseDragging = false;
+let mouseDragStartY = 0;
+let mouseDragStartOffset = 0;
+let mouseShiftKey = false;
+
 // ── Live tool spinner ──────────────────────────────────────────────────────
 
 interface ActiveTool {
@@ -575,7 +584,16 @@ function renderScrollView(): void {
   if (bannerRowCount > 0) {
     bannerLines.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
   }
-  visible.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
+  visible.forEach((line, idx) => {
+    const globalLine = start + idx;
+    const isSelected = mouseSelection !== null
+      && globalLine >= Math.min(mouseSelection.startLine, mouseSelection.endLine)
+      && globalLine <= Math.max(mouseSelection.startLine, mouseSelection.endLine);
+    if (isSelected) rawWrite('\x1b[7m');
+    rawWrite(truncVisible(line, width));
+    if (isSelected) rawWrite('\x1b[27m');
+    rawWrite('\n');
+  });
   for (let i = visible.length; i < vh; i++) rawWrite('\n');
 
   // Bottom block
@@ -587,10 +605,25 @@ function renderScrollView(): void {
 
   const bottom = start + visible.length;
   const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, liveLines.length)) * 100)}%`;
-  const indicator = ACCENT.bold(' -- SCROLL -- ')
+  let indicator = ACCENT.bold(' -- SCROLL -- ')
     + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · j/k · ^d/^u · gg/G · i/Enter/Esc insert`);
+  if (mouseSelection !== null) {
+    const selStart = Math.min(mouseSelection.startLine, mouseSelection.endLine) + 1;
+    const selEnd = Math.max(mouseSelection.startLine, mouseSelection.endLine) + 1;
+    indicator += ' ' + ACCENT.bold(`[SELECT: ${selStart}-${selEnd}]`);
+  }
   rawWrite(`\x1b[${sr};1H`);
   rawWrite(truncVisible(indicator, width));
+}
+
+function enableMouseTracking(): void {
+  rawWrite('\x1b[?1006h'); // SGR mouse mode
+  mouseTracking = true;
+}
+
+function disableMouseTracking(): void {
+  rawWrite('\x1b[?1006l'); // Disable SGR mouse mode
+  mouseTracking = false;
 }
 
 function enterScrollMode(initialOffset: number): void {
@@ -598,6 +631,9 @@ function enterScrollMode(initialOffset: number): void {
   scrollMode = true;
   pendingG = false;
   scrollOffset = initialOffset;
+  mouseSelection = null;
+  mouseDragging = false;
+  enableMouseTracking();
   renderScrollView();
 }
 
@@ -605,6 +641,9 @@ function exitScrollMode(): void {
   scrollMode = false;
   pendingG = false;
   scrollOffset = 0;
+  mouseSelection = null;
+  mouseDragging = false;
+  disableMouseTracking();
   redrawLiveView();
 }
 
@@ -945,6 +984,13 @@ function handleChar(ch: string): void {
   }
 }
 
+function clearSelection(): void {
+  if (mouseSelection !== null) {
+    mouseSelection = null;
+    renderScrollView();
+  }
+}
+
 function handleScrollKey(key: string): void {
   const half = Math.floor(viewHeight() / 2);
   const gWasPending = pendingG;
@@ -966,7 +1012,134 @@ function handleScrollKey(key: string): void {
       return;
     default: return;
   }
+  clearSelection();
   renderScrollView();
+}
+
+// ── Mouse handling ─────────────────────────────────────────────────────────
+
+interface MouseEvent {
+  button: number; // 0=left, 1=middle, 2=right, 3=release, 4=wheelUp, 5=wheelDown
+  x: number;      // 1-based column
+  y: number;      // 1-based row
+  pressed: boolean;
+  drag: boolean;
+  shift: boolean;
+}
+
+function parseMouseEvent(seq: string): MouseEvent | null {
+  // SGR mouse mode: \x1b[<button;x;y;M or \x1b[<button;x;y;m
+  const m = /^\x1b\[<(\d+);(\d+);(\d+);([Mm])$/.exec(seq);
+  if (!m) return null;
+  const button = parseInt(m[1], 10);
+  const x = parseInt(m[2], 10);
+  const y = parseInt(m[3], 10);
+  const pressed = m[4] === 'M';
+  const drag = button >= 32;
+  const shift = (button & 4) !== 0;
+  const actualButton = button & 3;
+  return { button: actualButton, x, y, pressed, drag, shift };
+}
+
+function handleMouseEvent(ev: MouseEvent): void {
+  if (!scrollMode) return;
+  const sr = screenRows();
+  const vh = viewHeight();
+  const liveLines = liveScrollLines();
+  const outputTop = scrollRegionTopRow(sr);
+  const outputBottom = scrollRegionBottomRow(sr);
+  const width = Math.max(10, cols() - MARGIN);
+
+  // Wheel events
+  if (ev.button === 4 && ev.pressed) {
+    clearSelection();
+    scrollOffset = Math.max(0, scrollOffset - 3);
+    renderScrollView();
+    return;
+  }
+  if (ev.button === 5 && ev.pressed) {
+    clearSelection();
+    scrollOffset = Math.min(maxScrollOffset(), scrollOffset + 3);
+    renderScrollView();
+    return;
+  }
+
+  // Only handle left button (0) and drag events
+  if (ev.button !== 0) return;
+
+  // Check if click/drag is in the output region
+  const inOutputRegion = ev.y >= outputTop && ev.y <= outputBottom;
+
+  if (ev.drag) {
+    // Drag event
+    if (mouseDragging && !mouseShiftKey && inOutputRegion) {
+      // Drag in output region without shift = scroll
+      const deltaY = mouseDragStartY - ev.y;
+      if (Math.abs(deltaY) >= 1) {
+        scrollOffset = Math.max(0, Math.min(maxScrollOffset(), mouseDragStartOffset + deltaY));
+        renderScrollView();
+      }
+    } else if (mouseDragging && mouseShiftKey && inOutputRegion) {
+      // Shift+drag in output region = mark/select text
+      const start = Math.max(0, liveLines.length - vh - scrollOffset);
+      const clickLine = start + (ev.y - outputTop);
+      const clickCol = Math.min(ev.x - 1, width - 1);
+      if (mouseSelection) {
+        mouseSelection.endLine = Math.max(0, Math.min(liveLines.length - 1, clickLine));
+        mouseSelection.endCol = Math.max(0, Math.min(width - 1, clickCol));
+      }
+      renderScrollView();
+    } else if (mouseDragging && !mouseShiftKey && !inOutputRegion) {
+      // Drag outside output region = scroll
+      const deltaY = mouseDragStartY - ev.y;
+      if (Math.abs(deltaY) >= 1) {
+        scrollOffset = Math.max(0, Math.min(maxScrollOffset(), mouseDragStartOffset + deltaY));
+        renderScrollView();
+      }
+    }
+    return;
+  }
+
+  // Press event
+  if (ev.pressed) {
+    mouseDragging = true;
+    mouseDragStartY = ev.y;
+    mouseDragStartOffset = scrollOffset;
+    mouseShiftKey = ev.shift;
+
+    if (ev.shift && inOutputRegion) {
+      // Start text selection
+      const start = Math.max(0, liveLines.length - vh - scrollOffset);
+      const clickLine = start + (ev.y - outputTop);
+      const clickCol = Math.min(ev.x - 1, width - 1);
+      mouseSelection = {
+        startLine: clickLine,
+        startCol: clickCol,
+        endLine: clickLine,
+        endCol: clickCol,
+      };
+      renderScrollView();
+    }
+    // If not shift, we just track for potential drag-scroll
+    return;
+  }
+
+  // Release event
+  if (!ev.pressed && mouseDragging) {
+    const dragDistance = Math.abs(ev.y - mouseDragStartY);
+    mouseDragging = false;
+    if (!mouseShiftKey && dragDistance <= 1 && inOutputRegion) {
+      // Click (no significant drag) in output region = jump to line
+      const start = Math.max(0, liveLines.length - vh - scrollOffset);
+      const clickLine = start + (ev.y - outputTop);
+      scrollOffset = Math.max(0, Math.min(maxScrollOffset(), liveLines.length - vh - clickLine));
+      renderScrollView();
+    }
+    // Keep selection if shift was held, otherwise clear it
+    if (!mouseShiftKey) {
+      mouseSelection = null;
+    }
+  }
 }
 
 function handleKey(key: string): void {
@@ -1054,6 +1227,16 @@ function rawHandler(data: string): void {
       if (stdinBuffer[i] === '\x1b') {
         if (i + 1 >= stdinBuffer.length) break;
         if (stdinBuffer[i + 1] === '[') {
+          // SGR mouse events: \x1b[<button;x;y;M or \x1b[<button;x;y;m
+          const mouseM = /^\x1b\[<(\d+);(\d+);(\d+);([Mm])/.exec(stdinBuffer.slice(i));
+          if (mouseM && scrollMode) {
+            const ev = parseMouseEvent(mouseM[0]);
+            if (ev) {
+              handleMouseEvent(ev);
+              i += mouseM[0].length;
+              continue;
+            }
+          }
           const m = /^\x1b\[[0-9;]*[A-Za-z~]/.exec(stdinBuffer.slice(i));
           if (!m) break;
           if (m[0] === PASTE_START) {
@@ -1173,6 +1356,7 @@ export function destroyTui(): void {
   scrollMode = false;
   lastPromptStartRow = null;
   lastPromptScreenRows = null;
+  if (mouseTracking) disableMouseTracking();
   stopInput();
   detachResizeHandler();
   resetScrollRegion();
