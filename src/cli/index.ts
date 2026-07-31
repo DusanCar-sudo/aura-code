@@ -86,7 +86,7 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
 import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
 import { isAuthError } from '../util/errors.js';
 import { ContextHealthTracker } from './context-health.js';
@@ -1306,11 +1306,15 @@ async function main() {
       ...(activeChatId ? [`chat ${activeChatId}`] : []),
     ],
   };
-  renderBanner(tuiBannerInfo);
+  // The pinned header is deliberately the one-line `compact` tier: every
+  // banner row is subtracted from the scroll region for the whole session,
+  // so the full lockup goes into the scroll region below instead (see
+  // startInput()), where it scrolls away like any other output.
+  renderBanner(tuiBannerInfo, 'compact');
   // The TUI keeps its own copy of the banner rows: when scroll mode hands
   // the screen back, the live view is rebuilt from scratch, and on the alt
   // screen there's no scrollback to recover the banner from.
-  setBannerLines(buildBannerLines(tuiBannerInfo));
+  setBannerLines(buildBannerLines(tuiBannerInfo, 'compact'));
 
   // Use the TUI display for output
   
@@ -1348,6 +1352,15 @@ async function main() {
   // Must come after initTui() — writeOutput() assumes the "cursor at base
   // row" invariant initTui() establishes; calling it any earlier corrupts
   // that baseline.
+  //
+  // The mark greets you once, in the scroll region, and then gets out of the
+  // way — only when the terminal is big enough that it isn't the whole view.
+  if (preferredBannerTier() === 'hero') {
+    // Minus the closing rule: it spans the full terminal width, one column
+    // wider than the scroll region, so writeOutput() would reflow it onto a
+    // second line. The pinned header's own rule already separates the two.
+    buildBannerLines(tuiBannerInfo, 'hero').slice(0, -1).forEach(line => writeOutput(line));
+  }
   if (activeChatHistory.length > 0) {
     writeOutput(chalk.hex(TEXT_DIM_HEX)('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
   }

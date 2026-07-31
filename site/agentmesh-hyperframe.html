@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440, height=900">
+  <title>AgentMesh HyperFrames Composition</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    :root {
+      --paper: #f3f7ef;
+      --ink: #101611;
+      --green: #1f7f63;
+      --green-dark: #14513f;
+      --cobalt: #2356a6;
+      --magenta: #b43167;
+      --amber: #e2a12d;
+      --red: #c44634;
+      --mono: "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --display: "Arial Narrow", "Aptos Narrow", "Roboto Condensed", var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--ink);
+      color: var(--paper);
+      font-family: var(--sans);
+    }
+
+    #agentmesh-hf {
+      position: relative;
+      width: 1440px;
+      height: 900px;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .stage-fill {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(243, 247, 239, 0.04) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(243, 247, 239, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 72% 34%, rgba(35, 86, 166, 0.32), transparent 34%),
+        linear-gradient(135deg, #101611 0%, #162219 52%, #07100c 100%);
+      background-size: 42px 42px, 42px 42px, 100% 100%, 100% 100%;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .rail-line {
+      position: absolute;
+      left: 180px;
+      right: 90px;
+      top: 446px;
+      height: 2px;
+      background: rgba(243, 247, 239, 0.16);
+    }
+
+    .rail-line::before,
+    .rail-line::after {
+      content: "";
+      position: absolute;
+      top: -126px;
+      width: 2px;
+      height: 254px;
+      background: rgba(243, 247, 239, 0.12);
+    }
+
+    .rail-line::before {
+      left: 340px;
+    }
+
+    .rail-line::after {
+      right: 360px;
+    }
+
+    .node {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: 132px;
+      height: 132px;
+      border: 2px solid currentColor;
+      color: var(--paper);
+      background: rgba(16, 22, 17, 0.72);
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .node::after {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      border: 1px solid rgba(243, 247, 239, 0.18);
+    }
+
+    .node.goal { left: 86px; top: 380px; color: var(--amber); }
+    .node.plan { left: 420px; top: 206px; color: var(--cobalt); }
+    .node.code { left: 420px; top: 554px; color: var(--green); }
+    .node.write { left: 760px; top: 206px; color: var(--magenta); }
+    .node.memory { left: 760px; top: 554px; color: #91d46f; }
+    .node.verify { left: 1104px; top: 380px; color: var(--paper); }
+
+    .packet {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: var(--amber);
+      box-shadow: 0 0 32px rgba(226, 161, 45, 0.9);
+    }
+
+    .packet.a { left: 238px; top: 436px; }
+    .packet.b { left: 560px; top: 270px; background: var(--cobalt); box-shadow: 0 0 32px rgba(35, 86, 166, 0.9); }
+    .packet.c { left: 560px; top: 612px; background: var(--green); box-shadow: 0 0 32px rgba(31, 127, 99, 0.9); }
+    .packet.d { left: 904px; top: 270px; background: var(--magenta); box-shadow: 0 0 32px rgba(180, 49, 103, 0.9); }
+    .packet.e { left: 904px; top: 612px; background: #91d46f; box-shadow: 0 0 32px rgba(145, 212, 111, 0.9); }
+
+    .microcopy {
+      position: absolute;
+      left: 86px;
+      top: 94px;
+      width: 720px;
+    }
+
+    .microcopy .label {
+      margin-bottom: 12px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: rgba(243, 247, 239, 0.62);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .microcopy h2 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: 76px;
+      line-height: 0.88;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .hud {
+      position: absolute;
+      right: 90px;
+      top: 92px;
+      display: grid;
+      gap: 8px;
+      width: 270px;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .hud-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(243, 247, 239, 0.14);
+      padding-bottom: 8px;
+      color: rgba(243, 247, 239, 0.62);
+    }
+
+    .hud-row b {
+      color: var(--paper);
+      font-weight: 800;
+    }
+
+    .contract-stack {
+      position: absolute;
+      right: 90px;
+      bottom: 92px;
+      width: 380px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .contract {
+      display: grid;
+      grid-template-columns: 86px 1fr 62px;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(243, 247, 239, 0.16);
+      background: rgba(16, 22, 17, 0.7);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .contract b {
+      color: var(--amber);
+    }
+
+    .contract span {
+      color: rgba(243, 247, 239, 0.68);
+    }
+
+    .contract em {
+      color: #80d99f;
+      font-style: normal;
+      text-align: right;
+    }
+
+    .memory-feed {
+      position: absolute;
+      left: 86px;
+      bottom: 92px;
+      width: 440px;
+      display: grid;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(243, 247, 239, 0.68);
+    }
+
+    .memory-feed div {
+      padding: 8px 10px;
+      border-left: 3px solid var(--green);
+      background: rgba(243, 247, 239, 0.06);
+    }
+
+    .seal {
+      position: absolute;
+      right: 98px;
+      top: 270px;
+      width: 210px;
+      height: 210px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(243, 247, 239, 0.42);
+      color: var(--paper);
+      font-family: var(--display);
+      font-size: 42px;
+      line-height: 0.9;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .seal::before,
+    .seal::after {
+      content: "";
+      position: absolute;
+      inset: 14px;
+      border: 1px solid rgba(243, 247, 239, 0.22);
+    }
+
+    .seal::after {
+      inset: 34px;
+      border-color: rgba(226, 161, 45, 0.45);
+    }
+  </style>
+</head>
+<body>
+  <div
+    id="agentmesh-hf"
+    data-composition-id="agentmesh-hf"
+    data-start="0"
+    data-width="1440"
+    data-height="900"
+    data-duration="12"
+  >
+    <div class="stage-fill"></div>
+
+    <section id="hf-scene-rail" class="clip" data-start="0" data-duration="12" data-track-index="1">
+      <div class="rail-line"></div>
+      <div class="node goal">Goal</div>
+      <div class="node plan">Plan</div>
+      <div class="node code">Code</div>
+      <div class="node write">Write</div>
+      <div class="node memory">Memory</div>
+      <div class="node verify">Verify</div>
+      <div class="packet a"></div>
+      <div class="packet b"></div>
+      <div class="packet c"></div>
+      <div class="packet d"></div>
+      <div class="packet e"></div>
+    </section>
+
+    <section id="hf-scene-title" class="clip" data-start="0" data-duration="4" data-track-index="2">
+      <div class="microcopy">
+        <div class="label">AgentMesh execution trace</div>
+        <h2>One goal becomes bounded work.</h2>
+      </div>
+    </section>
+
+    <section id="hf-scene-contracts" class="clip" data-start="3" data-duration="5" data-track-index="3">
+      <div class="contract-stack">
+        <div class="contract"><b>t001</b><span>research current files</span><em>pass</em></div>
+        <div class="contract"><b>t002</b><span>write patch and checks</span><em>pass</em></div>
+        <div class="contract"><b>t003</b><span>summarize output</span><em>pass</em></div>
+      </div>
+    </section>
+
+    <section id="hf-scene-memory" class="clip" data-start="6" data-duration="6" data-track-index="4">
+      <div class="memory-feed">
+        <div>episode stored: agent_code / t002 / success</div>
+        <div>lesson reinforced: verify output file before report</div>
+        <div>skill stat updated: run_python success rate</div>
+      </div>
+    </section>
+
+    <section id="hf-scene-hud" class="clip" data-start="0" data-duration="12" data-track-index="5">
+      <div class="hud">
+        <div class="hud-row"><span>provider</span><b>selected</b></div>
+        <div class="hud-row"><span>tools</span><b>bounded</b></div>
+        <div class="hud-row"><span>workspace</span><b>local</b></div>
+        <div class="hud-row"><span>memory</span><b>sqlite</b></div>
+      </div>
+      <div class="seal">Hard gates</div>
+    </section>
+  </div>
+
+  <script>
+    if (!window.gsap) {
+      window.gsap = {
+        timeline() {
+          const api = {
+            fromTo() { return api; },
+            to() { return api; },
+            repeat() { return api; },
+            yoyo() { return api; },
+            play() { return api; },
+            seek() { return api; }
+          };
+          return api;
+        }
+      };
+    }
+
+    window.__timelines = window.__timelines || {};
+
+    const tl = gsap.timeline({ paused: true });
+
+    tl.fromTo(".microcopy", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" }, 0.2);
+    tl.fromTo(".node", { scale: 0.84, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, stagger: 0.08, ease: "back.out(1.6)" }, 0.55);
+    tl.fromTo(".rail-line", { scaleX: 0, transformOrigin: "0% 50%", opacity: 0 }, { scaleX: 1, opacity: 1, duration: 1.1, ease: "power2.inOut" }, 1.0);
+    tl.fromTo(".packet.a", { x: 0, y: 0, opacity: 0 }, { x: 180, y: -170, opacity: 1, duration: 1.1, ease: "power2.inOut" }, 1.35);
+    tl.fromTo(".packet.b", { x: 0, y: 0, opacity: 0 }, { x: 180, y: 0, opacity: 1, duration: 0.9, ease: "power2.out" }, 3.0);
+    tl.fromTo(".packet.c", { x: 0, y: 0, opacity: 0 }, { x: 180, y: 0, opacity: 1, duration: 0.9, ease: "power2.out" }, 3.12);
+    tl.fromTo(".contract", { x: 26, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, stagger: 0.12, ease: "power2.out" }, 3.4);
+    tl.fromTo(".packet.d", { x: 0, y: 0, opacity: 0 }, { x: 190, y: 166, opacity: 1, duration: 1.05, ease: "power2.inOut" }, 5.2);
+    tl.fromTo(".packet.e", { x: 0, y: 0, opacity: 0 }, { x: 190, y: -166, opacity: 1, duration: 1.05, ease: "power2.inOut" }, 5.32);
+    tl.fromTo(".memory-feed div", { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, stagger: 0.18, ease: "power2.out" }, 6.15);
+    tl.fromTo(".seal", { rotation: -4, scale: 0.9, opacity: 0 }, { rotation: 0, scale: 1, opacity: 1, duration: 0.8, ease: "back.out(1.4)" }, 7.2);
+    tl.to(".packet", { opacity: 0.25, duration: 0.8, ease: "power2.out" }, 9.2);
+    tl.to(".microcopy h2", { color: "#f5cc62", duration: 0.75, ease: "power1.inOut" }, 9.5);
+    tl.to(".seal", { borderColor: "rgba(226, 161, 45, 0.9)", duration: 0.75, ease: "power1.inOut" }, 9.8);
+
+    window.__timelines["agentmesh-hf"] = tl;
+
+    const shouldPlay = new URLSearchParams(window.location.search).get("play") === "1";
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (shouldPlay && !reduced) {
+      tl.repeat(80).yoyo(true).play(0);
+    } else if (shouldPlay) {
+      tl.seek(7.8);
+    }
+  </script>
+</body>
+</html>

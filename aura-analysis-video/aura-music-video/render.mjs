@@ -22,7 +22,7 @@ const FPS = 24;
 const WIDTH = 1080;
 const HEIGHT = 1920;
 const HTML_PATH = path.join(__dirname, 'index.html');
-const AURA_MP3 = path.resolve(__dirname, '../../Aura.mp3');
+const AURA_MP3 = path.resolve(__dirname, 'assets', 'music.mp3');
 const OUTPUT = path.join(__dirname, 'renders', 'aura-music-video.mp4');
 
 // ── Resolve audio duration from Aura.mp3 ──

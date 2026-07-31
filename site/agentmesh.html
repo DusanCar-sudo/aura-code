@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentMesh - Contract-bound multi-agent harness</title>
+  <meta name="description" content="A distinctive website for AgentMesh, a local multi-agent orchestration framework with bounded contracts, provider routing, memory, and a HyperFrames-powered mesh visual.">
+  <meta name="theme-color" content="#f3f7ef">
+  <style>
+    :root {
+      --paper: #f3f7ef;
+      --paper-2: #e5eddf;
+      --ink: #141915;
+      --ink-soft: #465148;
+      --line: #c7d2c1;
+      --green: #1f7f63;
+      --green-dark: #14513f;
+      --cobalt: #2356a6;
+      --magenta: #b43167;
+      --amber: #e2a12d;
+      --red: #c44634;
+      --terminal: #101611;
+      --mono: "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --display: "Arial Narrow", "Aptos Narrow", "Roboto Condensed", var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(20, 25, 21, 0.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(20, 25, 21, 0.035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    ::selection {
+      background: var(--green);
+      color: white;
+    }
+
+    .topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 14px clamp(18px, 4vw, 54px);
+      border-bottom: 1px solid transparent;
+      color: var(--paper);
+      transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+
+    .topbar.is-scrolled {
+      background: rgba(243, 247, 239, 0.92);
+      color: var(--ink);
+      border-color: var(--line);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border: 2px solid currentColor;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 3px;
+      padding: 5px;
+    }
+
+    .brand-mark span {
+      display: block;
+      background: currentColor;
+    }
+
+    .navlinks {
+      display: flex;
+      align-items: center;
+      gap: clamp(12px, 2vw, 28px);
+      font-family: var(--mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .navlinks a {
+      text-decoration: none;
+      opacity: 0.78;
+    }
+
+    .navlinks a:hover,
+    .navlinks a:focus-visible {
+      opacity: 1;
+      color: var(--green);
+      outline: none;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 88svh;
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      color: white;
+      background: var(--terminal);
+    }
+
+    .hero-frame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      opacity: 0.92;
+      pointer-events: none;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(16, 22, 17, 0.28), rgba(16, 22, 17, 0.1) 42%, rgba(16, 22, 17, 0.86)),
+        linear-gradient(90deg, rgba(16, 22, 17, 0.94), rgba(16, 22, 17, 0.58) 48%, rgba(16, 22, 17, 0.22));
+      pointer-events: none;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      width: min(1180px, calc(100vw - 36px));
+      margin: 0 auto;
+      padding: 104px 0 46px;
+    }
+
+    .repo-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(243, 247, 239, 0.32);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.78);
+      background: rgba(16, 22, 17, 0.58);
+    }
+
+    .repo-chip svg {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+    }
+
+    h1 {
+      max-width: 890px;
+      margin: 28px 0 18px;
+      font-family: var(--display);
+      font-size: clamp(48px, 7.1vw, 96px);
+      font-stretch: condensed;
+      line-height: 0.9;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .lead {
+      max-width: 710px;
+      margin: 0 0 28px;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: clamp(18px, 2vw, 24px);
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 44px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 11px 16px;
+      border: 1px solid transparent;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .button svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .button.primary {
+      background: var(--paper);
+      color: var(--ink);
+    }
+
+    .button.secondary {
+      color: white;
+      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      transform: translateY(-2px);
+      outline: 2px solid var(--amber);
+      outline-offset: 3px;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid rgba(243, 247, 239, 0.24);
+      background: rgba(16, 22, 17, 0.62);
+      backdrop-filter: blur(10px);
+    }
+
+    .facts {
+      padding: 20px clamp(18px, 4vw, 54px) 32px;
+      background: var(--terminal);
+    }
+
+    .facts .status-strip {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
+
+    .status-cell {
+      min-height: 96px;
+      padding: 16px;
+      border-right: 1px solid rgba(243, 247, 239, 0.18);
+    }
+
+    .status-cell:last-child {
+      border-right: 0;
+    }
+
+    .status-cell span {
+      display: block;
+      margin-bottom: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.56);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .status-cell strong {
+      display: block;
+      color: white;
+      font-size: clamp(16px, 1.7vw, 22px);
+      line-height: 1.15;
+    }
+
+    main {
+      position: relative;
+      z-index: 2;
+    }
+
+    section {
+      padding: clamp(68px, 8vw, 124px) clamp(18px, 4vw, 54px);
+    }
+
+    .section-inner {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 0.75fr) minmax(280px, 1.25fr);
+      gap: clamp(28px, 5vw, 72px);
+      align-items: start;
+      margin-bottom: 38px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--green-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 32px;
+      height: 2px;
+      background: currentColor;
+    }
+
+    h2 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(38px, 6vw, 78px);
+      line-height: 0.95;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .section-copy {
+      margin: 14px 0 0;
+      max-width: 680px;
+      color: var(--ink-soft);
+      font-size: 18px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(320px, 1.05fr);
+      gap: clamp(28px, 5vw, 72px);
+      align-items: start;
+    }
+
+    .manifesto {
+      background: var(--paper-2);
+      border-block: 1px solid var(--line);
+    }
+
+    .big-quote {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 0.98;
+      text-transform: uppercase;
+    }
+
+    .big-quote mark {
+      background: transparent;
+      color: var(--magenta);
+    }
+
+    .explain {
+      display: grid;
+      gap: 18px;
+      color: var(--ink-soft);
+      font-size: 17px;
+    }
+
+    .rail {
+      display: grid;
+      gap: 10px;
+      margin-top: 30px;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .rail-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rail-row b {
+      color: var(--green-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .workbench {
+      background: var(--terminal);
+      color: var(--paper);
+    }
+
+    .workbench .eyebrow {
+      color: var(--amber);
+    }
+
+    .workbench .section-copy {
+      color: rgba(243, 247, 239, 0.68);
+    }
+
+    .runtime {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: 24px;
+    }
+
+    .terminal {
+      min-height: 456px;
+      background:
+        linear-gradient(rgba(243, 247, 239, 0.04) 1px, transparent 1px),
+        #0b100d;
+      background-size: 100% 28px;
+      border: 1px solid rgba(243, 247, 239, 0.18);
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .terminal-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid rgba(243, 247, 239, 0.12);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(243, 247, 239, 0.58);
+    }
+
+    .lights {
+      display: inline-flex;
+      gap: 7px;
+    }
+
+    .lights span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .lights span:nth-child(1) { background: var(--red); }
+    .lights span:nth-child(2) { background: var(--amber); }
+    .lights span:nth-child(3) { background: var(--green); }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: clamp(12px, 1.3vw, 14px);
+      line-height: 1.75;
+      color: #d8ead6;
+    }
+
+    .prompt { color: var(--amber); }
+    .ok { color: #68d39b; }
+    .dim { color: rgba(216, 234, 214, 0.5); }
+    .blue { color: #87b7ff; }
+    .pink { color: #ff8dbb; }
+
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .agent-card {
+      position: relative;
+      min-height: 122px;
+      padding: 16px;
+      border: 1px solid rgba(243, 247, 239, 0.16);
+      background: rgba(243, 247, 239, 0.055);
+      overflow: hidden;
+    }
+
+    .agent-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 5px;
+      height: 100%;
+      background: var(--agent-color, var(--green));
+    }
+
+    .agent-card h3 {
+      margin: 0 0 8px 0;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: white;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .agent-card p {
+      margin: 0;
+      color: rgba(243, 247, 239, 0.64);
+      font-size: 14px;
+    }
+
+    .contracts {
+      background: var(--paper);
+    }
+
+    .contract-table {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.42);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--green-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      background: var(--paper-2);
+    }
+
+    td:first-child {
+      font-family: var(--mono);
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .tag {
+      display: inline-flex;
+      padding: 4px 7px;
+      border: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .memory-band {
+      position: relative;
+      overflow: hidden;
+      color: white;
+      background:
+        linear-gradient(90deg, rgba(180, 49, 103, 0.18), transparent 48%),
+        var(--green-dark);
+    }
+
+    .memory-band::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 36px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 36px);
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .memory-band .section-inner {
+      position: relative;
+    }
+
+    .memory-band .eyebrow {
+      color: #f5cc62;
+    }
+
+    .memory-band .section-copy {
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .memory-stack {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.24);
+      margin-top: 36px;
+    }
+
+    .memory-layer {
+      min-height: 188px;
+      padding: 18px;
+      background: rgba(20, 25, 21, 0.72);
+    }
+
+    .memory-layer span {
+      display: inline-flex;
+      margin-bottom: 18px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: #f5cc62;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .memory-layer h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .memory-layer p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.66);
+      font-size: 14px;
+    }
+
+    .install {
+      background: var(--paper-2);
+    }
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+      gap: clamp(28px, 5vw, 72px);
+      align-items: start;
+    }
+
+    .install-list {
+      display: grid;
+      gap: 12px;
+      margin: 28px 0 0;
+    }
+
+    .install-list div {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .install-list b {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--green);
+      font-family: var(--mono);
+      color: var(--green-dark);
+    }
+
+    .install-list strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .install-list p {
+      margin: 0;
+      color: var(--ink-soft);
+    }
+
+    .copy-panel {
+      background: var(--terminal);
+      border: 1px solid #263128;
+      color: var(--paper);
+    }
+
+    .copy-panel header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(243, 247, 239, 0.14);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(243, 247, 239, 0.62);
+    }
+
+    .copy-panel button {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(243, 247, 239, 0.24);
+      background: transparent;
+      color: var(--paper);
+      cursor: pointer;
+    }
+
+    .copy-panel button:hover,
+    .copy-panel button:focus-visible {
+      border-color: var(--amber);
+      outline: none;
+    }
+
+    .copy-panel svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .copy-panel pre {
+      padding: 18px;
+    }
+
+    footer {
+      padding: 34px clamp(18px, 4vw, 54px);
+      background: var(--ink);
+      color: rgba(243, 247, 239, 0.66);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    footer .section-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 520ms ease, transform 520ms ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .navlinks {
+        display: none;
+      }
+
+      .hero {
+        min-height: 86svh;
+      }
+
+      .hero-content {
+        padding-top: 96px;
+        padding-bottom: 40px;
+      }
+
+      .status-strip,
+      .runtime,
+      .section-head,
+      .split,
+      .install-grid,
+      .memory-stack {
+        grid-template-columns: 1fr;
+      }
+
+      .status-cell {
+        border-right: 0;
+        border-bottom: 1px solid rgba(243, 247, 239, 0.18);
+      }
+
+      .status-cell:last-child {
+        border-bottom: 0;
+      }
+
+      .agent-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .hero-actions {
+        align-items: stretch;
+      }
+
+      .button {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .repo-chip {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+
+      h1 {
+        font-size: clamp(40px, 13.4vw, 56px);
+        line-height: 0.94;
+      }
+
+      .rail-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar" aria-label="Primary navigation">
+    <a class="brand" href="#top" aria-label="AgentMesh home">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      AgentMesh
+    </a>
+    <div class="navlinks">
+      <a href="#why">Why</a>
+      <a href="#runtime">Runtime</a>
+      <a href="#contracts">Contracts</a>
+      <a href="#install">Install</a>
+    </div>
+  </nav>
+
+  <header id="top" class="hero">
+    <iframe class="hero-frame" title="AgentMesh HyperFrames motion composition" src="agentmesh-hyperframe.html?play=1" loading="eager"></iframe>
+    <div class="hero-content">
+      <a class="repo-chip" href="https://github.com/DusanCar-sudo/agentmesh" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-1-2.6c3.2-.4 6.5-1.6 6.5-7.1a5.5 5.5 0 0 0-1.5-3.8 5.1 5.1 0 0 0-.1-3.7s-1.2-.4-3.9 1.5a13.4 13.4 0 0 0-7 0C6.3-.4 5.1 0 5.1 0A5.1 5.1 0 0 0 5 3.7a5.5 5.5 0 0 0-1.5 3.8c0 5.5 3.3 6.7 6.5 7.1a3.4 3.4 0 0 0-1 2.6V22"></path>
+        </svg>
+        github.com/DusanCar-sudo/agentmesh
+      </a>
+      <h1>Local agents, strict contracts, shared memory.</h1>
+      <p class="lead">AgentMesh is a Python multi-agent harness for programming work. It decomposes a goal, dispatches bounded tasks to specialist agents, checks hard completion conditions, and stores raw run history for future routing.</p>
+      <div class="hero-actions">
+        <a class="button primary" href="#install">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="m8 17 5-5-5-5"></path><path d="M13 17h7"></path><path d="M4 19V5"></path>
+          </svg>
+          Run the harness
+        </a>
+        <a class="button secondary" href="#runtime">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 12h4l2-7 4 14 2-7h4"></path>
+          </svg>
+          Inspect the mesh
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <aside class="facts" aria-label="AgentMesh project facts">
+    <div class="status-strip">
+      <div class="status-cell">
+        <span>Runtime</span>
+        <strong>Python 3.10+ with CLI entrypoints</strong>
+      </div>
+      <div class="status-cell">
+        <span>Agents</span>
+        <strong>Research, code, writer, file, data, summary</strong>
+      </div>
+      <div class="status-cell">
+        <span>Control</span>
+        <strong>Typed contracts and bounded tools</strong>
+      </div>
+      <div class="status-cell">
+        <span>Memory</span>
+        <strong>SQLite episodes, lessons, skill stats</strong>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <section id="why" class="manifesto">
+      <div class="section-inner split reveal">
+        <div>
+          <p class="eyebrow">What changed</p>
+          <p class="big-quote">Stop asking one giant agent to behave. <mark>Give each job a contract.</mark></p>
+        </div>
+        <div class="explain">
+          <p>AgentMesh treats agents like bounded workers, not a single sprawling prompt. The orchestrator decomposes a goal into two to four concrete tasks, each with its own agent, allowed tools, token budget, output path, and required JSON keys.</p>
+          <p>The result is easier to inspect: every subtask leaves a contract, a result, and a memory trace. Failures become data for the next run instead of vanishing into a transcript.</p>
+          <div class="rail" aria-label="AgentMesh execution stages">
+            <div class="rail-row"><b>Plan</b><span>Break one goal into narrow contracts.</span></div>
+            <div class="rail-row"><b>Dispatch</b><span>Run independent groups in parallel.</span></div>
+            <div class="rail-row"><b>Gate</b><span>Check required keys and hard completion rules.</span></div>
+            <div class="rail-row"><b>Learn</b><span>Persist episodes, lessons, and skill effectiveness.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="runtime" class="workbench">
+      <div class="section-inner">
+        <div class="section-head reveal">
+          <div>
+            <p class="eyebrow">Runtime board</p>
+            <h2>A terminal cockpit for autonomous work.</h2>
+          </div>
+          <p class="section-copy">The repo exposes `run.py` for direct goals, provider/model selection, streaming output, status checks, and smoke tests. The FastAPI backend extends that into server-side provider routing and run memory.</p>
+        </div>
+
+        <div class="runtime">
+          <div class="terminal reveal" aria-label="AgentMesh terminal example">
+            <div class="terminal-top">
+              <span>workspace/agentmesh</span>
+              <span class="lights" aria-hidden="true"><span></span><span></span><span></span></span>
+            </div>
+            <pre><span class="prompt">$</span> python run.py --provider groq --model llama-3.3-70b-versatile "Refactor the cache layer"
+<span class="dim">[Orchestrator]</span> Goal accepted
+<span class="blue">[Plan]</span> 3 tasks across 2 groups
+<span class="pink">[agent_research]</span> inspect current cache patterns
+<span class="ok">[agent_code]</span> write patch and run Python checks
+<span class="ok">[agent_summary]</span> summarize changed behavior
+<span class="dim">[Memory]</span> episode stored with traces and lessons
+<span class="prompt">$</span> python run.py --status
+<span class="ok">Episodes:</span> durable run history
+<span class="ok">Skills:</span> success rates by callable tool</pre>
+          </div>
+
+          <div class="agent-grid reveal" aria-label="Specialist agents">
+            <article class="agent-card" style="--agent-color: var(--cobalt)">
+              <h3>Research agent</h3>
+              <p>Finds current context and returns structured summaries with source fields.</p>
+            </article>
+            <article class="agent-card" style="--agent-color: var(--green)">
+              <h3>Code agent</h3>
+              <p>Writes Python, runs checks, and reports code plus explanation keys.</p>
+            </article>
+            <article class="agent-card" style="--agent-color: var(--magenta)">
+              <h3>Writer agent</h3>
+              <p>Turns source outputs into clear reports, summaries, and docs.</p>
+            </article>
+            <article class="agent-card" style="--agent-color: var(--amber)">
+              <h3>File agent</h3>
+              <p>Reads, writes, and organizes workspace artifacts for durable handoffs.</p>
+            </article>
+            <article class="agent-card" style="--agent-color: #74a6e8">
+              <h3>Data agent</h3>
+              <p>Runs dataset analysis and returns statistics plus insights.</p>
+            </article>
+            <article class="agent-card" style="--agent-color: #9fd37a">
+              <h3>Summary agent</h3>
+              <p>Condenses long content while preserving key points and counts.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contracts" class="contracts">
+      <div class="section-inner">
+        <div class="section-head reveal">
+          <div>
+            <p class="eyebrow">Contract model</p>
+            <h2>Small tool sets beat vague autonomy.</h2>
+          </div>
+          <p class="section-copy">Each `ExecutionContract` narrows the agent's work surface. The page mirrors the repo's actual contract fields, including budgets, allowed tools, output paths, required keys, and boolean completion checks.</p>
+        </div>
+
+        <div class="contract-table reveal">
+          <table>
+            <thead>
+              <tr>
+                <th>Contract</th>
+                <th>Allowed tools</th>
+                <th>Required output</th>
+                <th>Completion gates</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>research_contract</td>
+                <td><div class="tag-list"><span class="tag">web_search</span><span class="tag">read_file</span></div></td>
+                <td>summary, sources</td>
+                <td>no_error_flag, summary_written, required_keys_present</td>
+              </tr>
+              <tr>
+                <td>code_contract</td>
+                <td><div class="tag-list"><span class="tag">run_python</span><span class="tag">read_file</span><span class="tag">write_file</span></div></td>
+                <td>code, explanation</td>
+                <td>output_file_exists, no_error_flag, required_keys_present</td>
+              </tr>
+              <tr>
+                <td>writer_contract</td>
+                <td><div class="tag-list"><span class="tag">read_file</span></div></td>
+                <td>content, title</td>
+                <td>no_error_flag, summary_written, required_keys_present</td>
+              </tr>
+              <tr>
+                <td>data_contract</td>
+                <td><div class="tag-list"><span class="tag">run_python</span><span class="tag">read_file</span></div></td>
+                <td>analysis, statistics</td>
+                <td>no_error_flag, required_keys_present</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="memory-band">
+      <div class="section-inner">
+        <div class="section-head reveal">
+          <div>
+            <p class="eyebrow">Memory system</p>
+            <h2>The harness keeps the raw run, not just the story.</h2>
+          </div>
+          <p class="section-copy">AgentMesh stores episodes, extracted lessons, and skill statistics in SQLite. The next plan can use prior outcomes, Honcho context when configured, and provider history from the server learner.</p>
+        </div>
+        <div class="memory-stack reveal">
+          <article class="memory-layer">
+            <span>01</span>
+            <h3>Episodic</h3>
+            <p>Raw task history, traces, tokens, tools, latency, and success state.</p>
+          </article>
+          <article class="memory-layer">
+            <span>02</span>
+            <h3>Semantic</h3>
+            <p>Lessons extracted from outcomes and reinforced over future runs.</p>
+          </article>
+          <article class="memory-layer">
+            <span>03</span>
+            <h3>Procedural</h3>
+            <p>Skill effectiveness scores for callable tools across agents.</p>
+          </article>
+          <article class="memory-layer">
+            <span>04</span>
+            <h3>Working</h3>
+            <p>Current task state held in workspace files while groups execute.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" class="install">
+      <div class="section-inner install-grid">
+        <div class="reveal">
+          <p class="eyebrow">Install</p>
+          <h2>Clone it, install it, hand it a goal.</h2>
+          <p class="section-copy">AgentMesh supports direct source usage through `run.py` and package entrypoints from `pyproject.toml`: `agentmesh`, `agentmesh-server`, `agentmesh-lean`, and `agentmesh-mcp`.</p>
+          <div class="install-list">
+            <div>
+              <b>1</b>
+              <p><strong>Install Python dependencies.</strong> The project requires Python 3.10 or newer.</p>
+            </div>
+            <div>
+              <b>2</b>
+              <p><strong>Choose a provider key.</strong> `run.py` supports DeepSeek, Groq, OpenRouter, Anthropic, Gemini, and Together.</p>
+            </div>
+            <div>
+              <b>3</b>
+              <p><strong>Run a goal.</strong> Add `--stream`, `--status`, `--test`, `--provider`, or `--model` as needed.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="copy-panel reveal">
+          <header>
+            <span>quickstart.sh</span>
+            <button type="button" id="copyInstall" aria-label="Copy install commands" title="Copy install commands">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </header>
+          <pre id="installText"><span class="prompt">$</span> git clone https://github.com/DusanCar-sudo/agentmesh.git
+<span class="prompt">$</span> cd agentmesh
+<span class="prompt">$</span> python -m pip install -e .
+<span class="prompt">$</span> export DEEPSEEK_API_KEY=...
+<span class="prompt">$</span> python run.py --stream "Research this repo and write a test plan"
+<span class="prompt">$</span> python run.py --status</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="section-inner">
+      <span>AgentMesh website concept built from the public repository structure.</span>
+      <a href="https://github.com/DusanCar-sudo/agentmesh" target="_blank" rel="noopener">Open repository</a>
+    </div>
+  </footer>
+
+  <script>
+    const topbar = document.querySelector(".topbar");
+    const updateNav = () => topbar.classList.toggle("is-scrolled", window.scrollY > 16);
+    updateNav();
+    window.addEventListener("scroll", updateNav, { passive: true });
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { threshold: 0.18 });
+
+    document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
+
+    const copyButton = document.getElementById("copyInstall");
+    const installText = document.getElementById("installText");
+    copyButton?.addEventListener("click", async () => {
+      const text = installText.innerText.replace(/\$/g, "").trim();
+      try {
+        await navigator.clipboard.writeText(text);
+        copyButton.setAttribute("aria-label", "Install commands copied");
+        copyButton.title = "Copied";
+      } catch {
+        copyButton.setAttribute("aria-label", "Copy unavailable");
+        copyButton.title = "Copy unavailable";
+      }
+    });
+  </script>
+</body>
+</html>
