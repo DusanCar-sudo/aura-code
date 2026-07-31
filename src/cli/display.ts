@@ -37,6 +37,8 @@ export interface Display {
   compactionEvent?(info: { beforeTokens: number; afterTokens: number; generation: number; threshold: number }): void;
   /** Mid-run steering was folded into the running task. See agent/steering.ts. */
   steering?(messages: string[]): void;
+  /** The agent produced a previewable artifact (HTML, SVG, Markdown). */
+  artifact?(a: { id: string; name: string; content: string; contentType: string }): void;
   /** Stop the thinking spinner. Called when the loop exits. */
   stopThinking?(): void;
 }

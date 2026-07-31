@@ -672,6 +672,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       contextBar: (health) => send(ws, { type: 'context_bar', health }),
       contextDashboard: (health) => send(ws, { type: 'context_dashboard', health }),
       compactionEvent: (info) => send(ws, { type: 'compaction', ...info }),
+      artifact: (a) => send(ws, { type: 'artifact', ...a }),
     };
 
     // Try orchestration first

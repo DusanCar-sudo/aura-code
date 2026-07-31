@@ -33,6 +33,31 @@ import { formatSteering, type SteeringInbox } from './steering.js';
  *  failure again. */
 const MAX_REPETITION_RETRIES = 2;
 
+/**
+ * If a write_file call just wrote a previewable file (HTML, SVG, Markdown),
+ * extract an artifact descriptor so the client can render it inline. Returns
+ * undefined for anything that is not worth previewing.
+ */
+function artifactFromWriteFile(
+  toolName: string,
+  input: Record<string, unknown>,
+): { id: string; name: string; content: string; contentType: string } | undefined {
+  if (toolName !== 'write_file') return undefined;
+  const filePath = String(input.path ?? '');
+  const ext = path.extname(filePath).toLowerCase();
+  const content = String(input.content ?? '');
+  const map: Record<string, string> = {
+    '.html': 'text/html', '.htm': 'text/html',
+    '.svg':  'image/svg+xml',
+    '.md':   'text/markdown',
+  };
+  const contentType = map[ext];
+  if (!contentType || !content) return undefined;
+  const name = path.basename(filePath);
+  const id = crypto.createHash('sha1').update(`${name}:${content.length}`).digest('hex').slice(0, 12);
+  return { id, name, content, contentType };
+}
+
 /** Sent after a collapsed reply is cut off. Names the failure, then aims the
  *  model at the tool call it was narrating instead of making. */
 const REPETITION_CORRECTION =
@@ -1043,6 +1068,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             }
             const elapsed = Date.now() - startMs;
             display.toolResult(call.name, result, elapsed);
+            // Surface previewable artifacts to the client. write_file carries the
+            // full content in its input, so we can emit inline without re-reading.
+            const artifact = artifactFromWriteFile(call.name, call.input);
+            if (artifact && display.artifact) display.artifact(artifact);
           }
         }
         // Elision notes (exact-hit and subset) are never cached: they are
