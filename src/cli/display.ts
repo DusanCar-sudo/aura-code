@@ -35,6 +35,8 @@ export interface Display {
   contextDashboard?(health: import('./context-health.js').ContextHealth): void;
   /** Compaction event — replaces the current generic warning. */
   compactionEvent?(info: { beforeTokens: number; afterTokens: number; generation: number; threshold: number }): void;
+  /** The agent produced a previewable artifact (HTML, SVG, Markdown). */
+  artifact?(a: { id: string; name: string; content: string; contentType: string }): void;
   /** Stop the thinking spinner. Called when the loop exits. */
   stopThinking?(): void;
 }
