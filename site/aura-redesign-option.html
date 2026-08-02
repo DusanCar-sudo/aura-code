@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Code - Redesign Option</title>
+  <meta name="description" content="A redesign option for Aura Code, focused on verification, persistent memory, and model-agnostic engineering workflows.">
+  <meta name="theme-color" content="#f6f8f1">
+  <style>
+    :root {
+      --paper: #f6f8f1;
+      --paper-2: #e8eee4;
+      --ink: #17201b;
+      --muted: #526059;
+      --line: #c9d4c9;
+      --field: #20342c;
+      --field-2: #15231e;
+      --mint: #4fbf8f;
+      --blue: #2e78b8;
+      --plum: #7a4f86;
+      --rust: #bf5b39;
+      --gold: #d5a43a;
+      --white: #ffffff;
+      --mono: "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --display: "Arial Narrow", "Roboto Condensed", "Aptos Narrow", var(--sans);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(23, 32, 27, 0.05) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(23, 32, 27, 0.035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 38px 38px;
+      font-family: var(--sans);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    ::selection {
+      background: var(--field);
+      color: var(--paper);
+    }
+
+    .shell {
+      width: min(1220px, calc(100% - 36px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(23, 32, 27, 0.12);
+      background: rgba(246, 248, 241, 0.86);
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar .shell {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 13px 0;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border: 2px solid var(--ink);
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 3px;
+      padding: 5px;
+      background: var(--paper);
+    }
+
+    .brand-mark span {
+      background: var(--ink);
+    }
+
+    .navlinks {
+      display: flex;
+      align-items: center;
+      gap: clamp(12px, 2vw, 28px);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .navlinks a {
+      text-decoration: none;
+    }
+
+    .navlinks a:hover,
+    .navlinks a:focus-visible {
+      color: var(--field);
+      outline: none;
+    }
+
+    .hero {
+      min-height: calc(100svh - 62px);
+      display: grid;
+      align-items: stretch;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.05fr);
+      gap: clamp(28px, 5vw, 76px);
+      align-items: center;
+      padding: clamp(44px, 7vw, 92px) 0 42px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+      color: var(--field);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      background: var(--mint);
+      box-shadow: 14px 0 0 var(--blue), 28px 0 0 var(--rust);
+    }
+
+    h1 {
+      max-width: 810px;
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(56px, 8.2vw, 124px);
+      font-stretch: condensed;
+      font-weight: 900;
+      letter-spacing: 0;
+      line-height: 0.86;
+      text-transform: uppercase;
+    }
+
+    .lead {
+      max-width: 690px;
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: clamp(18px, 2vw, 24px);
+      line-height: 1.45;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 34px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 12px 18px;
+      border: 1px solid var(--field);
+      background: var(--field);
+      color: var(--paper);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, color 160ms ease;
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      transform: translateY(-2px);
+      outline: none;
+      background: var(--ink);
+    }
+
+    .button.secondary {
+      background: transparent;
+      color: var(--field);
+    }
+
+    .button.secondary:hover,
+    .button.secondary:focus-visible {
+      background: var(--field);
+      color: var(--paper);
+    }
+
+    .hero-panel {
+      position: relative;
+      min-height: 620px;
+      color: var(--paper);
+      background: var(--field-2);
+      overflow: hidden;
+      isolation: isolate;
+      box-shadow: 0 24px 80px rgba(21, 35, 30, 0.24);
+    }
+
+    .hero-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(180deg, rgba(21, 35, 30, 0.1), rgba(21, 35, 30, 0.82)),
+        url("aura_lady_portrait.png") center top / cover no-repeat;
+      opacity: 0.5;
+      filter: contrast(1.12) saturate(0.72);
+    }
+
+    .hero-panel::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background:
+        linear-gradient(90deg, rgba(79, 191, 143, 0.18) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(79, 191, 143, 0.12) 1px, transparent 1px);
+      background-size: 30px 30px;
+      mask-image: linear-gradient(180deg, transparent, black 24%, black 86%, transparent);
+    }
+
+    .console {
+      position: absolute;
+      left: clamp(18px, 4vw, 42px);
+      right: clamp(18px, 4vw, 42px);
+      bottom: clamp(18px, 4vw, 42px);
+      border: 1px solid rgba(246, 248, 241, 0.18);
+      background: rgba(12, 21, 18, 0.9);
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.36);
+    }
+
+    .console-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(246, 248, 241, 0.13);
+      color: rgba(246, 248, 241, 0.72);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .console-lines {
+      padding: 18px 16px 20px;
+      font-family: var(--mono);
+      font-size: clamp(12px, 1.5vw, 14px);
+      line-height: 1.9;
+    }
+
+    .console-line {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 14px;
+      color: rgba(246, 248, 241, 0.78);
+    }
+
+    .console-line span {
+      color: var(--mint);
+    }
+
+    .console-line strong {
+      color: var(--white);
+      font-weight: 500;
+    }
+
+    .signal {
+      position: absolute;
+      top: 28px;
+      left: 28px;
+      right: 28px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .signal span {
+      height: 8px;
+      background: var(--mint);
+    }
+
+    .signal span:nth-child(2) {
+      background: var(--blue);
+    }
+
+    .signal span:nth-child(3) {
+      background: var(--plum);
+    }
+
+    .signal span:nth-child(4) {
+      background: var(--rust);
+    }
+
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .metric {
+      min-height: 132px;
+      padding: 22px clamp(16px, 3vw, 34px);
+      border-right: 1px solid var(--line);
+    }
+
+    .metric:last-child {
+      border-right: 0;
+    }
+
+    .metric b {
+      display: block;
+      color: var(--field);
+      font-family: var(--display);
+      font-size: clamp(34px, 4vw, 56px);
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .metric span {
+      display: block;
+      max-width: 20ch;
+      margin-top: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    section {
+      padding: clamp(66px, 9vw, 120px) 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.34fr) minmax(0, 0.66fr);
+      gap: clamp(24px, 5vw, 70px);
+      align-items: start;
+      margin-bottom: 42px;
+    }
+
+    .label {
+      color: var(--field);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(38px, 5.5vw, 78px);
+      font-stretch: condensed;
+      line-height: 0.92;
+      text-transform: uppercase;
+    }
+
+    .section-copy {
+      margin: 18px 0 0;
+      max-width: 700px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .step {
+      min-height: 250px;
+      padding: 22px;
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: background 180ms ease, color 180ms ease;
+    }
+
+    .step:last-child {
+      border-right: 0;
+    }
+
+    .step:hover {
+      background: var(--field);
+      color: var(--paper);
+    }
+
+    .step code {
+      color: var(--rust);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .step:hover code,
+    .step:hover p {
+      color: rgba(246, 248, 241, 0.72);
+    }
+
+    .step h3 {
+      margin: 0 0 12px;
+      font-size: 22px;
+      line-height: 1.05;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+      gap: clamp(28px, 5vw, 74px);
+      align-items: start;
+    }
+
+    .memory-board {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .memory-row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 18px;
+      min-height: 86px;
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .memory-row:last-child {
+      border-bottom: 0;
+    }
+
+    .memory-row span {
+      color: var(--field);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .memory-row p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .provider-field {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 10px;
+      background: var(--field);
+    }
+
+    .provider {
+      min-height: 110px;
+      padding: 14px;
+      background: var(--field-2);
+      color: var(--paper);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .provider strong {
+      font-size: 18px;
+    }
+
+    .provider span {
+      color: rgba(246, 248, 241, 0.62);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .provider:nth-child(2) {
+      background: #183553;
+    }
+
+    .provider:nth-child(3) {
+      background: #4b3155;
+    }
+
+    .provider:nth-child(4) {
+      background: #653826;
+    }
+
+    .provider:nth-child(5) {
+      background: #665020;
+    }
+
+    .provider:nth-child(6) {
+      background: #20342c;
+    }
+
+    .install {
+      color: var(--paper);
+      background: var(--field-2);
+    }
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+      gap: clamp(26px, 5vw, 70px);
+      align-items: center;
+    }
+
+    .install .label,
+    .install h2 {
+      color: var(--paper);
+    }
+
+    .install .section-copy {
+      color: rgba(246, 248, 241, 0.66);
+    }
+
+    .command-box {
+      border: 1px solid rgba(246, 248, 241, 0.18);
+      background: rgba(0, 0, 0, 0.28);
+      overflow: hidden;
+    }
+
+    .command-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px;
+      border-bottom: 1px solid rgba(246, 248, 241, 0.14);
+      font-family: var(--mono);
+      color: var(--paper);
+      overflow-x: auto;
+    }
+
+    .command-line:last-child {
+      border-bottom: 0;
+    }
+
+    .command-line span {
+      color: var(--mint);
+    }
+
+    .copy {
+      flex: 0 0 auto;
+      border: 1px solid rgba(246, 248, 241, 0.22);
+      background: transparent;
+      color: var(--paper);
+      padding: 8px 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .copy:hover,
+    .copy:focus-visible {
+      border-color: var(--mint);
+      color: var(--mint);
+      outline: none;
+    }
+
+    footer {
+      padding: 32px 0;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    .footer-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .footer-row a {
+      text-decoration: none;
+    }
+
+    .footer-row a:hover,
+    .footer-row a:focus-visible {
+      color: var(--field);
+      outline: none;
+    }
+
+    @media (max-width: 920px) {
+      .navlinks {
+        display: none;
+      }
+
+      .hero-grid,
+      .split,
+      .install-grid,
+      .section-head {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-panel {
+        min-height: 520px;
+      }
+
+      .strip,
+      .workflow,
+      .provider-field {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .metric:nth-child(2) {
+        border-right: 0;
+      }
+
+      .metric:nth-child(-n + 2) {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .workflow .step:nth-child(2n),
+      .provider:nth-child(2n) {
+        border-right: 0;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .shell {
+        width: min(100% - 28px, 1220px);
+      }
+
+      .hero-grid {
+        padding-top: 34px;
+      }
+
+      .actions .button {
+        width: 100%;
+      }
+
+      .hero-panel {
+        min-height: 440px;
+      }
+
+      .console {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+      }
+
+      .console-line,
+      .memory-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .strip,
+      .workflow,
+      .provider-field {
+        grid-template-columns: 1fr;
+      }
+
+      .metric,
+      .metric:nth-child(2),
+      .metric:nth-child(-n + 2),
+      .step {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .metric:last-child,
+      .step:last-child {
+        border-bottom: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar" aria-label="Primary navigation">
+    <div class="shell">
+      <a class="brand" href="#top" aria-label="Aura Code home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        Aura Code
+      </a>
+      <div class="navlinks">
+        <a href="#loop">Loop</a>
+        <a href="#memory">Memory</a>
+        <a href="#models">Models</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="top">
+    <header class="hero">
+      <div class="shell hero-grid">
+        <div>
+          <div class="eyebrow">Local agent, verified work</div>
+          <h1>Ship code with receipts.</h1>
+          <p class="lead">Aura Code is a model-agnostic coding agent for engineers who want the loop visible: read the repo, make the smallest useful change, run the checks, and report the evidence.</p>
+          <div class="actions">
+            <a class="button" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">View source</a>
+            <button class="button secondary" type="button" data-copy="npm install -g aura-code">Copy install</button>
+          </div>
+        </div>
+
+        <div class="hero-panel" aria-label="Aura verification console">
+          <div class="signal" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <div class="console">
+            <div class="console-head">
+              <span>run/aura</span>
+              <span>verified</span>
+            </div>
+            <div class="console-lines">
+              <div class="console-line"><span>read</span><strong>14 files mapped before edit</strong></div>
+              <div class="console-line"><span>plan</span><strong>3 targeted changes, no broad refactor</strong></div>
+              <div class="console-line"><span>execute</span><strong>src/auth/handler.ts line 47</strong></div>
+              <div class="console-line"><span>verify</span><strong>1,121 tests passing</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="strip" aria-label="Aura Code proof points">
+      <div class="metric"><b>MIT</b><span>Open source and inspectable</span></div>
+      <div class="metric"><b>10+</b><span>Cloud and local providers</span></div>
+      <div class="metric"><b>1,121+</b><span>Tests represented in the loop</span></div>
+      <div class="metric"><b>TUI</b><span>Terminal-first control surface</span></div>
+    </div>
+
+    <section id="loop">
+      <div class="shell">
+        <div class="section-head">
+          <div class="label">Execution Loop</div>
+          <div>
+            <h2>The process is the product.</h2>
+            <p class="section-copy">This direction makes Aura feel like engineering infrastructure instead of a mascot page. The visual system is built from job queues, traces, and verification logs.</p>
+          </div>
+        </div>
+        <div class="workflow">
+          <article class="step">
+            <code>01 / read</code>
+            <div><h3>Map the repo</h3><p>Files, conventions, dependencies, and unknowns are gathered before edits begin.</p></div>
+          </article>
+          <article class="step">
+            <code>02 / plan</code>
+            <div><h3>Choose the move</h3><p>The plan names what changes and what stays untouched.</p></div>
+          </article>
+          <article class="step">
+            <code>03 / execute</code>
+            <div><h3>Patch precisely</h3><p>Small diffs, local style, and no unrelated cleanup.</p></div>
+          </article>
+          <article class="step">
+            <code>04 / verify</code>
+            <div><h3>Run checks</h3><p>Tests and builds are treated as evidence, not ceremony.</p></div>
+          </article>
+          <article class="step">
+            <code>05 / report</code>
+            <div><h3>Show receipts</h3><p>File paths, line numbers, and the exact validation result.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="memory">
+      <div class="shell split">
+        <div>
+          <div class="label">Persistent Memory</div>
+          <h2>Aura starts the next task warmer.</h2>
+          <p class="section-copy">The redesign treats memory as working context, not as a vague AI promise. It shows decisions, lessons, and constraints as records the agent can reuse.</p>
+        </div>
+        <div class="memory-board">
+          <div class="memory-row"><span>decision</span><p>Use TypeScript boundaries for provider adapters; avoid pushing vendor logic into the CLI loop.</p></div>
+          <div class="memory-row"><span>lesson</span><p>Verification output must be summarized with command names and failures, not hidden behind confidence language.</p></div>
+          <div class="memory-row"><span>context</span><p>Current project favors `rg`, focused patches, and explicit final file references.</p></div>
+          <div class="memory-row"><span>risk</span><p>Do not mutate unrelated worktree changes while improving one surface.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="models">
+      <div class="shell split">
+        <div>
+          <div class="label">Model Agnostic</div>
+          <h2>One loop, many engines.</h2>
+          <p class="section-copy">Provider routing is presented as a control plane. Cloud models, local models, and compatible endpoints can be selected by the work instead of by the brand.</p>
+        </div>
+        <div class="provider-field" aria-label="Supported provider examples">
+          <div class="provider"><strong>Claude</strong><span>deep reasoning</span></div>
+          <div class="provider"><strong>GPT</strong><span>general work</span></div>
+          <div class="provider"><strong>Gemini</strong><span>long context</span></div>
+          <div class="provider"><strong>DeepSeek</strong><span>cost control</span></div>
+          <div class="provider"><strong>OpenRouter</strong><span>routing layer</span></div>
+          <div class="provider"><strong>Ollama</strong><span>local runtime</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="install" id="install">
+      <div class="shell install-grid">
+        <div>
+          <div class="label">Install</div>
+          <h2>Run it where the repo lives.</h2>
+          <p class="section-copy">This option keeps the conversion point technical and direct: install, configure a provider, then ask Aura to handle a real task.</p>
+        </div>
+        <div class="command-box">
+          <div class="command-line"><code><span>$</span> npm install -g aura-code</code><button class="copy" type="button" data-copy="npm install -g aura-code">Copy</button></div>
+          <div class="command-line"><code><span>$</span> aura "fix the failing auth test"</code><button class="copy" type="button" data-copy='aura "fix the failing auth test"'>Copy</button></div>
+          <div class="command-line"><code><span>$</span> aura --model local "review this PR"</code><button class="copy" type="button" data-copy='aura --model local "review this PR"'>Copy</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-row">
+      <span>Aura Code redesign option - verification-first direction</span>
+      <span><a href="index.html">Current homepage</a> / <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub</a></span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      document.querySelectorAll("[data-copy]").forEach(function (control) {
+        control.addEventListener("click", function () {
+          var text = control.getAttribute("data-copy");
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+          }
+          var original = control.textContent;
+          control.textContent = "Copied";
+          window.setTimeout(function () {
+            control.textContent = original;
+          }, 1400);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

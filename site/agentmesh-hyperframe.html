@@ -138,7 +138,7 @@
       position: absolute;
       left: 86px;
       top: 94px;
-      width: 720px;
+      width: 520px;
     }
 
     .microcopy .label {
@@ -150,13 +150,28 @@
       text-transform: uppercase;
     }
 
-    .microcopy h2 {
-      margin: 0;
-      font-family: var(--display);
-      font-size: 76px;
-      line-height: 0.88;
-      letter-spacing: 0;
+    .trace-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: 520px;
+    }
+
+    .trace-pill {
+      display: inline-flex;
+      padding: 7px 9px;
+      border: 1px solid rgba(243, 247, 239, 0.13);
+      background: rgba(16, 22, 17, 0.48);
+      color: rgba(243, 247, 239, 0.32);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
+    }
+
+    .trace-pill.hot {
+      border-color: rgba(226, 161, 45, 0.38);
+      color: rgba(245, 204, 98, 0.72);
     }
 
     .hud {
@@ -296,7 +311,16 @@
     <section id="hf-scene-title" class="clip" data-start="0" data-duration="4" data-track-index="2">
       <div class="microcopy">
         <div class="label">AgentMesh execution trace</div>
-        <h2>One goal becomes bounded work.</h2>
+        <div class="trace-tags">
+          <span class="trace-pill hot">goal.recv</span>
+          <span class="trace-pill">plan.groups: 2</span>
+          <span class="trace-pill">agent_code</span>
+          <span class="trace-pill">agent_research</span>
+          <span class="trace-pill hot">required_keys_present</span>
+          <span class="trace-pill">memory.db</span>
+          <span class="trace-pill">run_python</span>
+          <span class="trace-pill">no_error_flag</span>
+        </div>
       </div>
     </section>
 
@@ -360,7 +384,7 @@
     tl.fromTo(".memory-feed div", { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, stagger: 0.18, ease: "power2.out" }, 6.15);
     tl.fromTo(".seal", { rotation: -4, scale: 0.9, opacity: 0 }, { rotation: 0, scale: 1, opacity: 1, duration: 0.8, ease: "back.out(1.4)" }, 7.2);
     tl.to(".packet", { opacity: 0.25, duration: 0.8, ease: "power2.out" }, 9.2);
-    tl.to(".microcopy h2", { color: "#f5cc62", duration: 0.75, ease: "power1.inOut" }, 9.5);
+    tl.to(".trace-pill.hot", { color: "#f5cc62", duration: 0.75, ease: "power1.inOut" }, 9.5);
     tl.to(".seal", { borderColor: "rgba(226, 161, 45, 0.9)", duration: 0.75, ease: "power1.inOut" }, 9.8);
 
     window.__timelines["agentmesh-hf"] = tl;

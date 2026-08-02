@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440, height=900">
+  <title>AgentMesh Patch Bay HyperFrames Composition</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    :root {
+      --paper: #eef2e8;
+      --ink: #17201b;
+      --line: #9cab9d;
+      --green: #1e7b57;
+      --blue: #245c93;
+      --rose: #9b3158;
+      --gold: #d4942c;
+      --mono: "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      font-family: var(--sans);
+    }
+
+    #agentmesh-patchbay {
+      position: relative;
+      width: 1440px;
+      height: 900px;
+      overflow: hidden;
+    }
+
+    .stage-fill {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(23, 32, 27, 0.08) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(23, 32, 27, 0.06) 1px, transparent 1px),
+        radial-gradient(circle at 78% 50%, rgba(36, 92, 147, 0.1), transparent 34%);
+      background-size: 38px 38px, 38px 38px, 100% 100%, 100% 100%;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .bus {
+      position: absolute;
+      left: 150px;
+      top: 180px;
+      width: 1040px;
+      height: 510px;
+      border: 2px solid rgba(23, 32, 27, 0.16);
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .bus::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: rgba(23, 32, 27, 0.12);
+    }
+
+    .socket {
+      position: absolute;
+      width: 176px;
+      min-height: 74px;
+      padding: 13px 14px;
+      border: 1px solid currentColor;
+      background: rgba(238, 242, 232, 0.62);
+      color: var(--ink);
+      font-family: var(--mono);
+    }
+
+    .socket b {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .socket span {
+      display: block;
+      color: rgba(23, 32, 27, 0.62);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .socket.goal { left: 74px; top: 398px; color: var(--gold); }
+    .socket.orch { left: 330px; top: 224px; color: var(--green); }
+    .socket.research { left: 620px; top: 132px; color: var(--blue); }
+    .socket.code { left: 620px; top: 398px; color: var(--green); }
+    .socket.writer { left: 620px; top: 662px; color: var(--rose); }
+    .socket.memory { left: 970px; top: 398px; color: #668f36; }
+    .socket.output { left: 1220px; top: 398px; color: var(--ink); }
+
+    .wire {
+      position: absolute;
+      height: 3px;
+      background: currentColor;
+      color: rgba(23, 32, 27, 0.13);
+      transform-origin: 0 50%;
+    }
+
+    .wire.w1 { left: 250px; top: 438px; width: 86px; }
+    .wire.w2 { left: 506px; top: 262px; width: 122px; transform: rotate(-20deg); color: rgba(30, 123, 87, 0.22); }
+    .wire.w3 { left: 506px; top: 438px; width: 122px; color: rgba(30, 123, 87, 0.24); }
+    .wire.w4 { left: 506px; top: 508px; width: 138px; transform: rotate(42deg); color: rgba(155, 49, 88, 0.22); }
+    .wire.w5 { left: 796px; top: 438px; width: 178px; color: rgba(36, 92, 147, 0.2); }
+    .wire.w6 { left: 1146px; top: 438px; width: 78px; color: rgba(23, 32, 27, 0.16); }
+
+    .pulse {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 18px rgba(212, 148, 44, 0.42);
+    }
+
+    .pulse.p1 { left: 252px; top: 432px; }
+    .pulse.p2 { left: 520px; top: 256px; background: var(--blue); box-shadow: 0 0 18px rgba(36, 92, 147, 0.42); }
+    .pulse.p3 { left: 520px; top: 432px; background: var(--green); box-shadow: 0 0 18px rgba(30, 123, 87, 0.42); }
+    .pulse.p4 { left: 520px; top: 502px; background: var(--rose); box-shadow: 0 0 18px rgba(155, 49, 88, 0.42); }
+
+    .ledger {
+      position: absolute;
+      left: 74px;
+      top: 86px;
+      width: 560px;
+      display: grid;
+      gap: 9px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: rgba(23, 32, 27, 0.72);
+    }
+
+    .ledger div {
+      display: grid;
+      grid-template-columns: 86px 1fr 72px;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(23, 32, 27, 0.18);
+    }
+
+    .ledger b { color: var(--green); }
+    .ledger em { color: var(--rose); font-style: normal; text-align: right; }
+
+    .stamp {
+      position: absolute;
+      right: 82px;
+      top: 74px;
+      width: 260px;
+      height: 112px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--green);
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div
+    id="agentmesh-patchbay"
+    data-composition-id="agentmesh-patchbay"
+    data-start="0"
+    data-width="1440"
+    data-height="900"
+    data-duration="10"
+  >
+    <div class="stage-fill"></div>
+
+    <section id="patch-scene-bus" class="clip" data-start="0" data-duration="10" data-track-index="1">
+      <div class="bus"></div>
+      <div class="wire w1"></div>
+      <div class="wire w2"></div>
+      <div class="wire w3"></div>
+      <div class="wire w4"></div>
+      <div class="wire w5"></div>
+      <div class="wire w6"></div>
+      <div class="socket goal"><b>goal</b><span>natural language objective</span></div>
+      <div class="socket orch"><b>orchestrator</b><span>decompose and route</span></div>
+      <div class="socket research"><b>research</b><span>web_search only</span></div>
+      <div class="socket code"><b>code</b><span>run_python + write_file</span></div>
+      <div class="socket writer"><b>writer</b><span>read_file report</span></div>
+      <div class="socket memory"><b>memory</b><span>episodes and lessons</span></div>
+      <div class="socket output"><b>output</b><span>result json</span></div>
+      <div class="pulse p1"></div>
+      <div class="pulse p2"></div>
+      <div class="pulse p3"></div>
+      <div class="pulse p4"></div>
+    </section>
+
+    <section id="patch-scene-ledger" class="clip" data-start="0" data-duration="10" data-track-index="2">
+      <div class="ledger">
+        <div><b>t001</b><span>required_keys_present</span><em>ready</em></div>
+        <div><b>t002</b><span>output_file_exists</span><em>ready</em></div>
+        <div><b>t003</b><span>summary_written</span><em>ready</em></div>
+      </div>
+      <div class="stamp">gated</div>
+    </section>
+  </div>
+
+  <script>
+    if (!window.gsap) {
+      window.gsap = {
+        timeline() {
+          const api = {
+            fromTo() { return api; },
+            to() { return api; },
+            repeat() { return api; },
+            yoyo() { return api; },
+            play() { return api; },
+            seek() { return api; }
+          };
+          return api;
+        }
+      };
+    }
+
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo(".bus", { opacity: 0 }, { opacity: 1, duration: 0.45, ease: "power2.out" }, 0.1);
+    tl.fromTo(".socket", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, stagger: 0.08, ease: "power2.out" }, 0.35);
+    tl.fromTo(".wire", { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.7, stagger: 0.08, ease: "power2.inOut" }, 1.0);
+    tl.fromTo(".pulse.p1", { x: 0, opacity: 0 }, { x: 84, opacity: 1, duration: 0.9, ease: "power2.inOut" }, 1.45);
+    tl.fromTo(".pulse.p2", { x: 0, y: 0, opacity: 0 }, { x: 106, y: -38, opacity: 1, duration: 0.8, ease: "power2.inOut" }, 2.55);
+    tl.fromTo(".pulse.p3", { x: 0, opacity: 0 }, { x: 106, opacity: 1, duration: 0.8, ease: "power2.inOut" }, 2.72);
+    tl.fromTo(".pulse.p4", { x: 0, y: 0, opacity: 0 }, { x: 120, y: 52, opacity: 1, duration: 0.8, ease: "power2.inOut" }, 2.89);
+    tl.fromTo(".ledger div", { x: -22, opacity: 0 }, { x: 0, opacity: 1, duration: 0.42, stagger: 0.14, ease: "power2.out" }, 3.7);
+    tl.fromTo(".stamp", { scale: 1.14, rotation: -3, opacity: 0 }, { scale: 1, rotation: 0, opacity: 1, duration: 0.62, ease: "back.out(1.7)" }, 4.5);
+    tl.to(".pulse", { opacity: 0.28, duration: 0.7, ease: "power2.out" }, 6.2);
+    tl.to(".stamp", { color: "#9b3158", borderColor: "#9b3158", duration: 0.7, ease: "power1.inOut" }, 7.0);
+    window.__timelines["agentmesh-patchbay"] = tl;
+
+    const shouldPlay = new URLSearchParams(window.location.search).get("play") === "1";
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (shouldPlay && !reduced) {
+      tl.repeat(80).yoyo(true).play(0);
+    } else if (shouldPlay) {
+      tl.seek(5);
+    }
+  </script>
+</body>
+</html>

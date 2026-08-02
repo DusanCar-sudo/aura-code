@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentMesh Patch Bay Variation</title>
+  <meta name="description" content="An alternate AgentMesh website direction with a lighter operations patch-bay interface and HyperFrames motion.">
+  <meta name="theme-color" content="#eef2e8">
+  <style>
+    :root {
+      --paper: #eef2e8;
+      --ink: #17201b;
+      --muted: #58645d;
+      --line: #aebbac;
+      --green: #1e7b57;
+      --blue: #245c93;
+      --rose: #9b3158;
+      --gold: #d4942c;
+      --dark: #111812;
+      --mono: "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --display: "Arial Narrow", "Aptos Narrow", "Roboto Condensed", var(--sans);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(23, 32, 27, 0.07) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(23, 32, 27, 0.055) 1px, transparent 1px),
+        var(--paper);
+      background-size: 38px 38px;
+      font-family: var(--sans);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; }
+    ::selection { background: var(--green); color: white; }
+
+    .topbar {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 30;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      padding: 14px clamp(18px, 4vw, 52px);
+      border-bottom: 1px solid rgba(23, 32, 27, 0.16);
+      background: rgba(238, 242, 232, 0.88);
+      backdrop-filter: blur(12px);
+      font-family: var(--mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .mark {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--ink);
+    }
+
+    .mark::before {
+      content: "";
+      width: 13px;
+      height: 13px;
+      border: 2px solid var(--green);
+    }
+
+    .nav {
+      display: flex;
+      gap: clamp(12px, 2vw, 28px);
+    }
+
+    .nav a {
+      text-decoration: none;
+      color: var(--muted);
+    }
+
+    .nav a:hover,
+    .nav a:focus-visible {
+      color: var(--green);
+      outline: none;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 84svh;
+      display: grid;
+      grid-template-columns: minmax(0, 0.78fr) minmax(420px, 1.22fr);
+      align-items: stretch;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .copy {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      justify-content: end;
+      padding: 92px clamp(18px, 4vw, 58px) 34px;
+    }
+
+    .kicker {
+      display: inline-flex;
+      width: max-content;
+      gap: 9px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.4);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    h1 {
+      margin: 28px 0 18px;
+      max-width: 720px;
+      font-family: var(--display);
+      font-size: clamp(52px, 6.2vw, 88px);
+      line-height: 0.9;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .lead {
+      max-width: 640px;
+      margin: 0 0 30px;
+      color: var(--muted);
+      font-size: clamp(17px, 1.8vw, 22px);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 11px 16px;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: white;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .button.secondary {
+      background: transparent;
+      color: var(--ink);
+      border-color: var(--line);
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+      transform: translateY(-2px);
+    }
+
+    .hero-stage {
+      position: relative;
+      overflow: hidden;
+      border-left: 1px solid var(--line);
+      background: transparent;
+    }
+
+    .hero-stage iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      opacity: 0.56;
+      transform: scale(0.76);
+      transform-origin: 62% 50%;
+      filter: saturate(0.72) contrast(0.84);
+      mix-blend-mode: multiply;
+    }
+
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    .facts-band {
+      padding: 20px clamp(18px, 5vw, 70px) 30px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .facts-band .facts {
+      width: min(1160px, 100%);
+      margin: 0 auto;
+    }
+
+    .fact {
+      min-height: 96px;
+      padding: 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .fact:last-child { border-right: 0; }
+
+    .fact span {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .fact strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.18;
+    }
+
+    section {
+      padding: clamp(64px, 8vw, 116px) clamp(18px, 5vw, 70px);
+    }
+
+    .inner {
+      width: min(1160px, 100%);
+      margin: 0 auto;
+    }
+
+    .head {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+      gap: clamp(28px, 5vw, 72px);
+      margin-bottom: 34px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(38px, 6vw, 78px);
+      line-height: 0.94;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .muted {
+      max-width: 670px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .terminal-band {
+      background: var(--dark);
+      color: #edf5ea;
+    }
+
+    .terminal-band .eyebrow { color: var(--gold); }
+    .terminal-band .muted { color: rgba(237, 245, 234, 0.68); }
+
+    .workflow-preview {
+      border-block: 1px solid var(--line);
+      background:
+        linear-gradient(90deg, rgba(155, 49, 88, 0.07), transparent 42%),
+        rgba(255, 255, 255, 0.24);
+    }
+
+    .workflow-board {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .workflow-map {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(112px, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line);
+      background: var(--line);
+      overflow-x: auto;
+    }
+
+    .workflow-step {
+      min-height: 180px;
+      padding: 15px;
+      background: rgba(238, 242, 232, 0.88);
+    }
+
+    .workflow-step span {
+      display: block;
+      margin-bottom: 18px;
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .workflow-step b {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 17px;
+      line-height: 1.15;
+    }
+
+    .workflow-step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .workflow-side {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line);
+      background: var(--line);
+    }
+
+    .workflow-lane {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.42);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .workflow-lane b {
+      color: var(--rose);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .workflow-lane span {
+      color: var(--muted);
+    }
+
+    .command-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 18px;
+    }
+
+    pre {
+      margin: 0;
+      padding: 18px;
+      min-height: 320px;
+      border: 1px solid rgba(237, 245, 234, 0.18);
+      background:
+        linear-gradient(rgba(237, 245, 234, 0.05) 1px, transparent 1px),
+        #0c120e;
+      background-size: 100% 28px;
+      color: #e8f2e4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.75;
+    }
+
+    .prompt { color: var(--gold); }
+    .ok { color: #75d49c; }
+    .dim { color: rgba(237, 245, 234, 0.48); }
+    .blue { color: #87b6ee; }
+
+    .checklist {
+      display: grid;
+      gap: 1px;
+      border: 1px solid rgba(237, 245, 234, 0.16);
+      background: rgba(237, 245, 234, 0.16);
+    }
+
+    .checklist div {
+      padding: 16px;
+      background: rgba(237, 245, 234, 0.055);
+    }
+
+    .checklist b {
+      display: block;
+      margin-bottom: 6px;
+      color: white;
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .checklist p {
+      margin: 0;
+      color: rgba(237, 245, 234, 0.64);
+      font-size: 14px;
+    }
+
+    footer {
+      padding: 30px clamp(18px, 5vw, 70px);
+      border-top: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    footer .inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .nav { display: none; }
+
+      .hero,
+      .head,
+      .command-grid,
+      .workflow-board {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: 86svh;
+      }
+
+      .hero-stage {
+        position: absolute;
+        inset: 0;
+        min-height: auto;
+        border-left: 0;
+        border-top: 0;
+        opacity: 0.22;
+        pointer-events: none;
+      }
+
+      .hero-stage iframe {
+        opacity: 0.48;
+        transform: scale(0.88);
+        transform-origin: 60% 48%;
+      }
+
+      .copy {
+        position: relative;
+        z-index: 2;
+        padding-top: 94px;
+      }
+
+      .facts {
+        grid-template-columns: 1fr;
+      }
+
+      .fact {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .fact:last-child { border-bottom: 0; }
+
+      .workflow-map {
+        grid-template-columns: repeat(6, minmax(154px, 1fr));
+      }
+
+      .workflow-side {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      h1 {
+        font-size: clamp(48px, 15vw, 66px);
+        line-height: 0.9;
+      }
+
+      .actions,
+      .button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar" aria-label="Primary navigation">
+    <a class="brand" href="#top"><span class="mark" aria-hidden="true"></span>AgentMesh</a>
+    <div class="nav">
+      <a href="agentmesh.html">Primary</a>
+      <a href="#patch">Patch bay</a>
+      <a href="#workflows">Workflows</a>
+      <a href="#run">Run</a>
+    </div>
+  </nav>
+
+  <header id="top" class="hero">
+    <div class="copy">
+      <a class="kicker" href="https://github.com/DusanCar-sudo/agentmesh" target="_blank" rel="noopener">github.com/DusanCar-sudo/agentmesh</a>
+      <h1>Bounded agents, wired like a patch bay.</h1>
+      <p class="lead">This variation turns AgentMesh into a physical control surface: goals plug into contracts, branch to specialist agents, and return through hard gates.</p>
+      <div class="actions">
+        <a class="button" href="#run">Run commands</a>
+        <a class="button secondary" href="agentmesh.html">View primary version</a>
+      </div>
+    </div>
+    <div class="hero-stage" aria-label="Patch bay motion graphic">
+      <iframe title="AgentMesh patch bay HyperFrames composition" src="agentmesh-hyperframe-variation.html?play=1" loading="eager"></iframe>
+    </div>
+  </header>
+
+  <aside class="facts-band" aria-label="AgentMesh facts">
+    <div class="facts">
+      <div class="fact"><span>Contracts</span><strong>Allowed tools and required JSON keys</strong></div>
+      <div class="fact"><span>Providers</span><strong>DeepSeek, Groq, OpenRouter, Anthropic, Gemini</strong></div>
+      <div class="fact"><span>Memory</span><strong>SQLite episodes, lessons, and skill stats</strong></div>
+    </div>
+  </aside>
+
+  <main>
+    <section id="patch">
+      <div class="inner">
+        <div class="head">
+          <p class="eyebrow">Patch bay model</p>
+          <div>
+            <h2>The visual system follows the repo architecture.</h2>
+            <p class="muted">The orchestrator creates two to four contracts, routes independent groups in parallel, and stores the resulting traces. The design uses wires, sockets, and ledger rows because the repo is about constrained handoffs, not generic agent sparkle.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflows" class="workflow-preview">
+      <div class="inner">
+        <div class="head">
+          <p class="eyebrow">Full workflow preview</p>
+          <div>
+            <h2>See the whole run, not just the handoff.</h2>
+            <p class="muted">This preview covers the full AgentMesh loop exposed in the repo: decomposition, bounded execution, hard gates, aggregation, memory, and future routing.</p>
+          </div>
+        </div>
+        <div class="workflow-board">
+          <div class="workflow-map" aria-label="AgentMesh full workflow">
+            <article class="workflow-step"><span>01</span><b>Goal intake</b><p>The CLI accepts a natural language goal plus optional provider, model, workspace, and streaming flags.</p></article>
+            <article class="workflow-step"><span>02</span><b>Plan</b><p>The orchestrator breaks the goal into two to four contracts and groups independent tasks for parallel work.</p></article>
+            <article class="workflow-step"><span>03</span><b>Dispatch</b><p>Research, code, writer, file, data, or summary agents receive only their permitted tools and budget.</p></article>
+            <article class="workflow-step"><span>04</span><b>Gate</b><p>Condition checks inspect real outputs: required keys, output files, summaries, and error flags.</p></article>
+            <article class="workflow-step"><span>05</span><b>Aggregate</b><p>Successful task results are collected into the final JSON output and written back into the workspace.</p></article>
+            <article class="workflow-step"><span>06</span><b>Learn</b><p>Episodes, lessons, and skill stats are stored so later runs can adapt provider and tool choices.</p></article>
+          </div>
+          <div class="workflow-side" aria-label="Workflow lanes">
+            <div class="workflow-lane"><b>parallel group</b><span>Research can run beside code or data work when there is no dependency.</span></div>
+            <div class="workflow-lane"><b>contract file</b><span>Each agent gets `contract.json` and writes a scoped result into its workspace folder.</span></div>
+            <div class="workflow-lane"><b>status view</b><span>`python run.py --status` surfaces episodes, lessons, tracked skills, and Honcho state.</span></div>
+            <div class="workflow-lane"><b>server path</b><span>FastAPI routes can record provider latency, success, and recommendation history.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="run" class="terminal-band">
+      <div class="inner">
+        <div class="head">
+          <p class="eyebrow">Run surface</p>
+          <div>
+            <h2>Source install, direct goal, visible status.</h2>
+            <p class="muted">The commands mirror `run.py` and `pyproject.toml`: local install, provider choice, streaming output, and memory status.</p>
+          </div>
+        </div>
+        <div class="command-grid">
+          <pre><span class="prompt">$</span> git clone https://github.com/DusanCar-sudo/agentmesh.git
+<span class="prompt">$</span> cd agentmesh
+<span class="prompt">$</span> python -m pip install -e .
+<span class="prompt">$</span> python run.py --provider deepseek --stream "Build a CLI report"
+<span class="dim">[Orchestrator]</span> 3 contracts across 2 groups
+<span class="blue">[agent_code]</span> output_file_exists
+<span class="ok">[Memory]</span> episode stored in workspace/memory.db</pre>
+          <div class="checklist">
+            <div><b>Bounded tools</b><p>Agents only see tools listed in their contract.</p></div>
+            <div><b>Hard gates</b><p>Completion checks are boolean and inspect real output.</p></div>
+            <div><b>Learning loop</b><p>Failures and lessons feed the harness optimizer.</p></div>
+            <div><b>Server option</b><p>FastAPI routes can track provider history and recommendations.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="inner">
+      <span>Variation B: Patch Bay</span>
+      <a href="https://github.com/DusanCar-sudo/agentmesh" target="_blank" rel="noopener">Open repository</a>
+    </div>
+  </footer>
+</body>
+</html>
