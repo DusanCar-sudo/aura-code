@@ -246,14 +246,14 @@ export class SingleModelStrategy extends BaseOrchestrationStrategy {
 const OLLAMA_PING_MS = 3_000;
 
 /** Checks whether an Ollama OpenAI-compatible endpoint responds. Never throws. */
-async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
+async function isLocalAvailable(baseUrl: string, provider: 'ollama' | 'lmstudio'): Promise<boolean> {
   try {
     const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), OLLAMA_PING_MS);
     const res = await fetch(`${root}/v1/models`, {
       method: 'GET',
-      headers: { Authorization: 'Bearer ollama' },
+      headers: { Authorization: `Bearer ${provider === 'lmstudio' ? 'lm-studio' : 'ollama'}` },
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -279,7 +279,7 @@ export async function selectDefaultStrategy(
   input: StrategySelectionInput,
 ): Promise<OrchestrationStrategy> {
   const { archimedesConfig, largeModelProvider, projectRoot } = input;
-  if (archimedesConfig.enabled && (await isOllamaAvailable(archimedesConfig.ollamaBaseUrl))) {
+  if (archimedesConfig.enabled && (await isLocalAvailable(archimedesConfig.ollamaBaseUrl, archimedesConfig.provider))) {
     return new ArchimedesAlternatorStrategy(archimedesConfig, largeModelProvider, projectRoot);
   }
   return new SingleModelStrategy(largeModelProvider);

@@ -39,8 +39,10 @@ export interface CompetenceLevel {
 export interface ArchimedesConfig {
   /** Ollama model tag (e.g. `qwen2.5-coder:1.5b`). */
   modelName: string;
-  /** OpenAI-compatible base URL for the local Ollama server. */
+  /** OpenAI-compatible base URL for the local server (Ollama or LM Studio). */
   ollamaBaseUrl: string;
+  /** Local backend: 'ollama' or 'lmstudio' (default: 'ollama'). */
+  provider: 'ollama' | 'lmstudio';
   /**
    * Minimum success rate required before Archimedes is trusted without escalation.
    * Compared against historical episodes for similar tasks.
@@ -66,6 +68,7 @@ export interface ArchimedesConfig {
 export const DEFAULT_ARCHIMEDES_CONFIG: ArchimedesConfig = {
   modelName: 'qwen2.5-coder:1.5b',
   ollamaBaseUrl: 'http://localhost:11434/v1',
+  provider: 'ollama',
   competenceThreshold: 0.7,
   minAttempts: 3,
   enabled: true,

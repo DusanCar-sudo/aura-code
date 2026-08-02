@@ -69,6 +69,7 @@ export interface ProjectConfig {
     enabled?: boolean;
     modelName?: string;
     ollamaBaseUrl?: string;
+    provider?: 'ollama' | 'lmstudio';
     competenceThreshold?: number;
     minAttempts?: number;
     epsilonProbeRate?: number;
@@ -139,6 +140,7 @@ function normalise(raw: unknown): ProjectConfig {
     if (rb.enabled === true || rb.enabled === false) archimedes.enabled = rb.enabled;
     if (typeof rb.modelName === 'string') archimedes.modelName = rb.modelName;
     if (typeof rb.ollamaBaseUrl === 'string') archimedes.ollamaBaseUrl = rb.ollamaBaseUrl;
+    if (rb.provider === 'ollama' || rb.provider === 'lmstudio') archimedes.provider = rb.provider;
     if (typeof rb.competenceThreshold === 'number') archimedes.competenceThreshold = rb.competenceThreshold;
     if (typeof rb.minAttempts === 'number' && rb.minAttempts > 0) archimedes.minAttempts = Math.floor(rb.minAttempts);
     if (typeof rb.epsilonProbeRate === 'number' && rb.epsilonProbeRate >= 0 && rb.epsilonProbeRate <= 1) archimedes.epsilonProbeRate = rb.epsilonProbeRate;

@@ -150,10 +150,10 @@ function isNonEmptyResult(text: string | undefined): boolean {
 }
 
 /**
- * Checks whether the Ollama OpenAI-compatible endpoint responds.
+ * Checks whether the local OpenAI-compatible endpoint (Ollama or LM Studio) responds.
  * Never throws.
  */
-async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
+async function isLocalAvailable(baseUrl: string, provider: 'ollama' | 'lmstudio'): Promise<boolean> {
   try {
     const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
     const url = `${root}/v1/models`;
@@ -161,7 +161,7 @@ async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
     const timer = setTimeout(() => controller.abort(), OLLAMA_PING_MS);
     const res = await fetch(url, {
       method: 'GET',
-      headers: { Authorization: 'Bearer ollama' },
+      headers: { Authorization: `Bearer ${provider === 'lmstudio' ? 'lm-studio' : 'ollama'}` },
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -261,13 +261,15 @@ async function verifyArchimedesAnswer(
 }
 
 function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProvider {
+  const isLMStudio = config.provider === 'lmstudio';
+  const apiKey = isLMStudio ? 'lm-studio' : 'ollama';
   return new OpenAICompatibleProvider(
     {
       model: config.modelName,
       baseUrl: config.ollamaBaseUrl,
-      apiKey: 'ollama',
+      apiKey,
     },
-    'Archimedes (Ollama)',
+    `Archimedes (${isLMStudio ? 'LM Studio' : 'Ollama'})`,
   );
 }
 
@@ -355,9 +357,9 @@ export class ArchimedesAlternator {
       this.display.header('Archimedes Principle', decision.reason);
 
       if (decision.useArchimedes && (archimedesConfig.enabled || this.opts.forceArchimedes)) {
-        const available = await isOllamaAvailable(archimedesConfig.ollamaBaseUrl);
+        const available = await isLocalAvailable(archimedesConfig.ollamaBaseUrl, archimedesConfig.provider);
         if (!available) {
-          this.display.warning('Archimedes (Ollama) is not reachable — escalating to large model.');
+          this.display.warning(`Archimedes (${archimedesConfig.provider === 'lmstudio' ? 'LM Studio' : 'Ollama'}) is not reachable — escalating to large model.`);
         } else {
           archimedesAttempted = true;
           this.display.success(`Trying Archimedes (${archimedesConfig.modelName})…`);

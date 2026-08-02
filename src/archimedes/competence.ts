@@ -35,6 +35,7 @@ function safeConfig(config: ArchimedesConfig): ArchimedesConfig {
   return {
     modelName: config?.modelName ?? DEFAULT_ARCHIMEDES_CONFIG.modelName,
     ollamaBaseUrl: config?.ollamaBaseUrl ?? DEFAULT_ARCHIMEDES_CONFIG.ollamaBaseUrl,
+    provider: config?.provider ?? DEFAULT_ARCHIMEDES_CONFIG.provider,
     competenceThreshold: clamp01(
       config?.competenceThreshold ?? DEFAULT_ARCHIMEDES_CONFIG.competenceThreshold,
     ),

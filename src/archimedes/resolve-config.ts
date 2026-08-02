@@ -37,6 +37,25 @@ async function fetchLocalOllamaModels(ollamaBaseUrl: string): Promise<OllamaTag[
   }
 }
 
+/** Fetches available models from an OpenAI-compatible /v1/models endpoint (LM Studio). */
+async function fetchLocalOpenAIModels(baseUrl: string): Promise<{ id: string; modified_at?: string }[]> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
+      headers: { Authorization: 'Bearer lm-studio' },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const models = Array.isArray(data.data) ? data.data : [];
+    return models.map((m: any) => ({ id: m.id, modified_at: m.modified }));
+  } catch {
+    return [];
+  }
+}
+
 export interface ArchimedesConfigResolution {
   config: ArchimedesConfig | null;
   reason: string;
@@ -60,6 +79,25 @@ export async function resolveArchimedesConfig(
 
   if (fileArchimedesConfig?.modelName) {
     return { config: merged, reason: `Using configured Archimedes model: ${merged.modelName}` };
+  }
+
+  if (merged.provider === 'lmstudio') {
+    // LM Studio exposes an OpenAI-compatible /v1/models endpoint
+    const lmModels = await fetchLocalOpenAIModels(merged.ollamaBaseUrl);
+    if (lmModels.length === 0) {
+      return {
+        config: null,
+        reason:
+          'No LM Studio models found — Archimedes Alternator has nothing to route to.\n' +
+          '  Start LM Studio, load a model, and enable the local server.\n' +
+          '  Or set "archimedes": { "modelName": "..." } in .aura.json.',
+      };
+    }
+    const first = lmModels[0];
+    return {
+      config: { ...merged, modelName: merged.modelName || first.id },
+      reason: `No model configured — auto-detected LM Studio model: ${merged.modelName || first.id}`,
+    };
   }
 
   const models = await fetchLocalOllamaModels(merged.ollamaBaseUrl);
