@@ -6,6 +6,8 @@ import type { ProjectContext } from '../agent/context.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
 import type { ContextHealthTracker } from '../cli/context-health.js';
+import type { SessionBudget } from '../agent/session-budget.js';
+import { runCouncil } from '../research/council.js';
 import type {
   AlternationDecision,
   Episode,
@@ -61,6 +63,11 @@ export interface AlternatorOptions {
    * budget is meant for the trusted large model, not the unproven local one.
    */
   maxTurns?: number;
+  /**
+   * Session budget for cost control. Respected by Archimedes attempt and any
+   * council escalation. Required for design-task council escalation to work.
+   */
+  sessionBudget?: SessionBudget;
 }
 
 export interface AlternatorRunResult {
@@ -145,6 +152,22 @@ function inferTaskCategory(task: string): TaskCategory {
   return 'other';
 }
 
+/**
+ * Classifies task mode for verification: retrieval (fact-checking against tool
+ * evidence) or design (allows novel proposals). Built on top of
+ * inferTaskCategory but maps to the verification axis.
+ */
+function taskMode(task: string): 'retrieval' | 'design' {
+  const cat = inferTaskCategory(task);
+  if (cat === 'review' || cat === 'research') return 'retrieval';
+  if (cat === 'refactor' || cat === 'implementation') return 'design';
+  // For 'other', check for design-indicating phrases
+  if (/\b(proposal|design|approach|solution|strategy|architecture|how should we|way to)\b/i.test(task)) {
+    return 'design';
+  }
+  return 'retrieval'; // default to safer mode
+}
+
 function isNonEmptyResult(text: string | undefined): boolean {
   return typeof text === 'string' && text.trim().length > 0;
 }
@@ -215,6 +238,10 @@ function summarizeToolActivity(history: HistoryMessage[]): string {
  * model with no tools and no history — deliberately NOT a full agent loop.
  * Fail-safe: any verification error counts as invalid (escalate), never as
  * silent trust.
+ *
+ * Verification rubric branches by task mode (retrieval vs design):
+ * - Retrieval tasks: strict tool-evidence corroboration (original behavior)
+ * - Design tasks: factual premises still strict, recommendations judged on coherence/relevance
  */
 async function verifyArchimedesAnswer(
   task: string,
@@ -223,8 +250,9 @@ async function verifyArchimedesAnswer(
   verifierProvider: LLMProvider,
 ): Promise<ArchimedesVerification> {
   const toolSummary = summarizeToolActivity(history);
+  const mode = taskMode(task);
 
-  const prompt = [
+  const prompt = mode === 'retrieval' ? [
     `Task: ${task}`,
     ``,
     `Tools Archimedes actually called and what they returned:`,
@@ -241,6 +269,33 @@ async function verifyArchimedesAnswer(
     `marked INVALID regardless of how complete or well-written the`,
     `answer looks.`,
     `Reply with exactly one line: either "VALID" or "INVALID: <short reason>".`,
+  ].join('\n') : [
+    `Task: ${task}`,
+    ``,
+    `Tools Archimedes actually called and what they returned:`,
+    toolSummary,
+    ``,
+    `Archimedes's final answer:`,
+    answer,
+    ``,
+    `This is a design/refactor/implementation task. Check the answer in two parts:`,
+    ``,
+    `PART 1 — Factual premises (must still be STRICT):`,
+    `Does the answer describe current state (files, functions, structure, behavior) in ways`,
+    `that contradict tool evidence? If tools say something was not found or doesn't exist,`,
+    `but the answer describes it in detail as if it does, that is fabrication and must be`,
+    `marked INVALID regardless of how good the proposal is.`,
+    ``,
+    `PART 2 — The proposal (different criteria):`,
+    `Since this is a design task, Archimedes is allowed to propose changes not currently in`,
+    `the codebase. Judge the recommendation on:`,
+    `- Does it address the task?`,
+    `- Is it internally coherent?`,
+    `- Does it demonstrate understanding of current state (even if not fully corroborated)?`,
+    `- Does it acknowledge tradeoffs or constraints?`,
+    `- Does it contradict known hard constraints from tool evidence?`,
+    ``,
+    `Reply with exactly one line: either "VALID" or "INVALID: <short reason, specify which part failed>".`,
   ].join('\n');
 
   try {
@@ -474,6 +529,66 @@ export class ArchimedesAlternator {
             : loopResult.success
               ? '(Task completed with no output)'
               : `Large model did not complete: ${loopResult.summary}`;
+
+          // Council escalation for design tasks: if large model output fails verification,
+          // run a design council to get divergent solution proposals.
+          const mode = taskMode(task);
+          if (mode === 'design' && isNonEmptyResult(largeModelOutput) && this.opts.sessionBudget) {
+            const largeModelVerification = await verifyArchimedesAnswer(
+              task,
+              largeModelOutput!,
+              loopResult.history,
+              largeModelProvider,
+            );
+
+            if (!largeModelVerification.valid) {
+              this.display.warning(
+                `Large model answer failed verification (${largeModelVerification.reason}) — checking council escalation…`,
+              );
+
+              // Rough estimate: 5 panel agents × 6 turns × 2k tokens + synthesis × 2k = ~62k tokens
+              // Conservative pad to 80k for prompt scaffolding and edge cases
+              const ESTIMATED_COUNCIL_TOKENS = 80_000;
+              const budgetCheck = this.opts.sessionBudget.wouldExceed(ESTIMATED_COUNCIL_TOKENS);
+
+              if (budgetCheck) {
+                this.display.warning(
+                  `Council would exceed session budget (${budgetCheck.used.toLocaleString()} / ${budgetCheck.limit.toLocaleString()} tokens) — skipping escalation.`,
+                );
+              } else {
+                this.display.header('Design council', 'Running 5-agent design council for divergent solutions…');
+                try {
+                  const councilResult = await runCouncil({
+                    projectRoot,
+                    topic: task,
+                    synthesisProvider: largeModelProvider,
+                    context,
+                    permissions: this.permissions,
+                    display: this.display,
+                    panelSize: 5,
+                    mode: 'design',
+                  });
+
+                  // Read the synthesized verdict from the council output
+                  const councilMd = await import('fs').then(fs => fs.promises.readFile(councilResult.path, 'utf-8'));
+                  // Extract the synthesis sections (everything before "Raw panel proposals")
+                  const synthesisMatch = councilMd.match(/[\s\S]+?(?=---\n\n## Raw panel proposals)/);
+                  result = synthesisMatch
+                    ? synthesisMatch[0].trim()
+                    : councilMd;
+
+                  finalLoopResult = {
+                    ...loopResult,
+                    summary: result,
+                  };
+
+                  this.display.success(`Design council completed — verdict saved to ${councilResult.path}`);
+                } catch (e) {
+                  this.display.error(`Council error: ${String(e)} — using large model output.`);
+                }
+              }
+            }
+          }
         } catch (e) {
           result = `Large model error: ${String(e)}`;
           largeModelOutput = result;

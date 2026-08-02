@@ -66,6 +66,24 @@ function buildPanelTask(topic: string, seat: number, panelSize: number): string 
   );
 }
 
+/**
+ * Design-specific panel prompt: generates divergent solution proposals rather
+ * than convergent research findings. Used when escalating design tasks through
+ * the alternator.
+ */
+function buildDesignPanelTask(task: string, seat: number, panelSize: number): string {
+  return (
+    `You are panel seat ${seat} of ${panelSize} in a design council on this task: "${task}"\n\n` +
+    `Propose a DISTINCT approach to solving this problem. Your goal is NOT to agree with ` +
+    `others — it is to explore the solution space from your angle. Focus on:\n\n` +
+    `- 4-8 bullet points outlining your approach, key decisions, and tradeoffs.\n` +
+    `- If you're unsure about something, say so explicitly.\n` +
+    `- End with one line: "Approach: <your one-sentence summary of your solution>"\n\n` +
+    `Do NOT try to converge on a single right answer. The point is to generate alternatives.\n\n` +
+    `No preamble, no headers, no questions back. Just the bullets and the approach line.`
+  );
+}
+
 function buildSynthesisPrompt(topic: string, findings: string[]): { system: string; user: string } {
   const system =
     'You are Aura synthesising an Ecclesia — an independent research council. You are given ' +
@@ -82,6 +100,26 @@ function buildSynthesisPrompt(topic: string, findings: string[]): { system: stri
   const user =
     `Topic: ${topic}\n\n` +
     findings.map((f, i) => `### Agent ${i + 1}\n${f}`).join('\n\n');
+  return { system, user };
+}
+
+/**
+ * Design-specific synthesis prompt: produces a menu of alternatives with
+ * tradeoffs, not a single verdict. Used when escalating design tasks.
+ */
+function buildDesignSynthesisPrompt(task: string, proposals: string[]): { system: string; user: string } {
+  const system =
+    'You are Aura synthesising a design council. ' +
+    `${proposals.length} agents proposed different approaches to the same task. ` +
+    'Produce a structured comparison, NOT a single verdict. Respond in Markdown with EXACTLY these ' +
+    'sections:\n\n' +
+    '## Distinct approaches\n(2-3 genuinely different solution paths — group similar proposals together)\n\n' +
+    '## Tradeoffs\n(for each approach: advantages, disadvantages, risks)\n\n' +
+    '## Recommendation\n(which approach seems best for this task, and why — this IS your verdict)\n\n' +
+    '## Implementation notes\n(what to watch for, what\'s reversible, what isn\'t)';
+  const user =
+    `Task: ${task}\n\n` +
+    proposals.map((p, i) => `### Agent ${i + 1}\n${p}`).join('\n\n');
   return { system, user };
 }
 
@@ -164,6 +202,11 @@ export interface CouncilResult {
 }
 
 /**
+ * Council mode: research (convergent truth-finding) or design (divergent solution proposals).
+ */
+export type CouncilMode = 'research' | 'design';
+
+/**
  * Pick which model the panel agents run on.
  *
  * Priority:
@@ -219,12 +262,15 @@ export async function runCouncil(opts: {
   panelModel?: string;
   /** The session's configured routing model id (e.g. "deepseek/deepseek-v4-flash"). */
   configuredModel?: string;
+  /** Council mode: research (default, convergent) or design (divergent proposals). */
+  mode?: CouncilMode;
 }): Promise<CouncilResult> {
   const {
     projectRoot, topic, synthesisProvider, context, permissions, display,
   } = opts;
   const panelSize = Math.max(1, opts.panelSize ?? DEFAULT_PANEL_SIZE);
   const panelModel = resolvePanelModel(synthesisProvider, opts.panelModel, opts.configuredModel);
+  const mode = opts.mode ?? 'research';
 
   const findings: string[] = [];
   let agentFailures = 0;
@@ -236,7 +282,9 @@ export async function runCouncil(opts: {
       const panelProvider = createProvider({ model: panelModel });
       const res = await runAgentLoop({
         provider: panelProvider,
-        task: buildPanelTask(topic, seat, panelSize),
+        task: mode === 'design'
+          ? buildDesignPanelTask(topic, seat, panelSize)
+          : buildPanelTask(topic, seat, panelSize),
         context,
         permissions,
         display,
@@ -261,11 +309,16 @@ export async function runCouncil(opts: {
         // calls and never write prose, so there is nothing to salvage.
         // Convert the research they DID gather into findings with one
         // tool-less completion over their own history.
+        const wrapPrompt = mode === 'design'
+          ? 'Your tool budget is exhausted. Using ONLY what you already gathered in this conversation, ' +
+            'write your design proposal now in the requested format: 4-8 bullet points outlining your approach, ' +
+            'then one line "Approach: <summary>". Do not call tools. No preamble.'
+          : 'Your tool budget is exhausted. Using ONLY what you already gathered in this conversation, ' +
+            'write the findings now in the requested format: 4-8 specific bullet points with sources in ' +
+            'parentheses, then one line "Stance: <bottom-line take>". Do not call tools. No preamble.';
         const wrap = await panelProvider.complete(
-          'Your tool budget is exhausted. Using ONLY what you already gathered in this conversation, ' +
-          'write the findings now in the requested format: 4-8 specific bullet points with sources in ' +
-          'parentheses, then one line "Stance: <bottom-line take>". Do not call tools. No preamble.',
-          [...res.history, { role: 'user', content: 'Tool budget exhausted — write your findings list and stance NOW.' }],
+          wrapPrompt,
+          [...res.history, { role: 'user', content: `Tool budget exhausted — write your ${mode === 'design' ? 'proposal' : 'findings list and stance'} NOW.` }],
           [],
         );
         text = (wrap.text ?? '').trim();
@@ -278,23 +331,29 @@ export async function runCouncil(opts: {
   }
 
   // Synthesis — one call, on the caller's real provider.
-  const { system, user } = buildSynthesisPrompt(topic, findings);
+  const { system, user } = mode === 'design'
+    ? buildDesignSynthesisPrompt(topic, findings)
+    : buildSynthesisPrompt(topic, findings);
   let verdictBody: string;
   try {
     const synth = await synthesisProvider.complete(system, [{ role: 'user', content: user }], []);
     verdictBody = (synth.text ?? '').trim();
   } catch (err) {
-    verdictBody =
-      `## Convergent findings\n_Synthesis failed: ${err instanceof Error ? err.message : String(err)}_\n\n` +
-      `## Contested\n- none (synthesis did not run)\n\n## Minority signal\n- none\n\n` +
-      `## Verdict\nSynthesis could not run, but the ${panelSize} agents' raw findings are preserved below.\n\n## Sources\n- see raw findings`;
+    const fallbackSections = mode === 'design'
+      ? `## Distinct approaches\n_Synthesis failed: ${err instanceof Error ? err.message : String(err)}_\n\n` +
+        `## Tradeoffs\n- none (synthesis did not run)\n\n## Recommendation\n- none\n\n` +
+        `## Implementation notes\nSynthesis could not run, but the ${panelSize} agents' raw proposals are preserved below.`
+      : `## Convergent findings\n_Synthesis failed: ${err instanceof Error ? err.message : String(err)}_\n\n` +
+        `## Contested\n- none (synthesis did not run)\n\n## Minority signal\n- none\n\n` +
+        `## Verdict\nSynthesis could not run, but the ${panelSize} agents' raw findings are preserved below.\n\n## Sources\n- see raw findings`;
+    verdictBody = fallbackSections;
   }
 
   const rawFindingsSection =
-    `\n\n---\n\n## Raw panel findings\n\n` +
+    `\n\n---\n\n## Raw panel ${mode === 'design' ? 'proposals' : 'findings'}\n\n` +
     findings.map((f, i) => `### Agent ${i + 1}\n\n${f}`).join('\n\n');
 
-  const md = `# Ecclesia: ${topic}\n\n${verdictBody}${rawFindingsSection}\n${FOOTER}`;
+  const md = `# Ecclesia${mode === 'design' ? ' (Design Council)' : ''}: ${topic}\n\n${verdictBody}${rawFindingsSection}\n${FOOTER}`;
 
   const dir = councilDir(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
