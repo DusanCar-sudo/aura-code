@@ -4,6 +4,39 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-08-02
+
+### Added
+- **Claim-type-aware verification.** The Archimedes verification gate now distinguishes
+  retrieval tasks (strict tool-evidence corroboration) from design tasks (factual
+  premises still strict, novel proposals judged on coherence/relevance). This fixes
+  a structural bias where good designs were penalized for lacking tool evidence.
+
+- **Design council escalation.** When a design task fails large-model verification,
+  it can escalate to a 5-agent design council that generates divergent solution
+  proposals with tradeoffs, then synthesizes them into a structured recommendation.
+  Council only fires when large-model verification fails AND the session budget allows
+  the estimated 80k token cost.
+
+- **SessionBudget integration into ArchimedesAlternator.** The alternator now
+  respects the session token budget, checking before council escalation and
+  skipping with a warning if the budget would be exceeded.
+
+### Changed
+- `runCouncil()` in `src/research/council.ts` now accepts a `mode` parameter
+  (`'research'` | `'design'`) to switch between convergent truth-finding and
+  divergent solution generation prompts.
+
+- `AlternatorOptions` interface now includes optional `sessionBudget` parameter
+  for cost control during council escalation.
+
+### Fixed
+- **Fabrication regression guard.** The original fabrication case (answer describes
+  a nonexistent function that `search_code` returned nothing for) is still caught
+  as INVALID after the design-aware verification changes. Factual premises in
+  design tasks remain strictly verified — fabrication-under-cover-of-proposal is
+  explicitly prevented.
+
 ## [0.13.5] — 2026-07-29
 
 Versions step by 0.0.5 from here on: 0.13.5, 0.14.0, 0.14.5, and so on.

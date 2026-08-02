@@ -252,3 +252,125 @@ describe('ArchimedesAlternator.run() — forceArchimedes (:small1 override)', ()
     expect(episode.archimedesSucceeded).toBe(false); // the failure still moves the score
   });
 });
+
+describe('ArchimedesAlternator — claim-type-aware verification', () => {
+  it('REGRESSION: still catches fabrication in retrieval tasks (tool says "not found", answer describes it)', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+
+    // search_code returned "not found" but Archimedes described the function anyway
+    const fabricationLoopResult: LoopResult = {
+      success: true,
+      summary: 'The foo() function handles user authentication by validating tokens...',
+      turns: 3,
+      toolCallCount: 1,
+      usage: { inputTokens: 100, outputTokens: 200, totalTokens: 300, cachedTokens: 0 },
+      costUsd: 0.01,
+      history: [
+        { role: 'user', content: 'find the foo function' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'call_1', name: 'search_code', input: { query: 'foo' } }] },
+        { role: 'tool_result', results: [{ id: 'call_1', name: 'search_code', content: 'No results found for "foo"' }] },
+        { role: 'assistant', content: 'The foo() function handles user authentication...' },
+      ],
+      toolCallLog: [],
+    };
+
+    // Verifier should reject this as INVALID (fabrication)
+    const rejectingProvider = {
+      ...fakeProvider,
+      complete: async () => ({ text: 'INVALID: tool says not found but answer describes it as if it exists' }),
+    } as unknown as LLMProvider;
+
+    mockRunAgentLoop.mockResolvedValueOnce(fabricationLoopResult); // Archimedes fabricates
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult({ summary: 'large model correct answer' })); // escalation
+
+    const alternator = new ArchimedesAlternator({
+      ...baseOpts(),
+      largeModelProvider: rejectingProvider,
+    });
+    const { usedArchimedes, episode, loopResult } = await alternator.run('find the foo function');
+
+    expect(usedArchimedes).toBe(false); // should have escalated
+    expect(loopResult.summary).toBe('large model correct answer');
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(2); // Archimedes + large model escalation
+    expect(episode.archimedesSucceeded).toBe(false); // verification failed
+  });
+
+  it('allows novel proposals in design tasks as long as factual premises are correct', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+
+    // Design task: Archimedes proposes a solution (not in codebase yet) but describes current state correctly
+    const designLoopResult: LoopResult = {
+      success: true,
+      summary: 'The current auth flow uses tokens (confirmed by tools). I propose we add rate limiting by...',
+      turns: 4,
+      toolCallCount: 2,
+      usage: { inputTokens: 100, outputTokens: 200, totalTokens: 300, cachedTokens: 0 },
+      costUsd: 0.01,
+      history: [
+        { role: 'user', content: 'implement rate limiting for auth' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'call_1', name: 'search_code', input: { query: 'auth' } }] },
+        { role: 'tool_result', results: [{ id: 'call_1', name: 'search_code', content: 'Found auth.ts with token validation logic' }] },
+        { role: 'assistant', content: 'The current auth flow uses tokens (confirmed by tools). I propose we add rate limiting by...' },
+      ],
+      toolCallLog: [],
+    };
+
+    // Verifier should accept this as VALID (factual premises are correct, proposal is allowed for design tasks)
+    const acceptingProvider = {
+      ...fakeProvider,
+      complete: async () => ({ text: 'VALID' }),
+    } as unknown as LLMProvider;
+
+    mockRunAgentLoop.mockResolvedValueOnce(designLoopResult); // Archimedes proposes design
+
+    const alternator = new ArchimedesAlternator({
+      ...baseOpts(),
+      largeModelProvider: acceptingProvider,
+    });
+    const { usedArchimedes, episode } = await alternator.run('implement rate limiting for auth');
+
+    expect(usedArchimedes).toBe(true); // should NOT have escalated
+    expect(episode.archimedesSucceeded).toBe(true); // verification passed
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1); // only Archimedes, no escalation
+  });
+
+  it('rejects design tasks with fabricated factual premises', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+
+    // Design task with fabricated premise: describes current auth flow that doesn't exist
+    const fabricatedDesignLoopResult: LoopResult = {
+      success: true,
+      summary: 'The current compaction ladder fires at 0.55 (this is wrong per tools). We should add...',
+      turns: 3,
+      toolCallCount: 1,
+      usage: { inputTokens: 100, outputTokens: 200, totalTokens: 300, cachedTokens: 0 },
+      costUsd: 0.01,
+      history: [
+        { role: 'user', content: 'add a cap to compaction' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'call_1', name: 'search_code', input: { query: 'compaction' } }] },
+        { role: 'tool_result', results: [{ id: 'call_1', name: 'search_code', content: 'No results found for "compaction"' }] },
+        { role: 'assistant', content: 'The current compaction ladder fires at 0.55 (this is wrong per tools). We should add...' },
+      ],
+      toolCallLog: [],
+    };
+
+    // Verifier should reject this as INVALID (PART 1 failed: factual premise fabricated)
+    const rejectingProvider = {
+      ...fakeProvider,
+      complete: async () => ({ text: 'INVALID: PART 1 - tool says compaction not found but answer describes it' }),
+    } as unknown as LLMProvider;
+
+    mockRunAgentLoop.mockResolvedValueOnce(fabricatedDesignLoopResult);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult({ summary: 'large model correct answer' }));
+
+    const alternator = new ArchimedesAlternator({
+      ...baseOpts(),
+      largeModelProvider: rejectingProvider,
+    });
+    const { usedArchimedes, episode } = await alternator.run('add a cap to compaction');
+
+    expect(usedArchimedes).toBe(false); // should have escalated
+    expect(episode.archimedesSucceeded).toBe(false); // verification failed
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(2); // Archimedes + large model escalation
+  });
+});
