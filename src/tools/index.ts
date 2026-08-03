@@ -25,6 +25,7 @@ import { WHATSAPP_DEFINITION, whatsAppTool } from './whatsapp.js';
 import { CRON_DEFINITION, cronTool } from './cron.js';
 import { MCP_DEFINITION, mcpTool } from './mcp.js';
 import { GITHUB_DEFINITION, githubTool } from './github.js';
+import { FTP_UPLOAD_DEFINITION, ftpUpload } from './ftp-upload.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool schemas (what the model sees)
@@ -170,6 +171,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   CRON_DEFINITION,
   MCP_DEFINITION,
   GITHUB_DEFINITION,
+  FTP_UPLOAD_DEFINITION,
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,20 +184,39 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
   telegram:     /telegram|\btg\b|\bbot\b|send me|message me|text me|ping me|notify me/,
   browser:      /browser|chrome|website|webpage|web page|screenshot|click|navigate|scrape|open .{0,20}page|\burl\b/,
-  http_request: /\bhttp\b|\bapi\b|endpoint|curl|webhook|\brest\b|\brequest\b|post to/,
+  // API-ish *actions* only: bare "api"/"request"/"endpoint" appear in nearly
+  // every coding task ("the API module", "the request handler") and would
+  // ship the ~350-char schema as a pure false positive. "call the api
+  // endpoint" still triggers via curl / the api-verb phrase / an explicit URL.
+  http_request: /\bhttp\b|curl|webhook|post to|https?:\/\/\S+|\bapi\b.{0,30}\b(call|request|fetch|endpoint|test|client|server)\b|\b(call|query|fetch|post|get|hit)\b.{0,30}\bapi\b/,
   calendar:     /calendar|\bevents?\b|meeting|appointment|schedule|remind/,
   cron:         /\bcron\b|schedule|recurring|daily|weekly|hourly|\bevery\b|periodically/,
   whatsapp:     /whatsapp|\bwa\b|send me|message me/,
   email:        /e-?mail|\bmail\b|inbox|gmail|smtp/,
   notify:       /notify|notification|alert|when done|ping|desktop/,
-  image_read:   /image|screenshot|png|jpe?g|photo|picture|webcam/,
+  // "image"/"picture" alone are too generic ("the docker image", "picture
+  // element") — require a concrete image-ish token or an action on an image.
+  image_read:   /screenshot|png|jpe?g|webcam|\bphotos?\b|\bimage[s]?\b.{0,30}\b(file|path|at|from|in|show|view|read|ocr|attach|analyze|describe)\b/,
   clipboard:    /clipboard|copy to|paste/,
-  spawn_task:   /\b(spawn|sub.?agent|parallel|delegate|orchestrat|multi.?agent)\b/i,
-  web_fetch:    /\b(http|https|url|fetch|curl|download|website|webpage|endpoint)\b/i,
+  // "parallel" is pure code prose ("run tests in parallel", "parallelize");
+  // spawn/sub-agent/delegate/orchestrate are the actual delegation words.
+  spawn_task:   /\b(spawn|sub.?agent|delegate|orchestrat|multi.?agent)\b/i,
+  // Explicit web actions or a literal URL only — "http"/"url"/"endpoint"
+  // describe code, not a fetch the agent should perform.
+  web_fetch:    /\b(fetch|curl|download|website|webpage|web ?page)\b|https?:\/\/\S+/i,
   web_search:   /\b(web.?search|search|look up|find online|google|latest|current|news|recent)\b/i,
-  memory:       /\b(remember|recall|memory|forget|note|store|what did|last time)\b/i,
-  mcp:          /\b(mcp|tool server|external tool|connect to)\b/i,
-  github:       /\bgit\b|\bgithub\b|\b(pr|prs)\s*#?\d+|pull[ .-]?request|\bcommit\b|\brepo\b|\bbranch\b|\bfork\b|\bclone\b|\bgh\b/i,
+  // "store"/"note" are everywhere in code ("data store", "note that …");
+  // remember/recall/memory/forget are the memory-actions. "store X in
+  // memory" still triggers via \bmemory\b.
+  memory:       /\b(remember|recall|memory|forget|what did|last time)\b/i,
+  // "connect to" is generic ("connect to the database"); mcp/tool
+  // server/external tool name the feature itself.
+  mcp:          /\b(mcp|tool server|external tool)\b/i,
+  // GitHub API operations only — bare git/commit/repo/branch describe local
+  // work the agent does with run_shell, not GH API calls. "clone" alone is
+  // kept: cloning is inherently a GitHub action.
+  github:       /\bgithub\b|\b(pr|prs)\s*#?\d+|pull[ .-]?request|create (a )?(new )?repo|\bclone\b|\bfork\b|\bissues?\s*#?\d*|\breleases?\b|\bgh (pr|api|issue|repo)\b/i,
+  ftp_upload:   /\bftp\b|upload to|deploy via ftp|ftp upload/i,
 };
 
 /** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy). */
@@ -342,6 +363,7 @@ export async function executeTool(
       case 'cron':         return cronTool(input as any);
       case 'mcp':          return mcpTool(input as any);
       case 'github':       return githubTool(input as any);
+      case 'ftp_upload':   return ftpUpload({ host: input.host as string, port: input.port as number | undefined, username: input.username as string, password: input.password as string, remoteDir: input.remoteDir as string, localFile: input.localFile as string });
       default:             return `Error: Unknown tool '${name}'`;
     }
   } catch (e) {

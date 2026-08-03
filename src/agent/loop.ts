@@ -19,6 +19,7 @@ import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
 import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } from './compactor.js';
 import { maybeRollover } from './generational-flush.js';
 import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.js';
+import { elideToolCallArgs, elideGoogleParts } from './tool-elision.js';
 import { detectFrustration } from './affect.js';
 import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
@@ -158,6 +159,102 @@ const CACHEABLE_READ_TOOLS = new Set([
 function callSignature(name: string, input: Record<string, unknown>): string {
   const keys = Object.keys(input).sort();
   return `${name}(${keys.map(k => `${k}=${JSON.stringify(input[k])}`).join(',')})`;
+}
+
+/**
+ * Normalize a tool-input path for cache scoping. Returns undefined when the
+ * path can't be reasoned about safely ('..', absolute) — callers treat that
+ * as workspace-wide, i.e. invalidated by any mutation.
+ */
+function normalizeCachePath(p: string): string | undefined {
+  if (p.includes('..') || p.startsWith('/')) return undefined;
+  const norm = p.replace(/^\.\//, '').replace(/\/+$/, '');
+  return norm === '.' ? '' : norm;
+}
+
+/** Two normalized paths overlap when one is a prefix of the other; '' (root)
+ *  overlaps everything. */
+function cachePathsOverlap(a: string, b: string): boolean {
+  if (a === '' || b === '') return true;
+  return a === b || a.startsWith(b + '/') || b.startsWith(a + '/');
+}
+
+/**
+ * Canonical identity of a path: fully resolves symlinks when the file exists,
+ * so a cached read via one alias is invalidated by a write via another
+ * (symlink, case-variant filesystem, 'a/../b' forms). For not-yet-existing
+ * files (a fresh write_file target) it resolves the parent directory and
+ * appends the basename. Returns undefined only when even the parent can't be
+ * resolved — callers then rely on the string-overlap check alone.
+ */
+function canonicalPath(root: string, p: string): string | undefined {
+  try {
+    return fs.realpathSync(path.resolve(root, p));
+  } catch {
+    try {
+      const abs = path.resolve(root, p);
+      return path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs));
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/**
+ * First/last line numbers actually present in a read_file result text,
+ * parsed from the tool's `N: ` line prefixes. This reflects what is REALLY
+ * in context — a char-truncated result covers fewer lines than requested,
+ * and the parser must not overclaim. When the text carries a truncation
+ * marker, the last numbered line is only partially in context and is
+ * excluded from the span (underclaiming is safe; overclaiming would elide a
+ * read the model can't actually satisfy from context).
+ */
+function coveredLineSpan(text: string): { start: number; end: number } | undefined {
+  // Head+tail whole-file reads interleave line 1 and line N — the span
+  // between them is NOT in context. Guarded by the caller too, but the
+  // parser must never be the last line of defense.
+  if (text.includes('lines omitted')) return undefined;
+  const matches: RegExpMatchArray[] = [];
+  for (const m of text.matchAll(/^(\d+):/gm)) matches.push(m);
+  if (matches.length === 0) return undefined;
+  // loop.ts truncation markers: '[truncated — N chars omitted]' and
+  // '[result truncated: …]'.
+  if (/truncated/.test(text)) matches.pop();
+  if (matches.length === 0) return undefined;
+  return {
+    start: parseInt(matches[0][1], 10),
+    end: parseInt(matches[matches.length - 1][1], 10),
+  };
+}
+
+/**
+ * Overlapping-range elision for read_file: agents re-read growing ranges of
+ * the same file (1–200, then 1–400, …). If the requested range is fully
+ * inside a range whose result is still verbatim in history and the workspace
+ * is unchanged (guaranteed by readCoverage being invalidated on mutation),
+ * return a short note instead of re-reading and re-sending the overlap.
+ * Conservative by design: whole-file requests, head+tail-truncated results,
+ * and ranges not provably covered all fall through to a real read.
+ */
+function tryElideSubsetRead(
+  call: ToolCall,
+  coveredText: string | undefined,
+  history: HistoryMessage[],
+): string | undefined {
+  if (!coveredText || coveredText.includes('lines omitted')) return undefined;
+  const input = call.input as { path?: string; start_line?: number; end_line?: number };
+  const start = input.start_line ?? 1;
+  const end = input.end_line;
+  // No end bound = whole-file request; we can't prove coverage without
+  // knowing the file's total line count.
+  if (end === undefined) return undefined;
+  const covered = coveredLineSpan(coveredText);
+  if (!covered) return undefined;
+  if (start < covered.start || end > covered.end) return undefined;
+  const stillInContext = history.some(m =>
+    m.role === 'tool_result' && m.results.some(r => r.content === coveredText));
+  if (!stillInContext) return undefined;
+  return `[lines ${start}–${end} of ${input.path} are within the earlier read (lines ${covered.start}–${covered.end}), already in context, and the workspace is unchanged. Result omitted — reuse the copy already in context.]`;
 }
 
 const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number }> = {
@@ -304,9 +401,19 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   // Redundant-read cache. Exploratory runs routinely re-read the same file or
   // re-list the same directory several turns apart, paying full I/O and a full
   // second copy of the content in context each time. Cached results are keyed
-  // by exact call signature and dropped wholesale the moment anything mutates
-  // the workspace, so a hit can never serve stale content.
-  const readCache = new Map<string, string>();
+  // by exact call signature and dropped the moment anything mutates the
+  // workspace, so a hit can never serve stale content. Each entry remembers
+  // the path it came from so a write_file/edit_file only invalidates the
+  // entries that path could have changed, instead of nuking the whole cache
+  // and forcing re-reads (which then re-enter context — the exact waste this
+  // cache exists to prevent). Entries without a resolvable path (git_status,
+  // whole-root searches, .. paths) are treated as workspace-wide: any write
+  // drops them, matching the old wholesale-clear semantics.
+  const readCache = new Map<string, { text: string; path?: string }>();
+  // Per-path record of the last successful read_file result, used to elide
+  // *overlapping* range reads (see tryElideSubsetRead). Invalidated together
+  // with readCache, so a record always describes the current workspace.
+  const readCoverage = new Map<string, { text: string }>();
 
   // Sticky set of triggered conditional tools — survives history compaction.
   const includedTools = new Set<string>();
@@ -598,10 +705,14 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     const assistantMsg: HistoryMessage = {
       role: 'assistant',
       content: responseText,
-      toolCalls: responseToolCalls,
+      // History copy only: large string arguments (write_file.content,
+      // edit_file.replace, …) are elided to size stubs so the payload isn't
+      // re-sent on every later turn. The live call above kept full args for
+      // display, toolCallLog, execQueue, and the read cache.
+      toolCalls: responseToolCalls.map(elideToolCallArgs),
     };
     if ((finalResponse as any)?.googleParts) {
-      (assistantMsg as any).googleParts = (finalResponse as any).googleParts;
+      (assistantMsg as any).googleParts = elideGoogleParts((finalResponse as any).googleParts);
     }
     history.push(assistantMsg);
 
@@ -680,34 +791,82 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           }
         }
 
-        // Any mutation invalidates every cached read: a shell command or file
-        // write can change arbitrary paths, so partial invalidation would be
-        // guesswork. Cleared before execution so a mutation that throws still
-        // drops the cache rather than leaving it falsely warm.
+        // Any mutation invalidates cached reads: a shell command can change
+        // arbitrary paths (full clear), but write_file/edit_file only touch a
+        // known path — invalidating just the entries that path could have
+        // changed keeps unrelated cached reads warm, so the agent isn't
+        // forced to re-read (and re-pay for) files it already has in context.
+        // Cleared before execution so a mutation that throws still drops the
+        // cache rather than leaving it falsely warm. Paths we can't scope
+        // safely ('..', absolute) fall back to the full clear.
         if (MUTATING_TOOLS.has(call.name) || call.name === 'run_tests') {
-          readCache.clear();
+          const norm = typeof call.input.path === 'string'
+            ? normalizeCachePath(call.input.path)
+            : undefined;
+          if ((call.name === 'write_file' || call.name === 'edit_file') && norm !== undefined) {
+            // Alias safety net: a write via a symlink/case/`..` alias of a
+            // cached path must still invalidate it. Realpath comparison is
+            // per-entry I/O, so it only runs for entries the cheap string
+            // overlap did NOT already match.
+            const canonTarget = canonicalPath(opts.context.root, norm);
+            for (const [k, v] of readCache) {
+              if (v.path === undefined || cachePathsOverlap(v.path, norm)) {
+                readCache.delete(k);
+                continue;
+              }
+              if (canonTarget !== undefined) {
+                const canonEntry = canonicalPath(opts.context.root, v.path);
+                if (canonEntry !== undefined && canonEntry === canonTarget) readCache.delete(k);
+              }
+            }
+            for (const k of readCoverage.keys()) {
+              if (k === undefined || cachePathsOverlap(k, norm)) readCoverage.delete(k);
+            }
+          } else {
+            readCache.clear();
+            readCoverage.clear();
+          }
         }
 
         const sig = callSignature(call.name, call.input);
         const cacheable = CACHEABLE_READ_TOOLS.has(call.name);
         const cached = cacheable ? readCache.get(sig) : undefined;
+        const cachedText = cached?.text;
 
-        if (cached !== undefined) {
+        if (cachedText !== undefined) {
           // The content is only elided if it is still verbatim in the live
           // history — if compaction has since dropped it, the model genuinely
           // no longer has it and must get the full result back.
           const stillInContext = history.some(m =>
-            m.role === 'tool_result' && m.results.some(r => r.content === cached));
+            m.role === 'tool_result' && m.results.some(r => r.content === cachedText));
           result = stillInContext
             ? `[identical to the earlier ${sig} call this session; workspace unchanged since. Result omitted — reuse the copy already in context.]`
-            : cached;
+            : cachedText;
           display.toolResult(call.name, result, 0);
         } else {
-          const startMs = Date.now();
-          result = await executeTool(call.name, call.input, opts.context.root);
-          const elapsed = Date.now() - startMs;
-          display.toolResult(call.name, result, elapsed);
+          // Overlapping-range elision: a read whose range is a subset of an
+          // earlier read still in context returns a note instead of re-reading
+          // (see tryElideSubsetRead). Only for read_file with a scoped path.
+          const pathArg = call.input.path;
+          const normPath = typeof pathArg === 'string' ? normalizeCachePath(pathArg) : undefined;
+          const subsetNote = (call.name === 'read_file' && normPath !== undefined)
+            ? tryElideSubsetRead(call, readCoverage.get(normPath)?.text, history)
+            : undefined;
+          if (subsetNote !== undefined) {
+            result = subsetNote;
+            display.toolResult(call.name, result, 0);
+          } else {
+            const startMs = Date.now();
+            result = await executeTool(call.name, call.input, opts.context.root);
+            const elapsed = Date.now() - startMs;
+            display.toolResult(call.name, result, elapsed);
+          }
         }
+        // Elision notes (exact-hit and subset) are never cached: they are
+        // history-dependent by construction (the note only makes sense while
+        // the original content is still in context), and caching a note
+        // would overwrite the real coverage record readCoverage relies on.
+        const isElisionNote = result.startsWith('[identical to the earlier') || result.startsWith('[lines ');
         // Proactive truncation: align with the compactor's MAX_RESULT_CHARS
         // (4K chars ~1K tokens). Oversized results pollute context between
         // compaction cycles — truncate early so every API call carries less
@@ -724,8 +883,18 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         // Cache the post-truncation text — that is exactly what lands in
         // history, so a later hit can compare against it verbatim. Errors are
         // never cached: they are frequently transient and re-reading is cheap.
-        if (cached === undefined && cacheable && !isError) {
-          readCache.set(sig, result);
+        // Elision notes are never cached either (see isElisionNote above).
+        // read_file results also feed the range-coverage record used by
+        // subset-range elision (same staleness discipline: cleared on any
+        // mutation of that path).
+        if (cached === undefined && cacheable && !isError && !isElisionNote) {
+          const normPath = typeof call.input.path === 'string'
+            ? normalizeCachePath(call.input.path)
+            : undefined;
+          readCache.set(sig, { text: result, path: normPath });
+          if (call.name === 'read_file' && normPath !== undefined) {
+            readCoverage.set(normPath, { text: result });
+          }
         }
         toolCallLog.push({ name: call.name, input: call.input });
         if (!isError) execQueue.push(call.name, call.input, turns);
