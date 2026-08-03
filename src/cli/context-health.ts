@@ -10,6 +10,7 @@ import { estimateContextTokens, countMessage, countText, getRecapGeneration } fr
 import { getLadder, compactionThreshold } from '../agent/context-policy.js';
 import { getContextWindow } from '../providers/factory.js';
 import { costFor } from '../agent/loop.js';
+import { checkSystemMemory } from '../util/system-memory.js';
 
 const ROLLOVER_AT_GENERATION = 3;
 const DEFAULT_WINDOW = 128_000;
@@ -45,6 +46,12 @@ export interface ContextHealth {
   compactionCount: number;
   largestMessages: LargestMessage[];
   compactionHistory: CompactionEvent[];
+  systemMemory: {
+    usagePercent: number;
+    availableMemory: number;
+    severity: 'ok' | 'warn' | 'critical';
+    recommendation: 'continue' | 'throttle' | 'abort';
+  };
 }
 
 export class ContextHealthTracker {
@@ -84,6 +91,7 @@ export class ContextHealthTracker {
       ? Math.round((nextCompactionThreshold / contextWindow) * 100)
       : 0;
     const tokensUntilCompaction = Math.max(0, nextCompactionThreshold - estimatedTokens);
+    const mem = checkSystemMemory();
 
     return {
       estimatedTokens, contextWindow, usagePercent, recapGeneration,
@@ -95,6 +103,12 @@ export class ContextHealthTracker {
       compactionCount: this.compactionEvents.length,
       largestMessages: getLargestMessages(history, system, 5),
       compactionHistory: [...this.compactionEvents],
+      systemMemory: {
+        usagePercent: mem.stats.usagePercent,
+        availableMemory: mem.stats.availableMemory,
+        severity: mem.severity,
+        recommendation: mem.recommendation,
+      },
     };
   }
 }
@@ -173,6 +187,9 @@ export function formatContextDashboard(h: ContextHealth): string {
     '    Cost:     ' + chalk.hex('#c8b5a0')('$' + h.totalCostUsd.toFixed(4)),
     '    Turns:    ' + chalk.hex('#c8b5a0')(String(h.turnCount)),
     '    Tools:    ' + chalk.hex('#c8b5a0')(h.toolCallCount + ' calls'),
+    '',
+    '  System RAM: ' + memColor(h.systemMemory.severity)(h.systemMemory.usagePercent.toFixed(1) + '% used')
+      + chalk.hex(TEXT_DIM_HEX)(' · ' + (h.systemMemory.availableMemory / 1024 ** 3).toFixed(1) + 'GB available · ' + h.systemMemory.recommendation),
   ];
 
   if (h.compactionHistory.length > 0) {
@@ -193,6 +210,10 @@ export function formatContextDashboard(h: ContextHealth): string {
 
   lines.push('', chalk.hex(FAINT_HEX)(line), '');
   return lines.join('\n');
+}
+
+function memColor(severity: ContextHealth['systemMemory']['severity']) {
+  return severity === 'ok' ? chalk.hex('#5a9e6e') : severity === 'warn' ? chalk.hex('#d4903a') : chalk.hex('#b15439');
 }
 
 function formatLadder(generation: number): string {
