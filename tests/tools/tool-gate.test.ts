@@ -78,7 +78,7 @@ describe('selectTools relevance gate', () => {
 
   it('selected tools preserve TOOL_DEFINITIONS order and cover all 25 when everything triggers', () => {
     const everything = Object.values({
-      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr #42 clone fork repo branch',
+      t: 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr #42 clone fork repo branch ftp upload',
     }).join(' ');
     const sent = names(everything);
     expect(sent).toEqual(TOOL_DEFINITIONS.map(t => t.name));
@@ -101,5 +101,36 @@ describe('selectTools relevance gate', () => {
       { role: 'tool_result', results: [{ id: '1', content: 'grep hit: sendTelegramMessage()', isError: false }] },
     ];
     expect(names('fix the bug', history)).not.toContain('whatsapp');
+  });
+
+  it('generic code prose does not trigger the tightened gates', () => {
+    const cases: Array<[string, string[]]> = [
+      ['run the tests in parallel and fix the data store module', ['spawn_task', 'memory']],
+      ['connect to the database and inspect the request handler', ['mcp', 'http_request']],
+      ['build a docker image with the new picture element', ['image_read']],
+      ['explain the last commit and the repo structure', ['github']],
+      ['handle the http endpoint in the api module', ['web_fetch']],
+    ];
+    for (const [task, excluded] of cases) {
+      const sent = names(task);
+      for (const t of excluded) {
+        expect(sent, `${t} should be gated out for "${task}"`).not.toContain(t);
+      }
+    }
+  });
+
+  it('intent phrases still trigger the tightened gates', () => {
+    const cases: Record<string, string> = {
+      spawn_task: 'spawn two sub-agents to investigate',
+      memory: 'store this fact in memory',
+      http_request: 'call the api endpoint with curl',
+      mcp: 'connect to the mcp server',
+      image_read: 'read the image at assets/logo.png',
+      github: 'clone the repo and open a pull request',
+      web_fetch: 'fetch https://example.com and summarize',
+    };
+    for (const [tool, task] of Object.entries(cases)) {
+      expect(names(task), `trigger for ${tool} with "${task}"`).toContain(tool);
+    }
   });
 });
