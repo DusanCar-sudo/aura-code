@@ -6,6 +6,7 @@ import type { Display } from '../cli/display.js';
 import type { ContextHealthTracker } from '../cli/context-health.js';
 import type { ArchimedesConfig } from '../archimedes/types.js';
 import { ArchimedesAlternator, type AlternatorRunResult } from '../archimedes/alternator.js';
+import { resolveEndpoint } from '../archimedes/endpoint.js';
 import { episodeStore } from '../archimedes/episode-capture.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,15 +246,18 @@ export class SingleModelStrategy extends BaseOrchestrationStrategy {
 
 const OLLAMA_PING_MS = 3_000;
 
-/** Checks whether an Ollama OpenAI-compatible endpoint responds. Never throws. */
-async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
+/**
+ * Checks whether the configured local endpoint (Ollama or LM Studio) responds.
+ * Never throws.
+ */
+async function isLocalBackendAvailable(config: ArchimedesConfig): Promise<boolean> {
+  const endpoint = resolveEndpoint(config);
   try {
-    const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), OLLAMA_PING_MS);
-    const res = await fetch(`${root}/v1/models`, {
+    const res = await fetch(`${endpoint.baseUrl}/models`, {
       method: 'GET',
-      headers: { Authorization: 'Bearer ollama' },
+      headers: { Authorization: `Bearer ${endpoint.apiKey}` },
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -271,15 +275,15 @@ export interface StrategySelectionInput {
 
 /**
  * Picks a default strategy from what the local machine can actually run:
- * Ollama reachable and Archimedes enabled → alternation; otherwise the single
- * (large) model handles everything. Config can always override this — it is
- * a default, not a mandate.
+ * a local model server (Ollama or LM Studio) reachable and Archimedes enabled
+ * → alternation; otherwise the single (large) model handles everything.
+ * Config can always override this — it is a default, not a mandate.
  */
 export async function selectDefaultStrategy(
   input: StrategySelectionInput,
 ): Promise<OrchestrationStrategy> {
   const { archimedesConfig, largeModelProvider, projectRoot } = input;
-  if (archimedesConfig.enabled && (await isOllamaAvailable(archimedesConfig.ollamaBaseUrl))) {
+  if (archimedesConfig.enabled && (await isLocalBackendAvailable(archimedesConfig))) {
     return new ArchimedesAlternatorStrategy(archimedesConfig, largeModelProvider, projectRoot);
   }
   return new SingleModelStrategy(largeModelProvider);

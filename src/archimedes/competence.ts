@@ -34,7 +34,11 @@ function clamp01(n: number): number {
 function safeConfig(config: ArchimedesConfig): ArchimedesConfig {
   return {
     modelName: config?.modelName ?? DEFAULT_ARCHIMEDES_CONFIG.modelName,
+    // Backend selection must survive normalisation — dropping it here would
+    // silently re-route an LM Studio config back to Ollama's port.
+    ...(config?.backend ? { backend: config.backend } : {}),
     ollamaBaseUrl: config?.ollamaBaseUrl ?? DEFAULT_ARCHIMEDES_CONFIG.ollamaBaseUrl,
+    lmstudioBaseUrl: config?.lmstudioBaseUrl ?? DEFAULT_ARCHIMEDES_CONFIG.lmstudioBaseUrl,
     competenceThreshold: clamp01(
       config?.competenceThreshold ?? DEFAULT_ARCHIMEDES_CONFIG.competenceThreshold,
     ),

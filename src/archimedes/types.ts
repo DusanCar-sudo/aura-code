@@ -32,15 +32,29 @@ export interface CompetenceLevel {
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Which local model server Archimedes talks to. */
+export type ArchimedesBackend = 'ollama' | 'lmstudio';
+
 /**
  * Runtime configuration for the Archimedes small-model alternation layer.
  * Typically loaded from `.aura/archimedes.json` or CLI flags.
  */
 export interface ArchimedesConfig {
-  /** Ollama model tag (e.g. `qwen2.5-coder:1.5b`). */
+  /**
+   * Local model id — an Ollama tag (`qwen2.5-coder:1.5b`) or an LM Studio id
+   * (`qwen/qwen3-1.7b`). May carry an `ollama/` or `lmstudio/` routing prefix,
+   * which selects the backend and is stripped before the request goes out.
+   */
   modelName: string;
   /** OpenAI-compatible base URL for the local Ollama server. */
   ollamaBaseUrl: string;
+  /**
+   * Which local server to use. Omitted = inferred from a `modelName` prefix,
+   * falling back to Ollama for configs written before LM Studio was supported.
+   */
+  backend?: ArchimedesBackend;
+  /** OpenAI-compatible base URL for the local LM Studio server. */
+  lmstudioBaseUrl?: string;
   /**
    * Minimum success rate required before Archimedes is trusted without escalation.
    * Compared against historical episodes for similar tasks.
@@ -66,6 +80,7 @@ export interface ArchimedesConfig {
 export const DEFAULT_ARCHIMEDES_CONFIG: ArchimedesConfig = {
   modelName: 'qwen2.5-coder:1.5b',
   ollamaBaseUrl: 'http://localhost:11434/v1',
+  lmstudioBaseUrl: 'http://localhost:1234/v1',
   competenceThreshold: 0.7,
   minAttempts: 3,
   enabled: true,

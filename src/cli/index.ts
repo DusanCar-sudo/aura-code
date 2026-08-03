@@ -41,6 +41,7 @@ import { compactHistory, estimateContextTokens } from '../agent/compactor.js';
 import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
+import { applyModelOverride } from '../archimedes/endpoint.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
@@ -1201,10 +1202,7 @@ async function main() {
         });
       } else {
         display.success(reason);
-        const archimedesConfig = {
-          ...baseArchimedesConfig,
-          ...(archimedesModelOverride ? { modelName: archimedesModelOverride } : {}),
-        };
+        const archimedesConfig = applyModelOverride(baseArchimedesConfig, archimedesModelOverride);
         const alternator = new ArchimedesAlternator({
           archimedesConfig,
           largeModelProvider: provider,
@@ -1647,10 +1645,7 @@ let abortController: AbortController | null = null;
           });
         } else {
           tuiDisplay.success(reason);
-          const archimedesConfig = {
-            ...baseArchimedesConfig,
-            ...(archimedesModelOverride ? { modelName: archimedesModelOverride } : {}),
-          };
+          const archimedesConfig = applyModelOverride(baseArchimedesConfig, archimedesModelOverride);
           const alternator = new ArchimedesAlternator({
             archimedesConfig,
             largeModelProvider: currentProvider,
@@ -2471,7 +2466,10 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input.startsWith(':archmodel ')) {
     const modelTag = input.slice(11).trim();
     if (!modelTag) {
-      c.display.warning('Usage: :archmodel <ollama-model-tag>  e.g. :archmodel qwen3-vl:4b');
+      c.display.warning(
+        'Usage: :archmodel <model>  e.g. :archmodel qwen3-vl:4b (Ollama) ' +
+        'or :archmodel lmstudio/qwen/qwen3-1.7b (LM Studio)',
+      );
       return { handled: true };
     }
     return { handled: true, newArchimedesModelOverride: modelTag };

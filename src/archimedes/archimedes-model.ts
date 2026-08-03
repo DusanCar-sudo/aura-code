@@ -7,18 +7,24 @@ import type {
 } from '../providers/types.js';
 import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
 import type { ArchimedesConfig } from './types.js';
+import { apiRoot, resolveEndpoint, wireModelName } from './endpoint.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ArchimedesModel — small local model via Ollama
+// ArchimedesModel — small local model via Ollama or LM Studio
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OllamaTagsResponse {
   models?: { name: string }[];
 }
 
+interface OpenAIModelsResponse {
+  data?: { id: string }[];
+}
+
 /**
  * {@link LLMProvider} implementation for the Archimedes Principle small model.
- * Delegates completions to {@link OpenAICompatibleProvider} against Ollama.
+ * Delegates completions to {@link OpenAICompatibleProvider} against whichever
+ * local server the config selects — Ollama or LM Studio.
  */
 export class ArchimedesModel implements LLMProvider {
   readonly name = 'Archimedes';
@@ -30,12 +36,14 @@ export class ArchimedesModel implements LLMProvider {
 
   constructor(config: ArchimedesConfig) {
     this.config = config;
-    this.model = config.modelName;
+    // A prefixed id (`lmstudio/qwen/qwen3-1.7b`) selects the backend via
+    // resolveEndpoint; only the bare id goes on the wire.
+    this.model = wireModelName(config);
     this.delegate = this.buildDelegate();
   }
 
   /**
-   * One-shot completion via the Ollama OpenAI-compatible endpoint.
+   * One-shot completion via the local OpenAI-compatible endpoint.
    */
   async complete(
     system: string,
@@ -46,7 +54,7 @@ export class ArchimedesModel implements LLMProvider {
   }
 
   /**
-   * Streaming completion via the Ollama OpenAI-compatible endpoint.
+   * Streaming completion via the local OpenAI-compatible endpoint.
    */
   async *stream(
     system: string,
@@ -57,20 +65,35 @@ export class ArchimedesModel implements LLMProvider {
   }
 
   /**
-   * Returns true when Ollama is reachable and lists {@link model}.
+   * Returns true when the configured local server is reachable and lists
+   * {@link model}. Each backend is asked on its own terms: Ollama via
+   * `/api/tags` (tag-prefix matching, so `qwen2.5-coder` matches
+   * `qwen2.5-coder:1.5b`), LM Studio via `/v1/models` (exact ids, no tags).
    * Never throws.
    */
   async isAvailable(): Promise<boolean> {
+    const endpoint = resolveEndpoint(this.config);
     try {
-      const root = ollamaRoot(this.config.ollamaBaseUrl);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3_000);
-      const res = await fetch(`${root}/api/tags`, { signal: controller.signal });
+      const url = endpoint.backend === 'lmstudio'
+        ? `${endpoint.baseUrl}/models`
+        : `${apiRoot(endpoint.baseUrl)}/api/tags`;
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${endpoint.apiKey}` },
+      });
       clearTimeout(timer);
       if (!res.ok) return false;
+
+      const wanted = this.model;
+      if (endpoint.backend === 'lmstudio') {
+        const body = (await res.json()) as OpenAIModelsResponse;
+        return (body.data ?? []).some(m => m.id === wanted);
+      }
+
       const body = (await res.json()) as OllamaTagsResponse;
       const names = (body.models ?? []).map(m => m.name);
-      const wanted = this.model;
       return names.some(
         n => n === wanted || n.startsWith(`${wanted}:`) || n.split(':')[0] === wanted,
       );
@@ -80,34 +103,31 @@ export class ArchimedesModel implements LLMProvider {
   }
 
   /**
-   * Returns the current Ollama model tag in use.
+   * Returns the current local model id in use.
    */
   async getVersion(): Promise<string> {
     return this.model;
   }
 
   /**
-   * Switches the active Ollama model and rebuilds the delegate provider.
+   * Switches the active local model and rebuilds the delegate provider.
+   * Accepts a backend-prefixed id, which also switches the backend.
    */
   async updateModel(newModelName: string): Promise<void> {
-    this.model = newModelName;
     this.config.modelName = newModelName;
+    this.model = wireModelName(this.config);
     this.delegate = this.buildDelegate();
   }
 
   private buildDelegate(): OpenAICompatibleProvider {
+    const endpoint = resolveEndpoint(this.config);
     return new OpenAICompatibleProvider(
       {
         model: this.model,
-        baseUrl: this.config.ollamaBaseUrl,
-        apiKey: 'ollama',
+        baseUrl: endpoint.baseUrl,
+        apiKey: endpoint.apiKey,
       },
       'Archimedes',
     );
   }
-}
-
-function ollamaRoot(baseUrl: string): string {
-  const trimmed = (baseUrl ?? 'http://localhost:11434/v1').replace(/\/v1\/?$/, '').replace(/\/$/, '');
-  return trimmed || 'http://localhost:11434';
 }

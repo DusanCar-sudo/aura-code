@@ -201,6 +201,18 @@ async function fetchOpenAICompatModels(cfg: { base: string; envKey: string; pref
  * selectors). Falls back to empty array on any error — the caller uses the
  * static list instead. Never throws.
  */
+/**
+ * Server root for a local backend, with any `/v1` suffix stripped — these two
+ * cases append their own path. Users set OLLAMA_BASE_URL / LMSTUDIO_BASE_URL
+ * in both spellings, and the `/v1` form used to produce a `/v1/v1/models`
+ * request that 404s, leaving the picker silently empty.
+ */
+function localApiRoot(envValue: string | undefined, fallback: string): string {
+  const raw = envValue?.trim().replace(/\/+$/, '');
+  if (!raw) return fallback;
+  return raw.replace(/\/v1$/, '');
+}
+
 export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> {
   try {
     const compat = OPENAI_COMPAT_MODELS[providerId];
@@ -226,7 +238,7 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
       }
 
       case 'ollama': {
-        const base = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+        const base = localApiRoot(process.env.OLLAMA_BASE_URL, 'http://localhost:11434');
         const r = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (!r.ok) return [];
         const d = await r.json() as { models?: { name: string }[] };
@@ -234,7 +246,7 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
       }
 
       case 'lmstudio': {
-        const base = process.env.LMSTUDIO_BASE_URL ?? 'http://localhost:1234';
+        const base = localApiRoot(process.env.LMSTUDIO_BASE_URL, 'http://localhost:1234');
         const r = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (!r.ok) return [];
         const d = await r.json() as { data?: { id: string }[] };

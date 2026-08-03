@@ -219,6 +219,20 @@ const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://opencode.ai/zen/v1': 'opencode',
 };
 
+/**
+ * Base URL for a local model server. The model picker tells users to set
+ * OLLAMA_BASE_URL / LMSTUDIO_BASE_URL and live-fetches model lists through
+ * them, so completions have to honour them too — otherwise a non-default port
+ * lists its models correctly in the picker and then sends every request to
+ * localhost. Both the bare `host:port` and the `host:port/v1` spellings are
+ * accepted, since the picker documents one and .aura.json the other.
+ */
+function localBaseUrl(envVar: string, fallback: string): string {
+  const raw = process.env[envVar]?.trim().replace(/\/+$/, '');
+  if (!raw) return fallback;
+  return /\/v1$/.test(raw) ? raw : `${raw}/v1`;
+}
+
 function baseUrlFamily(url: string | undefined): string | undefined {
   if (!url) return undefined;
   return KNOWN_PROVIDER_BASE_URLS[url];
@@ -538,7 +552,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     return new OpenAICompatibleProvider({
       ...config,
       model: ollamaModel,
-      baseUrl: config.baseUrl ?? 'http://localhost:11434/v1',
+      baseUrl: config.baseUrl ?? localBaseUrl('OLLAMA_BASE_URL', 'http://localhost:11434/v1'),
       apiKey: 'ollama',
     }, 'Ollama');
   }
@@ -549,7 +563,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     return new OpenAICompatibleProvider({
       ...config,
       model: localModel,
-      baseUrl: config.baseUrl ?? 'http://localhost:1234/v1',
+      baseUrl: config.baseUrl ?? localBaseUrl('LMSTUDIO_BASE_URL', 'http://localhost:1234/v1'),
       apiKey: 'lm-studio',
     }, 'Local');
   }

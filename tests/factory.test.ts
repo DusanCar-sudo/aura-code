@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   registerCustomProviders, getCustomProviders, getAllModels, createProvider,
   ZHIPU_GENERAL_BASE_URL, ZHIPU_CODING_BASE_URL,
@@ -172,5 +172,67 @@ describe('createProvider with custom providers', () => {
     expect(provider.name).toBe('Exact');
     // When the whole model IS the prefix, rawModel would be empty, so it uses full model
     expect(provider.model).toBe('exact-model');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Local backends — Ollama / LM Studio base URL routing
+// ─────────────────────────────────────────────────────────────────────────────
+describe('createProvider — local backend base URLs', () => {
+  const saved = {
+    ollama: process.env.OLLAMA_BASE_URL,
+    lmstudio: process.env.LMSTUDIO_BASE_URL,
+  };
+
+  beforeEach(() => {
+    delete process.env.OLLAMA_BASE_URL;
+    delete process.env.LMSTUDIO_BASE_URL;
+  });
+
+  afterEach(() => {
+    if (saved.ollama === undefined) delete process.env.OLLAMA_BASE_URL;
+    else process.env.OLLAMA_BASE_URL = saved.ollama;
+    if (saved.lmstudio === undefined) delete process.env.LMSTUDIO_BASE_URL;
+    else process.env.LMSTUDIO_BASE_URL = saved.lmstudio;
+  });
+
+  /** The configured endpoint, read off the underlying OpenAI SDK client. */
+  function baseUrlOf(provider: unknown): string {
+    return (provider as { client: { baseURL: string } }).client.baseURL;
+  }
+
+  it('defaults LM Studio to port 1234', () => {
+    const p = createProvider({ model: 'lmstudio/granite' });
+    expect(baseUrlOf(p)).toBe('http://localhost:1234/v1');
+    expect(p.model).toBe('granite');
+  });
+
+  it('honours LMSTUDIO_BASE_URL — the picker lists via it, so completions must too', () => {
+    process.env.LMSTUDIO_BASE_URL = 'http://192.168.1.9:4321';
+    const p = createProvider({ model: 'lmstudio/granite' });
+    expect(baseUrlOf(p)).toBe('http://192.168.1.9:4321/v1');
+  });
+
+  it('accepts LMSTUDIO_BASE_URL already carrying /v1 without doubling it', () => {
+    process.env.LMSTUDIO_BASE_URL = 'http://192.168.1.9:4321/v1';
+    const p = createProvider({ model: 'lmstudio/granite' });
+    expect(baseUrlOf(p)).toBe('http://192.168.1.9:4321/v1');
+  });
+
+  it('keeps LM Studio publisher/model ids intact after stripping the prefix', () => {
+    const p = createProvider({ model: 'lmstudio/qwen/qwen3-1.7b' });
+    expect(p.model).toBe('qwen/qwen3-1.7b');
+  });
+
+  it('honours OLLAMA_BASE_URL', () => {
+    process.env.OLLAMA_BASE_URL = 'http://gpu-box:11434';
+    const p = createProvider({ model: 'ollama/qwen3:4b' });
+    expect(baseUrlOf(p)).toBe('http://gpu-box:11434/v1');
+  });
+
+  it('lets an explicit config baseUrl win over the env var', () => {
+    process.env.LMSTUDIO_BASE_URL = 'http://from-env:4321';
+    const p = createProvider({ model: 'lmstudio/granite', baseUrl: 'http://explicit:9999/v1' });
+    expect(baseUrlOf(p)).toBe('http://explicit:9999/v1');
   });
 });

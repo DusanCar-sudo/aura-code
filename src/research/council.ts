@@ -7,6 +7,7 @@ import type { LLMProvider } from '../providers/types.js';
 import type { ProjectContext } from '../agent/context.js';
 import type { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
+import type { SessionBudget } from '../agent/session-budget.js';
 
 /**
  * Aura's `:council` ("Ecclesia") — N independent research agents investigate
@@ -71,8 +72,8 @@ function buildPanelTask(topic: string, seat: number, panelSize: number): string 
  * than convergent research findings. Used when escalating design tasks through
  * the alternator.
  */
-function buildDesignPanelTask(task: string, seat: number, panelSize: number): string {
-  return (
+function buildDesignPanelTask(task: string, seat: number, panelSize: number, failedAttemptContext?: string): string {
+  let prompt =
     `You are panel seat ${seat} of ${panelSize} in a design council on this task: "${task}"\n\n` +
     `Propose a DISTINCT approach to solving this problem. Your goal is NOT to agree with ` +
     `others — it is to explore the solution space from your angle. Focus on:\n\n` +
@@ -80,8 +81,15 @@ function buildDesignPanelTask(task: string, seat: number, panelSize: number): st
     `- If you're unsure about something, say so explicitly.\n` +
     `- End with one line: "Approach: <your one-sentence summary of your solution>"\n\n` +
     `Do NOT try to converge on a single right answer. The point is to generate alternatives.\n\n` +
-    `No preamble, no headers, no questions back. Just the bullets and the approach line.`
-  );
+    `No preamble, no headers, no questions back. Just the bullets and the approach line.`;
+
+  if (failedAttemptContext) {
+    prompt += `\n\n---\nNote: a previous attempt at this task failed verification. Use the following as ` +
+      `context on what NOT to repeat — it is not verified and may itself be wrong or incomplete:\n` +
+      failedAttemptContext;
+  }
+
+  return prompt;
 }
 
 function buildSynthesisPrompt(topic: string, findings: string[]): { system: string; user: string } {
@@ -264,6 +272,13 @@ export async function runCouncil(opts: {
   configuredModel?: string;
   /** Council mode: research (default, convergent) or design (divergent proposals). */
   mode?: CouncilMode;
+  /** Context from a previous attempt that failed verification (design mode only).
+   *  Appended to each panel agent's task so they avoid repeating the same errors. */
+  failedAttemptContext?: string;
+  /** Session budget for cost control. When provided, threaded into each panel
+   *  agent's runAgentLoop call so council token spend counts against the
+   *  session ceiling. */
+  budget?: SessionBudget;
 }): Promise<CouncilResult> {
   const {
     projectRoot, topic, synthesisProvider, context, permissions, display,
@@ -283,13 +298,14 @@ export async function runCouncil(opts: {
       const res = await runAgentLoop({
         provider: panelProvider,
         task: mode === 'design'
-          ? buildDesignPanelTask(topic, seat, panelSize)
+          ? buildDesignPanelTask(topic, seat, panelSize, opts.failedAttemptContext)
           : buildPanelTask(topic, seat, panelSize),
         context,
         permissions,
         display,
         maxTurns: 6,
         disableSpawn: true,
+        budget: opts.budget,
       });
       let text = (res.summary ?? '').trim();
       if (!res.success || /^Loop (ended|stalled)/i.test(text)) {
