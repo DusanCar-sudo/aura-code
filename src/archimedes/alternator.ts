@@ -15,10 +15,11 @@ import type {
   TaskCategory,
 } from './types.js';
 import { assessCompetence, shouldFineTune } from './competence.js';
+import { resolveEndpoint, wireModelName } from './endpoint.js';
 import { episodeStore } from './episode-capture.js';
 import type { EpisodeStats } from './episode-capture.js';
 
-// Tools sent to the Archimedes (Ollama) attempt — read-only subset only.
+// Tools sent to the Archimedes attempt — read-only subset only.
 // Mutating tools (edit_file, write_file, run_shell) are already blocked by the
 // PermissionSystem, but stripping them from the schema saves schema tokens on
 // every one of Archimedes's turns without touching the large-model escalation.
@@ -162,7 +163,7 @@ function taskMode(task: string): 'retrieval' | 'design' {
   if (cat === 'review' || cat === 'research') return 'retrieval';
   if (cat === 'refactor' || cat === 'implementation') return 'design';
   // For 'other', check for design-indicating phrases
-  if (/\b(proposal|design|approach|solution|strategy|architecture|how should we|way to)\b/i.test(task)) {
+  if (/\b(proposal|design|approach|solution|strategy|architecture|how should we|way to|suggest|recommend|improve|optimize|plan|rethink|how would|what'?s the best)\b/i.test(task)) {
     return 'design';
   }
   return 'retrieval'; // default to safer mode
@@ -173,18 +174,18 @@ function isNonEmptyResult(text: string | undefined): boolean {
 }
 
 /**
- * Checks whether the Ollama OpenAI-compatible endpoint responds.
+ * Checks whether the configured local endpoint (Ollama or LM Studio) responds.
+ * Both serve an OpenAI-compatible `/v1/models`, so one probe covers either.
  * Never throws.
  */
-async function isOllamaAvailable(baseUrl: string): Promise<boolean> {
+async function isLocalBackendAvailable(config: ArchimedesConfig): Promise<boolean> {
+  const endpoint = resolveEndpoint(config);
   try {
-    const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
-    const url = `${root}/v1/models`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), OLLAMA_PING_MS);
-    const res = await fetch(url, {
+    const res = await fetch(`${endpoint.baseUrl}/models`, {
       method: 'GET',
-      headers: { Authorization: 'Bearer ollama' },
+      headers: { Authorization: `Bearer ${endpoint.apiKey}` },
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -299,8 +300,11 @@ async function verifyArchimedesAnswer(
   ].join('\n');
 
   try {
+    const systemMsg = mode === 'retrieval'
+      ? 'You are a strict factual verifier. Check the answer against tool evidence for contradictions and fabrications. Reply with exactly one line.'
+      : 'You are a strict verifier for a design task. Factual claims about current state must match tool evidence (Part 1), but novel proposals are judged on coherence and relevance (Part 2). Reply with exactly one line.';
     const response = await verifierProvider.complete(
-      'You are a strict verifier. Judge only whether the proposed answer addresses the task. Reply with exactly one line.',
+      systemMsg,
       [{ role: 'user', content: prompt }],
       [],
     );
@@ -316,13 +320,14 @@ async function verifyArchimedesAnswer(
 }
 
 function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProvider {
+  const endpoint = resolveEndpoint(config);
   return new OpenAICompatibleProvider(
     {
-      model: config.modelName,
-      baseUrl: config.ollamaBaseUrl,
-      apiKey: 'ollama',
+      model: wireModelName(config),
+      baseUrl: endpoint.baseUrl,
+      apiKey: endpoint.apiKey,
     },
-    'Archimedes (Ollama)',
+    `Archimedes (${endpoint.label})`,
   );
 }
 
@@ -331,7 +336,8 @@ function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProv
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Routes tasks between the small Archimedes model (Ollama) and a large model based on
+ * Routes tasks between the small Archimedes model (local Ollama or LM Studio)
+ * and a large model based on
  * learned competence, capturing every alternation as an {@link Episode}.
  */
 export class ArchimedesAlternator {
@@ -410,12 +416,15 @@ export class ArchimedesAlternator {
       this.display.header('Archimedes Principle', decision.reason);
 
       if (decision.useArchimedes && (archimedesConfig.enabled || this.opts.forceArchimedes)) {
-        const available = await isOllamaAvailable(archimedesConfig.ollamaBaseUrl);
+        const endpoint = resolveEndpoint(archimedesConfig);
+        const available = await isLocalBackendAvailable(archimedesConfig);
         if (!available) {
-          this.display.warning('Archimedes (Ollama) is not reachable — escalating to large model.');
+          this.display.warning(
+            `Archimedes (${endpoint.label} at ${endpoint.baseUrl}) is not reachable — escalating to large model.`,
+          );
         } else {
           archimedesAttempted = true;
-          this.display.success(`Trying Archimedes (${archimedesConfig.modelName})…`);
+          this.display.success(`Trying Archimedes (${wireModelName(archimedesConfig)} on ${endpoint.label})…`);
 
           try {
             const archimedesProvider = buildArchimedesProvider(archimedesConfig);
@@ -556,35 +565,80 @@ export class ArchimedesAlternator {
                   `Council would exceed session budget (${budgetCheck.used.toLocaleString()} / ${budgetCheck.limit.toLocaleString()} tokens) — skipping escalation.`,
                 );
               } else {
-                this.display.header('Design council', 'Running 5-agent design council for divergent solutions…');
-                try {
-                  const councilResult = await runCouncil({
-                    projectRoot,
-                    topic: task,
-                    synthesisProvider: largeModelProvider,
-                    context,
-                    permissions: this.permissions,
-                    display: this.display,
-                    panelSize: 5,
-                    mode: 'design',
-                  });
+                // Gap 4: Confirm with user before expensive 5-agent council.
+                // Budget check is necessary but not sufficient — 80k tokens
+                // within budget is still expensive if the user didn't ask for it.
+                const confirmFn = this.opts.confirmFn;
+                const userConfirmed = confirmFn
+                  ? await confirmFn(
+                      `Large model answer failed verification. Run a 5-agent design council (~${(ESTIMATED_COUNCIL_TOKENS / 1000).toFixed(0)}k tokens)?`,
+                    )
+                  : false; // no confirmFn = non-interactive context, skip council
 
-                  // Read the synthesized verdict from the council output
-                  const councilMd = await import('fs').then(fs => fs.promises.readFile(councilResult.path, 'utf-8'));
-                  // Extract the synthesis sections (everything before "Raw panel proposals")
-                  const synthesisMatch = councilMd.match(/[\s\S]+?(?=---\n\n## Raw panel proposals)/);
-                  result = synthesisMatch
-                    ? synthesisMatch[0].trim()
-                    : councilMd;
+                if (!userConfirmed) {
+                  this.display.warning('Council escalation declined — using large model output.');
+                } else {
+                  // Gap 5: Pass the failed attempt so council agents don't repeat
+                  // the same factual errors that got the large model rejected.
+                  const failedAttemptContext = [
+                    `A previous attempt at this task failed verification: ${largeModelVerification.reason}`,
+                    ``,
+                    `Previous attempt's tool activity:`,
+                    summarizeToolActivity(loopResult.history),
+                    ``,
+                    `Previous (invalid) answer, for reference — verify independently:`,
+                    largeModelOutput!,
+                  ].join('\n');
 
-                  finalLoopResult = {
-                    ...loopResult,
-                    summary: result,
-                  };
+                  this.display.header('Design council', 'Running 5-agent design council for divergent solutions…');
+                  try {
+                    const councilResult = await runCouncil({
+                      projectRoot,
+                      topic: task,
+                      synthesisProvider: largeModelProvider,
+                      context,
+                      permissions: this.permissions,
+                      display: this.display,
+                      panelSize: 5,
+                      mode: 'design',
+                      failedAttemptContext,
+                      budget: this.opts.sessionBudget,
+                    });
 
-                  this.display.success(`Design council completed — verdict saved to ${councilResult.path}`);
-                } catch (e) {
-                  this.display.error(`Council error: ${String(e)} — using large model output.`);
+                    // Read the synthesized verdict from the council output
+                    const councilMd = await import('fs').then(fs => fs.promises.readFile(councilResult.path, 'utf-8'));
+                    // Extract the synthesis sections (everything before "Raw panel proposals")
+                    const synthesisMatch = councilMd.match(/[\s\S]+?(?=---\n\n## Raw panel proposals)/);
+                    let councilAnswer = synthesisMatch
+                      ? synthesisMatch[0].trim()
+                      : councilMd;
+
+                    // Gap 6: Re-verify council output for factual accuracy.
+                    // The synthesis could contain fabrications from panel agents.
+                    // Use retrieval mode — proposals are expected to be novel,
+                    // but factual claims must still be checkable.
+                    const councilVerification = await verifyArchimedesAnswer(
+                      task,
+                      councilAnswer,
+                      loopResult.history, // original tool evidence is the ground truth
+                      largeModelProvider,
+                    );
+
+                    if (councilVerification.valid) {
+                      result = councilAnswer;
+                      finalLoopResult = {
+                        ...loopResult,
+                        summary: result,
+                      };
+                      this.display.success(`Design council completed — verdict saved to ${councilResult.path}`);
+                    } else {
+                      this.display.warning(
+                        `Council output also failed verification (${councilVerification.reason}) — using large model output.`,
+                      );
+                    }
+                  } catch (e) {
+                    this.display.error(`Council error: ${String(e)} — using large model output.`);
+                  }
                 }
               }
             }

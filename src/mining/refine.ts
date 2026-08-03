@@ -3,6 +3,7 @@ import * as path from 'path';
 import { createProvider } from '../providers/factory.js';
 import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
 import type { TrainingExample, ArchimedesConfig } from '../archimedes/types.js';
+import { resolveEndpoint, wireModelName } from '../archimedes/endpoint.js';
 import type { MinedConcept } from './extract.js';
 
 /**
@@ -161,9 +162,10 @@ function parseDecision(raw: string): RawDecision | null {
  * caller doesn't have one already loaded (e.g. from .aura.json).
  */
 function buildPapaArchimedesProvider(archimedesConfig: ArchimedesConfig) {
+  const endpoint = resolveEndpoint(archimedesConfig);
   return createProvider({
-    model: `ollama/${archimedesConfig.modelName}`,
-    baseUrl: archimedesConfig.ollamaBaseUrl,
+    model: `${endpoint.backend}/${wireModelName(archimedesConfig)}`,
+    baseUrl: endpoint.baseUrl,
     maxTokens: 512, // judging one concept is a small, bounded task
   });
 }

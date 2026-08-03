@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import type { ArchimedesBackend } from '../archimedes/types.js';
 
 /**
  * Definition of a custom provider in .aura.json.
@@ -67,8 +68,12 @@ export interface ProjectConfig {
   /** Archimedes alternator — small-local-model-first routing (single-task path). */
   archimedes?: {
     enabled?: boolean;
+    /** Local model id, optionally prefixed `ollama/` or `lmstudio/`. */
     modelName?: string;
+    /** Which local server to use; inferred from a modelName prefix when omitted. */
+    backend?: ArchimedesBackend;
     ollamaBaseUrl?: string;
+    lmstudioBaseUrl?: string;
     competenceThreshold?: number;
     minAttempts?: number;
     epsilonProbeRate?: number;
@@ -138,7 +143,9 @@ function normalise(raw: unknown): ProjectConfig {
     const archimedes: NonNullable<ProjectConfig['archimedes']> = {};
     if (rb.enabled === true || rb.enabled === false) archimedes.enabled = rb.enabled;
     if (typeof rb.modelName === 'string') archimedes.modelName = rb.modelName;
+    if (rb.backend === 'ollama' || rb.backend === 'lmstudio') archimedes.backend = rb.backend;
     if (typeof rb.ollamaBaseUrl === 'string') archimedes.ollamaBaseUrl = rb.ollamaBaseUrl;
+    if (typeof rb.lmstudioBaseUrl === 'string') archimedes.lmstudioBaseUrl = rb.lmstudioBaseUrl;
     if (typeof rb.competenceThreshold === 'number') archimedes.competenceThreshold = rb.competenceThreshold;
     if (typeof rb.minAttempts === 'number' && rb.minAttempts > 0) archimedes.minAttempts = Math.floor(rb.minAttempts);
     if (typeof rb.epsilonProbeRate === 'number' && rb.epsilonProbeRate >= 0 && rb.epsilonProbeRate <= 1) archimedes.epsilonProbeRate = rb.epsilonProbeRate;
