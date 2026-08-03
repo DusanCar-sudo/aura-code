@@ -76,7 +76,8 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner, buildBannerLines, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { checkBuildFreshness } from './build-freshness.js';
 import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
 import { isAuthError } from '../util/errors.js';
 import { ContextHealthTracker } from './context-health.js';
@@ -886,6 +887,15 @@ async function main() {
     ],
   });
 
+  // You are running dist/, but you edit and test src/ — say so when they've
+  // diverged, or an edit looks landed while the binary runs the old code.
+  const stale = checkBuildFreshness(path.join(__dirname, '../..'));
+  if (stale) {
+    console.log(chalk.hex('#d4903a')(
+      `  ⚠ dist/ is ${stale.behindBy} behind src/ (newest: ${stale.newestSource}) — run \`npm run build\`.`,
+    ));
+  }
+
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
   // One-shot-per-session flag for the stale-history nudge below — a session
   // that's already been warned once shouldn't repeat it every turn.
@@ -1276,11 +1286,15 @@ async function main() {
       ...(activeChatId ? [`chat ${activeChatId}`] : []),
     ],
   };
-  renderBanner(tuiBannerInfo);
+  // The pinned header is deliberately the one-line `compact` tier: every
+  // banner row is subtracted from the scroll region for the whole session,
+  // so the full lockup goes into the scroll region below instead (see
+  // startInput()), where it scrolls away like any other output.
+  renderBanner(tuiBannerInfo, 'compact');
   // The TUI keeps its own copy of the banner rows: when scroll mode hands
   // the screen back, the live view is rebuilt from scratch, and on the alt
   // screen there's no scrollback to recover the banner from.
-  setBannerLines(buildBannerLines(tuiBannerInfo));
+  setBannerLines(buildBannerLines(tuiBannerInfo, 'compact'));
 
   // Use the TUI display for output
   
@@ -1318,6 +1332,22 @@ async function main() {
   // Must come after initTui() — writeOutput() assumes the "cursor at base
   // row" invariant initTui() establishes; calling it any earlier corrupts
   // that baseline.
+  //
+  // The mark greets you once, in the scroll region, and then gets out of the
+  // way — only when the terminal is big enough that it isn't the whole view.
+  if (preferredBannerTier() === 'hero') {
+    // Minus the closing rule: it spans the full terminal width, one column
+    // wider than the scroll region, so writeOutput() would reflow it onto a
+    // second line. The pinned header's own rule already separates the two.
+    buildBannerLines(tuiBannerInfo, 'hero').slice(0, -1).forEach(line => writeOutput(line));
+  }
+  // Same stale-build warning as one-shot mode, routed through the TUI.
+  const staleBuild = checkBuildFreshness(path.join(__dirname, '../..'));
+  if (staleBuild) {
+    writeOutput(chalk.hex('#d4903a')(
+      `  ⚠ dist/ is ${staleBuild.behindBy} behind src/ (newest: ${staleBuild.newestSource}) — run \`npm run build\`.`,
+    ));
+  }
   if (activeChatHistory.length > 0) {
     writeOutput(chalk.hex(TEXT_DIM_HEX)('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
   }
