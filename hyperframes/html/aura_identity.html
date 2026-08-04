@@ -1,0 +1,55 @@
+<!DOCTYPE html><html><head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#0f0f1a;color:#e4e4f0;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center}
+.slide{width:1920px;height:1080px;padding:80px 120px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden}
+.slide::before{content:'';position:absolute;top:-200px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,#6c5ce715,transparent 70%);pointer-events:none}
+.slide::after{content:'';position:absolute;bottom:-300px;left:-100px;width:500px;height:500px;background:radial-gradient(circle,#a855f712,transparent 70%);pointer-events:none}
+.accent-bar{position:absolute;top:0;left:0;width:6px;height:100%;background:linear-gradient(180deg,#6c5ce7,#a855f7)}
+.badge{display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#6c5ce7;border:1px solid #6c5ce744;margin-bottom:20px;opacity:0;animation:fadeIn 0.8s ease-out forwards}
+.title{font-size:64px;font-weight:700;line-height:1.15;margin-bottom:16px;background:linear-gradient(135deg,#e4e4f0,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;opacity:0;animation:fadeIn 0.8s ease-out 0.2s forwards}
+.sub{font-size:22px;color:#a0a0c0;line-height:1.5;margin-bottom:30px;opacity:0;animation:fadeIn 0.8s ease-out 0.4s forwards}
+.line{font-size:20px;color:#a0a0c0;line-height:1.6;margin-bottom:8px;opacity:0;animation:in 0.6s ease-out forwards}
+.big{font-size:40px;font-weight:700;color:#e4e4f0;line-height:1.3;margin-bottom:12px;opacity:0;animation:in 0.6s ease-out forwards}
+.stat{display:flex;align-items:baseline;gap:16px;margin-bottom:12px;opacity:0;animation:in 0.5s ease-out forwards}
+.stat-n{font-size:48px;font-weight:800;color:#6c5ce7;min-width:80px}
+.stat-l{font-size:22px;color:#a0a0c0}
+.bul{display:flex;align-items:flex-start;gap:12px;margin-bottom:8px;font-size:19px;color:#a0a0c0;line-height:1.4;opacity:0;animation:in 0.5s ease-out forwards}
+.bul-d{color:#6c5ce7;font-size:14px;margin-top:4px}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;opacity:0;animation:in 0.5s ease-out forwards}
+.tag{display:inline-block;padding:4px 14px;border-radius:16px;font-size:13px;font-weight:500;color:#22d3ee;border:1px solid #22d3ee33;background:#22d3ee11}
+.quote{font-size:24px;font-style:italic;color:#a855f7;line-height:1.5;margin:12px 0;padding:12px 20px;border-left:3px solid #a855f7;opacity:0;animation:in 0.6s ease-out forwards}
+.qm{color:#6c5ce7;font-size:28px;font-weight:bold}
+.code{font-family:'Courier New',monospace;font-size:16px;color:#34d399;padding:8px 16px;background:#0f0f1a;border-radius:6px;border:1px solid #2a2a45;display:inline-block;margin:4px 0;opacity:0;animation:in 0.5s ease-out forwards}
+.emoji{font-size:22px;color:#a0a0c0;line-height:1.5;margin-bottom:8px;opacity:0;animation:in 0.6s ease-out forwards}
+.footer{position:absolute;bottom:30px;left:120px;font-size:11px;color:#6b6b8a;letter-spacing:2px;text-transform:uppercase}
+.dots{position:absolute;bottom:30px;right:120px;display:flex;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#2a2a45}
+.dot.active{background:#6c5ce7;width:24px;border-radius:4px}
+@keyframes in{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes glow{0%,100%{text-shadow:0 0 10px #6c5ce744,0 0 20px #6c5ce722}50%{text-shadow:0 0 20px #6c5ce788,0 0 40px #6c5ce744}}
+.glow{animation:glow 3s ease-in-out infinite}
+</style></head><body>
+<div class="slide"><div class="accent-bar"></div>
+<div class="badge">01 - Identity</div>
+<div class="title">Aura Code</div>
+<div class="sub">Autonomous Coding Agent</div>
+<div class="big">"I don't try. I verify."</div>
+
+<div class="line">An open-source AI coding agent, designed by Dušan Milosavljević.</div>
+
+<div class="line">Model-agnostic - works with Claude, GPT, Gemini, MiMo, DeepSeek, Ollama</div>
+
+<div class="line">Self-aware - cites line numbers, reports what was verified</div>
+
+<div class="tags"><span class="tag">Claude</span><span class="tag">GPT</span><span class="tag">Gemini</span><span class="tag">MiMo</span><span class="tag">DeepSeek</span><span class="tag">Ollama</span></div>
+
+<div class="line">Written in TypeScript. Strictly typed. MIT licensed.</div>
+
+<div class="line">Built on the Praktess framework - she who acts and executes.</div>
+
+<div class="emoji">&#9670;  Designed and brought to life by Dusan Milosavljevic</div>
+
+<div class="footer">Aura Code - HyperFrames</div>
+<div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+</div></body></html>

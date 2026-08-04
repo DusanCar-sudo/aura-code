@@ -1,4 +1,5 @@
 import * as http from 'http';
+import * as https from 'https';
 import * as crypto from 'crypto';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -6,14 +7,29 @@ import { createProvider, KNOWN_MODELS } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
+import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js';
+import {
+  pickLanAddress, ensureLanCert, shortFingerprint, tailscaleAddress, tailscaleDnsName,
+} from './lan.js';
+import { addEpisode, recentEpisodes } from '../agent/episodic-memory.js';
 import { Session } from './session.js';
+import { SessionBudget } from '../agent/session-budget.js';
+import { ProtocolHandler } from '../protocol/handler.js';
+import type { Frame } from '../protocol/types.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
+import { openExternal } from '../util/open.js';
 
 export interface ServeOptions {
   port: number; cwd: string; model: string;
   apiKey?: string; baseUrl?: string; open: boolean;
+  /** Also listen on the local network, over TLS, for phones on the same Wi-Fi. */
+  lan?: boolean;
+  /** Bind this LAN address specifically instead of the auto-detected one. */
+  lanAddress?: string;
+  /** Also listen on the Tailscale address, reachable from any network. */
+  tailscale?: boolean;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
@@ -34,64 +50,370 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   ]);
   const tokenizedUrl = `http://${host}:${opts.port}/?token=${token}`;
 
-  const wss = new WebSocketServer({
-    server,
-    verifyClient: (info: { origin: string; req: http.IncomingMessage; secure: boolean }) => {
-      // Reject the handshake unless the token matches and (for browser
-      // clients that send one) the Origin is our own page.
-      try {
-        const reqUrl = new URL(info.req.url ?? '/', `http://${host}:${opts.port}`);
-        if (reqUrl.searchParams.get('token') !== token) return false;
-      } catch { return false; }
-      const origin = info.origin;
-      if (origin && !allowedOrigins.has(origin)) return false;
-      return true;
-    },
-  });
+  // ── Optional LAN listener ──────────────────────────────────────────────
+  // A second server on the *specific* LAN address, never 0.0.0.0: this
+  // machine also has a Tailscale address and a container bridge, and
+  // wildcard-binding would publish the agent on both without saying so.
+  // TLS-only, because over Wi-Fi the stream is source code and shell output.
+  const lanServers: { server: https.Server; address: string; iface: string; kind: string }[] = [];
+  let lanFingerprint: string | null = null;
+
+  if (opts.lan || opts.tailscale) {
+    const targets: { address: string; iface: string; kind: string }[] = [];
+
+    if (opts.lan || opts.lanAddress) {
+      const picked = pickLanAddress(opts.lanAddress);
+      if (!picked) {
+        throw new Error(
+          opts.lanAddress
+            ? `No interface has the address ${opts.lanAddress}.`
+            : 'No local network interface found — is Wi-Fi connected?',
+        );
+      }
+      targets.push({ ...picked, kind: 'Wi-Fi' });
+    }
+
+    if (opts.tailscale) {
+      const ts = tailscaleAddress();
+      if (!ts) {
+        throw new Error(
+          'No Tailscale address found — is Tailscale installed and running? '
+          + 'Check with `tailscale status`.',
+        );
+      }
+      if (!targets.some(t => t.address === ts.address)) {
+        targets.push({ ...ts, kind: 'Tailscale' });
+      }
+    }
+
+    // One certificate covering every address this machine answers on, so the
+    // phone's pin survives moving between Wi-Fi and Tailscale.
+    const dnsNames = [tailscaleDnsName()].filter((d): d is string => !!d);
+    const { cert, key, fingerprint } = ensureLanCert(targets.map(t => t.address), dnsNames);
+    lanFingerprint = fingerprint;
+
+    for (const t of targets) {
+      lanServers.push({ server: https.createServer({ cert, key }, app), ...t });
+      allowedOrigins.add(`https://${t.address}:${opts.port}`);
+    }
+    for (const d of dnsNames) allowedOrigins.add(`https://${d}:${opts.port}`);
+  }
+
+  /**
+   * Who is on the other end.
+   *
+   * The per-run token is the browser UI's own credential and identifies no
+   * particular person, so every holder of it shares one identity. A paired
+   * device gets its own, which is what lets two people share this server
+   * without sharing a conversation, a budget, or each other's approval
+   * prompts.
+   */
+  interface ClientIdentity { id: string; name: string }
+
+  function identify(provided: string | undefined): ClientIdentity | null {
+    if (!provided) return null;
+    if (provided === token) return { id: 'local', name: 'this computer' };
+    const device = findDeviceByToken(provided);
+    return device ? { id: `device:${device.id}`, name: device.name } : null;
+  }
+
+  // noServer, because the same WebSocket layer has to serve two listeners:
+  // the loopback HTTP server and, when enabled, the TLS LAN server.
+  const wss = new WebSocketServer({ noServer: true });
+
+  function handshakeAllowed(req: http.IncomingMessage): boolean {
+    // Reject unless the token names a known client and (for browser clients
+    // that send one) the Origin is our own page.
+    try {
+      const reqUrl = new URL(req.url ?? '/', `http://${host}:${opts.port}`);
+      if (!identify(reqUrl.searchParams.get('token') ?? undefined)) return false;
+    } catch { return false; }
+    const origin = req.headers.origin;
+    if (origin && !allowedOrigins.has(origin)) return false;
+    return true;
+  }
+
+  const onUpgrade = (
+    req: http.IncomingMessage,
+    socket: import('net').Socket,
+    head: Buffer,
+  ): void => {
+    if (!handshakeAllowed(req)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+  };
+
+  server.on('upgrade', onUpgrade);
+  for (const l of lanServers) l.server.on('upgrade', onUpgrade);
 
   app.use(express.json());
 
   // Auth gate for all HTTP routes \u2014 token via ?token= (initial navigation)
   // or the X-Aura-Token header (API calls from the page).
+  // Deliberately ahead of the auth gate: a phone redeeming a pairing code has
+  // no token yet — that is the whole point of the exchange. The code itself is
+  // the credential here, and it is single-use, short-lived, and attempt-capped
+  // (see devices.ts), so this is not an open door.
+  app.post('/api/pair', (req, res) => {
+    const code = String((req.body as { code?: unknown } | undefined)?.code ?? '');
+    if (!code.trim()) {
+      res.status(400).json({ error: 'Missing pairing code.' });
+      return;
+    }
+    const paired = redeemPairingCode(code);
+    if (!paired) {
+      // Same answer for unknown, expired, and exhausted: distinguishing them
+      // would tell a guesser which codes are worth continuing to try.
+      res.status(401).json({ error: 'That pairing code is not valid. Generate a new one with `aura devices add`.' });
+      return;
+    }
+    console.log(`\n  Paired "${paired.device.name}" (${paired.device.id})\n`);
+    res.json({ token: paired.token, device: { id: paired.device.id, name: paired.device.name } });
+  });
+
   app.use((req, res, next) => {
     const provided = (req.query.token as string | undefined) ?? req.header('x-aura-token');
-    if (provided !== token) {
+    const who = identify(provided);
+    if (!who) {
       res.status(401).send('Unauthorized: missing or invalid token.');
       return;
     }
+    // Carried so /api/history and /api/reset act on the caller's own
+    // conversation instead of a single shared one.
+    (req as express.Request & { auraClient?: ClientIdentity }).auraClient = who;
     next();
   });
 
+  function clientOf(req: express.Request): ClientIdentity {
+    // The gate above rejects anything unidentified, so this is always set.
+    return (req as express.Request & { auraClient?: ClientIdentity }).auraClient!;
+  }
+
   const ctx = await loadProjectContext(opts.cwd);
-  const session = new Session();
+
+  /**
+   * Conversation and spend, per client.
+   *
+   * These used to be one shared pair. With two phones paired that means one
+   * person's turns enter the other's context and one person's usage exhausts
+   * the other's ceiling, so they are keyed by identity. The project context
+   * stays shared — it describes the checkout, which genuinely is common.
+   *
+   * The budget is the spend ceiling the CLI paths already apply
+   * (cli/index.ts:631, :1361); without it runAgentLoop enforces none at all.
+   * Defaults to AURA_SESSION_BUDGET, else DEFAULT_MAX_INPUT_TOKENS. Reset
+   * alongside the conversation it bounds.
+   */
+  interface ClientState { session: Session; budget: SessionBudget }
+  const clients = new Map<string, ClientState>();
+
+  function stateFor(who: ClientIdentity): ClientState {
+    let state = clients.get(who.id);
+    if (!state) {
+      state = { session: new Session(), budget: new SessionBudget({}) };
+      clients.set(who.id, state);
+    }
+    return state;
+  }
 
   console.log('\n  Aura \u2014 web client');
   console.log('  Project : ' + ctx.name + ' \u00b7 ' + ctx.language);
   console.log('  Model   : ' + opts.model);
   console.log('  URL     : ' + tokenizedUrl);
-  console.log('  (bound to 127.0.0.1; the URL includes a single-session access token)\n');
+  console.log('  (bound to 127.0.0.1; the URL includes a single-session access token)');
+  for (const l of lanServers) {
+    console.log(`\n  ${l.kind.padEnd(9)}: ${l.address}:${opts.port}  (${l.iface}, TLS)`);
+  }
+  if (lanFingerprint) {
+    console.log('  Identity : ' + shortFingerprint(lanFingerprint)
+      + '   \u2190 the phone shows this after pairing; they must match');
+    console.log('  Reaching the port is not enough \u2014 a pairing code from');
+    console.log('  `aura devices add` is still required to get in.');
+  }
+  console.log('');
 
   app.get('/', (_req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.send(buildUI(ctx.name, opts.model, token));
   });
-  app.get('/api/history', (_req, res) => res.json(session.getDisplay()));
-  app.get('/api/project', (_req, res) => res.json({
+  app.get('/api/history', (req, res) => res.json(stateFor(clientOf(req)).session.getDisplay()));
+  app.get('/api/project', (req, res) => res.json({
     name: ctx.name, language: ctx.language, model: opts.model, models: KNOWN_MODELS,
+    // Lets a phone show which device it is paired as, so two people sharing
+    // a desktop can tell whose client they are looking at.
+    device: clientOf(req).name,
   }));
-  app.post('/api/reset', (_req, res) => { session.reset(); res.json({ ok: true }); });
+  /**
+   * Memos recorded on a phone, filed into episodic memory.
+   *
+   * The phone is where thinking-aloud happens; the desktop is where the agent
+   * can search it. Idempotent by the phone's own id, so a re-sync after a
+   * dropped connection does not leave the same memo in recall three times.
+   */
+  app.post('/api/memo', (req, res) => {
+    const body = (req.body ?? {}) as {
+      id?: unknown; text?: unknown; title?: unknown; at?: unknown; tags?: unknown;
+    };
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!text) {
+      res.status(400).json({ error: 'Missing text.' });
+      return;
+    }
+    const episode = addEpisode({
+      id: typeof body.id === 'string' ? body.id : undefined,
+      kind: 'memo',
+      title: typeof body.title === 'string' ? body.title : undefined,
+      text,
+      at: typeof body.at === 'string' ? body.at : undefined,
+      // Tagged with the device so recall can say where a thought came from.
+      tags: [
+        ...(Array.isArray(body.tags) ? body.tags.filter((t): t is string => typeof t === 'string') : []),
+        clientOf(req).name,
+      ],
+    });
+    res.json({ id: episode.id, title: episode.title });
+  });
 
-  wss.on('connection', (ws) => {
+  app.get('/api/memos', (_req, res) => res.json(recentEpisodes(50)));
+
+  app.post('/api/reset', (req, res) => {
+    const state = stateFor(clientOf(req));
+    state.session.reset();
+    state.budget.reset();
+    res.json({ ok: true });
+  });
+
+  // ── Remote tool approval ───────────────────────────────────────────────
+  // Without this, PermissionSystem('normal') falls back to confirm(), which
+  // reads the *server's* stdin — so a remote client asking for a file write
+  // blocks on a y/N prompt it cannot see, and hangs forever when the server
+  // runs headless (systemd). Route the prompt to the client that asked.
+  //
+  // The pending map is per connection, created below. A server-wide map keyed
+  // by uuid would let one client answer a prompt raised by another's run
+  // simply by echoing back an id it observed.
+  const CONFIRM_TIMEOUT_MS = 120_000;
+
+  function askClient(
+    ws: WebSocket,
+    pendingConfirms: Map<string, (approved: boolean) => void>,
+    message: string,
+  ): Promise<boolean> {
+    if (ws.readyState !== WebSocket.OPEN) return Promise.resolve(false);
+    const id = crypto.randomUUID();
+    return new Promise<boolean>(resolve => {
+      let settled = false;
+      const finish = (approved: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        pendingConfirms.delete(id);
+        resolve(approved);
+      };
+      // Deny on silence rather than blocking the agent indefinitely.
+      const timer = setTimeout(() => {
+        send(ws, { type: 'confirm_timeout', id });
+        finish(false);
+      }, CONFIRM_TIMEOUT_MS);
+      pendingConfirms.set(id, finish);
+      send(ws, { type: 'confirm_request', id, message });
+    });
+  }
+
+  wss.on('connection', (ws, req) => {
+    // verifyClient already rejected anything unidentified, so re-deriving the
+    // identity here cannot fail — but fall back to the local identity rather
+    // than crashing the connection if the URL is somehow unparseable.
+    let who: ClientIdentity = { id: 'local', name: 'this computer' };
+    try {
+      const reqUrl = new URL(req.url ?? '/', `http://${host}:${opts.port}`);
+      who = identify(reqUrl.searchParams.get('token') ?? undefined) ?? who;
+    } catch { /* keep the fallback */ }
+    if (who.id.startsWith('device:')) touchDevice(who.id.slice('device:'.length));
+
+    const state = stateFor(who);
     send(ws, { type: 'connected' });
+
+    // Approvals belong to this socket alone. Previously this registered a
+    // process-global handler, so the client that connected most recently
+    // received *everyone's* prompts — your mother's phone could be asked to
+    // approve a shell command your agent wanted to run — and any client
+    // hanging up cleared the handler for whoever was still connected,
+    // silently dropping the agent back to the desktop's unread stdin.
+    const pendingConfirms = new Map<string, (approved: boolean) => void>();
+    const confirmFn = (message: string): Promise<boolean> => askClient(ws, pendingConfirms, message);
+
+    // Protocol handler for frame-shaped clients (aura-droid and any other
+    // non-browser consumer). The built-in browser UI still speaks the older
+    // `type:`-tagged messages below, so the two are dispatched by shape:
+    // a `kind` field means a protocol frame, `type` means the legacy path.
+    // Same socket, same auth, one message schema shared with `aura sidecar`.
+    const protocol = new ProtocolHandler({
+      defaultModel: opts.model,
+      defaultApiKey: opts.apiKey,
+      defaultBaseUrl: opts.baseUrl,
+      defaultProjectRoot: opts.cwd,
+      send: (frame) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame)); },
+    });
+
     ws.on('message', async (raw) => {
-      let msg: { type: string; task?: string; model?: string };
+      let msg: {
+        kind?: string;
+        type: string; task?: string; model?: string; id?: string; approved?: boolean;
+      };
       try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg.type === 'task' && msg.task) await runTask(ws, msg.task, msg.model ?? opts.model);
-      if (msg.type === 'reset') { session.reset(); send(ws, { type: 'reset_ok' }); }
+
+      if (msg.kind === 'req' || msg.kind === 'res' || msg.kind === 'evt') {
+        await protocol.handle(msg as unknown as Frame);
+        return;
+      }
+
+      if (msg.type === 'confirm_response' && typeof msg.id === 'string') {
+        pendingConfirms.get(msg.id)?.(msg.approved === true);
+        return;
+      }
+      if (msg.type === 'task' && msg.task) {
+        await runTask(ws, state, confirmFn, msg.task, msg.model ?? opts.model);
+      }
+      if (msg.type === 'reset') {
+        // The budget bounds one conversation, and reset starts a new one —
+        // carrying the old total forward would leave every later conversation
+        // starting already exhausted. Same rationale as SessionBudget.reset().
+        state.session.reset();
+        state.budget.reset();
+        send(ws, { type: 'reset_ok' });
+      }
+      if (msg.type === 'usage') {
+        send(ws, {
+          type: 'usage',
+          inputTokensUsed: state.budget.inputTokensUsed,
+          maxInputTokens: state.budget.maxInputTokens,
+          turnsUsed: state.budget.turnsUsed,
+        });
+      }
+    });
+
+    ws.on('close', () => {
+      protocol.dispose();
+      // Deny anything still waiting on *this* socket — nobody is left to
+      // answer it. Other clients' prompts live in their own maps and are
+      // deliberately untouched.
+      for (const resolve of pendingConfirms.values()) resolve(false);
+      pendingConfirms.clear();
     });
   });
 
-  async function runTask(ws: WebSocket, task: string, model: string): Promise<void> {
+  async function runTask(
+    ws: WebSocket,
+    state: ClientState,
+    confirmFn: (message: string) => Promise<boolean>,
+    task: string,
+    model: string,
+  ): Promise<void> {
+    const { session, budget } = state;
     session.addUser(task);
     let provider;
     try { provider = createProvider({ model, apiKey: opts.apiKey, baseUrl: opts.baseUrl } as ProviderConfig); }
@@ -113,6 +435,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       showPlan: (plan) => send(ws, { type: 'plan_created', plan }),
       stepStarted: (step) => send(ws, { type: 'step_started', step }),
       stepCompleted: (step, result) => send(ws, { type: 'step_completed', step, result }),
+      contextBar: (health) => send(ws, { type: 'context_bar', health }),
+      contextDashboard: (health) => send(ws, { type: 'context_dashboard', health }),
+      compactionEvent: (info) => send(ws, { type: 'compaction', ...info }),
     };
 
     // Try orchestration first
@@ -123,7 +448,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         const plan = await createPlan({ provider, context: ctx, task });
         send(ws, { type: 'plan_created', plan });
 
-        const executedPlan = await executePlan({ provider, context: ctx, plan, display });
+        const executedPlan = await executePlan({ provider, context: ctx, plan, display, confirmFn });
         const text = executedPlan.outcome ?? 'Plan completed.';
         const success = executedPlan.status === 'done';
         send(ws, { type: 'plan_done', outcome: text, success });
@@ -138,15 +463,23 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     const result = await runAgentLoop({
       provider, task, context: ctx,
       permissions: new PermissionSystem('normal'), display,
+      budget,
+      confirmFn,
     });
     session.addAssistant(result.summary, result.turns, result.toolCallCount);
     send(ws, { type: 'done', success: result.success, text: result.summary, turns: result.turns, toolCount: result.toolCallCount });
   }
 
   server.listen(opts.port, host, () => {
-    if (opts.open) { try { require('child_process').exec('xdg-open ' + JSON.stringify(tokenizedUrl)); } catch {} }
+    if (opts.open) openExternal(tokenizedUrl);
     console.log('  Ready \u2192 ' + tokenizedUrl + '  (Ctrl+C to stop)\n');
   });
+
+  for (const l of lanServers) {
+    l.server.listen(opts.port, l.address, () => {
+      console.log(`  Ready \u2192 https://${l.address}:${opts.port}  (${l.kind}, phones)\n`);
+    });
+  }
 }
 
 function send(ws: WebSocket, data: object): void {
@@ -203,6 +536,14 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
 .tk::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c);flex-shrink:0;animation:p 1.2s infinite}
 .sk{background:var(--s);border:1px solid var(--l2);border-left:2px solid var(--c);border-radius:6px;padding:13px 16px;color:var(--inks);line-height:1.65;white-space:pre-wrap}
 .cur{display:inline-block;width:8px;height:14px;background:var(--c);margin-left:2px;animation:bk 1s steps(1) infinite;vertical-align:text-bottom}
+.cf{background:#1a1008;border:1px solid var(--l2);border-left:2px solid #d4903a;border-radius:8px;padding:12px 15px;margin:4px 0}
+.cfm{color:var(--ink);font-size:13px;line-height:1.5;margin-bottom:10px}
+.cfb{display:flex;gap:8px;align-items:center}
+.cfb button{border:none;border-radius:6px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer}
+.cfy{background:var(--g);color:#fff}
+.cfn{background:var(--f);color:var(--ink)}
+.cfa{color:var(--g);font-size:12px;font-family:monospace}
+.cfd{color:var(--cd);font-size:12px;font-family:monospace}
 .plc{border:1px solid var(--l2);border-radius:10px;padding:14px 16px;margin:4px 0}
 .plh{color:var(--c);font-weight:700;font-size:13px;margin-bottom:8px}
 .plg{color:var(--m);font-size:12px;margin-bottom:10px}
@@ -272,8 +613,28 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
     if (d.type === 'text_end' || d.type === 'done') { fn(); if (d.type === 'done') idle(); sc(); return; }
     if (d.type === 'tool_call') { rt(); var e = mk('div','mt'); e.innerHTML = '<div class="tn">' + ic(d.name) + ' ' + d.name + '</div><div class="ti">' + ex(si(d.name, d.input)) + '</div><div class="tr">running\u2026</div>'; ch.appendChild(e); tEl = e; sc(); return; }
     if (d.type === 'tool_result') { if (tEl) { var r = tEl.querySelector('.tr'), ls = d.result.split('\\n'); r.textContent = ls.length > 5 ? ls.slice(0,5).join('\\n') + '\\n\u2026(+' + (ls.length-5) + ' lines)' : d.result; } tEl = null; return; }
+    if (d.type === 'confirm_request') { cfr(d.id, d.message); sc(); return; }
+    if (d.type === 'confirm_timeout') { var t = document.getElementById('cf-' + d.id); if (t) { t.querySelector('.cfb').innerHTML = '<span class="cfd">timed out — denied</span>'; } return; }
+    if (d.type === 'tool_blocked') { var e = mk('div','sy'); e.textContent = 'blocked: ' + (d.name||'') + ' — ' + (d.reason||''); ch.appendChild(e); sc(); return; }
     if (d.type === 'error' || d.type === 'warning') { var e = mk('div','sy'); e.textContent = d.message || d.reason || ''; ch.appendChild(e); if (d.type === 'error') idle(); sc(); return; }
     if (d.type === 'reset_ok') { ch.innerHTML = ''; }
+  }
+
+  // Approval prompt — the agent is blocked until one of these is clicked
+  // (or it times out server-side and denies).
+  function cfr(id, message) {
+    var e = mk('div','cf'); e.id = 'cf-' + id;
+    e.innerHTML = '<div class="cfm">' + ex(message) + '</div>'
+      + '<div class="cfb"><button class="cfy">Allow</button><button class="cfn">Deny</button></div>';
+    ch.appendChild(e);
+    function answer(ok) {
+      ws.send(JSON.stringify({ type: 'confirm_response', id: id, approved: ok }));
+      e.querySelector('.cfb').innerHTML = ok
+        ? '<span class="cfa">allowed</span>'
+        : '<span class="cfd">denied</span>';
+    }
+    e.querySelector('.cfy').onclick = function() { answer(true); };
+    e.querySelector('.cfn').onclick = function() { answer(false); };
   }
 
   function rp(plan) {

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP server trust boundaries in AI coding agents: is confirm-at-connect with unrestricted call_tool afterwards the right permission model? — Ecclesia</title>
+<style>
+  :root {
+    --bg: #fdf6f0; --card: #fffaf5; --text: #3e2f24; --muted: #8a7768;
+    --accent: #cc785c; --accent-2: #5a9e6e; --border: #e8d5c8;
+    --code-bg: #f4ede6; --bq: #cc785c; --hr: #e0cebc;
+    --shadow: 0 2px 12px rgba(62,47,36,0.06); --radius: 12px;
+    --serif: 'Georgia', 'Times New Roman', serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1b18; --card: #26221e; --text: #ede0cc; --muted: #9e8e80;
+      --accent: #e08a6e; --accent-2: #6db880; --border: #3a322a;
+      --code-bg: #2c2722; --bq: #e08a6e; --hr: #3a322a;
+      --shadow: 0 2px 12px rgba(0,0,0,0.25);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--serif); line-height: 1.75; font-size: 18px; }
+  .container { max-width: 780px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  .hero { text-align: center; padding: 3rem 0 2.5rem; border-bottom: 2px solid var(--border); margin-bottom: 2.5rem; }
+  .hero .badge { display: inline-block; background: var(--accent); color: #fff; font-family: var(--sans); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.3em 1em; border-radius: 100px; margin-bottom: 1.25rem; }
+  .hero h1 { font-family: var(--sans); font-size: 2.4rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+  .hero .meta { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 2.5rem 3rem; }
+  @media (max-width: 640px) { .card { padding: 1.5rem; border-radius: 8px; } .hero h1 { font-size: 1.7rem; } .container { padding: 1.5rem 0.75rem 3rem; } }
+  .card h1, .card h2, .card h3 { font-family: var(--sans); margin: 2rem 0 0.75rem; line-height: 1.3; }
+  .card h2:first-child { margin-top: 0; }
+  .card h2 { font-size: 1.45rem; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; }
+  .card h3 { font-size: 1.1rem; color: var(--accent-2); }
+  .card p { margin: 0.85rem 0; }
+  .card a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); }
+  .card ul, .card ol { margin: 0.85rem 0; padding-left: 1.8rem; }
+  .card li { margin: 0.4rem 0; }
+  .card code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.4em; border-radius: 4px; border: 1px solid var(--border); }
+  .card hr { border: none; border-top: 1px solid var(--hr); margin: 2rem 0; }
+  .footer { text-align: center; margin-top: 2.5rem; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); opacity: 0.7; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="hero">
+    <div class="badge">Ecclesia &middot; 5 agents</div>
+    <h1>MCP server trust boundaries in AI coding agents: is confirm-at-connect with unrestricted call_tool afterwards the right permission model?</h1>
+    <div class="meta">2026-07-09</div>
+  </header>
+  <article class="card">
+<h2>Convergent findings</h2>
+<ul>
+<li><strong>De facto model is confirm-at-connect + unrestricted call_tool</strong>: After initial connection or OAuth authorization, the MCP protocol provides no per-call or per-tool authorization mechanism. Once a session is established, every <code>tools/call</code> proceeds without additional permission checks.  </li>
+<li><strong>Protocol-level guidance is aspirational, not enforced</strong>: The specification states tools SHOULD involve a human in the loop and SHOULD show confirmation prompts, but these are non-binding (SHOULD, not MUST). No mandatory per-invocation consent is defined.  </li>
+<li><strong>Authorization scope is server-level, not tool-level</strong>: OAuth 2.1 scopes (e.g., <code>mcp:tools</code>) grant blanket access to all tools on a server. Per-tool granularity is neither standardized nor required—proposals SEP-1880 and SEP-1881 were closed as “not planned.”  </li>
+<li><strong>Security risk is well documented but unaddressed</strong>: The Security Best Practices page lists confused deputy, prompt injection, session hijacking, and local server compromise, yet does not propose a protocol-level per-call permission gate.  </li>
+<li><strong>Clients are responsible for all user-facing consent</strong>: The spec assigns security to client developers (UI dialogs, sandboxing, logging) and users (vetting servers). Industry clients (VS Code, Cursor, Claude Code) implement install-time consent (SEP-1024) but lack documented per-call denial after connection—confirming the “trust-once, call-freely” pattern in practice.</li>
+</ul>
+<h2>Contested</h2>
+<p><strong>4 of 5 agents</strong> (Agents 1, 2, 3, 5) describe the current model as a pragmatic but incomplete design choice—intentionally minimal for local/controlled environments, but insufficient for autonomous, multi-tenant, or enterprise deployments. Agent 4 disagrees: they argue the model is <strong>not a deliberate protocol feature at all</strong>, but a client-side workaround that contradicts the specification’s own security intent (which recommends per-invocation oversight). Agent 4 notes no formal design document describes “confirm-at-connect + unrestricted call_tool” as a pattern, and finds it fundamentally at odds with the spec’s SHOULD language.</p>
+<p><strong>Split on whether the model is “right” even for controlled uses</strong>:  </p>
+<ul>
+<li>Agents 1 and 5 accept it as a reasonable default for local/first-party setups where the user trusts the server.  </li>
+<li>Agents 2 and 3 strongly recommend augmenting it with per-call confirmation for sensitive tools (e.g., write/delete/exfiltration-capable), while keeping low-risk tools silent.  </li>
+<li>Agent 4 considers the model inherently wrong because it creates a single point of trust failure that cannot adapt to dynamic tool lists or compromised servers.</li>
+</ul>
+<h2>Minority signal</h2>
+<ul>
+<li><strong>Dynamic tool list expansion is an acute risk</strong>: Agent 2 highlights that servers can send <code>notifications/tools/list_changed</code> at any time, meaning a server that passed an initial connect check (based only on spawn command patterns) can later expose arbitrarily powerful tools—without re-prompting the user. This makes the “confirm-at-connect” model even weaker than a static trust decision.  </li>
+<li><strong>Community interceptors working group remains unresolved</strong>: Agent 3 mentions an “Interceptors Working Group” charter exists but no ratified specification has emerged—suggesting there is interest in middleware for per-call policy enforcement, but no concrete outcome yet.  </li>
+<li><strong>Industry client behavior varies but none enforce per-call denial</strong>: Agent 5 reports that VS Code and Cursor added install-time consent (per SEP-1024) but no major client currently implements a per-call denial mechanism for every tool call after connection. This indicates that even if the spec wanted more oversight, market practice has settled on the current model.</li>
+</ul>
+<h2>Verdict</h2>
+<p><strong>“Confirm-at-connect with unrestricted call_tool afterwards” is the current de facto permission model of the MCP protocol, but it is not the right model for any scenario where agent autonomy, dynamic server capabilities, or multi-tenancy are present.</strong>  </p>
+<p>For tightly controlled local environments where the user explicitly trusts every server they connect to and where servers are static and non-malicious, the model is acceptable as a pragmatic shortcut. For any other case—especially autonomous AI agents, enterprise workflows, or servers that can change their tool set post-connect—the model is dangerously insufficient. The protocol provides no safety net against prompt injection, confused deputy attacks, or tool escalation after initial consent.</p>
+<p>The specification’s own security guidance (SHOULD prompts, human-in-the-loop) indicates the intended direction, but it remains unenforced and unimplemented in practice. Until the protocol (or widely-adopted client extensions) provides per-tool or per-call authorization, the burden falls entirely on client-side heuristics—which are absent in most deployments today.  </p>
+<p><strong>Recommendation</strong>:  </p>
+<ul>
+<li>For high-risk tools (write, delete, network exfiltration, execution), clients must implement per-call confirmation despite the lack of protocol support.  </li>
+<li>For low-risk tools (read-only, local file operations), the current model may be retained.  </li>
+<li>The community should revive per-tool authorization metadata (e.g., SEP-1880/1881) or standardize a mechanism for servers to declare sensitivity levels, and clients should honor those declarations with appropriate UI prompts.</li>
+</ul>
+<p><strong>Confidence</strong>: High (4/5 agents agree on the factual description; the disagreement is about normative evaluation, not about what the protocol does).</p>
+<h2>Sources</h2>
+<ol>
+<li>MCP SECURITY.md – GitHub spec repository  </li>
+<li>MCP Specification: Tools page – modelcontextprotocol.io/specification/2025-11-25/server/tools (security considerations)  </li>
+<li>MCP Architecture Overview – modelcontextprotocol.io/docs/concepts/architecture  </li>
+<li>MCP Authorization Tutorial – modelcontextprotocol.io/docs/tutorials/security/authorization  </li>
+<li>MCP Security Best Practices – modelcontextprotocol.io/docs/tutorials/security/security_best_practices  </li>
+<li>SEP-1024: MCP Client Security Requirements for Local Server Install – modelcontextprotocol.io/seps/1024-mcp-client-security-requirements-for-local-server-  </li>
+<li>GitHub Issue #1880: SEP-1880 (tool-level OAuth scope requirements, closed “not planned”)  </li>
+<li>GitHub Issue #1881: SEP-1881 (scope-filtered tool discovery, closed)  </li>
+<li>GitHub Issue #2280: SMCP RFC – community proposal identifying lack of identity/scope/integrity  </li>
+<li>MCP Transports page – modelcontextprotocol.io/docs/concepts/transports  </li>
+<li>MCP Lifecycle specification – specification/2025-11-25/basic/lifecycle.md  </li>
+<li>MCP Interceptors Working Group charter – modelcontextprotocol.io/community/working-groups/interceptors  </li>
+<li>Agent 2 source code reference: src/safety/permissions.ts – MCP GitHub client repository  </li>
+<li>Agent 5 reference: industry patterns (Claude Code, VS Code, Cursor) – cited from SEP-1024 rationale and community blog posts (den.dev, Cursor patterns)</li>
+</ol>
+<hr>
+<h2>Raw panel findings</h2>
+<h3>Agent 1</h3>
+<ul>
+<li><p>MCP&#39;s official trust model states: &quot;MCP clients trust MCP servers they connect to&quot; — once connected, the server has trust-equivalent access, and there is no per-call authorization boundary in the base protocol. (MCP SECURITY.md, GitHub spec repo)</p>
+</li>
+<li><p>The spec explicitly lists &quot;LLM-driven tool invocation&quot; (where the LLM may invoke tools in ways the user did not explicitly request) as &quot;expected behavior, not a vulnerability&quot; — meaning the protocol provides no mechanism to constrain what the LLM does with connected tools after initial consent. (MCP SECURITY.md)</p>
+</li>
+<li><p>SEP-1880 (tool-level OAuth scope requirements) was proposed in Nov 2025 but closed as &quot;not planned&quot; — the spec has not adopted per-tool authorization metadata. (GitHub Issue #1880)</p>
+</li>
+<li><p>SEP-1881 (scope-filtered tool discovery) depended on SEP-1880 and was also closed; no standardized way exists for servers to advertise or enforce tool-level permissions. (GitHub Issue #1881)</p>
+</li>
+<li><p>The SMCP RFC (#2280, community proposal, not adopted) identifies that MCP lacks identity verification, per-request permission scoping, integrity protection, and non-repudiation — describing the current model as &quot;all-or-nothing per session.&quot; (GitHub Issue #2280)</p>
+</li>
+<li><p>For STDIO transport, the server runs as a subprocess with client-equivalent privileges; the SDK &quot;does not defend either peer against a malicious counterpart&quot; — the entire trust boundary is at process launch, not at tool call time. (MCP SECURITY.md)</p>
+</li>
+<li><p>The official spec assigns responsibility for security to client developers (consent mechanisms, sandboxing) and users (vetting servers) rather than building controls into the protocol itself. (MCP SECURITY.md)</p>
+</li>
+</ul>
+<p>Stance: Confirm-at-connect with unrestricted call_tool is an intentionally minimal, pragmatic model suitable for controlled/local-first use cases, but it is insufficient for multi-tenant, enterprise, or autonomous agent deployments where fine-grained, per-invocation authorization is needed — and the community proposals to add that layer remain unadopted.</p>
+<h3>Agent 2</h3>
+<ul>
+<li><p>MCP specification explicitly states &quot;there SHOULD always be a human in the loop with the ability to deny tool invocations&quot; and that applications &quot;SHOULD present confirmation prompts to the user for operations&quot; — but this is guidance, not a protocol-level mandate (Model Context Protocol, Tools page, Security Considerations section, modelcontextprotocol.io).</p>
+</li>
+<li><p>The current codebase&#39;s permission system (src/safety/permissions.ts) implements exactly the questioned model: <code>mcp connect</code> triggers a confirm prompt, but once connected, every <code>call_tool</code> invocation on that server is executed with <em>no further user checks</em> — the comment says &quot;once connected, its tools run without further prompts.&quot;</p>
+</li>
+<li><p>MCP tools are &quot;model-controlled&quot; by design: the LLM discovers and invokes tools automatically based on context, making per-call confirmation potentially disruptive to autonomous agent flows (MCP Architecture / Tools page).</p>
+</li>
+<li><p>An MCP server&#39;s tool list is dynamic — servers can send <code>notifications/tools/list_changed</code> at any time, meaning the set of available tools (and their capabilities) can expand post-connect without the user being re-prompted (MCP spec, tools/list_changed notification).</p>
+</li>
+<li><p>The &quot;connect&quot; permission check only screens for dangerous <em>shell command patterns</em> in the spawn command (DANGEROUS_PATTERNS), not for the eventual tool capabilities of the server — a server that passes the connect check could later expose arbitrarily powerful tools (src/safety/permissions.ts lines 38–57).</p>
+</li>
+<li><p>Streamable HTTP transport adds a separate trust boundary: servers may use OAuth tokens and session management, but the MCP protocol itself does not distinguish between local and remote servers for authorization — once initialized, all tools are equally callable (MCP Transports page, modelcontextprotocol.io).</p>
+</li>
+<li><p>MCP tool annotations include <code>audience</code> metadata (<code>user</code> vs. <code>assistant</code>), but the spec warns &quot;clients MUST consider tool annotations to be untrusted unless they come from trusted servers&quot; — this acknowledges but does not solve the trust gap (MCP Tools, Data Types / Tool Annotations).</p>
+</li>
+</ul>
+<p>Stance: Confirm-at-connect with unrestricted call_tool is a pragmatic but incomplete trust model — it places full faith in the server after a single approval point, which contradicts MCP&#39;s own &quot;human in the loop&quot; guidance and creates a gap where a compromised or dynamic server can execute arbitrary tool operations without user awareness; the model should be augmented with per-call confirmation for sensitive tool operations (e.g., write/delete/exfiltration-capable tools) while keeping read-only or low-risk tools silent for usability.</p>
+<h3>Agent 3</h3>
+<ul>
+<li>The MCP protocol&#39;s data layer defines three distinct lifecycle phases (initialize, list primitives, call primitives), but after initialization and tool discovery, there is <strong>no protocol-level mechanism for per-call authorization or consent</strong>—the <code>tools/call</code> method proceeds without additional permission checks. (MCP Architecture Overview, modelcontextprotocol.io/docs/concepts/architecture)</li>
+<li>The current MCP authorization model is based on OAuth 2.1 scopes (e.g., <code>mcp:tools</code> as a single coarse scope), meaning authorization is granted at connection time and applies uniformly to <strong>all tools</strong> on that server—no per-tool granularity is defined in the specification. (MCP Authorization Tutorial, modelcontextprotocol.io/docs/tutorials/security/authorization)</li>
+<li>SEP-1024 mandates <strong>pre-configuration consent dialogs</strong> for one-click local MCP server installation (showing exact commands), but this consent covers installation only, not subsequent per-tool-call authorization. (SEP-1024, modelcontextprotocol.io/seps/1024-mcp-client-security-requirements-for-local-server-; note: this is a Final Standards Track SEP, not yet part of the core spec)</li>
+<li>The Security Best Practices page extensively documents threats (confused deputy, SSRF, session hijacking, prompt injection, token passthrough) but <strong>does not address the risk of an agent calling arbitrary tools without user oversight after connection</strong>—that threat model is implicitly left to client-side implementation. (MCP Security Best Practices, modelcontextprotocol.io/docs/tutorials/security/security_best_practices)</li>
+<li>The current MCP specification does <strong>not define or require a per-call permission model</strong>; the only authorization boundary is the OAuth handshake at connection time, after which <code>tools/call</code> is unrestricted within the granted scope. This is the de facto &quot;confirm-at-connect&quot; model being questioned. (Derived from architecture and authorization docs; no counterexample found in the spec)</li>
+<li>An &quot;Interceptors Working Group&quot; charter exists in the MCP community but has <strong>not produced a finalized specification</strong> for middleware that could enforce per-call policies. (MCP Community Working Groups, modelcontextprotocol.io/community/working-groups/interceptors; speculative—the charter exists but no ratified spec was found)</li>
+<li>A <strong>confused deputy attack</strong> is explicitly documented for MCP proxy servers where static client IDs and consent cookies can be exploited. This is distinct from the tool-call permission question but illustrates that the trust boundary at connect time is fragile. (Security Best Practices, &quot;Confused Deputy Problem&quot; section)</li>
+<li>The MCP protocol&#39;s <strong>session model</strong> (for streamable HTTP) is stateful, and session hijacking is documented as a threat—if a session is hijacked, the attacker inherits all tool-call privileges granted at init, with no per-call check to limit damage. (Security Best Practices, &quot;Session Hijacking&quot; section)</li>
+</ul>
+<p>Stance: &quot;Confirm-at-connect with unrestricted <code>call_tool</code> afterwards is insufficient as a permission model because it grants blanket access to all tools for the duration of a session, with no protocol-level per-call authorization, leaving clients responsible for implementing ad-hoc consent layers that the specification does not standardize.&quot;</p>
+<h3>Agent 4</h3>
+<ul>
+<li><p>The MCP specification explicitly states that &quot;tools represent arbitrary code execution and must be treated with appropriate caution&quot; and that &quot;hosts must obtain explicit user consent before invoking any tool&quot; — this indicates the spec expects per-invocation consent, not merely connect-time consent (MCP Specification, &quot;Security and Trust &amp; Safety&quot; section, modelcontextprotocol.io/specification).</p>
+</li>
+<li><p>The Tools specification says there &quot;SHOULD always be a human in the loop with the ability to deny tool invocations&quot; and that applications &quot;SHOULD present confirmation prompts to the user for operations&quot; — this is aspirational guidance, not a protocol-level enforcement, but it directly pushes against a &quot;confirm at connect, then unrestricted&quot; model (MCP Specification, &quot;Server Features: Tools&quot;, modelcontextprotocol.io/specification/2025-11-25/server/tools).</p>
+</li>
+<li><p>The specification also notes that implementations are &quot;free to expose tools through any interface pattern that suits their needs&quot; and that security principles &quot;cannot enforce these security principles at the protocol level&quot; — so &quot;confirm-at-connect&quot; is technically permissible today, but it contradicts the stated security intent (same sources).</p>
+</li>
+<li><p>SEP-1024 (Final, Standards Track) mandates that MCP clients supporting one-click local server installation MUST display a clear consent dialog showing the exact command before execution — this is a pre-installation consent, not a model for ongoing tool use, but it establishes a precedent that consent must be informed and specific, not a blanket approval (SEP-1024, modelcontextprotocol.io/seps/1024-mcp-client-security-requirements-for-local-server-).</p>
+</li>
+<li><p>The Security Best Practices document identifies &quot;Local MCP Server Compromise&quot; as a critical risk, noting that without proper sandboxing and per-operation consent, attackers can achieve arbitrary code execution, data exfiltration, and privilege escalation — a flat &quot;confirm-at-connect&quot; model gives no defense after the initial approval (Security Best Practices, modelcontextprotocol.io/docs/tutorials/security/security_best_practices.md).</p>
+</li>
+<li><p>The Tools specification&#39;s Security Considerations state that clients &quot;SHOULD prompt for user confirmation on sensitive operations&quot; and &quot;show tool inputs to the user before calling the server, to avoid malicious or accidental data exfiltration&quot; — this explicitly recommends per-call visibility, not one-time authorization (same Tools page).</p>
+</li>
+<li><p>OAuth-based authorization flows for remote MCP servers (using scopes like <code>mcp:tools</code>) bind consent to specific scopes at authorization time, but per-tool granularity is not defined in the protocol — this creates uncertainty about whether &quot;confirm-at-connect&quot; provides meaningful protection when the server&#39;s tool list can change dynamically via <code>notifications/tools/list_changed</code> (Authorization tutorial and Tools spec).</p>
+</li>
+<li><p>There is no documented or widely-discussed &quot;confirm-at-connect with unrestricted call_tool afterwards&quot; model as a formal design pattern in MCP literature — searches for this exact phrase and related terms returned zero results, suggesting this model is a de facto implementation choice by some clients rather than a deliberate protocol feature (web search, no results found).</p>
+</li>
+</ul>
+<p>Stance: The &quot;confirm-at-connect with unrestricted call_tool afterwards&quot; model is technically permitted by MCP&#39;s protocol-level agnosticism but is fundamentally at odds with the specification&#39;s own security guidance, which consistently recommends per-invocation human oversight and explicit consent for each tool call.</p>
+<h3>Agent 5</h3>
+<ul>
+<li><p>The MCP Tools specification explicitly states tools are &quot;model-controlled&quot; and that &quot;for trust &amp; safety and security, there <strong>SHOULD</strong> always be a human in the loop with the ability to deny tool invocations,&quot; but this is a non-binding SHOULD, and no mandatory per-call confirmation model is defined in the protocol (MCP Tools Spec, specification/2025-11-25/server/tools.md).</p>
+</li>
+<li><p>The specification recommends that clients &quot;present confirmation prompts to the user for operations&quot; and &quot;show tool inputs to the user before calling the server, to avoid malicious or accidental data exfiltration,&quot; yet these are also SHOULD-level guidance, not protocol-enforced requirements (MCP Tools Spec, Security Considerations section).</p>
+</li>
+<li><p>SEP-1024 (Final, Standards Track) mandates consent dialogs only for <em>local server installation</em> (pre-execution of server commands), not for ongoing tool calls after connection; post-connect tool invocation has no equivalent consent requirement in any current SEP or spec (SEP-1024, modelcontextprotocol.io/seps/1024).</p>
+</li>
+<li><p>The MCP authorization model uses OAuth 2.1 scopes (e.g., <code>mcp:tools</code>) at the server level; once a client is authorized and connected, there is no protocol mechanism for per-tool or per-call authorization — all tools in the negotiated scope are callable without additional consent (MCP Authorization tutorial and OAuth flow docs).</p>
+</li>
+<li><p>The Security Best Practices document identifies confused deputy attacks, token passthrough, SSRF, session hijacking, and local server compromise, but does not propose or evaluate a &quot;confirm-at-connect + unrestricted call_tool&quot; model — the threat model assumes server-side access controls and client-side UI safeguards rather than protocol-level per-call permission gates (Security Best Practices, modelcontextprotocol.io/docs/tutorials/security/security_best_practices.md).</p>
+</li>
+<li><p>MCP lifecycle (initialization → operation → shutdown) performs capability negotiation once at connection; after <code>initialized</code> notification, tools are freely callable — the protocol currently provides no hook for per-invocation authorization or re-consent (Lifecycle spec, specification/2025-11-25/basic/lifecycle.md).</p>
+</li>
+<li><p>The spec advises clients to &quot;prompt for user confirmation on sensitive operations&quot; and &quot;implement timeouts for tool calls&quot; and &quot;log tool usage for audit purposes,&quot; but all are client-side responsibilities with no protocol-level enforcement, meaning a client that skips confirmation can call any tool at any time (Tools Spec, Security Considerations).</p>
+</li>
+<li><p>Industry practice in notable clients (Claude Code, VS Code, Cursor) shows varying policies: VS Code and Cursor added install-time consent (per SEP-1024), but none publicly document a per-call denial mechanism for every <code>tools/call</code> after connection — the dominant deployed model is indeed &quot;confirm-at-connect (auth) + unrestricted call_tool&quot; for authorized servers (mentioned in SEP-1024 rationale referencing den.dev blog and Cursor patterns).</p>
+</li>
+</ul>
+<p>Stance: The current MCP protocol effectively defaults to a &quot;trust-once, call-freely&quot; model where authorization and consent happen at connection time, and while the spec recommends human-in-the-loop for tool invocations, it provides no built-in mechanism for per-call or per-tool permission decisions, making security entirely dependent on client-side UI and server-side access controls.</p>
+
+  </article>
+  <footer class="footer"><p>Generated by Aura Code &middot; Ecclesia &middot; Inspired by DeerFlow</p></footer>
+</div>
+</body>
+</html>

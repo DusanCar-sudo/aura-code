@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mihajlo Pupin — Aura Research</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#fdf6f0;--card:#fffaf5;--text:#2a1f18;--muted:#8a7768;--accent:#cc5c3c;--accent-glow:#e0785c;--gold:#c8944a;--gold-light:#e0b860;--border:#e8d5c8;--code-bg:#f4ede6;--shadow:0 4px 24px rgba(62,47,36,.08);--shadow-lg:0 12px 48px rgba(62,47,36,.12);--radius:16px;--serif:'Playfair Display',Georgia,serif;--sans:'Inter',system-ui,-apple-system,sans-serif;--mono:'JetBrains Mono','Fira Code',monospace}
+  *{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7;font-size:17px;overflow-x:hidden}
+  nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;transition:background .3s,box-shadow .3s}
+  nav.scrolled{background:rgba(253,246,240,.92);backdrop-filter:blur(12px);box-shadow:0 1px 20px rgba(62,47,36,.06)}
+  nav .logo{font-family:var(--serif);font-size:1.25rem;font-weight:700;color:var(--accent)}
+  nav .links{display:flex;gap:2rem;list-style:none}
+  nav .links a{text-decoration:none;color:var(--muted);font-size:.85rem;font-weight:500;letter-spacing:.02em;transition:color .2s}
+  nav .links a:hover{color:var(--accent)}
+  .hero{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1a1410}
+  .hero-bg{position:absolute;inset:0;background:url('pupin-inventions.png') center/cover no-repeat;opacity:.18;filter:brightness(1.3) contrast(1.1);animation:heroDrift 40s ease-in-out infinite alternate}
+  @keyframes heroDrift{0%{transform:scale(1)}100%{transform:scale(1.08)}}
+  .hero-overlay{position:absolute;inset:0;background:radial-gradient(ellipse at 35% 50%,rgba(204,92,60,.28) 0%,transparent 60%),radial-gradient(ellipse at 70% 30%,rgba(200,148,74,.15) 0%,transparent 50%),linear-gradient(180deg,rgba(26,20,16,.7) 0%,rgba(26,20,16,.45) 50%,rgba(26,20,16,.88) 100%)}
+  .hero-content{position:relative;z-index:2;display:flex;align-items:center;gap:4rem;max-width:1200px;width:100%;padding:4rem 2rem}
+  .hero-text{flex:1}
+  .hero .badge{display:inline-block;background:rgba(204,92,60,.15);border:1px solid rgba(204,92,60,.3);color:var(--accent-glow);font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:.4em 1.2em;border-radius:100px;margin-bottom:2rem}
+  .hero h1{font-family:var(--serif);font-size:clamp(2.8rem,6vw,4.8rem);font-weight:800;line-height:1.08;letter-spacing:-.02em;color:#faf5ef;margin-bottom:1.25rem}
+  .hero h1 .gold{color:var(--gold-light)}
+  .hero .subtitle{font-size:1.15rem;color:rgba(250,245,239,.7);font-weight:300;max-width:520px;line-height:1.6;margin-bottom:2.5rem}
+  .hero .stats-row{display:flex;gap:2rem}
+  .hero .stat{text-align:center}
+  .hero .stat .num{font-family:var(--serif);font-size:2.2rem;font-weight:700;color:var(--gold-light);line-height:1}
+  .hero .stat .lbl{font-size:.7rem;color:rgba(250,245,239,.5);text-transform:uppercase;letter-spacing:.1em;margin-top:.3rem}
+  .hero-portrait{flex-shrink:0;width:320px;height:420px;border-radius:20px;overflow:hidden;border:2px solid rgba(200,148,74,.3);box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 0 1px rgba(200,148,74,.15);position:relative}
+  .hero-portrait::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,rgba(26,20,16,.5) 100%)}
+  .hero-portrait img{width:100%;height:100%;object-fit:cover;object-position:center 15%;filter:grayscale(15%) contrast(1.05)}
+  .hero-scroll{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;color:rgba(250,245,239,.4);font-size:.7rem;text-transform:uppercase;letter-spacing:.15em;display:flex;flex-direction:column;align-items:center;gap:.5rem}
+  .hero-scroll .arrow{animation:bounce 2s ease-in-out infinite}
+  @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+  .content-wrap{max-width:1100px;margin:0 auto;padding:5rem 2rem}
+  .card-section{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem 3rem;box-shadow:var(--shadow);margin-bottom:2rem}
+  .card-section h2{font-family:var(--serif);font-size:1.6rem;color:var(--accent);margin-bottom:1.25rem;font-weight:700}
+  .card-section h4{font-size:1.1rem;margin:1.5rem 0 .5rem}
+  .card-section p{margin:.85rem 0}
+  .card-section ul{margin:.85rem 0;padding-left:1.8rem}
+  .card-section li{margin:.4rem 0}
+  .card-section a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent)}
+  .card-section strong{font-weight:700}
+  .card-section em{color:var(--muted)}
+  .card-section code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px;border:1px solid var(--border)}
+  .card-section hr{border:none;border-top:1px solid var(--border);margin:2rem 0}
+  .quote-banner{background:linear-gradient(135deg,#2a1f18 0%,#3a2820 100%);color:#faf5ef;padding:5rem 2rem;text-align:center;position:relative;overflow:hidden}
+  .quote-banner::before{content:'';position:absolute;inset:0;background:url('pupin-inventions.png') center/cover no-repeat;opacity:.06}
+  .quote-banner .inner{position:relative;z-index:1;max-width:750px;margin:0 auto}
+  .quote-banner blockquote{font-family:var(--serif);font-size:clamp(1.4rem,3vw,2rem);font-style:italic;line-height:1.5;color:#ede0cc;font-weight:400}
+  .quote-banner cite{display:block;margin-top:1rem;font-size:.85rem;color:var(--gold-light);font-style:normal;letter-spacing:.05em}
+  .page-footer{border-top:1px solid var(--border);padding:3rem 2rem;background:var(--card);text-align:center}
+  .page-footer p{color:var(--muted);font-size:.8rem}
+  .page-footer .heart{color:var(--accent)}
+  @media(max-width:900px){.hero-content{flex-direction:column-reverse;text-align:center;gap:2.5rem}.hero .subtitle{max-width:100%}.hero .stats-row{justify-content:center}.hero-portrait{width:240px;height:320px}nav .links{gap:1rem}.card-section{padding:1.5rem}}
+  @media(max-width:640px){.content-wrap{padding:3rem 1.25rem}.hero h1{font-size:2.2rem}.hero .stats-row{gap:1.25rem}.hero .stat .num{font-size:1.6rem}.hero-portrait{width:180px;height:240px}nav{padding:.75rem 1rem}}
+  @media print{body{background:#fff;font-size:13px}.card-section{box-shadow:none;border:1px solid #ccc}.hero{min-height:auto;padding:2rem}}
+</style>
+</head>
+<body>
+<nav id="navbar">
+  <div class="logo">Mihajlo Pupin</div>
+  <ul class="links">
+    <li><a href="#content">Read</a></li>
+    <li><a href="2026-06-24-mihajlo-pupin.md">Markdown</a></li>
+  </ul>
+</nav>
+
+<div class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-text">
+      <div class="badge">Serbian-American Inventor &middot; Physicist &middot; Humanitarian</div>
+      <h1>Mihajlo <span class="gold">Pupin</span></h1>
+      <p class="subtitle">Arrived in America with five cents. Became a Columbia professor, a founding father of NASA, a Pulitzer Prize winner, and the man who made long-distance telephony possible.</p>
+      <div class="stats-row">
+        <div class="stat"><div class="num">34</div><div class="lbl">Patents</div></div>
+        <div class="stat"><div class="num">18</div><div class="lbl">Doctorates</div></div>
+        <div class="stat"><div class="num">1924</div><div class="lbl">Pulitzer</div></div>
+        <div class="stat"><div class="num">5&cent;</div><div class="lbl">Arrived With</div></div>
+      </div>
+    </div>
+    <div class="hero-portrait">
+      <img src="pupin-portrait.jpg" alt="Mihajlo Pupin">
+    </div>
+  </div>
+  <div class="hero-scroll">
+    <span>Scroll</span>
+    <div class="arrow">&darr;</div>
+  </div>
+</div>
+
+<div class="content-wrap" id="content">
+
+    <div class="card-section">
+      <h2>Who Was Mihajlo Pupin?</h2>
+      <p>Mihajlo Idvorski Pupin (also known as Michael Pupin; 4 October 1858 – 12 March 1935) was a <strong>Serbian-American electrical engineer, physicist, inventor, and author</strong>. Born in the village of Idvor in the Banat region (then Austrian Empire, now Serbia), he emigrated to the United States at age 15 with just five cents in his pocket. He went on to become a professor at Columbia University, a founding member of what would become <strong>NASA</strong>, a <strong>Pulitzer Prize winner</strong>, and one of the most decorated scientists of his era.</p>
+<p>Pupin is best known for the <strong>"Pupin coil"</strong> — loading coils placed at intervals along telephone lines that dramatically extended long-distance communication range. His 34 patents and over 70 scientific articles helped lay the groundwork for modern telecommunications.</p>
+    </div>
+
+    <div class="card-section">
+      <h2>The Immigrant Story — "From Immigrant to Inventor"</h2>
+      <p>Pupin's life story is itself legendary and was captured in his 1923 autobiography <strong><em>From Immigrant to Inventor</em></strong>, which won the <strong>1924 Pulitzer Prize for Biography or Autobiography</strong>.</p>
+<h4>Key milestones:</h4>
+<li><strong>Born in Idvor, Banat</strong> (1858), to Serbian parents in a peasant family. His mother Olimpijada, though illiterate, impressed upon him the value of knowledge: <em>"Knowledge is the golden ladder over which we climb to heaven."</em></li>
+<li><strong>Educated in Pančevo and Prague</strong>, but forced to leave due to political activity in the "Serbian Youth" movement and his father's death.</li>
+<li><strong>Arrived at Castle Garden, New York (1874)</strong> at age 15 with five cents. His first purchase — a prune pie that turned out to contain only pits. He later wrote that being penniless was "no handicap … provided that he has the stamina to stand the hardships."</li>
+<li><strong>Worked manual labour</strong> (including in a biscuit factory on Cortlandt Street in Manhattan) while teaching himself English, Greek, and Latin.</li>
+<li><strong>Entered Columbia College in 1879</strong>, graduating with honours in 1883 and becoming an American citizen the same year.</li>
+<li>Earned his <strong>Ph.D. at the University of Berlin</strong> under <strong>Hermann von Helmholtz</strong> (one of the greatest physicists of the 19th century) in 1889, with a dissertation on osmotic pressure and free energy.</li>
+<ul>
+<li>Returned to Columbia University that same year as a lecturer and rose to full professor of electromechanics by 1901. He taught there for over 40 years, retiring in 1931.</li></ul>
+
+    </div>
+
+    <div class="card-section">
+      <h2>The Pupin Coil — Revolutionising Telecommunications</h2>
+      <p>Pupin's most famous invention addresses a fundamental problem in early telephony: <strong>signal attenuation</strong>. As electrical signals travelled along long wires, they weakened and became unintelligible.</p>
+<h4>What are Pupin coils?</h4>
+<p>Loading coils — inductors placed at precisely calculated intervals along a telephone line — that <strong>reduce signal loss and distortion</strong>, allowing voice transmission over vastly greater distances. The technique became known as <strong>"pupinisation"</strong>.</p>
+<h4>Significance:</h4>
+<li><strong>Patented in 1899–1900</strong> (US Patents 652,230 and 652,231). The patent rights were acquired by <strong>AT&amp;T</strong>, making Pupin a wealthy man.</li>
+<li>Built on the theoretical work of <strong>Oliver Heaviside</strong> (1887) but provided the practical implementation.</li>
+<li>AT&amp;T's own engineer <strong>George Campbell</strong> independently developed similar technology; the company bought Pupin's patent largely to control the technology landscape.</li>
+<li><strong>Enabled transcontinental and submarine telephone cables</strong>, fundamentally changing global communication.</li>
+<ul>
+<li>AT&amp;T reportedly paid Pupin a sum that, adjusted for inflation, made him a multimillionaire.</li>
+</ul>
+<p>Without Pupin coils, the coast-to-coast telephone call — realised in 1915 — would not have been possible.</p>
+    </div>
+
+    <div class="card-section">
+      <h2>X-Ray Pioneer</h2>
+      <p>Pupin was among the first scientists in the United States to experiment with <strong>X-ray imaging</strong> after Röntgen's discovery in late 1895:</p>
+<li>Produced successful X-ray images on <strong>2 January 1896</strong>, just weeks after the discovery was announced.</li>
+<li>Collaborated with <strong>Thomas Edison</strong>, who provided Pupin with a <strong>calcium tungstate fluoroscopic screen</strong> that reduced exposure time from one hour to a few seconds.</li>
+<li>Was the <strong>first to use a fluorescent screen to enhance X-rays for medical purposes</strong>.</li>
+<ul>
+<li>Assisted a New York surgeon, Dr. Bull, in locating lead shot in a patient's hand — an early example of diagnostic radiology.</li>
+<li>His conclusion that primary X-rays generated secondary X-rays was an important early insight into radiation physics.</li></ul>
+
+    </div>
+
+    <div class="card-section">
+      <h2>Founding NASA (as NACA) and Institution Building</h2>
+      <p>In 1915, Pupin was a <strong>founding member of the National Advisory Committee for Aeronautics (NACA)</strong> — the organisation that would later become <strong>NASA</strong> in 1958. He served alongside other scientific luminaries of the era.</p>
+<p>He also helped establish:</p>
+<li>The <strong>American Mathematical Society</strong></li>
+<li>The <strong>American Physical Society</strong></li>
+<p>And served as president of:</p>
+<li>The <strong>Institute of Radio Engineers</strong> (1917)</li>
+<li>The <strong>American Institute of Electrical Engineers</strong> (1925–26)</li>
+<li>The <strong>American Association for the Advancement of Science</strong></li>
+<li>The <strong>New York Academy of Sciences</strong></li>
+    </div>
+
+    <div class="card-section">
+      <h2>World War I and Submarine Detection</h2>
+      <p>When the US entered World War I in 1917, Pupin organised a <strong>research group at Columbia University for submarine detection</strong>. He conducted experiments at Key West and New London, contributing to Allied anti-submarine warfare capabilities. For this work he received formal recognition from President Warren G. Harding.</p>
+    </div>
+
+    <div class="card-section">
+      <h2>Diplomacy and the Borders of Yugoslavia</h2>
+      <p>Pupin served as an <strong>honorary consul of Serbia</strong> in the United States from 1912 to 1920 and played a direct role in shaping post-WWI borders.</p>
+<p>At the <strong>Paris Peace Conference (1919)</strong>, Pupin personally wrote a memorandum to President <strong>Woodrow Wilson</strong> on 19 March 1919, presenting historical and ethnic data about Dalmatia, Slovenia, Istria, Banat, Međimurje, Baranja, and Macedonia. His intervention helped Wilson reject the secret London Agreement that would have given Dalmatia to Italy. Thousands of Serbs remained within Yugoslavia's borders thanks in part to Pupin's advocacy.</p>
+<p>He spent two months in Paris (April–May 1919) at the insistence of the Yugoslav government, leveraging his personal relationships with Wilson and Secretary of State Robert Lansing.</p>
+    </div>
+
+    <div class="card-section">
+      <h2>Philanthropy and the Pupin Foundation</h2>
+      <p>Pupin never forgot his roots and became one of the greatest Serbian-American philanthropists:</p>
+<li>Established the <strong>"Fund Olimpijada Aleksić-Pupin"</strong> (1914) at the Serbian Academy of Sciences, named after his mother, to support schools in Old Serbia and Macedonia.</li>
+<li>Founded the <strong>Mihajlo Pupin Fund</strong> in Yugoslavia, funding agricultural scholarships, student prizes, and church support in Idvor.</li>
+<li>Donated over 500 publications and ongoing journal subscriptions to <strong>Belgrade University Library</strong>.</li>
+<li>Established a foundation at the <strong>National Museum of Serbia</strong> to purchase works by Serbian artists (Uroš Predić, Paja Jovanović, Konstantin Danil, et al.).</li>
+<li>Founded <strong>"Union of Serbs – Sloga"</strong> (1909), one of the oldest Serbian emigrant organisations in the US, and the <strong>Serbian National Defense Council</strong> during WWI, which organised volunteers and relief supplies.</li>
+<li>Founded the <strong>Serbian Society for Helping Children</strong>, providing medicine, clothing, and shelter for war orphans.</li>
+<li>Funded the <strong>electrification and water plant for Idvor</strong>, his home village.</li>
+<li>Was the chief financial benefactor of <strong>St. Sava Monastery</strong> (founded 1923), reflecting his lifelong Orthodox Christian faith.</li>
+<li>In total, Pupin invested over <strong>one million dollars</strong> (a vast sum at the time) into his foundations.</li>
+    </div>
+
+    <div class="card-section">
+      <h2>Major Awards and Honours</h2>
+      <p>Pupin was one of the most decorated scientists of his generation:</p>
+<p>| Award / Honour | Year |</p>
+<p>|---|---|</p>
+<p>| Eliot Cresson Medal (Franklin Institute) | 1902 |</p>
+<p>| Member, National Academy of Sciences | 1905 |</p>
+<p>| Herbert Award (French Academy of Sciences) | 1916 |</p>
+<p>| IEEE Edison Medal | 1920 |</p>
+<p>| Pulitzer Prize for Biography | 1924 |</p>
+<p>| IEEE Medal of Honor | 1924 |</p>
+<p>| John Fritz Medal (highest US engineering honour) | 1932 |</p>
+<p>He received <strong>18 honorary doctorates</strong> from institutions including Columbia, Princeton, Johns Hopkins, UC Berkeley, the University of Belgrade, and Charles University in Prague. He was a member of the <strong>French Academy of Sciences</strong>, the <strong>Serbian Academy of Sciences and Arts</strong>, and the <strong>American Philosophical Society</strong>.</p>
+<p>Posthumously, a <strong>lunar crater</strong> (Pupin crater) and the <strong>Pupin Bridge</strong> over the Danube in Belgrade were named after him. <strong>Pupin Hall</strong> at Columbia University houses the physics and astronomy departments — the building where Harold Urey discovered deuterium and won the Nobel Prize.</p>
+    </div>
+
+    <div class="card-section">
+      <h2>Key Publications</h2>
+      <li><strong><em>From Immigrant to Inventor</em></strong> (1923) — Pulitzer Prize-winning autobiography</li>
+<li><strong><em>The New Reformation: From Physical to Spiritual Realities</em></strong> (1927) — a philosophical work exploring the relationship between science and spirituality</li>
+<li><strong><em>Romance of the Machine</em></strong> (1930) — reflections on technology and human progress</li>
+<li><em>Der Osmotische Druck und Seine Beziehung zur Freien Energie</em> (1889) — doctoral dissertation under Helmholtz</li>
+<li><em>Thermodynamics of Reversible Cycles in Gases and Saturated Vapors</em> (1894)</li>
+<li><em>Serbian Orthodox Church</em> (1918) — a study of Serbian ecclesiastical architecture and history</li>
+    </div>
+
+    <div class="card-section">
+      <h2>Private Life</h2>
+      <p>Pupin married <strong>Sarah Catharine Jackson</strong> of New York in 1888. They had one daughter, <strong>Barbara Ivanka Pupin</strong> (born 1899). Sarah died of pneumonia only eight years into their marriage, at age 37. Pupin never remarried.</p>
+<p>He owned a farm in <strong>Norfolk, Connecticut</strong>, which he described as his "real American home." He died in New York City on 12 March 1935 at age 76 and is buried at <strong>Woodlawn Cemetery in the Bronx</strong>.</p>
+    </div>
+
+    <div class="card-section">
+      <h2>Relationship with Nikola Tesla</h2>
+      <p>Pupin and <strong>Nikola Tesla</strong> — the two most famous Serbian-American inventors — had a complex relationship. Both were ethnic Serbs from the Austro-Hungarian Empire who achieved extraordinary success in America. While they respected each other's scientific achievements, they also had public disagreements, most notably over the relative merits of alternating current (Tesla's domain) and the physics of wave transmission (Pupin's specialty). Pupin criticised some of Tesla's more speculative later claims, and Tesla reciprocated. Nonetheless, together they represented an extraordinary Serbian contribution to American science in the early 20th century.</p>
+    </div>
+</div>
+
+<div class="quote-banner">
+  <div class="inner">
+    <blockquote>&ldquo;Knowledge is the golden ladder over which we climb to heaven; knowledge is the light which illuminates our path through this life and leads to a future life of everlasting glory.&rdquo;</blockquote>
+    <cite>&mdash; Olimpijada Pupin (Mihajlo's mother)</cite>
+  </div>
+</div>
+
+<footer class="page-footer">
+  <p>Generated by <span class="heart">&hearts;</span> Aura Code &middot; Inspired by DeerFlow</p>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50);
+  });
+</script>
+</body>
+</html>

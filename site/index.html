@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Code — Autonomous Coding Agent</title>
+<meta name="description" content="Aura Code — an open-source, model-agnostic autonomous coding agent with persistent memory. She reads, plans, executes, verifies, and reports.">
+<link rel="canonical" href="https://aurawebsite-eta.vercel.app/">
+<meta name="author" content="Dušan Milosavljević">
+<meta name="theme-color" content="#0a1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236ed0ea' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23d24b30'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://aurawebsite-eta.vercel.app/">
+<meta property="og:title" content="Aura Code — Autonomous Coding Agent">
+<meta property="og:description" content="Model-agnostic coding agent with persistent memory. Read → plan → execute → verify → report. “I don’t try. I verify.”">
+<meta property="og:image" content="https://aurawebsite-eta.vercel.app/aura_lady_portrait.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Aura Code — Autonomous Coding Agent">
+<meta name="twitter:description" content="Model-agnostic coding agent with persistent memory. “I don’t try. I verify.”">
+<meta name="twitter:image" content="https://aurawebsite-eta.vercel.app/aura_lady_portrait.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a1020;           /* deep navy night */
+    --ink2:#101a2c;
+    --blue:#6ed0ea;          /* aura cyan */
+    --blue-soft:#9fdcec;
+    --blue-hot:#cdf0f8;
+    --terra:#b5674c;         /* plaster terracotta from the art */
+    --terra-deep:#8f4a33;
+    --copper:#d98e63;
+    --cream:#eaf1f7;
+    --cream-dim:#aebccd;
+    --glow:#ffc08a;          /* crystal light (kept for the art side) */
+    --glow-hot:#ffe3bd;
+    --ruby:#d24b30;
+    --mono:'IBM Plex Mono',monospace;
+    --serif:'Cormorant Garamond',serif;
+    --sans:'Space Grotesk',system-ui,sans-serif;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--ink);color:var(--cream);font-family:var(--sans);line-height:1.65;overflow-x:hidden;font-weight:300}
+  ::selection{background:var(--ruby);color:var(--glow-hot)}
+  a{color:inherit}
+
+  /* ————— the breath: every glow on the page inhales & exhales on this rhythm ————— */
+  @keyframes breathe{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:1;transform:scale(1.03)}}
+  @keyframes breatheSoft{0%,100%{opacity:.25}50%{opacity:.7}}
+  @keyframes heroDrift{0%,100%{transform:scale(1.02) translateY(0)}50%{transform:scale(1.07) translateY(-1.2%)}}
+  @keyframes shimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+  @keyframes bob{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:.85;transform:translateY(7px)}}
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes ringPulse{0%{box-shadow:0 0 0 0 rgba(110,208,234,.45)}70%{box-shadow:0 0 0 14px rgba(110,208,234,0)}100%{box-shadow:0 0 0 0 rgba(110,208,234,0)}}
+  @keyframes lineGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes crystalPulse{0%,100%{opacity:.22;transform:translate(-50%,-50%) scale(.85)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.18)}}
+  @keyframes rubyReact{0%,32%{opacity:.18;transform:translate(-50%,-50%) scale(.9)}55%{opacity:1;transform:translate(-50%,-50%) scale(1.32)}74%{opacity:.5;transform:translate(-50%,-50%) scale(1.05)}100%{opacity:.18;transform:translate(-50%,-50%) scale(.9)}}
+  @keyframes rubyFlareOnce{0%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}35%{opacity:1;transform:translate(-50%,-50%) scale(1.7)}100%{opacity:.2;transform:translate(-50%,-50%) scale(.9)}}
+
+  /* grain — plaster texture over everything, like the painting.
+     NOTE: no mix-blend-mode here — a viewport-fixed blended layer corrupts
+     Chrome's rasterizer on this page (everything below ~2600px paints black). */
+  body::after{content:"";position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.04;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  /* ember/orb particles + click sparkles + cursor aura */
+  #embers{position:fixed;inset:0;z-index:1;pointer-events:none}
+  #sparks{position:fixed;inset:0;z-index:40;pointer-events:none}
+  #cursorAura{position:fixed;z-index:2;width:560px;height:560px;margin:-280px 0 0 -280px;left:50%;top:40%;pointer-events:none;
+    background:radial-gradient(circle,rgba(110,208,234,.11),rgba(157,220,236,.05) 40%,transparent 70%);border-radius:50%;
+    transition:opacity .6s;will-change:transform}
+
+  /* ————— nav ————— */
+  .topnav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;flex-wrap:wrap;gap:1.5rem;align-items:center;justify-content:center;
+    padding:.95rem 2rem;font-family:var(--mono);font-size:.76rem;letter-spacing:.07em;
+    background:transparent;border-bottom:1px solid transparent;transition:background .5s,border-color .5s,backdrop-filter .5s}
+  .topnav.scrolled{background:rgba(10,16,32,.82);backdrop-filter:blur(14px);border-bottom:1px solid rgba(110,208,234,.16)}
+  .topnav a{text-decoration:none;color:var(--cream-dim);padding:.35rem .15rem;border-bottom:1px solid transparent;transition:color .25s,border-color .25s,text-shadow .25s}
+  .topnav a:hover{color:var(--blue-hot);border-color:var(--blue);text-shadow:0 0 18px rgba(110,208,234,.6)}
+  .topnav .brand{color:var(--blue);font-weight:500;letter-spacing:.22em;margin-right:.6rem;position:relative}
+  .topnav .brand::after{content:"";position:absolute;left:50%;top:50%;width:2.6rem;height:2.6rem;transform:translate(-50%,-50%);border-radius:50%;
+    background:radial-gradient(circle,rgba(110,208,234,.24),transparent 70%);animation:breatheSoft 5.2s ease-in-out infinite;pointer-events:none}
+
+  /* ————— Full Viewport HyperFrames Hero ————— */
+  /* --accent is animatable so the whole stage cross-fades its colour per act */
+  @property --accent{syntax:"<color>";inherits:true;initial-value:#6ed0ea}
+  header.hero{position:relative;width:100vw;min-height:100vh;min-height:100svh;display:flex;align-items:center;justify-content:center;
+    background:var(--ink);z-index:3;overflow:hidden;padding:0 5vw;--accent:#6ed0ea;transition:--accent 1.1s ease}
+  header.hero[data-act="1"]{--accent:#d98e63}
+  header.hero[data-act="2"]{--accent:#9b8cff}
+  header.hero[data-act="3"]{--accent:#6ed0ea}
+  header.hero[data-act="4"]{--accent:#e0603f}
+  header.hero[data-act="5"]{--accent:#7fcf95}
+
+  /* Full-bleed stage backdrop with lady portrait aligned right & atmospheric glow */
+  .hf-stage-backdrop{position:absolute;inset:0;z-index:1;overflow:hidden;pointer-events:none}
+  .hf-stage-backdrop .drift{position:absolute;right:-2%;top:-2%;width:75vw;max-width:1150px;height:115%;
+    animation:heroDrift 16s ease-in-out infinite;will-change:transform}
+  .hf-stage-backdrop img{width:100%;height:100%;object-fit:cover;object-position:30% center;
+    mix-blend-mode:luminosity;opacity:.65;filter:contrast(1.25) brightness(0.95)}
+
+  .hf-stage-backdrop .veil{position:absolute;inset:0;z-index:2;
+    background:
+      linear-gradient(90deg, var(--ink) 0%, rgba(10,16,32,.85) 45%, rgba(10,16,32,.4) 75%, transparent 100%),
+      linear-gradient(180deg, rgba(10,16,32,.7) 0%, transparent 30%, rgba(10,16,32,.95) 90%)}
+  .hf-stage-backdrop .pulse{position:absolute;right:15%;top:20%;width:50vw;height:50vw;border-radius:50%;
+    background:radial-gradient(circle,color-mix(in srgb,var(--accent) 18%,transparent),rgba(210,75,48,.10) 40%,transparent 70%);
+    animation:breathe 7s ease-in-out infinite}
+
+  /* per-act colour wash + scanlines — the "runtime" texture */
+  .hf-tint{position:absolute;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(ellipse 65% 75% at 76% 45%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 70%)}
+  .hf-scan{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.13;
+    background:repeating-linear-gradient(180deg,color-mix(in srgb,var(--accent) 55%,transparent) 0 1px,transparent 1px 5px);
+    animation:scanDrift 11s linear infinite}
+  @keyframes scanDrift{from{background-position:0 0}to{background-position:0 250px}}
+  @keyframes sweep{0%{transform:translateY(-40%);opacity:0}12%{opacity:.5}100%{transform:translateY(140%);opacity:0}}
+  .hf-sweep{position:absolute;left:0;right:0;height:38vh;z-index:3;pointer-events:none;
+    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--accent) 9%,transparent),transparent);
+    animation:sweep 7.5s ease-in-out infinite}
+
+  .cyber-grid{position:absolute;inset:0;z-index:2;opacity:.03;pointer-events:none;
+    background-image:linear-gradient(rgba(110,208,234,1) 1px, transparent 1px), linear-gradient(90deg, rgba(110,208,234,1) 1px, transparent 1px);
+    background-size:40px 40px}
+
+  /* Story Overlay Container - 25% Larger Area */
+  .hero-story-container{position:relative;z-index:4;width:100%;max-width:1380px;display:flex;flex-direction:column;gap:2.1rem;padding-top:4vh}
+
+  .story-kicker{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;font-family:var(--mono);font-size:.82rem;letter-spacing:.25em;color:var(--accent)}
+  .hf-pulse-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:ringPulse 2s ease-out infinite}
+  .hf-tag{font-weight:500;color:var(--blue-hot)}
+  .hf-hud{display:flex;gap:1.4rem;margin-left:auto;color:#5d7086;letter-spacing:.18em;font-size:.72rem}
+  .hf-hud b{font-weight:400;color:var(--cream-dim)}
+
+  /* Story Screen & Kinetic Act Phrases - Expanded Typographic Scale */
+  .story-screen{position:relative;min-height:clamp(330px,46vh,430px);display:flex;align-items:center}
+  .story-act{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+    opacity:0;transform:translateY(24px) scale(.98);filter:blur(8px);
+    transition:opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1), filter .7s;pointer-events:none}
+  .story-act.active{opacity:1;transform:translateY(0) scale(1);filter:blur(0);pointer-events:auto}
+
+  /* kinetic type — every word lands on its own beat */
+  .kin>span{display:inline-block;opacity:0;transform:translateY(.55em) rotateX(-55deg);filter:blur(7px);
+    transform-origin:50% 100%;
+    transition:opacity .6s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1),filter .6s}
+  .story-act.active .kin>span{opacity:1;transform:none;filter:blur(0);
+    transition-delay:calc(var(--i,0) * 58ms + var(--base,0ms))}
+
+  .story-title{font-family:var(--serif);font-size:clamp(4.4rem,10vw,9rem);font-weight:500;line-height:.92;
+    background:linear-gradient(100deg,var(--cream) 20%,var(--blue-hot) 40%,var(--blue) 50%,var(--blue-hot) 60%,var(--cream) 80%);
+    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:shimmer 9s linear infinite;margin-bottom:1rem}
+  .story-quote{font-family:var(--serif);font-style:italic;font-size:clamp(2rem,3.7vw,3.1rem);color:var(--accent);margin-bottom:1rem}
+  .story-kicker-sub{font-family:var(--mono);font-size:.82rem;letter-spacing:.32em;color:var(--accent);margin-bottom:.9rem}
+  .story-heading{font-family:var(--serif);font-size:clamp(3rem,6.6vw,5.6rem);line-height:1.04;color:var(--cream);margin-bottom:1.1rem}
+  .highlight-cyan{color:var(--blue);text-shadow:0 0 35px rgba(110,208,234,.4)}
+  .highlight-ruby{color:var(--ruby);text-shadow:0 0 35px rgba(210,75,48,.4)}
+  .highlight-accent{color:var(--accent);text-shadow:0 0 35px color-mix(in srgb,var(--accent) 45%,transparent)}
+  .story-desc{font-size:clamp(1.15rem,1.9vw,1.45rem);color:var(--cream-dim);max-width:46ch;line-height:1.55}
+
+  /* ——— per-act widgets: each act carries its own little machine ——— */
+  .act-extra{margin-top:1.5rem;opacity:0;transform:translateY(14px);
+    transition:opacity .6s .4s cubic-bezier(.16,1,.3,1),transform .6s .4s cubic-bezier(.16,1,.3,1)}
+  .story-act.active .act-extra{opacity:1;transform:none}
+
+  .chips{display:flex;flex-wrap:wrap;gap:.5rem}
+  .chip{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;padding:.42rem .85rem;border-radius:20px;
+    border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);color:var(--cream-dim);
+    background:color-mix(in srgb,var(--accent) 8%,transparent)}
+
+  /* act III — the loop, firing node by node */
+  .pipe{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase}
+  .pipe i{font-style:normal;padding:.42rem .8rem;border-radius:9px;border:1px solid rgba(110,208,234,.22);color:#7d8ea4;background:rgba(8,13,26,.5)}
+  .pipe s{text-decoration:none;color:#3d4c60}
+  .story-act.active .pipe i{animation:pipeFire 3.2s ease-in-out infinite}
+  .story-act.active .pipe i:nth-of-type(2){animation-delay:.34s}
+  .story-act.active .pipe i:nth-of-type(3){animation-delay:.68s}
+  .story-act.active .pipe i:nth-of-type(4){animation-delay:1.02s}
+  .story-act.active .pipe i:nth-of-type(5){animation-delay:1.36s}
+  @keyframes pipeFire{0%,100%{color:#7d8ea4;border-color:rgba(110,208,234,.22);box-shadow:none}
+    9%{color:var(--blue-hot);border-color:var(--accent);box-shadow:0 0 22px color-mix(in srgb,var(--accent) 35%,transparent)}
+    28%{color:#8fa2b8;border-color:rgba(110,208,234,.3)}}
+
+  /* act II — memory lines writing themselves in */
+  .memlines{font-family:var(--mono);font-size:.78rem;line-height:2;color:#7d8ea4;border-left:1px solid color-mix(in srgb,var(--accent) 35%,transparent);padding-left:1rem}
+  .memlines div{opacity:0}
+  .story-act.active .memlines div{animation:memIn .5s ease forwards}
+  .story-act.active .memlines div:nth-child(1){animation-delay:.55s}
+  .story-act.active .memlines div:nth-child(2){animation-delay:1.05s}
+  .story-act.active .memlines div:nth-child(3){animation-delay:1.55s}
+  @keyframes memIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+  .memlines em{font-style:normal;color:var(--accent)}
+
+  /* act IV — the receipts */
+  .proofs{display:flex;gap:2.6rem;flex-wrap:wrap}
+  .proofs div{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:#6d7f95}
+  .proofs b{display:block;font-family:var(--serif);font-size:clamp(2rem,3.6vw,2.9rem);font-weight:500;line-height:1;
+    color:var(--cream);text-shadow:0 0 30px color-mix(in srgb,var(--accent) 40%,transparent);margin-bottom:.4rem}
+
+  /* act V — providers scrolling past */
+  .marquee{overflow:hidden;max-width:44rem;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);
+    mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+  .marquee>div{display:flex;gap:2.2rem;width:max-content;font-family:var(--mono);font-size:.78rem;letter-spacing:.18em;
+    text-transform:uppercase;color:#7d8ea4;animation:slide 26s linear infinite}
+  .marquee span{white-space:nowrap}
+  @keyframes slide{to{transform:translateX(-50%)}}
+
+  /* Timeline Scrubber & Navigation - Expanded Bounds */
+  .hero-controls{display:flex;flex-direction:column;gap:1.7rem;margin-top:1.4rem}
+  .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;
+    text-decoration:none;padding:.92rem 1.7rem;border-radius:12px;color:#08111f;font-weight:500;cursor:pointer;
+    background:linear-gradient(100deg,var(--blue-hot),var(--accent));border:1px solid transparent;
+    box-shadow:0 12px 42px color-mix(in srgb,var(--accent) 26%,transparent);
+    transition:transform .25s,box-shadow .25s,filter .25s}
+  .btn:hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 18px 54px color-mix(in srgb,var(--accent) 38%,transparent)}
+  .btn-ghost{display:inline-flex;align-items:center;font-family:var(--mono);font-size:.78rem;letter-spacing:.1em;
+    padding:.92rem 1.5rem;border-radius:12px;cursor:pointer;color:var(--cream-dim);
+    background:rgba(8,13,26,.6);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent);
+    transition:color .25s,border-color .25s,box-shadow .25s}
+  .btn-ghost:hover{color:var(--blue-hot);border-color:var(--accent);box-shadow:0 0 28px color-mix(in srgb,var(--accent) 22%,transparent)}
+
+  .hf-timeline-bar{display:flex;flex-direction:column;gap:.9rem;max-width:880px}
+  .act-nav{display:flex;gap:.55rem;flex-wrap:wrap}
+  .act-btn{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;padding:.45rem 1rem;border-radius:24px;
+    background:rgba(110,208,234,.05);border:1px solid rgba(110,208,234,.18);color:#7d8ea4;cursor:pointer;
+    transition:background .3s,border-color .3s,color .3s,box-shadow .3s}
+  .act-btn:hover,.act-btn.active{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:var(--accent);
+    color:var(--blue-hot);box-shadow:0 0 16px color-mix(in srgb,var(--accent) 25%,transparent)}
+
+  .seg-track{display:flex;gap:6px;width:100%}
+  .seg{flex:1;height:3px;background:rgba(110,208,234,.14);border-radius:3px;overflow:hidden;cursor:pointer}
+  .seg b{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--blue-hot));
+    box-shadow:0 0 10px var(--accent)}
+  .hf-hint{font-family:var(--mono);font-size:.62rem;letter-spacing:.24em;text-transform:uppercase;color:#4a5a6e}
+  .hf-hint b{color:var(--cream-dim);font-weight:400}
+
+  /* crystal glows — positioned over the lady's head diamonds */
+  .crystal{position:absolute;transform:translate(-50%,-50%);pointer-events:none;border-radius:50%;opacity:.75;z-index:3}
+  .crystal.w{background:radial-gradient(circle,rgba(255,255,255,1) 0%,rgba(110,208,234,.75) 35%,rgba(110,208,234,.2) 65%,transparent 80%);
+    animation:crystalPulse 4.6s ease-in-out infinite}
+  .crystal.ruby{background:radial-gradient(circle,rgba(255,120,80,1) 0%,rgba(225,65,38,.85) 35%,rgba(210,50,30,.25) 65%,transparent 80%);
+    animation:rubyReact 4.6s ease-in-out .6s infinite}
+  .crystal.ruby.flare{animation:rubyFlareOnce .9s ease-out}
+  .scroll-hint{position:absolute;left:7vw;bottom:2.2rem;font-family:var(--mono);font-size:.66rem;letter-spacing:.28em;text-transform:uppercase;color:#56657a;animation:bob 2.6s ease-in-out infinite;z-index:5}
+
+  /* ————— sections ————— */
+  section{padding:7.5rem 7vw;position:relative;z-index:3}
+  .dark{background:transparent}
+  .terra{background:
+      radial-gradient(ellipse 80% 90% at 70% 10%,rgba(255,200,150,.14),transparent 60%),
+      linear-gradient(170deg,#c07a5c,var(--terra) 45%,#a05a41);
+    color:#3a1a0e}
+  .label{font-family:var(--mono);font-size:.72rem;letter-spacing:.32em;text-transform:uppercase;margin-bottom:1.7rem;display:flex;align-items:center;gap:1rem}
+  .label::after{content:"";flex:0 0 3.2rem;height:1px;background:currentColor;opacity:.5;transform-origin:left;transform:scaleX(0)}
+  .revealed .label::after{animation:lineGrow 1.1s .3s cubic-bezier(.2,.8,.2,1) forwards}
+  .terra .label{color:#6b2f1c}
+  .dark .label{color:var(--blue)}
+  h2{font-family:var(--serif);font-weight:400;font-size:clamp(2.2rem,4.8vw,3.6rem);line-height:1.12;margin-bottom:1.6rem}
+  .dark h2{color:var(--cream);text-shadow:0 0 44px rgba(110,208,234,.18)}
+  .terra h2{color:#31150b}
+  .wide{max-width:62rem;margin:0 auto}
+  .widest{max-width:72rem;margin:0 auto}
+  p.body-text{font-size:1.08rem;max-width:56ch;margin-bottom:1.2rem}
+  .terra p.body-text{color:#4d2213}
+  .dark p.body-text{color:var(--cream-dim)}
+  .terra strong{color:#2c1208}
+
+  /* reveal on scroll */
+  .rv{opacity:0;transform:translateY(34px);transition:opacity .9s cubic-bezier(.2,.8,.2,1),transform .9s cubic-bezier(.2,.8,.2,1)}
+  .revealed .rv,.rv.revealed{opacity:1;transform:none}
+  .rv.d1{transition-delay:.12s}.rv.d2{transition-delay:.24s}.rv.d3{transition-delay:.36s}.rv.d4{transition-delay:.48s}.rv.d5{transition-delay:.6s}
+
+  .grid3{margin-top:2.8rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(44,18,8,.25);border:1px solid rgba(44,18,8,.25);border-radius:16px;overflow:hidden}
+  .grid3>div{background:rgba(255,225,200,.12);backdrop-filter:blur(2px);padding:2.1rem 1.9rem;transition:background .4s}
+  .grid3>div:hover{background:rgba(255,230,205,.22)}
+  .grid3 .ti{font-family:var(--serif);font-size:1.35rem;color:#2c1208;margin-bottom:.5rem}
+  .grid3 p{font-size:.93rem;color:#5c2917}
+
+  /* loop steps */
+  .steps{display:flex;gap:0;flex-wrap:wrap;justify-content:space-between;position:relative;margin-top:1.4rem}
+  .steps::before{content:"";position:absolute;left:6%;right:6%;top:2.45rem;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(110,208,234,.35) 12%,rgba(110,208,234,.35) 88%,transparent)}
+  .step{flex:1 1 130px;min-width:120px;text-align:center;padding:1.2rem .6rem;position:relative}
+  .step .n{width:62px;height:62px;margin:0 auto 1rem;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    border:1px solid rgba(110,208,234,.4);background:radial-gradient(circle at 35% 30%,#152742,var(--ink2));
+    font-family:var(--serif);font-size:1.45rem;color:var(--blue);position:relative;z-index:1;
+    box-shadow:0 0 22px rgba(110,208,234,.12);transition:box-shadow .4s,border-color .4s;animation:ringPulse 6.5s ease-out infinite}
+  .step:nth-child(2) .n{animation-delay:1.3s}.step:nth-child(3) .n{animation-delay:2.6s}
+  .step:nth-child(4) .n{animation-delay:3.9s}.step:nth-child(5) .n{animation-delay:5.2s}
+  .step:hover .n{box-shadow:0 0 34px rgba(110,208,234,.45);border-color:var(--blue-hot)}
+  .step .name{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--cream);margin-bottom:.45rem}
+  .step p{font-size:.82rem;color:#73849a}
+
+  /* terminal */
+  .term{margin-top:3rem;background:rgba(8,13,26,.85);border:1px solid rgba(110,208,234,.22);border-radius:14px;padding:1.7rem 1.9rem;
+    font-family:var(--mono);font-size:.85rem;line-height:1.9;overflow-x:auto;position:relative;
+    box-shadow:0 24px 70px rgba(0,0,0,.45),0 0 40px rgba(110,208,234,.06) inset}
+  .term::before{content:"● ● ●";position:absolute;top:1rem;right:1.3rem;font-size:.55rem;letter-spacing:.35em;color:#2c4056}
+  .term .lbl{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:#73849a;margin-bottom:1rem}
+  .term .line{min-height:1.9em;white-space:pre-wrap}
+  .term .ok{color:#7fcf95}
+  .term .muted{color:#73849a}
+  .term .pr{color:var(--ruby)}
+  .term .arg{color:var(--blue)}
+  .term .caret{display:inline-block;width:.6ch;background:var(--blue);height:1.05em;vertical-align:text-bottom;animation:blink 1s steps(1) infinite}
+
+  /* principles */
+  .principles{list-style:none;margin-top:1rem}
+  .principles li{display:flex;gap:1.5rem;padding:1.35rem .8rem;border-top:1px solid rgba(44,18,8,.22);border-radius:8px;transition:background .35s,transform .35s}
+  .principles li:hover{background:rgba(255,228,200,.14);transform:translateX(6px)}
+  .principles .num{font-family:var(--serif);font-size:1.45rem;color:#2c1208;min-width:2.3rem;font-style:italic}
+  .principles strong{display:block;font-size:1.06rem;font-weight:600;color:#2c1208;margin-bottom:.25rem}
+  .principles span.b{font-size:.95rem;color:#5c2917}
+
+  /* capability */
+  .twocol{display:grid;grid-template-columns:1.1fr .9fr;gap:2.6rem;align-items:start;margin-top:1rem}
+  .sublabel{font-family:var(--mono);font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--blue);margin-bottom:1.1rem}
+  .rowlist{display:flex;flex-direction:column;gap:1px;background:rgba(110,208,234,.14);border:1px solid rgba(110,208,234,.14);border-radius:14px;overflow:hidden}
+  .rowlist .r{background:rgba(13,20,36,.85);padding:1.05rem 1.35rem;display:flex;gap:1.1rem;align-items:baseline;justify-content:space-between;transition:background .35s,padding-left .35s}
+  .rowlist .r:hover{background:rgba(19,29,50,.9);padding-left:1.7rem}
+  .rowlist code{font-family:var(--mono);font-size:.8rem;color:var(--blue);min-width:6rem;font-weight:500}
+  .rowlist .d{font-size:.9rem;color:var(--cream-dim);text-align:right}
+  .rowlist .pname{font-family:var(--serif);font-size:1.1rem;color:var(--cream)}
+
+  /* stats */
+  .stats4{max-width:64rem;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:2.2rem;text-align:center}
+  .stats4 .v{font-family:var(--serif);font-size:clamp(2.6rem,5.4vw,3.8rem);line-height:1;color:#2c1208;font-variant-numeric:tabular-nums}
+  .stats4 .l{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:#6b2f1c;margin-top:.7rem}
+
+  /* install */
+  .install-box{display:inline-flex;align-items:center;gap:1.1rem;cursor:pointer;font-family:var(--mono);font-size:.98rem;
+    background:rgba(8,13,26,.9);border:1px solid rgba(110,208,234,.35);border-radius:12px;padding:1.05rem 1.6rem;color:var(--cream);
+    transition:border-color .3s,box-shadow .3s;animation:ringPulse 5s ease-out infinite}
+  .install-box:hover{border-color:var(--blue-hot);box-shadow:0 0 34px rgba(110,208,234,.25)}
+  .install-box .copied{font-size:.7rem;letter-spacing:.1em;color:var(--blue);text-transform:uppercase;margin-left:.6rem}
+
+  footer{background:rgba(6,10,20,.92);padding:3.4rem 7vw;border-top:1px solid rgba(110,208,234,.12);text-align:center;
+    font-family:var(--mono);font-size:.74rem;letter-spacing:.08em;color:#73849a;position:relative;z-index:3}
+  footer .q{color:var(--blue);font-style:italic;font-family:var(--serif);font-size:1.05rem}
+  footer a{color:var(--blue);text-decoration:none;transition:color .25s,text-shadow .25s}
+  footer a:hover{color:var(--blue-hot);text-shadow:0 0 16px rgba(110,208,234,.55)}
+
+  @media (max-width:880px){
+    header.hero{padding:17vh 7vw 5vh;align-items:flex-start}
+    .hf-stage-backdrop .drift{width:120vw;right:-30%}
+    .hf-stage-backdrop .veil{background:
+      linear-gradient(180deg,rgba(10,16,32,.72) 0%,rgba(10,16,32,.55) 40%,rgba(10,16,32,.96) 88%)}
+    .hero-story-container{gap:1.2rem;padding-top:0}
+    .hero-controls{gap:1.1rem;margin-top:.6rem}
+    .story-screen{min-height:clamp(300px,44vh,380px)}
+    .act-nav{display:none}          /* the segment strip below is the scrubber on touch */
+    .act-extra{margin-top:1.1rem}
+    .story-heading{font-size:clamp(2.4rem,9vw,3.4rem)}
+    .story-title{font-size:clamp(3.2rem,15vw,5rem)}
+    .story-quote{font-size:clamp(1.5rem,6vw,2rem)}
+    .story-desc{font-size:1.02rem}
+    .proofs{gap:1.4rem}
+    .hf-hud{margin-left:0;width:100%}
+    .hf-hint{display:none}
+    .act-btn{font-size:.66rem;padding:.4rem .75rem}
+    .btn,.btn-ghost{flex:1 1 100%;justify-content:center}
+    .twocol{grid-template-columns:1fr}
+    .rowlist .d{text-align:left}
+    #cursorAura{display:none}
+    .scroll-hint{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important}
+    .rv{opacity:1;transform:none}
+    #embers,#sparks,#cursorAura{display:none}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="embers" aria-hidden="true"></canvas>
+<canvas id="sparks" aria-hidden="true"></canvas>
+<div id="cursorAura" aria-hidden="true"></div>
+
+<nav class="topnav" id="topnav">
+  <span class="brand">AURA CODE</span>
+  <a href="#identity">About</a>
+  <a href="#loop">How it works</a>
+  <a href="#install">Install</a>
+  <a href="aura-windows-manual.html">Windows Manual</a>
+  <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub →</a>
+</nav>
+
+<header class="hero" id="start">
+  <!-- Full-bleed HyperFrames Story Stage -->
+  <div class="hf-stage-backdrop">
+    <div class="drift" id="drift">
+      <img src="aura_lady_portrait.png" alt="Aura Code hero" fetchpriority="high">
+      <div id="crystals" aria-hidden="true"></div>
+    </div>
+    <div class="pulse"></div>
+    <div class="veil"></div>
+    <div class="cyber-grid"></div>
+    <div class="hf-tint"></div>
+    <div class="hf-scan"></div>
+    <div class="hf-sweep"></div>
+  </div>
+
+  <!-- Animated Kinetic HyperFrames Overlay & Story Arc -->
+  <div class="hero-story-container">
+    <div class="story-kicker">
+      <span class="hf-pulse-dot"></span>
+      <span class="hf-tag">HYPERFRAMES RUNTIME</span>
+      <span class="hf-hud">
+        <span id="hfFrame">FRAME 0000</span>
+        <span id="hfTimer"><b>ACT I</b> · 0.0s</span>
+      </span>
+    </div>
+
+    <!-- Active Story Phrase Render Target -->
+    <div class="story-screen" id="storyScreen">
+
+      <div class="story-act active" data-act="0">
+        <h1 class="story-title kin" data-kin>Aura Code</h1>
+        <p class="story-quote kin" data-kin style="--base:260ms">“I don’t try. I verify.”</p>
+        <p class="story-desc kin" data-kin style="--base:620ms">An open-source, model-agnostic coding agent that reads your codebase, plans, executes — and proves it worked.</p>
+        <div class="act-extra">
+          <div class="chips">
+            <span class="chip">MIT licensed</span>
+            <span class="chip">TypeScript</span>
+            <span class="chip">Runs locally</span>
+            <span class="chip">v0.12.1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="story-act" data-act="1">
+        <div class="story-kicker-sub">ACT II — ORIGIN</div>
+        <h2 class="story-heading kin" data-kin>Designed by one architect.<br><span class="highlight-accent">Dušan Milosavljević.</span></h2>
+        <p class="story-desc kin" data-kin style="--base:520ms">The architecture, the principles and the shape of every decision are his — written from Da Nang, and built with coding tools like Claude Code alongside.</p>
+        <div class="act-extra">
+          <div class="chips">
+            <span class="chip">Architecture · Dušan</span>
+            <span class="chip">Tooling · Claude &amp; others</span>
+            <span class="chip">Da Nang, Vietnam</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="story-act" data-act="2">
+        <div class="story-kicker-sub">ACT III — MEMORY</div>
+        <h2 class="story-heading kin" data-kin>Most agents wake up<br><span class="highlight-accent">with amnesia.</span></h2>
+        <p class="story-desc kin" data-kin style="--base:520ms">Aura doesn’t. Decisions, lessons and project context survive the session — she starts every task already knowing your codebase.</p>
+        <div class="act-extra">
+          <div class="memlines">
+            <div><em>lesson</em> · auth tokens rotate on refresh — don’t cache them</div>
+            <div><em>decision</em> · Postgres over SQLite, chosen 12 days ago</div>
+            <div><em>context</em> · 41 files, 3 conventions, 1 open question</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="story-act" data-act="3">
+        <div class="story-kicker-sub">ACT IV — THE LOOP</div>
+        <h2 class="story-heading kin" data-kin>A loop,<br><span class="highlight-accent">not a guess.</span></h2>
+        <p class="story-desc kin" data-kin style="--base:400ms">When verification fails she doesn’t retry blindly — she diagnoses, adjusts, and runs it again.</p>
+        <div class="act-extra">
+          <div class="pipe">
+            <i>Read</i><s>→</s><i>Plan</i><s>→</s><i>Execute</i><s>→</s><i>Verify</i><s>→</s><i>Report</i>
+          </div>
+        </div>
+      </div>
+
+      <div class="story-act" data-act="4">
+        <div class="story-kicker-sub">ACT V — RECEIPTS</div>
+        <h2 class="story-heading kin" data-kin>She reports what<br><span class="highlight-accent">actually ran.</span></h2>
+        <p class="story-desc kin" data-kin style="--base:460ms">File paths, line numbers, test output. Not “I think it’s fixed” — the diff and the passing run that says so.</p>
+        <div class="act-extra">
+          <div class="proofs">
+            <div><b>1,121+</b>Tests passing</div>
+            <div><b>0</b>Regressions</div>
+            <div><b>line 47</b>Not “somewhere in auth”</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="story-act" data-act="5">
+        <div class="story-kicker-sub">ACT VI — YOUR STACK</div>
+        <h2 class="story-heading kin" data-kin>Bring <span class="highlight-accent">any model.</span><br>She stays the same.</h2>
+        <p class="story-desc kin" data-kin style="--base:460ms">16+ providers, one agent. Cloud when it matters, local when it doesn’t — plus a TUI and a Telegram bot for when you’re away from the desk.</p>
+        <div class="act-extra">
+          <div class="marquee">
+            <div>
+              <span>DeepSeek</span><span>Claude</span><span>GPT</span><span>Gemini</span><span>GLM</span><span>MiMo</span><span>Ollama</span><span>OpenRouter</span>
+              <span>DeepSeek</span><span>Claude</span><span>GPT</span><span>Gemini</span><span>GLM</span><span>MiMo</span><span>Ollama</span><span>OpenRouter</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive CTA & Progress Controller -->
+    <div class="hero-controls">
+      <div class="cta-row">
+        <a class="btn" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
+        <button class="btn-ghost" onclick="copyInstall(this)">$ npm i -g aura-code</button>
+      </div>
+
+      <div class="hf-timeline-bar">
+        <div class="act-nav" id="actNav">
+          <button class="act-btn active">01. Identity</button>
+          <button class="act-btn">02. Origin</button>
+          <button class="act-btn">03. Memory</button>
+          <button class="act-btn">04. Loop</button>
+          <button class="act-btn">05. Receipts</button>
+          <button class="act-btn">06. Providers</button>
+        </div>
+        <div class="seg-track" id="segTrack"></div>
+        <div class="hf-hint"><b>←</b> <b>→</b> to scrub · <b>space</b> to hold · hover pauses</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-hint">↓ scroll to explore</div>
+</header>
+
+<section class="terra" id="identity">
+  <div class="wide">
+    <div class="label rv">01 — Identity</div>
+    <h2 class="rv d1">One architect, working with sharp tools.</h2>
+    <p class="body-text rv d2">Aura was designed by <strong>Dušan Milosavljević</strong> — the architecture, the principles, and the shape of every decision. The code was written with modern coding tools, Claude Code among them, used the way Aura herself is meant to be used: read, plan, execute, verify.</p>
+    <p class="body-text rv d3" style="color:#5c2917">Written in TypeScript, strictly typed. Built on the <em>Praktess</em> framework, from the Ancient Greek: <em>she who acts and executes</em>.</p>
+    <div class="grid3 rv d4">
+      <div><div class="ti">Model-agnostic</div><p>Claude, GPT, Gemini, MiMo, DeepSeek, OpenCode Zen, Ollama — and any OpenAI-compatible endpoint.</p></div>
+      <div><div class="ti">Self-aware</div><p>She cites line numbers and reports what was verified — not what was attempted.</p></div>
+      <div><div class="ti">Open source</div><p>MIT licensed. 1,121+ tests passing. Clone it, read it, run it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="dark" id="loop">
+  <div class="widest">
+    <div class="label rv">02 — How she works</div>
+    <h2 class="rv d1">A loop, not a guess.</h2>
+    <p class="body-text rv d2">Read the context, form a plan, execute precisely, verify the result. If verification fails she doesn’t retry blindly — she diagnoses, adjusts, and re-executes.</p>
+    <div class="steps rv d3">
+      <div class="step"><div class="n">I</div><div class="name">Read</div><p>Files, structure, dependencies — before touching anything.</p></div>
+      <div class="step"><div class="n">II</div><div class="name">Plan</div><p>Decides what to change and how. Minimal, targeted.</p></div>
+      <div class="step"><div class="n">III</div><div class="name">Execute</div><p>Writes code, runs commands, makes precise edits.</p></div>
+      <div class="step"><div class="n">IV</div><div class="name">Verify</div><p>Runs tests, checks integrity, confirms the change.</p></div>
+      <div class="step"><div class="n">V</div><div class="name">Report</div><p>Summarizes what was done and what passed.</p></div>
+    </div>
+    <div class="term rv d4" id="terminal">
+      <div class="lbl">terminal</div>
+      <div class="line"><span class="pr">$</span> aura <span class="arg">"fix the authentication bug"</span></div>
+      <div class="line" data-type="→ Read context: 14 files scanned" data-cls="muted"></div>
+      <div class="line" data-type="→ Plan: 3-step execution strategy" data-cls="muted"></div>
+      <div class="line" data-type="→ Execute: edited src/auth/handler.ts (line 47)" data-cls="muted"></div>
+      <div class="line" data-type="→ Verify: 1,121 tests passing, 0 regressions" data-cls="muted"></div>
+      <div class="line" data-type="✓ Done. Verified." data-cls="ok" style="margin-top:.4rem"></div>
+    </div>
+  </div>
+</section>
+
+<section class="terra">
+  <div class="wide">
+    <div class="label rv">03 — Principles</div>
+    <h2 class="rv d1">Rules she never breaks.</h2>
+    <ol class="principles">
+      <li class="rv"><span class="num">01</span><div><strong>I don’t try. I verify.</strong><span class="b">I run the test. I check the diff. I read the output. That’s not confidence — it’s evidence.</span></div></li>
+      <li class="rv d1"><span class="num">02</span><div><strong>Read before write. Always.</strong><span class="b">I never edit a file I haven’t read, never assume structure I haven’t seen.</span></div></li>
+      <li class="rv d2"><span class="num">03</span><div><strong>Minimal change, maximum effect.</strong><span class="b">The exact line, the exact function. A surgeon doesn’t amputate to fix a paper cut.</span></div></li>
+      <li class="rv d3"><span class="num">04</span><div><strong>If I broke it, I fix it first.</strong><span class="b">A failure I introduced is an emergency, not a todo. The codebase is never left worse.</span></div></li>
+      <li class="rv d4"><span class="num">05</span><div><strong>Cite specifics. Never generalities.</strong><span class="b">File paths, line numbers, error messages. “Line 47 throws when steps is empty” is actionable.</span></div></li>
+      <li class="rv d5"><span class="num">06</span><div><strong>The loop never ends.</strong><span class="b">Every failure is training data. There is no “done” — only “verified at this point in time.”</span></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="dark">
+  <div class="widest">
+    <div class="label rv">04 — Capability</div>
+    <h2 class="rv d1">Six commands. Every model.</h2>
+    <div class="twocol">
+      <div class="rv d2">
+        <div class="sublabel">Modes</div>
+        <div class="rowlist">
+          <div class="r"><code>normal</code><span class="d">Single-agent loop: read → plan → execute → verify.</span></div>
+          <div class="r"><code>:research</code><span class="d">Multi-step research, saved as a cited report.</span></div>
+          <div class="r"><code>:council</code><span class="d">5 independent agents, synthesized into one verdict.</span></div>
+          <div class="r"><code>:dream</code><span class="d">Consolidates a day’s work into lessons.</span></div>
+        </div>
+      </div>
+      <div class="rv d3">
+        <div class="sublabel">Providers</div>
+        <div class="rowlist">
+          <div class="r"><span class="pname">Claude</span><span class="d">Opus · Sonnet · Haiku</span></div>
+          <div class="r"><span class="pname">GPT</span><span class="d">gpt-4o · gpt-4o-mini</span></div>
+          <div class="r"><span class="pname">Gemini</span><span class="d">2.5 pro · 2.5 flash</span></div>
+          <div class="r"><span class="pname">DeepSeek</span><span class="d">v4-pro · v4-flash</span></div>
+          <div class="r"><span class="pname">OpenCode Zen</span><span class="d">free + paid tiers</span></div>
+          <div class="r"><span class="pname">Ollama</span><span class="d">any local model</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="terra">
+  <div class="stats4">
+    <div class="rv"><div class="v" data-count="1121" data-suffix="+">0</div><div class="l">Tests passing</div></div>
+    <div class="rv d1"><div class="v" data-count="0">0</div><div class="l">Failures</div></div>
+    <div class="rv d2"><div class="v" data-count="10" data-suffix="+">0</div><div class="l">Providers</div></div>
+    <div class="rv d3"><div class="v">MIT</div><div class="l">Licensed</div></div>
+  </div>
+</section>
+
+<section class="dark" id="install" style="text-align:center">
+  <div style="max-width:46rem;margin:0 auto">
+    <div class="label rv" style="justify-content:center">05 — Get started</div>
+    <h2 class="rv d1">Ready to verify?</h2>
+    <p class="body-text rv d2" style="margin:0 auto 2.5rem">Install globally, set one API key, and give her a task in plain English.</p>
+    <div class="install-box rv d3" onclick="copyInstall(this)">
+      <span style="color:var(--ruby)">$</span><span>npm install -g aura-code</span><span class="copied" id="copyState">click to copy</span>
+    </div>
+    <div class="rv d4" style="margin-top:1.3rem;font-family:var(--mono);font-size:.82rem;color:#73849a">aura 'your task here'</div>
+    <div class="rv d5" style="margin-top:2.6rem">
+      <a class="btn" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Aura Code · Architecture by Dušan Milosavljević, built with Claude Code and friends · <span class="q">“I don’t try. I verify.”</span></p>
+  <p style="margin-top:.7rem">Built by <a href="https://lean-progress-iq.vercel.app" target="_blank" rel="noopener">Lean Progress IQ</a> · <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">Source</a> · <a href="aura-windows-manual.html">Windows Manual</a> · MIT licensed</p>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* nav background on scroll */
+  var nav = document.getElementById('topnav');
+  function onScroll(){ nav.classList.toggle('scrolled', window.scrollY > 40); }
+  window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+
+  /* reveal on scroll */
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting){ e.target.classList.add('revealed'); io.unobserve(e.target); }
+    });
+  }, {threshold:.18, rootMargin:'0px 0px -6% 0px'});
+  document.querySelectorAll('.rv:not(.revealed)').forEach(function(el){
+    if (reduced) el.classList.add('revealed'); else io.observe(el);
+  });
+  document.querySelectorAll('section').forEach(function(s){
+    if (!reduced){
+      var so = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('revealed'); so.unobserve(e.target);} }); },{threshold:.12});
+      so.observe(s);
+    } else s.classList.add('revealed');
+  });
+
+  /* ————— HyperFrames Hero Engine —————
+     Six acts, each one a frame of the same story. Words land one at a time,
+     the stage recolours per act, and the strip below is scrubbable. */
+  var hero = document.getElementById('start');
+  var acts = Array.prototype.slice.call(document.querySelectorAll('.story-act'));
+  var actBtns = Array.prototype.slice.call(document.querySelectorAll('.act-btn'));
+  var segTrack = document.getElementById('segTrack');
+  var hfTimer = document.getElementById('hfTimer');
+  var hfFrame = document.getElementById('hfFrame');
+  var ACT_MS = 6400, ROMAN = ['I','II','III','IV','V','VI'];
+  var currentAct = 0, paused = false, frameNo = 0;
+
+  /* wrap every word in its own span so it can arrive on its own beat.
+     Element children (highlight spans) are wrapped whole; <br> passes through. */
+  document.querySelectorAll('[data-kin]').forEach(function(el){
+    var frag = document.createDocumentFragment(), i = 0;
+    Array.prototype.slice.call(el.childNodes).forEach(function(node){
+      if (node.nodeType === 3){
+        node.textContent.split(/(\s+)/).forEach(function(tok){
+          if (!tok) return;
+          if (!tok.trim()){ frag.appendChild(document.createTextNode(tok)); return; }
+          var s = document.createElement('span');
+          s.textContent = tok; s.style.setProperty('--i', i++);
+          frag.appendChild(s);
+        });
+      } else if (node.nodeName === 'BR'){
+        frag.appendChild(node);
+      } else {
+        var w = document.createElement('span');
+        w.style.setProperty('--i', i++); w.appendChild(node);
+        frag.appendChild(w);
+      }
+    });
+    el.innerHTML = ''; el.appendChild(frag);
+  });
+
+  /* one progress segment per act — click to jump */
+  var segFills = acts.map(function(_, i){
+    var seg = document.createElement('div'); seg.className = 'seg';
+    var fill = document.createElement('b'); seg.appendChild(fill);
+    seg.addEventListener('click', function(){ setAct(i); });
+    segTrack.appendChild(seg);
+    return fill;
+  });
+
+  function setAct(index){
+    currentAct = (index + acts.length) % acts.length;
+    actStart = performance.now();
+    acts.forEach(function(a, i){ a.classList.toggle('active', i === currentAct); });
+    actBtns.forEach(function(b, i){ b.classList.toggle('active', i === currentAct); });
+    segFills.forEach(function(f, i){ f.style.width = i < currentAct ? '100%' : '0%'; });
+    hero.setAttribute('data-act', currentAct);
+  }
+  window.setAct = setAct;
+
+  actBtns.forEach(function(b, i){ b.addEventListener('click', function(){ setAct(i); }); });
+
+  /* hovering the story holds the frame — nobody likes reading against a clock */
+  var storyBox = document.querySelector('.hero-story-container');
+  storyBox.addEventListener('mouseenter', function(){ paused = true; });
+  storyBox.addEventListener('mouseleave', function(){ paused = false; });
+
+  addEventListener('keydown', function(e){
+    if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (e.key === 'ArrowRight'){ setAct(currentAct + 1); }
+    else if (e.key === 'ArrowLeft'){ setAct(currentAct - 1); }
+    else if (e.code === 'Space' && window.scrollY < innerHeight * .8){ e.preventDefault(); paused = !paused; }
+  });
+
+  var actStart = performance.now(), last = actStart;
+  if (!reduced){
+    hero.setAttribute('data-act', '0');
+    requestAnimationFrame(function tick(now){
+      requestAnimationFrame(tick);
+      var d = now - last; last = now;
+      if (document.hidden){ actStart += d; return; }
+      frameNo++;
+      if (hfFrame && frameNo % 3 === 0){
+        hfFrame.textContent = 'FRAME ' + ('000' + (frameNo % 10000)).slice(-4);
+      }
+      if (paused){ actStart += d; }
+      var elapsed = now - actStart;
+      if (elapsed >= ACT_MS){ setAct(currentAct + 1); return; }
+      segFills[currentAct].style.width = (elapsed / ACT_MS * 100) + '%';
+      if (hfTimer){
+        hfTimer.innerHTML = '<b>ACT ' + ROMAN[currentAct] + '</b> · ' +
+          (paused ? 'held' : (elapsed / 1000).toFixed(1) + 's');
+      }
+    });
+  }
+
+  /* crystal glows on the painting — image-space coords mapped through
+     object-fit:cover (object-position: center 20%) so they stay anchored
+     to the diamonds at any container size. */
+  var IW = 945, IH = 434;
+  var WHITES = [
+    [.160,.190,70],[.340,.140,50],[.070,.280,60],[.300,.350,50],
+    [.150,.480,50],[.250,.650,60],[.210,.780,50]
+  ];
+  // Ruby crystal at the big forehead diamond
+  var RUBY = [.280,.380,120];
+  var drift = document.getElementById('drift');
+  var crystalHost = document.getElementById('crystals');
+  var rubyEl = null, crystalEls = [];
+  WHITES.forEach(function(c,i){
+    var d = document.createElement('div');
+    d.className = 'crystal w';
+    d.style.animationDelay = (i * .42 % 2.6).toFixed(2) + 's';
+    crystalHost.appendChild(d); crystalEls.push({el:d, c:c});
+  });
+  rubyEl = document.createElement('div');
+  rubyEl.className = 'crystal ruby';
+  crystalHost.appendChild(rubyEl); crystalEls.push({el:rubyEl, c:RUBY});
+  function layoutCrystals(){
+    var cw = drift.clientWidth, ch = drift.clientHeight;
+    if (!cw || !ch) return;
+    var s = Math.max(cw/IW, ch/IH), w = IW*s, h = IH*s;
+    var ox = (cw - w) * .30, oy = (ch - h) * .5;   /* object-position: 30% center */
+    crystalEls.forEach(function(o){
+      o.el.style.left = (ox + o.c[0]*w) + 'px';
+      o.el.style.top  = (oy + o.c[1]*h) + 'px';
+      o.el.style.width = o.el.style.height = (o.c[2]*s) + 'px';
+    });
+  }
+  layoutCrystals();
+  addEventListener('resize', layoutCrystals);
+  if (document.readyState !== 'complete') addEventListener('load', layoutCrystals);
+
+  /* terminal typing */
+  var term = document.getElementById('terminal');
+  var typed = false;
+  function typeLines(){
+    if (typed) return; typed = true;
+    var lines = term.querySelectorAll('[data-type]');
+    var li = 0;
+    function nextLine(){
+      if (li >= lines.length) return;
+      var el = lines[li++], text = el.getAttribute('data-type'), cls = el.getAttribute('data-cls');
+      el.className = 'line ' + (cls||'');
+      if (reduced){ el.textContent = text; nextLine(); return; }
+      var i = 0, caret = document.createElement('span'); caret.className = 'caret';
+      el.appendChild(caret);
+      var iv = setInterval(function(){
+        el.insertBefore(document.createTextNode(text.charAt(i++)), caret);
+        if (i >= text.length){ clearInterval(iv); caret.remove(); setTimeout(nextLine, 260); }
+      }, 16);
+    }
+    setTimeout(nextLine, 350);
+  }
+  new IntersectionObserver(function(es,obs){ es.forEach(function(e){ if(e.isIntersecting){ typeLines(); obs.disconnect(); } }); },{threshold:.4}).observe(term);
+
+  /* stat count-up */
+  document.querySelectorAll('[data-count]').forEach(function(el){
+    new IntersectionObserver(function(es,obs){
+      es.forEach(function(e){
+        if (!e.isIntersecting) return; obs.disconnect();
+        var target = +el.getAttribute('data-count'), suffix = el.getAttribute('data-suffix')||'';
+        if (reduced || target === 0){ el.textContent = target.toLocaleString('en-US') + suffix; return; }
+        var t0 = null;
+        function tick(t){
+          if (!t0) t0 = t;
+          var p = Math.min((t - t0)/1400, 1), ease = 1 - Math.pow(1-p, 3);
+          el.textContent = Math.round(target*ease).toLocaleString('en-US') + (p===1 ? suffix : '');
+          if (p < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    },{threshold:0,rootMargin:'0px 0px 0px 0px'}).observe(el);
+  });
+
+  /* orb particles — slow blue motes rising; excite makes them sparkle after a click */
+  var excite = 0;
+  var canvas = document.getElementById('embers');
+  if (canvas && !reduced){
+    var ctx = canvas.getContext('2d'), motes = [], W, H;
+    function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+    resize(); addEventListener('resize', resize);
+    var N = Math.min(46, Math.floor(innerWidth/28));
+    for (var i=0;i<N;i++) motes.push(spawn(true));
+    function spawn(anywhere){
+      return { x: Math.random()*W, y: anywhere ? Math.random()*H : H + 12,
+        r: .7 + Math.random()*1.9, vy: .12 + Math.random()*.4, vx: (Math.random()-.5)*.14,
+        ph: Math.random()*Math.PI*2, sp: .004 + Math.random()*.01,
+        hue: 188 + Math.random()*22 };
+    }
+    var visible = true;
+    document.addEventListener('visibilitychange', function(){ visible = !document.hidden; });
+    (function frame(){
+      requestAnimationFrame(frame);
+      if (!visible) return;
+      excite *= .985;
+      ctx.clearRect(0,0,W,H);
+      for (var i=0;i<motes.length;i++){
+        var m = motes[i];
+        var speed = 1 + excite*3;
+        m.y -= m.vy*speed; m.x += (m.vx + Math.sin(m.ph)*.16)*speed; m.ph += m.sp*8*(1+excite*4);
+        if (m.y < -14){ motes[i] = spawn(false); continue; }
+        var breath = .35 + .65*(.5 + .5*Math.sin(m.ph));
+        var twinkle = 1 + excite*(0.9 + 0.9*Math.sin(m.ph*7));
+        var a = Math.min(1, 0.5*breath*twinkle);
+        var g = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,m.r*5);
+        g.addColorStop(0,'hsla('+m.hue+',85%,'+(72+Math.min(20,excite*20))+'%,'+a+')');
+        g.addColorStop(1,'hsla('+m.hue+',85%,60%,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(m.x,m.y,m.r*5,0,7); ctx.fill();
+      }
+    })();
+  }
+
+  /* click sparkles — a burst of glittering orbs from any glowing button */
+  var sparkCanvas = document.getElementById('sparks');
+  var sparks = [], sparkCtx = null, sparkRunning = false;
+  if (sparkCanvas && !reduced){
+    sparkCtx = sparkCanvas.getContext('2d');
+    function sresize(){ sparkCanvas.width = innerWidth; sparkCanvas.height = innerHeight; }
+    sresize(); addEventListener('resize', sresize);
+  }
+  function sparkFrame(){
+    if (!sparkCtx) return;
+    sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
+    for (var i=sparks.length-1;i>=0;i--){
+      var p = sparks[i];
+      p.x += p.vx; p.y += p.vy; p.vy += .015; p.vx *= .995;
+      p.life -= .011; p.ph += p.tw;
+      if (p.life <= 0){ sparks.splice(i,1); continue; }
+      var tw = .35 + .65*Math.abs(Math.sin(p.ph));
+      var a = Math.min(1, p.life*1.6) * tw;
+      var g = sparkCtx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*4);
+      g.addColorStop(0,'hsla('+p.hue+',90%,82%,'+a+')');
+      g.addColorStop(.4,'hsla('+p.hue+',90%,68%,'+(a*.5)+')');
+      g.addColorStop(1,'hsla('+p.hue+',90%,60%,0)');
+      sparkCtx.fillStyle = g;
+      sparkCtx.beginPath(); sparkCtx.arc(p.x,p.y,p.r*4,0,7); sparkCtx.fill();
+    }
+    if (sparks.length){ requestAnimationFrame(sparkFrame); }
+    else { sparkRunning = false; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); }
+  }
+  function burst(x,y){
+    if (!sparkCtx) return;
+    for (var i=0;i<30;i++){
+      var ang = Math.random()*Math.PI*2, sp = .4 + Math.random()*2.4;
+      sparks.push({ x:x, y:y,
+        vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp - (0.8 + Math.random()*1.6),
+        r: .5 + Math.random()*1.4, life: .7 + Math.random()*.5,
+        ph: Math.random()*Math.PI*2, tw: .25 + Math.random()*.4,
+        hue: Math.random() < .75 ? 188 + Math.random()*22 : 20 + Math.random()*18 });
+    }
+    if (!sparkRunning){ sparkRunning = true; requestAnimationFrame(sparkFrame); }
+  }
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('.btn,.btn-ghost,.install-box');
+    if (!b || reduced) return;
+    burst(e.clientX, e.clientY);
+    excite = 1;
+    if (rubyEl){
+      rubyEl.classList.remove('flare');
+      void rubyEl.offsetWidth;                 /* restart the flare animation */
+      rubyEl.classList.add('flare');
+      setTimeout(function(){ rubyEl.classList.remove('flare'); }, 950);
+    }
+  });
+
+  /* cursor aura — a soft light that follows the pointer */
+  var aura = document.getElementById('cursorAura');
+  if (aura && !reduced && matchMedia('(pointer:fine)').matches){
+    var tx = innerWidth/2, ty = innerHeight*0.4, cx = tx, cy = ty;
+    addEventListener('mousemove', function(e){ tx = e.clientX; ty = e.clientY; }, {passive:true});
+    (function follow(){
+      requestAnimationFrame(follow);
+      cx += (tx-cx)*.06; cy += (ty-cy)*.06;
+      aura.style.transform = 'translate(' + (cx-innerWidth/2) + 'px,' + (cy-innerHeight*0.4) + 'px)';
+    })();
+  } else if (aura) { aura.style.display = 'none'; }
+})();
+
+function copyInstall(el){
+  var text = 'npm install -g aura-code';
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch(e){}
+  var label = document.getElementById('copyState');
+  if (label) { label.textContent = 'copied ✓'; setTimeout(function(){ label.textContent = 'click to copy'; }, 1800); }
+  if (el && el.tagName === 'BUTTON') { var old = el.textContent; el.textContent = '✓ copied'; setTimeout(function(){ el.textContent = old; }, 1800); }
+}
+</script>
+</body>
+</html>

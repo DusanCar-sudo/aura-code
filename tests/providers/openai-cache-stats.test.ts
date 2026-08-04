@@ -1,0 +1,88 @@
+import { describe, it, expect } from 'vitest';
+import type OpenAI from 'openai';
+import { readCacheStats } from '../../src/providers/openai-compatible.js';
+import { costFor } from '../../src/agent/loop.js';
+
+const usage = (extra: Record<string, unknown>, prompt = 100_000): OpenAI.CompletionUsage =>
+  ({ prompt_tokens: prompt, completion_tokens: 200, total_tokens: prompt + 200, ...extra }) as OpenAI.CompletionUsage;
+
+describe('readCacheStats', () => {
+  it('reads the OpenAI-standard field (Zhipu/GLM, OpenAI)', () => {
+    const s = readCacheStats(usage({ prompt_tokens_details: { cached_tokens: 98_000 } }));
+    expect(s.cacheHit).toBe(98_000);
+    expect(s.cacheMiss).toBe(2_000);
+  });
+
+  it('still reads the DeepSeek dialect', () => {
+    const s = readCacheStats(usage({
+      prompt_cache_hit_tokens: 90_000,
+      prompt_cache_miss_tokens: 10_000,
+    }));
+    expect(s.cacheHit).toBe(90_000);
+    expect(s.cacheMiss).toBe(10_000);
+  });
+
+  it('reports no hits when a provider sends neither dialect', () => {
+    const s = readCacheStats(usage({}));
+    expect(s.cacheHit).toBe(0);
+    expect(s.cacheMiss).toBe(100_000);
+  });
+
+  it('ignores a zeroed field in favour of the dialect that reports a hit', () => {
+    const s = readCacheStats(usage({
+      prompt_tokens_details: { cached_tokens: 0 },
+      prompt_cache_hit_tokens: 75_000,
+    }));
+    expect(s.cacheHit).toBe(75_000);
+  });
+
+  it('tolerates a missing details object', () => {
+    expect(readCacheStats(usage({ prompt_tokens_details: undefined })).cacheHit).toBe(0);
+  });
+
+  it('never reports negative misses', () => {
+    const s = readCacheStats(usage({ prompt_tokens_details: { cached_tokens: 999_999 } }));
+    expect(s.cacheMiss).toBe(0);
+  });
+});
+
+describe('reported flag (guards AURA_DEBUG_CACHE noise)', () => {
+  // cacheMiss falls back to the whole prompt when a provider reports nothing,
+  // which made `cacheMiss > 0` always true and printed a [cache] line on every
+  // streamed chunk — dozens of identical lines per response.
+  it('is false when the provider sends no cache fields at all', () => {
+    const s = readCacheStats(usage({}));
+    expect(s.reported).toBe(false);
+    expect(s.cacheMiss).toBe(100_000);   // inferred, not measured
+  });
+
+  it('is true for the OpenAI-standard dialect, even at a zero hit', () => {
+    expect(readCacheStats(usage({ prompt_tokens_details: { cached_tokens: 0 } })).reported).toBe(true);
+  });
+
+  it('is true for the DeepSeek dialect, even at a zero hit', () => {
+    expect(readCacheStats(usage({ prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 100_000 })).reported).toBe(true);
+  });
+
+  it('is true when only the miss field is present', () => {
+    expect(readCacheStats(usage({ prompt_cache_miss_tokens: 500 })).reported).toBe(true);
+  });
+});
+
+describe('billing impact of the fix', () => {
+  // The bug this fixes: a fully-cached GLM turn was billed at the full rate
+  // because the standard field was never read.
+  // ~4.8x, not the ~10x this once asserted: that figure came from costFor's
+  // `p.in / 10` fallback, which applied while glm-5.2 had no published cached
+  // rate in the table. Zhipu's real rates are $1.40 input / $0.26 cached
+  // (docs.z.ai/guides/overview/pricing), a 5.4x spread on the input portion
+  // and ~4.8x once uncached remainder and output are included.
+  it('bills a 98%-cached GLM turn ~4.8x cheaper once the field is parsed', () => {
+    const u = usage({ prompt_tokens_details: { cached_tokens: 98_000 } });
+    const before = costFor('glm-5.2', 100_000, 200);                       // cachedTokens undefined
+    const after = costFor('glm-5.2', 100_000, 200, readCacheStats(u).cacheHit);
+    expect(after).toBeLessThan(before / 4);
+    expect(before / after).toBeGreaterThan(4.5);
+    expect(before / after).toBeLessThan(5.5);
+  });
+});

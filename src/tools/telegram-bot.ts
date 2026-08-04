@@ -8,9 +8,20 @@ import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
 import { exec, execSync, execFileSync } from 'child_process';
-import { createProvider, registerCustomProviders } from '../providers/factory.js';
+import { createProvider, registerCustomProviders, getAllModels, isModelConfigured } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
+import { rtkWrap } from '../util/rtk.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
+import {
+  normalizeAudioMode, shouldSendAudio, stripForSpeech, DEFAULT_AUDIO_MIN_CHARS,
+  type AudioReplyMode,
+} from './telegram-audio-policy.js';
+import { textToSpeech, sendVoiceMessage } from './telegram-voice.js';
+import {
+  parseAgentAction, stripDirectives, hasToolCallResidue, claimsDelivery,
+  formatProvenance,
+} from './telegram-actions.js';
+import { getApiKey } from '../util/env.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
@@ -27,6 +38,12 @@ interface TelegramConfig {
   /** Telegram user IDs allowed to use the bot. If set, everyone else is
    *  refused (the bot can run shell commands, so this gate is mandatory). */
   allowed_user_ids?: string | string[];
+  /** Voice-note replies: 'off' | 'voice-only' | 'auto' (default) | 'always'.
+   *  'auto' = text always, plus a voice note for voice-in messages and for
+   *  substantial conversational replies (≥ audio_min_chars). */
+  audio_replies?: string;
+  /** Reply length (chars) at which 'auto' mode adds a voice note. Default 500. */
+  audio_min_chars?: number;
 }
 
 function loadConfig(): TelegramConfig {
@@ -55,6 +72,13 @@ const ALLOWED_USER_IDS: string[] = (() => {
   if (!raw) return [];
   return (Array.isArray(raw) ? raw : [raw]).map(String);
 })();
+
+// ── Audio replies: when to attach a voice note alongside the text reply ──────
+const AUDIO_MODE: AudioReplyMode = normalizeAudioMode(config.audio_replies);
+const AUDIO_MIN_CHARS: number =
+  Number.isFinite(config.audio_min_chars) && (config.audio_min_chars as number) > 0
+    ? (config.audio_min_chars as number)
+    : DEFAULT_AUDIO_MIN_CHARS;
 
 function isAuthorized(userId: string | number | undefined): boolean {
   if (ALLOWED_USER_IDS.length === 0) return true; // no allowlist configured → open (logged as a warning at startup)
@@ -392,7 +416,9 @@ const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
 const CHAT_HISTORY_MAX = 50; // keep last N messages per chat for context
 const SESSION_DIR = path.join(os.homedir(), '.aura', 'sessions', 'telegram');
 
-let _chatProvider: LLMProvider | null = null;
+// Per-chat provider instances — one Telegram user's /provider switch MUST NOT
+// affect another user's messages. Map<chatId, provider>.
+const chatProviders = new Map<string, LLMProvider>();
 let _identityBlock = ''; // loaded from memory on startup
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -448,7 +474,7 @@ function loadIdentityFromMemory(): string {
   // Unified memory: full global identity/facts (shared with the CLI) plus the
   // global episodic-lessons digest. No projectRoot → the bot isn't tied to one
   // project, so it gets the cross-project lessons summary.
-  return loadUnifiedMemory({ maxChars: 3500 });
+  return loadUnifiedMemory({ maxChars: 800 });
 }
 
 // Build system prompt once on first use — includes user identity from memory
@@ -533,12 +559,13 @@ async function pushToHistory(chatId: string, msg: HistoryMessage): Promise<void>
   dirtySessions.delete(chatId);
 }
 
-function getChatProvider(): LLMProvider {
-  if (!_chatProvider) {
-    _chatProvider = createProvider({ model: DEFAULT_CHAT_MODEL, temperature: 0.7, maxTokens: 4096 });
-    console.log(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]   Chat model: ${DEFAULT_CHAT_MODEL} (${_chatProvider.name})`);
+function getChatProvider(chatId: string): LLMProvider {
+  if (!chatProviders.has(chatId)) {
+    const provider = createProvider({ model: DEFAULT_CHAT_MODEL, temperature: 0.7, maxTokens: 4096 });
+    chatProviders.set(chatId, provider);
+    console.log(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]   Chat ${chatId} model: ${DEFAULT_CHAT_MODEL} (${provider.name})`);
   }
-  return _chatProvider;
+  return chatProviders.get(chatId)!;
 }
 
 /** Block only truly catastrophic commands; everything else is allowed. Shared
@@ -591,13 +618,73 @@ const AGENT_MAX_STEPS = 4;
 interface PendingApproval {
   resolve: (approved: boolean) => void;
   command: string;
+  chatId: string;
   createdAt: number;
 }
 const pendingApprovals = new Map<string, PendingApproval>();
 const APPROVAL_TIMEOUT_MS = 5 * 60_000;
 
+// ── Auto-approve mode (per chat) ─────────────────────────────────────────────
+// /approve-all switches the chat to auto-approve: every requestApproval()
+// resolves true immediately, no button sent. Persists until /new (or /clear)
+// resets the session — mirrors the TUI's accept-all mode, not a one-time flush.
+const autoApproveChats = new Set<string>();
+
+// ── Running-task registry (for /stop and /status) ────────────────────────────
+// Message handlers are detached tasks, so several agentic runs can be in
+// flight at once — even in the same chat. /stop aborts everything registered
+// for that chat; the loop in chatWithLLM checks the signal between steps and
+// races it against in-flight LLM calls so the stop lands promptly.
+interface RunningTask {
+  abort: AbortController;
+  task: string;
+  startedAt: number;
+}
+const runningTasks = new Map<string, Set<RunningTask>>();
+
+function registerTask(chatId: string, entry: RunningTask): void {
+  let set = runningTasks.get(chatId);
+  if (!set) { set = new Set(); runningTasks.set(chatId, set); }
+  set.add(entry);
+}
+
+function unregisterTask(chatId: string, entry: RunningTask): void {
+  const set = runningTasks.get(chatId);
+  if (!set) return;
+  set.delete(entry);
+  if (set.size === 0) runningTasks.delete(chatId);
+}
+
+const ABORTED = Symbol('aborted');
+
+/** Race a promise against an abort signal. On abort the caller moves on
+ *  immediately; the losing in-flight call finishes in the background and its
+ *  result is discarded (Promise.race keeps its rejection observed). */
+function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
+  if (signal.aborted) return Promise.resolve(ABORTED);
+  return Promise.race([
+    p,
+    new Promise<typeof ABORTED>((resolve) =>
+      signal.addEventListener('abort', () => resolve(ABORTED), { once: true })),
+  ]);
+}
+
+/** Resolve every pending approval for a chat. Returns how many were flushed. */
+function flushApprovals(chatId: string, approved: boolean): number {
+  let n = 0;
+  for (const [id, p] of pendingApprovals) {
+    if (p.chatId === chatId) {
+      pendingApprovals.delete(id);
+      p.resolve(approved);
+      n++;
+    }
+  }
+  return n;
+}
+
 /** Ask Dušan to approve a command; resolves true/false (false on timeout). */
 async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
+  if (autoApproveChats.has(String(chatId))) return true;
   const id = `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   const keyboard = {
     inline_keyboard: [[
@@ -612,16 +699,26 @@ async function requestApproval(chatId: string | number, label: string, command: 
     reply_markup: keyboard,
   });
   return new Promise<boolean>((resolve) => {
-    pendingApprovals.set(id, { resolve, command, createdAt: Date.now() });
+    pendingApprovals.set(id, { resolve, command, chatId: String(chatId), createdAt: Date.now() });
     setTimeout(() => {
       const p = pendingApprovals.get(id);
-      if (p) { pendingApprovals.delete(id); p.resolve(false); }
+      if (p) {
+        pendingApprovals.delete(id);
+        p.resolve(false);
+        // Tell Dušan why the step got denied instead of failing silently —
+        // otherwise the task just reports "blocked" with no explanation.
+        void apiPost('sendMessage', {
+          chat_id: chatId,
+          text: `⏱ Approval timed out (${Math.round(APPROVAL_TIMEOUT_MS / 60_000)}m) — command was denied:\n\`${command.slice(0, 300)}\`\nAsk again to retry, or /approve-all for auto-approve until /new.`,
+          parse_mode: 'Markdown',
+        }).catch(() => {});
+      }
     }, APPROVAL_TIMEOUT_MS);
   });
 }
 
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
-  const provider = getChatProvider();
+  const provider = getChatProvider(String(chatId));
   // Agentic system prompt: the model may run real shell commands on Dušan's PC
   // by emitting a line `RUN: <command>`. The bot executes it and feeds the
   // output back so the model can answer from real data (processes, files, etc).
@@ -631,6 +728,9 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
     'You run on Dušan\'s Linux PC and have real abilities. To act, emit ONE line',
     'that is JUST the action (nothing else in that reply); the system performs it,',
     'sends you the result, and you then give your natural answer:',
+    '  • `SEARCH: <query>` — search the web / internet for real-time information,',
+    '    current events, prices, news, or anything you don\'t know. Always try',
+    '    SEARCH first when you need up-to-date info you lack.',
     '  • `RUN: <shell command>` — inspect the PC (ps, free -h, df -h, ls, cat,',
     '    grep, git status…). Prefer read-only commands.',
     '  • `SEND: <file path>` — send a file to Dušan on Telegram (images go as',
@@ -639,7 +739,8 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
     '  • `CAM: [device]` — capture a webcam snapshot (default /dev/video0, the',
     '    integrated camera) and send it. Use for surveillance / "show me the room"',
     '    / "take a photo" requests.',
-    'NEVER claim you cannot send files or take photos — you can, via SEND and CAM.',
+    'NEVER claim you cannot search the internet, send files or take photos — you',
+    'can, via SEARCH, SEND, and CAM.',
     'Only use an action when needed; for normal conversation just reply directly.',
   ].join('\n');
 
@@ -648,27 +749,80 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
   await pushToHistory(String(chatId), { role: 'user', content: userMessage });
 
   const ts0 = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+  // Register this run so /stop can abort it (per-chat; several runs may be
+  // in flight since message handlers are detached).
+  const runEntry: RunningTask = {
+    abort: new AbortController(),
+    task: userMessage.slice(0, 120),
+    startedAt: Date.now(),
+  };
+  registerTask(chatId, runEntry);
+  const signal = runEntry.abort.signal;
   try {
     let finalReply = '';
+    // Which actions genuinely reached an executor this turn. The model's own
+    // prose is not evidence that anything ran — this is.
+    const executedVerbs: string[] = [];
+    // …and exactly what each one was, so the reply can show its provenance.
+    const executedCalls: string[] = [];
     for (let step = 0; step < AGENT_MAX_STEPS; step++) {
-      const response = await provider.complete(systemPrompt, history, []);
+      const response = await raceAbort(provider.complete(systemPrompt, history, []), signal);
+      if (response === ABORTED) {
+        finalReply = '⏹ Stopped.';
+        break;
+      }
       const text = (response.text || '').trim();
 
       // Which action does the model want? RUN (shell), SEND (a file), CAM (webcam).
-      // Models often wrap the directive in markdown — a leading backtick, bullet,
-      // or blockquote — so tolerate those and strip a trailing backtick from the
-      // argument. Without this the action leaks out as visible text.
-      const action = text.match(/(?:^|\n)[ \t`>*_-]*(RUN|SEND|CAM):[ \t]*`?([^\n`]+)/);
+      // Accepts both the bare `RUN:` line and XML tool calls — see parseAgentAction.
+      const action = parseAgentAction(text);
       if (!action) {
-        // No action → this is the answer. Strip any stray directive fragments
-        // so raw "SEND:/RUN:" text never shows to the user.
-        finalReply = (text || '(no response from model)')
-          .replace(/[ \t`>*_-]*(RUN|SEND|CAM):[^\n]*/g, '').replace(/\n{3,}/g, '\n\n').trim()
-          || '(no response from model)';
+        // No action → this is the answer. Strip directive fragments of either
+        // dialect so raw syntax never shows to the user.
+        const hadResidue = hasToolCallResidue(text);
+        if (hadResidue) {
+          // Unparseable tool-call syntax. This is the failure that ran silently
+          // for a week; it must never be quiet again.
+          console.error(
+            `[${ts0()}] ⚠️ UNPARSED tool-call syntax from model (nothing executed): ` +
+            text.slice(0, 500).replace(/\n/g, ' '),
+          );
+        }
+        finalReply = stripDirectives(text) || '';
+
+        if (hadResidue && !finalReply) {
+          finalReply = '⚠️ Pokušala sam da izvršim akciju, ali sistem nije prepoznao format — ništa nije izvršeno. Probaj ponovo ili koristi /run <komanda>.';
+        } else if (!finalReply) {
+          finalReply = '(no response from model)';
+        } else if (executedVerbs.length > 0) {
+          // Provenance footer. The model will happily assert findings about
+          // checks it never ran — the first real test of this fix produced
+          // "no cron jobs or timers" off a single `ps aux`, when 14 cron jobs
+          // exist. Semantic verification of arbitrary claims isn't tractable,
+          // but showing exactly what was executed is, and it lets Dušan see
+          // the gap himself instead of trusting the summary.
+          finalReply += '\n\n' + formatProvenance(executedCalls);
+        } else if (claimsDelivery(finalReply)) {
+          // The model is claiming a delivery on a turn where no SEND/CAM ran.
+          // Flag rather than rewrite: the claim may be about a past turn, but
+          // the user must not read it as confirmation of one that just happened.
+          console.error(
+            `[${ts0()}] ⚠️ UNVERIFIED delivery claim with no action executed: ` +
+            finalReply.slice(0, 200).replace(/\n/g, ' '),
+          );
+          finalReply += '\n\n⚠️ (Ništa nije stvarno poslato u ovoj poruci — nijedna akcija nije izvršena.)';
+        }
         break;
       }
-      const verb = action[1];
-      const arg = (action[2] || '').trim().replace(/`+$/, '').trim();
+      const { verb, arg } = action;
+
+      // /stop between the LLM deciding an action and us executing it — don't
+      // run the action (a shell command may be destructive; the wait for an
+      // approval tap resolves false on /stop and lands here too).
+      if (signal.aborted) {
+        finalReply = '⏹ Stopped.';
+        break;
+      }
 
       let toolOut: string;
       try {
@@ -683,10 +837,12 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
               toolOut = 'DENIED by user (not approved). Do not retry; suggest an alternative or ask.';
             } else {
               const r = await execShell(arg);
+              executedVerbs.push('RUN'); executedCalls.push(`RUN: ${arg}`);
               toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
             }
           } else {
             const r = await execShell(arg);
+            executedVerbs.push('RUN'); executedCalls.push(`RUN: ${arg}`);
             toolOut = `exit ${r.code}\n${(r.stdout || r.stderr || '(no output)').slice(0, 3000)}`;
           }
         } else if (verb === 'SEND') {
@@ -701,12 +857,21 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
             } else {
               await sendLocalFile(chatId, resolved);
             }
+            // Only after the upload resolved — a throw lands in catch below and
+            // must not be recorded as a delivery.
+            executedVerbs.push('SEND'); executedCalls.push(`SEND: ${path.basename(resolved)}`);
             toolOut = `Sent ${path.basename(resolved)} to the user.`;
           }
+        } else if (verb === 'SEARCH') {
+          console.error(`[${ts0()}] agent SEARCH: ${arg}`);
+          const result = await webSearch(arg);
+          executedVerbs.push('SEARCH'); executedCalls.push(`SEARCH: ${arg}`);
+          toolOut = result;
         } else { // CAM
           console.error(`[${ts0()}] agent CAM: ${arg || 'default'}`);
           const shot = captureWebcam(arg || undefined);
           await sendPhoto(chatId, shot, 'Camera snapshot');
+          executedVerbs.push('CAM'); executedCalls.push(`CAM: ${arg || 'default'}`);
           try { fs.unlinkSync(shot); } catch {}
           toolOut = 'Captured a webcam snapshot and sent it to the user.';
         }
@@ -719,8 +884,15 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       history.push({ role: 'user', content: `[result]\n${toolOut}` });
 
       if (step === AGENT_MAX_STEPS - 1) {
-        const wrap = await provider.complete(systemPrompt, history, []);
-        finalReply = (wrap.text || '').replace(/^(RUN|SEND|CAM):.*$/m, '').trim() || '(done)';
+        const wrap = await raceAbort(provider.complete(systemPrompt, history, []), signal);
+        if (wrap === ABORTED) {
+          finalReply = '⏹ Stopped.';
+        } else {
+          // Same provenance footer as the normal exit — this path also ends a
+          // turn in which commands ran, so it must not claim more than they show.
+          finalReply = (stripDirectives(wrap.text || '') || '(done)')
+            + '\n\n' + formatProvenance(executedCalls);
+        }
       }
     }
     await pushToHistory(String(chatId), { role: 'assistant', content: finalReply });
@@ -728,6 +900,8 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
   } catch (e: any) {
     console.error(`[${ts0()}] LLM error: ${e?.message || String(e)}`);
     return `❌ AI greška: ${e?.message || 'Nepoznata greška'}. Probaj /help.`;
+  } finally {
+    unregisterTask(chatId, runEntry);
   }
 }
 
@@ -743,7 +917,9 @@ const pendingFileOps = new Map<string, { op: string; path: string }>();
 
 function execShell(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    exec(command, { cwd: cwd ?? DEFAULT_CWD, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err: any, stdout: string, stderr: string) => {
+    // Through RTK when installed (compressed output, far fewer tokens); the
+    // bare command when it isn't, so the bot works on a machine without it.
+    exec(rtkWrap(command), { cwd: cwd ?? DEFAULT_CWD, timeout: 30_000, maxBuffer: 1024 * 1024 }, (err: any, stdout: string, stderr: string) => {
       resolve({
         stdout: stdout?.toString() ?? '',
         stderr: stderr?.toString() ?? '',
@@ -760,7 +936,7 @@ function readFileTool(filePath: string): string {
     const content = fs.readFileSync(resolved, 'utf8');
     const lines = content.split('\n');
     const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
-    return numbered.length > 3500 ? numbered.slice(0, 3500) + '\n... (truncated)' : numbered;
+    return numbered.length > 800 ? numbered.slice(0, 800) + '\n... (truncated)' : numbered;
   } catch (e: any) {
     return `❌ Error reading: ${e.message}`;
   }
@@ -796,6 +972,59 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
   }
 }
 
+/**
+ * Web search via DuckDuckGo's lite HTML interface (no API key needed).
+ */
+async function webSearch(query: string, maxResults = 5): Promise<string> {
+  try {
+    const params = new URLSearchParams({ q: query, kl: 'wt-wt' });
+    const resp = await new Promise<any>((resolve, reject) => {
+      const req = https.get(
+        'https://html.duckduckgo.com/html/?' + params.toString(),
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve(data));
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    });
+    // Parse the HTML results
+    const results: string[] = [];
+    const linkRe = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const snippetRe = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    let match: RegExpExecArray | null;
+    const titles: string[] = [];
+    const urls: string[] = [];
+    while ((match = linkRe.exec(resp)) !== null) {
+      urls.push(match[1].replace(/&amp;/g, '&'));
+      titles.push(match[2].replace(/<[^>]+>/g, '').trim());
+    }
+    const snippets: string[] = [];
+    while ((match = snippetRe.exec(resp)) !== null) {
+      snippets.push(match[1].replace(/<[^>]+>/g, '').trim());
+    }
+    for (let i = 0; i < Math.min(maxResults, titles.length); i++) {
+      const snippet = i < snippets.length ? snippets[i] : '';
+      results.push(`${i + 1}. ${titles[i]}\n   ${urls[i]}\n   ${snippet}`);
+    }
+    return results.length > 0
+      ? results.join('\n\n')
+      : `No search results for: "${query}"`;
+  } catch (e: any) {
+    return `Search error: ${e.message}`;
+  }
+}
+
+/** Bare text that handleCommand executes directly as a shell command
+ *  (no leading slash). Shared with the reply path so shell output — like
+ *  /-command output — is never read aloud as a voice note. */
+function isDirectShellText(lowerText: string): boolean {
+  return /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lowerText);
+}
+
 async function handleCommand(chatId: number, text: string, from: string): Promise<string> {
   const lower = text.toLowerCase().trim();
 
@@ -803,35 +1032,168 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return [
       `💎 Aura Bot — Online`,
       ``,
-      `Komande:`,
-      `/status — Status sistema`,
-      `/tools — Lista dostupnih alata`,
-      `/memory — Pregled memorije`,
-      `/history — Pregled istorije razgovora`,
-      `/clear — Obriši istoriju razgovora`,
-      `/time — Trenutno vreme`,
-      `/ping — Provera konekcije`,
-      `/whoami — Ko sam ja`,
+      `Commands:`,
+      `/status — What's running in this chat (task, duration, pending approvals) + system status`,
+      `/tools — List available tools`,
+      `/provider [model] — List AI models, or switch model (this session)`,
+      `/memory — View memory`,
+      `/history — View conversation history`,
+      `/clear — Delete conversation history`,
+      `/time — Current time`,
+      `/ping — Connection check`,
+      `/whoami — Who I am`,
       ``,
       `💻 PC Control:`,
-      `/ls <dir> — Lista direktorijuma na tvom PC-ju`,
-      `/read <file> — Čitanje fajla sa tvog PC-ja`,
-      `/sendfile <path> — Pošalji fajl sa tvog PC-ja na Telegram`,
-      `/find <pattern> — Pronađi fajlove na tvom PC-ju`,
-      `/run <cmd> — Izvrši shell komandu na tvom PC-ju`,
-      `/cam — Snimi i pošalji sliku sa kamere (nadzor)`,
+      `/ls <dir> — List a directory on your PC`,
+      `/read <file> — Read a file from your PC`,
+      `/sendfile <path> — Send a file from your PC to Telegram`,
+      `/find <pattern> — Find files on your PC`,
+      `/run <cmd> — Run a shell command on your PC`,
+      `/cam — Capture and send a camera image (surveillance)`,
       `/git — Git status`,
       ``,
-      `💡 Pamtiš razgovore trajno — šta god da mi tražiš, zapamtiću to za sledeći put!`,
-      `💡 Možeš da tražiš fajlove sa tvog računara i šaljiš ih sebi!`,
+      `🎛 Task control:`,
+      `/stop — Stop the task currently running in this chat`,
+      `/approve-all — ⚠️ Auto mode: approve all pending confirmations AND all future commands without asking (including destructive ones). Lasts until you send /new.`,
+      `/new — New session: clears history and turns off auto-approve mode`,
       ``,
-      `Ili mi piši bilo šta — odgovoriću!`,
+      `💡 I remember conversations permanently — whatever you ask me, I'll recall it next time!`,
+      `💡 You can ask for files from your computer and send them to yourself!`,
+      ``,
+      `Or just write me anything — I'll reply!`,
     ].join('\n');
   }
 
   if (lower === '/ping') return '🏓 Pong! Aura je živa i radi.';
 
+  // ── /status — what's running in THIS chat, then bot health ───────────────
+  // Pairs with /stop and /approve-all: when a task runs unattended for a
+  // while, this shows what it is, how long it's been going, and whether it's
+  // blocked waiting on an approval tap. The bot-health block that /status
+  // always showed follows below the live-task section.
+  if (lower === '/status') {
+    const lines: string[] = [];
+    if (autoApproveChats.has(String(chatId))) {
+      lines.push('⚡ Auto-approve ON — commands execute without asking (until /new).');
+    }
+    const set = runningTasks.get(String(chatId));
+    const waiting = [...pendingApprovals.values()].filter(p => p.chatId === String(chatId));
+    if (set && set.size > 0) {
+      lines.push(`🏃 Running task(s): ${set.size}`);
+      for (const t of set) {
+        const secs = Math.round((Date.now() - t.startedAt) / 1000);
+        const mins = Math.floor(secs / 60);
+        const dur = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        lines.push(`  • "${t.task}" — running ${dur}`);
+      }
+    } else {
+      lines.push('💤 No task running in this chat.');
+    }
+    if (waiting.length > 0) {
+      lines.push(`⏳ Waiting for your ✅/❌ approval: ${waiting.length}`);
+      for (const p of waiting) lines.push(`  • ${p.command.slice(0, 120)}`);
+      lines.push(`(/approve-all approves these + turns on auto-approve until /new; /stop denies them.)`);
+    }
+    const uptime = process.uptime();
+    const hours = Math.floor(uptime / 3600);
+    const mins = Math.floor((uptime % 3600) / 60);
+    const mem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    lines.push(
+      ``,
+      `📊 Aura Status`,
+      `Uptime: ${hours}h ${mins}m`,
+      `Memory: ${mem}MB`,
+      `Node: ${process.version}`,
+      `Bot: @Aura_Code_bot`,
+      `Status: ✅ Active`,
+    );
+    return lines.join('\n');
+  }
+
+  // ── /stop — abort the running task(s) for THIS chat ──────────────────────
+  // Same semantics as the CLI's Esc/:stop abort: the agentic loop checks the
+  // signal between steps and races it against in-flight LLM calls. Pending
+  // approval prompts are denied so awaited steps unblock instead of hanging
+  // until their 5-minute timeout.
+  if (lower === '/stop') {
+    const denied = flushApprovals(String(chatId), false);
+    const set = runningTasks.get(String(chatId));
+    if (!set || set.size === 0) {
+      return denied > 0
+        ? `⏹ Nothing running — but denied ${denied} stale pending approval(s).`
+        : '⏹ Nothing is running in this chat.';
+    }
+    const lines: string[] = [];
+    for (const t of set) {
+      t.abort.abort();
+      const secs = Math.round((Date.now() - t.startedAt) / 1000);
+      lines.push(`  • "${t.task}" (running ${secs}s)`);
+    }
+    return [
+      `⏹ Stopping ${set.size} task(s):`,
+      ...lines,
+      ...(denied > 0 ? [`Also denied ${denied} pending approval(s).`] : []),
+      `Note: a shell command already executing finishes its (≤30s) run; nothing further happens after it.`,
+    ].join('\n');
+  }
+
+  // ── /approve-all — auto-approve mode until /new ───────────────────────────
+  // ⚠️ Trust escalation: approves everything currently waiting AND every
+  // future command — including destructive operations, sight unseen — until
+  // /new (or /clear) resets the session. Same semantics as the TUI's
+  // accept-all mode.
+  if (lower === '/approve-all') {
+    autoApproveChats.add(String(chatId));
+    const n = flushApprovals(String(chatId), true);
+    return [
+      `⚡ Auto-approve ON — all commands execute without asking, including destructive ones.`,
+      ...(n > 0 ? [`Approved ${n} pending confirmation(s) that were waiting.`] : []),
+      `Stays on until /new resets the session.`,
+    ].join('\n');
+  }
+
   if (lower === '/time') return `🕐 ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`;
+
+  // ── /provider — switch AI model for this chat ─────────────────────────────
+  if (lower === '/provider' || lower.startsWith('/provider ')) {
+    const arg = text.slice(9).trim();
+
+    // No argument: list current + available configured models
+    if (!arg) {
+      const currentProvider = chatProviders.get(String(chatId));
+      const currentModel = currentProvider ? currentProvider.name : DEFAULT_CHAT_MODEL;
+      const allModels = getAllModels().filter(m => isModelConfigured(m.id));
+
+      const lines: string[] = [
+        `🤖 Current: ${currentModel}`,
+        ``,
+        `Available models (configured with API keys):`,
+      ];
+
+      for (const m of allModels) {
+        lines.push(`• ${m.id} — ${m.provider} (${m.speed})`);
+      }
+
+      lines.push(``, `💡 Use /provider <model_id> to switch (session-scoped to this chat)`);
+      return lines.join('\n');
+    }
+
+    // With argument: switch to that model
+    const newModel = arg;
+    if (!isModelConfigured(newModel)) {
+      return `❌ Model not configured or missing API key: ${newModel}\n\n💡 Use /provider to see available models.`;
+    }
+
+    // Detect cost tier for hint
+    const isPremium = /opus|claude-sonnet-4-5|gpt-4/i.test(newModel);
+    const tierHint = isPremium ? ` ⚠️ Premium tier (higher cost)` : '';
+
+    const newProvider = createProvider({ model: newModel, temperature: 0.7, maxTokens: 4096 });
+    chatProviders.set(String(chatId), newProvider);
+
+    console.log(`[${ts()}] 🔄 Chat ${chatId} switched model: ${newModel} (${newProvider.name})`);
+    return `✅ Switched to ${newModel}${tierHint}`;
+  }
 
   if (lower === '/whoami') {
     return [
@@ -844,22 +1206,6 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Alati: 22`,
       `Testovi: 838+ passing`,
       `Verzija: v0.7.2 (Aura)`,
-    ].join('\n');
-  }
-
-  if (lower === '/status') {
-    const uptime = process.uptime();
-    const hours = Math.floor(uptime / 3600);
-    const mins = Math.floor((uptime % 3600) / 60);
-    const mem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    return [
-      `📊 Aura Status`,
-      `Uptime: ${hours}h ${mins}m`,
-      `Memory: ${mem}MB`,
-      `Node: ${process.version}`,
-      `Bot: @Aura_Code_bot`,
-      `Status: ✅ Active`,
-      `Version: v0.7.2`,
     ].join('\n');
   }
 
@@ -910,7 +1256,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
     const result = await execShell(cmd);
     const output = result.stdout || result.stderr || '(no output)';
-    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
+    const truncated = output.length > 800 ? output.slice(0, 800) + '\n... (truncated)' : output;
     return `⚡ ${cmd}\n${result.code === 0 ? '✅' : '❌'} exit ${result.code}\n${truncated}`;
   }
 
@@ -946,13 +1292,17 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     return `📜 Poslednjih 10 poruka (ukupno ${history.length}):\n${lines.join('\n')}\n\n💡 Svi razgovori se čuvaju trajno — pamtim šta si mi rekao čak i ako me resetuješ.`;
   }
 
-  if (lower === '/clear') {
+  if (lower === '/clear' || lower === '/new') {
     chatHistory.delete(String(chatId));
     const filePath = getSessionFile(String(chatId));
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
-    return '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!';
+    const wasAuto = autoApproveChats.delete(String(chatId));
+    return [
+      '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!',
+      ...(wasAuto ? ['🔒 Auto-approve isključen — komande opet traže potvrdu.'] : []),
+    ].join('\n');
   }
 
   // ── File sending from PC ─────────────────────────────────────────────────────
@@ -1039,11 +1389,10 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   // Default: try to interpret as a shell command if it looks like one
-  const looksLikeCommand = /^(ls|cat|pwd|whoami|date|df|du|ps|top|free|uname|which|find|grep|git|npm|node|python|curl)\b/.test(lower);
-  if (looksLikeCommand) {
+  if (isDirectShellText(lower)) {
     const result = await execShell(text);
     const output = result.stdout || result.stderr || '(no output)';
-    const truncated = output.length > 3500 ? output.slice(0, 3500) + '\n... (truncated)' : output;
+    const truncated = output.length > 800 ? output.slice(0, 800) + '\n... (truncated)' : output;
     return `⚡ ${text}\n${truncated}`;
   }
 
@@ -1067,7 +1416,16 @@ async function poll(): Promise<void> {
   let offset = loadOffset();
 
   console.log(`[${ts()}] 💎 Aura Telegram Bot started`);
-  console.log(`   Bot: @Aura_Code_bot`);
+  // Resolve identity from the token instead of hardcoding it — this token has
+  // been shared with another bot before, so a banner naming the wrong bot makes
+  // "did the right bot start?" unanswerable from the log alone.
+  let who = '(unknown — getMe failed)';
+  try {
+    who = `@${(await apiPost('getMe')).username}`;
+  } catch (e: any) {
+    console.error(`[${ts()}]   ⚠️ getMe failed: ${e.message}`);
+  }
+  console.log(`   Bot: ${who}`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Long-polling Telegram (30s)…`);
   console.log('');
@@ -1180,14 +1538,50 @@ async function poll(): Promise<void> {
             if (!text) return;
             if (!cameFromVoice) console.log(`[${ts()}] 📩 [${from}]: ${text}`);
 
+            const lower = text.toLowerCase().trim();
+            const conversational = !lower.startsWith('/') && !isDirectShellText(lower);
             const response = await handleCommand(chatId, text, from);
             await sendMessage(chatId, response);
-            if (cameFromVoice) {
-              try {
-                const wav = await synthesizeSpeech(response.slice(0, 1000));
-                await sendVoice(chatId, wav);
-              } catch (e: any) {
-                console.error(`[${ts()}] ⚠️ Voice reply failed: ${e.message}`);
+            // Voice note alongside the text, per the audio-reply policy:
+            // voice-in always speaks back; 'auto' also speaks substantial
+            // conversational replies (task summaries), never command output.
+            if (shouldSendAudio({
+              mode: AUDIO_MODE, cameFromVoice, conversational,
+              length: response.length, minChars: AUDIO_MIN_CHARS,
+            })) {
+              const spoken = stripForSpeech(response);
+              if (spoken) {
+                let voiceSent = false;
+                let voiceError = '';
+                // Path 1: Groq playai-tts via curl — returns OGG natively (no
+                // ffmpeg step needed). This is the tested, reliable path.
+                const groqKey = getApiKey('GROQ_API_KEY', 'groq_api_key');
+                if (groqKey) {
+                  try {
+                    const ogg = await textToSpeech(spoken, groqKey);
+                    await sendVoiceMessage(TOKEN, chatId, ogg);
+                    voiceSent = true;
+                  } catch (e: any) {
+                    voiceError = e?.message || String(e);
+                    console.error(`[${ts()}] ⚠️ Groq TTS failed: ${voiceError}`);
+                  }
+                }
+                // Path 2 (fallback): MiMo TTS → WAV → ffmpeg Opus.
+                if (!voiceSent) {
+                  try {
+                    const wav = await synthesizeSpeech(spoken);
+                    await sendVoice(chatId, wav);
+                    voiceSent = true;
+                  } catch (e: any) {
+                    voiceError = voiceError || (e?.message || String(e));
+                    console.error(`[${ts()}] ⚠️ MiMo TTS failed: ${voiceError}`);
+                  }
+                }
+                if (!voiceSent) {
+                  // Tell the user why there's no voice note instead of
+                  // silently swallowing the failure.
+                  console.error(`[${ts()}] ⚠️ Voice reply failed entirely: ${voiceError}`);
+                }
               }
             }
             console.log(`[${ts()}] 📤 Replied to ${from}`);

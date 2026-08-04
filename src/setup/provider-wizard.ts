@@ -20,9 +20,10 @@ import {
   PROVIDER_REGISTRY, detectExistingKey, maskApiKey,
   type ProviderEntry,
 } from './provider-registry.js';
-import { testProviderConnection } from './provider-test.js';
+import { testProviderConnection, normalizeBaseUrl } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
-import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig } from './xiaomi.js';
+import { saveKey } from './key-store.js';
+import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig, xiaomiKeyKind } from './xiaomi.js';
 import { ZHIPU_CODING_BASE_URL, ZHIPU_GENERAL_BASE_URL } from '../providers/factory.js';
 
 export interface ProviderConfig {
@@ -36,8 +37,11 @@ export interface ProviderConfig {
  * Run the full 4-step provider wizard.
  *
  * Returns the chosen config on success, or null if the user cancelled.
+ *
+ * @param existingRl - Optional readline interface (for non-TUI mode)
+ * @param askInputFn - Optional askInput function (for TUI mode)
  */
-export async function runProviderWizard(existingRl?: readline.Interface): Promise<ProviderConfig | null> {
+export async function runProviderWizard(existingRl?: readline.Interface, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderConfig | null> {
   const rl = existingRl || readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -48,15 +52,15 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
     console.log(chalk.hex('#8a7768')('  Configure your AI provider in 3 easy steps.\n'));
 
     // ── Step 1: Select Provider ─────────────────────────────────────────────
-    const provider = await selectProvider(rl);
+    const provider = await selectProvider(rl, askInputFn);
     if (!provider) return null;
 
     // ── Step 2: Select Model ────────────────────────────────────────────────
-    const model = await selectModel(rl, provider);
+    const model = await selectModel(rl, provider, askInputFn);
     if (!model) return null;
 
     // ── Step 3: API Key ─────────────────────────────────────────────────────
-    const apiKey = await configureApiKey(rl, provider);
+    const apiKey = await configureApiKey(rl, provider, askInputFn);
     if (apiKey === null && provider.envKey !== null) return null; // Cancelled (needed key but got null)
 
     let effectiveModel = model;
@@ -65,27 +69,52 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
       console.log(chalk.hex('#cc785c')('\n  Which GLM plan are you using?\n'));
       console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Coding Plan')} ${chalk.hex('#5a4a3a')('(subscription quota)')}`);
       console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('Pay-as-you-go')} ${chalk.hex('#5a4a3a')('(general API key)')}`);
-      const planChoice = await askInput(rl, '  ▸ Choose (1 or 2): ');
+      const planChoice = await askInput(rl, '  ▸ Choose (1 or 2): ', askInputFn);
       if (planChoice.trim() === '1') {
         effectiveModel = `zhipu-coding/${model}`;
       }
     }
 
+    // Xiaomi Token Plan is region-scoped; pay-as-you-go (sk-) keys all use
+    // the same host, so only ask when the region actually matters.
+    let xiaomiRegion: 'sgp' | 'cn' | 'ams' = 'sgp';
+    if (provider.name === 'Xiaomi MiMo' && xiaomiKeyKind(apiKey ?? undefined) !== 'paygo') {
+      console.log(chalk.hex('#cc785c')('\n  Which Token Plan region?\n'));
+      console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Singapore')} ${chalk.hex('#5a4a3a')('(default)')}`);
+      console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('China')}`);
+      console.log(`  ${chalk.hex('#8a7768')('3.')} ${chalk.hex('#e8d5b7')('Amsterdam')}`);
+      const regionChoice = (await askInput(rl, '  ▸ Choose (1, 2, or 3) [1]: ', askInputFn)).trim();
+      if (regionChoice === '2') xiaomiRegion = 'cn';
+      else if (regionChoice === '3') xiaomiRegion = 'ams';
+    }
+
     // Build baseUrl
     let baseUrlPrompt = '  ▸ Enter base URL: ';
     const defaultBase = provider.name === 'Xiaomi MiMo'
-      ? defaultXiaomiBaseUrl(apiKey ?? undefined)
+      ? defaultXiaomiBaseUrl(apiKey ?? undefined, xiaomiRegion)
       : provider.name === 'GLM (Zhipu)'
         ? (effectiveModel.startsWith('zhipu-coding/') ? ZHIPU_CODING_BASE_URL : ZHIPU_GENERAL_BASE_URL)
         : (provider.baseUrl || '');
     if (defaultBase) {
       baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(defaultBase)}]: `;
     }
-    const enteredUrl = await askInput(rl, baseUrlPrompt);
+    const enteredUrl = await askInput(rl, baseUrlPrompt, askInputFn);
     let baseUrl = enteredUrl.trim() || defaultBase || provider.baseUrl || '';
+    // Normalize user-typed URLs (trailing slash, pasted /chat/completions path).
+    if (baseUrl) {
+      const normalized = normalizeBaseUrl(baseUrl);
+      if (normalized !== baseUrl) {
+        console.log(chalk.hex('#8a7768')(`  ↪ Base URL normalized to ${chalk.hex('#ede0cc')(normalized)}`));
+      }
+      baseUrl = normalized;
+    }
+    if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+      console.log(chalk.hex('#b15439')(`  ✗ Base URL must start with http:// or https:// (got "${baseUrl}").`));
+      return null;
+    }
 
     if (provider.name === 'Xiaomi MiMo') {
-      const norm = normalizeXiaomiWizardConfig(effectiveModel, apiKey ?? undefined, baseUrl);
+      const norm = normalizeXiaomiWizardConfig(effectiveModel, apiKey ?? undefined, baseUrl, xiaomiRegion);
       effectiveModel = norm.model;
       baseUrl = norm.baseUrl;
       if (norm.note) {
@@ -106,7 +135,7 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
     };
 
     // ── Step 4: Test Connection ─────────────────────────────────────────────
-    const saved = await testAndSave(rl, config);
+    const saved = await testAndSave(rl, config, askInputFn);
     return saved;
   } finally {
     if (!existingRl) {
@@ -119,7 +148,7 @@ export async function runProviderWizard(existingRl?: readline.Interface): Promis
 // Step 1: Provider Selection
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function selectProvider(rl: readline.Interface): Promise<ProviderEntry | null> {
+async function selectProvider(rl: readline.Interface, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderEntry | null> {
   console.log(chalk.hex('#cc785c')('  Step 1: Select your AI provider\n'));
 
   const items = PROVIDER_REGISTRY.map((p, i) => {
@@ -132,7 +161,7 @@ async function selectProvider(rl: readline.Interface): Promise<ProviderEntry | n
   }
   console.log();
 
-  const choice = await askInput(rl, '  ▸ Choose a number: ');
+  const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
   const idx = parseInt(choice, 10) - 1;
   if (idx < 0 || idx >= PROVIDER_REGISTRY.length || !Number.isFinite(idx)) {
     console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
@@ -145,11 +174,11 @@ async function selectProvider(rl: readline.Interface): Promise<ProviderEntry | n
 // Step 2: Model Selection
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function selectModel(rl: readline.Interface, provider: ProviderEntry): Promise<string | null> {
+async function selectModel(rl: readline.Interface, provider: ProviderEntry, askInputFn?: (prompt: string) => Promise<string>): Promise<string | null> {
   // Custom endpoint — user types model ID
   if (provider.name === 'Custom endpoint') {
     console.log(chalk.hex('#cc785c')('\n  Step 2: Enter model ID\n'));
-    const modelId = await askInput(rl, '  ▸ Model ID: ');
+    const modelId = await askInput(rl, '  ▸ Model ID: ', askInputFn);
     if (!modelId) {
       console.log(chalk.hex('#b15439')('  ✗ Model ID is required.'));
       return null;
@@ -167,7 +196,9 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry): Pro
       console.log(chalk.hex('#8a7768')('  Start it first: ollama serve'));
       console.log(chalk.hex('#8a7768')('  Pull a model:   ollama pull llama3.2\n'));
       const manual = await askInput(rl, '  ▸ Enter model name manually (or press Enter to cancel): ');
-      return manual || null;
+      // Bare Ollama tags aren't routable — the factory needs the ollama/
+      // prefix to pick the localhost endpoint instead of the OpenAI default.
+      return manual ? (manual.startsWith('ollama/') ? manual : `ollama/${manual}`) : null;
     }
     for (let i = 0; i < ollamaModels.length; i++) {
       const num = chalk.hex('#8a7768')(String(i + 1).padStart(2) + '.');
@@ -175,13 +206,13 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry): Pro
       console.log(`  ${num} ${name}`);
     }
     console.log();
-    const choice = await askInput(rl, '  ▸ Choose a number: ');
+    const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
     const idx = parseInt(choice, 10) - 1;
     if (idx < 0 || idx >= ollamaModels.length || !Number.isFinite(idx)) {
       console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
       return null;
     }
-    return ollamaModels[idx];
+    return `ollama/${ollamaModels[idx]}`;
   }
 
   // Standard provider — show preset model list
@@ -194,7 +225,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry): Pro
     console.log(`  ${num} ${label}${speed}`);
   }
   console.log();
-  const choice = await askInput(rl, '  ▸ Choose a number: ');
+  const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
   const idx = parseInt(choice, 10) - 1;
   if (idx < 0 || idx >= provider.models.length || !Number.isFinite(idx)) {
     console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
@@ -210,7 +241,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry): Pro
 /**
  * Returns the API key string, empty string for local providers, or null if cancelled.
  */
-async function configureApiKey(rl: readline.Interface, provider: ProviderEntry): Promise<string | null> {
+async function configureApiKey(rl: readline.Interface, provider: ProviderEntry, askInputFn?: (prompt: string) => Promise<string>): Promise<string | null> {
   // No key needed for Ollama / local
   if (!provider.envKey) {
     return '';
@@ -254,7 +285,7 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry):
 // Step 4: Test Connection & Save
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function testAndSave(rl: readline.Interface, config: ProviderConfig): Promise<ProviderConfig | null> {
+async function testAndSave(rl: readline.Interface, config: ProviderConfig, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderConfig | null> {
   console.log(chalk.hex('#cc785c')(`\n  Testing connection to ${config.provider}...`));
 
   const result = await testProviderConnection({
@@ -276,12 +307,12 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig): Prom
   console.log(chalk.hex('#8a7768')('   1. Re-enter API key'));
   console.log(chalk.hex('#8a7768')('   2. Skip test and save anyway'));
   console.log(chalk.hex('#8a7768')('   3. Cancel\n'));
-  const choice = await askInput(rl, '  ▸ Choose (1, 2, or 3): ');
+  const choice = await askInput(rl, '  ▸ Choose (1, 2, or 3): ', askInputFn);
   if (choice === '1') {
     const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
     if (!newKey) return null;
     config.apiKey = newKey;
-    return testAndSave(rl, config); // Recursive retry
+    return testAndSave(rl, config, askInputFn); // Recursive retry
   }
   if (choice === '2') {
     saveProviderConfig(config);
@@ -304,7 +335,13 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig): Prom
  * first/last character right at the paste boundary. Well-behaved
  * terminals are unaffected either way.
  */
-function askInput(rl: readline.Interface, prompt: string): Promise<string> {
+function askInput(rl: readline.Interface, prompt: string, askInputFn?: (prompt: string) => Promise<string>): Promise<string> {
+  // Use TUI's askInput function if provided (running in TUI mode)
+  if (askInputFn) {
+    return askInputFn(prompt);
+  }
+
+  // Fall back to default readline behavior
   const canToggle = process.stdout.isTTY;
   if (canToggle) process.stdout.write('\x1b[?2004l'); // disable bracketed paste
   return new Promise(resolve => {
@@ -325,15 +362,21 @@ const askSecretInput = askInput;
 /**
  * Save the provider config to ~/.config/aura-code/config.json and export
  * the API key env var for the current process.
+ *
+ * Exported so non-TUI front ends (the `setup --web` wizard the installers
+ * launch) persist through exactly this path — key store, global config, and
+ * provider.json all written the same way, rather than each caller
+ * reimplementing three writes and drifting.
  */
-function saveProviderConfig(config: ProviderConfig): void {
+export function saveProviderConfig(config: ProviderConfig): void {
   // Find the matching provider entry to get apiKeyEnv
   const entry = PROVIDER_REGISTRY.find(p => p.name === config.provider);
   const apiKeyEnv = entry?.envKey ?? '';
 
-  // Export API key as env var for the current process
+  // Persist the key in the key store (also exports it into process.env).
+  // Keys never land in provider.json — that file is world-readable config.
   if (config.apiKey && apiKeyEnv) {
-    process.env[apiKeyEnv] = config.apiKey;
+    saveKey(apiKeyEnv, config.apiKey);
     process.env[apiKeyEnv.toLowerCase()] = config.apiKey;
   }
 
@@ -355,7 +398,6 @@ function saveProviderConfig(config: ProviderConfig): void {
     provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
-    ...(config.apiKey ? { apiKey: config.apiKey } : {}),
   };
   fs.writeFileSync(
     path.join(configDir, 'provider.json'),
@@ -372,9 +414,22 @@ export function loadProviderConfig(): ProviderConfig | null {
     const configDir = process.env.XDG_CONFIG_HOME
       ? path.join(process.env.XDG_CONFIG_HOME, 'aura-code')
       : path.join(os.homedir(), '.config', 'aura-code');
-    const raw = fs.readFileSync(path.join(configDir, 'provider.json'), 'utf8');
+    const filePath = path.join(configDir, 'provider.json');
+    const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw) as ProviderConfig;
     if (!parsed.provider || !parsed.model) return null;
+    // Legacy files stored the key in plaintext here — migrate it into the
+    // key store once and strip it from the file.
+    if (parsed.apiKey) {
+      const entry = PROVIDER_REGISTRY.find(p => p.name === parsed.provider);
+      if (entry?.envKey) {
+        try {
+          saveKey(entry.envKey, parsed.apiKey);
+          const { apiKey: _dropped, ...rest } = parsed;
+          fs.writeFileSync(filePath, JSON.stringify(rest, null, 2) + '\n', { mode: 0o600 });
+        } catch { /* keep the legacy file as-is; runtime still works via parsed.apiKey */ }
+      }
+    }
     return parsed;
   } catch {
     return null;

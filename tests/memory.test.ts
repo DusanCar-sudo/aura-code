@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { memoryTool, MEMORY_DEFINITION } from '../src/tools/memory.js';
 
-const testDir = path.join(os.tmpdir(), 'ruby-test-memory-' + Date.now());
+const testDir = path.join(os.tmpdir(), 'aura-test-memory-' + Date.now());
 const memDir = path.join(testDir, '.aura', 'memory');
 
 beforeEach(() => {

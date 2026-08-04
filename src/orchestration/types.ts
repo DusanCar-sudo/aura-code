@@ -35,6 +35,35 @@ export interface PlanStep {
   tokensUsed?: number;
   /** Wall-clock time the step took to complete, in milliseconds. */
   durationMs?: number;
+  /**
+   * How many times this step has been re-run after a dependent reviewer
+   * returned a blocking verdict. Bounded by `MAX_REVIEW_RETRIES` in
+   * executor.ts — a retry loop is a cost multiplier and there is no token
+   * ceiling yet, so this is deliberately capped at one extra attempt.
+   */
+  retries?: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Review verdict
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One problem found by the reviewer specialist. */
+export interface ReviewIssue {
+  severity: 'critical' | 'major' | 'minor';
+  description: string;
+  location: string;
+}
+
+/**
+ * The reviewer's structured verdict. `blocking` is stated explicitly by the
+ * reviewer rather than inferred from prose: deciding "does this need another
+ * pass?" by pattern-matching free text is how retry loops become infinite.
+ */
+export interface ReviewVerdict {
+  issues: ReviewIssue[];
+  /** True when the issues are severe enough to warrant another coder pass. */
+  blocking: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

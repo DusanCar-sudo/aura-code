@@ -1,18 +1,17 @@
 #!/bin/bash
-# Start Aura Telegram Bot in background
+# (Re)start Aura Telegram Bot.
+# The bot is managed by the systemd user service `aura-telegram.service`
+# (Restart=always). Never launch it directly with nohup — systemd would
+# immediately respawn its own copy and two pollers on one token make
+# Telegram return 409 Conflict, silently eating messages.
 # Usage: ./start-telegram-bot.sh
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+set -e
 
-# Kill existing bot if running
-pkill -f "telegram-bot.ts" 2>/dev/null || true
+systemctl --user restart aura-telegram.service
+sleep 3
+systemctl --user --no-pager --lines=0 status aura-telegram.service
 
-# Start bot in background with nohup
-nohup npx tsx src/tools/telegram-bot.ts > ~/.aura/telegram-bot.log 2>&1 &
-BOT_PID=$!
-
-echo "💎 Aura Telegram Bot started (PID: $BOT_PID)"
-echo "   Log: ~/.aura/telegram-bot.log"
-echo "   Stop: kill $BOT_PID"
-echo $BOT_PID > ~/.aura/telegram-bot.pid
+echo "💎 Aura Telegram Bot restarted (systemd: aura-telegram.service)"
+echo "   Logs:   journalctl --user -u aura-telegram.service -f"
+echo "   Stop:   systemctl --user stop aura-telegram.service"

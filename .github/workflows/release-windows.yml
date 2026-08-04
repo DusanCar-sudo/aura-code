@@ -1,0 +1,124 @@
+name: Windows installer
+
+# The .iss cannot be compiled anywhere but Windows, and no amount of local
+# review substitutes for that, so this runs on every push touching the
+# packaging path — not only on tags. A broken installer should surface on the
+# commit that broke it, not at release.
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'packaging/windows/**'
+      - '.github/workflows/release-windows.yml'
+      - 'package.json'
+      - 'src/**'
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'packaging/windows/**'
+      - '.github/workflows/release-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "version=$v"
+
+      # Stages the runtime and app, verifies the Node download against the
+      # official SHASUMS, and smoke-tests `aura --version` from the staged tree
+      # before anything is packaged.
+      - name: Stage payload
+        shell: pwsh
+        run: ./packaging/windows/stage-windows.ps1
+
+      # Inno Setup is not preinstalled on windows-latest despite what its name
+      # suggests; install it explicitly rather than relying on the image.
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" `
+                  "packaging\windows\aura.iss"
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed ($LASTEXITCODE)" }
+
+      - name: Verify the installer exists and is not a stub
+        shell: pwsh
+        run: |
+          $exe = "build\dist\AuraCode-${{ steps.version.outputs.version }}-setup.exe"
+          if (-not (Test-Path $exe)) { throw "missing $exe" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "installer: $exe ($mb MB)"
+          # A bundled Node runtime plus dependencies cannot compress to under
+          # 10 MB. Anything smaller means the payload was silently omitted and
+          # the installer would "succeed" while installing nothing usable.
+          if ($mb -lt 10) { throw "installer is only $mb MB — payload missing" }
+
+      # Proves the installer actually installs: run it silently, then invoke
+      # the installed binary. Compiling is not the same as working, and this is
+      # the step that would have caught a wrong path or a missing runtime.
+      - name: Install silently and run it
+        shell: pwsh
+        run: |
+          $exe = "build\dist\AuraCode-${{ steps.version.outputs.version }}-setup.exe"
+          $dir = "$env:LOCALAPPDATA\AuraTest"
+          Start-Process -FilePath $exe `
+            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dir" `
+            -Wait
+          $cmd = Join-Path $dir 'aura.cmd'
+          if (-not (Test-Path $cmd)) { throw "aura.cmd not installed at $cmd" }
+          $out = & $cmd --version
+          Write-Host "installed build reports: $out"
+          if ($LASTEXITCODE -ne 0) { throw "installed aura failed ($LASTEXITCODE)" }
+
+      - name: Confirm uninstall removes the PATH entry
+        shell: pwsh
+        run: |
+          $dir = "$env:LOCALAPPDATA\AuraTest"
+          $before = (Get-ItemProperty -Path 'HKCU:\Environment' -Name Path).Path
+          & "$dir\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES | Out-Null
+          Start-Sleep -Seconds 10
+          $after = (Get-ItemProperty -Path 'HKCU:\Environment' -Name Path).Path
+          Write-Host "PATH before: $before"
+          Write-Host "PATH after : $after"
+          # Leaving a dead directory on every user's PATH is the kind of thing
+          # nobody notices until they have three of them.
+          if ($after -like "*$dir*") { throw 'uninstall left the PATH entry behind' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AuraCode-${{ steps.version.outputs.version }}-setup
+          path: build/dist/AuraCode-*-setup.exe
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/dist/AuraCode-*-setup.exe

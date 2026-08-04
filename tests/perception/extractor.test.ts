@@ -25,11 +25,11 @@ function assertValidPerception(p: ProjectPerception, expectedRoot?: string): voi
 // Happy path — runs against the real aura-code project
 // ─────────────────────────────────────────────────────────────────────────────
 describe('extractPerception — happy path against aura-code', () => {
-  const rubyCodeRoot = path.resolve(process.cwd()); // vitest runs from project root
+  const auraCodeRoot = path.resolve(process.cwd()); // vitest runs from project root
 
   it('returns a valid ProjectPerception for the aura-code project', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
-    assertValidPerception(perception, rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
+    assertValidPerception(perception, auraCodeRoot);
 
     // ExtractedAt should be a recent timestamp (within last 60 seconds)
     const now = Date.now();
@@ -38,7 +38,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('includes file nodes for key src/ files', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     // At minimum we expect a node for each major source directory
     const nodeIds = new Set(perception.nodes.map(n => n.id));
@@ -66,7 +66,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('includes at least one depends_on edge', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     const dependsOnEdges = perception.edges.filter(e => e.relationship === 'depends_on');
     // A project with imports definitely has dependency edges
@@ -85,14 +85,14 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('trajectory.vision is a non-empty string', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     expect(typeof perception.trajectory.vision).toBe('string');
     expect(perception.trajectory.vision.trim().length).toBeGreaterThan(0);
   });
 
   it('trajectory arrays are present (may be empty)', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     expect(Array.isArray(perception.trajectory.deprecated)).toBe(true);
     expect(Array.isArray(perception.trajectory.inProgress)).toBe(true);
@@ -100,7 +100,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('constraints object has all required fields', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
     const c = perception.constraints;
 
     expect(c).toBeDefined();
@@ -113,7 +113,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('testCoverage items have the correct shape', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     for (const tc of perception.constraints.testCoverage) {
       expect(typeof tc.module).toBe('string');
@@ -123,7 +123,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('every node has all required fields', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     for (const node of perception.nodes) {
       expect(typeof node.id).toBe('string');
@@ -139,7 +139,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('every edge has all required fields', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     for (const edge of perception.edges) {
       expect(typeof edge.from).toBe('string');
@@ -158,7 +158,7 @@ describe('extractPerception — happy path against aura-code', () => {
   });
 
   it('all edge from/to IDs exist in nodes', async () => {
-    const perception = await extractPerception(rubyCodeRoot);
+    const perception = await extractPerception(auraCodeRoot);
 
     const nodeIds = new Set(perception.nodes.map(n => n.id));
     for (const edge of perception.edges) {
@@ -177,7 +177,7 @@ describe('extractPerception — edge cases', () => {
   let tmpDir: string;
 
   function makeTmpDir(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-ext-'));
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'aura-ext-'));
   }
 
   it('handles missing README gracefully (no crash)', async () => {
@@ -207,7 +207,7 @@ describe('extractPerception — edge cases', () => {
   });
 
   it('handles non-existent projectRoot gracefully', async () => {
-    const nonExistent = path.join(os.tmpdir(), 'rubycode-nonexistent-' + Date.now());
+    const nonExistent = path.join(os.tmpdir(), 'aura-nonexistent-' + Date.now());
 
     const perception = await extractPerception(nonExistent);
     // Must not throw — returns a perception with empty nodes/edges

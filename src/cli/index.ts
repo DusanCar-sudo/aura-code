@@ -1,32 +1,73 @@
 #!/usr/bin/env node
+// Auto-load ~/.secrets/agents.env so provider keys work when Aura runs as a binary
+import * as _fs from 'fs';
+import * as _path from 'path';
+import * as _os from 'os';
+const _agentsEnv = _path.join(_os.homedir(), '.secrets', 'agents.env');
+if (_fs.existsSync(_agentsEnv)) {
+  for (const line of _fs.readFileSync(_agentsEnv, 'utf8').split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const eq = t.indexOf('=');
+    if (eq === -1) continue;
+    const k = t.slice(0, eq).trim();
+    const v = t.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+    if (k && !(k in process.env)) process.env[k] = v;
+  }
+}
 import * as path from 'path';
 import * as readline from 'readline';
 import * as fs from 'fs';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
-import { KNOWN_MODELS, getAllModels, registerCustomProviders } from '../providers/factory.js';
+import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily, normalizeModelId } from '../providers/factory.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
+process.on('unhandledRejection', (reason) => {
+  console.error(chalk.hex('#b15439')('  \u2717 Unhandled rejection: ' + String(reason)));
+});
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
-import { runAgentLoop } from '../agent/loop.js';
-import { PermissionSystem, setSharedReadline, getSharedReadline } from '../safety/permissions.js';
+import { runAgentLoop, costFor } from '../agent/loop.js';
+import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
+import { createGazelleChat, type GazelleChat } from '../agent/gazelle-chat.js';
+import { runCoderConversation } from '../agent/coder-conversation.js';
+import { SessionBudget, describeBudgetStop } from '../agent/session-budget.js';
+import { DEFAULT_MAX_TURNS } from '../agent/loop-profile.js';
+import { compactHistory, estimateContextTokens } from '../agent/compactor.js';
+import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
+import { ArchimedesAlternator } from '../archimedes/index.js';
+import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
+import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
 import { startServer } from '../server/index.js';
+import { runSidecar } from '../protocol/stdio.js';
+import { runDevices } from './devices-command.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
 import pkg from '../../package.json';
 
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
-import { sessionStore } from '../agent/session-store.js';
-import type { LLMProvider } from '../providers/types.js';
-import { loadGlobalConfig, globalConfigPath } from '../setup/global-config.js';
+import { sessionStore, type SessionUsage } from '../agent/session-store.js';
+import {
+  handleSessionCommand,
+  type ChatState,
+  type ReplCommandResult,
+  type ReplMode,
+} from './repl-session-commands.js';
+import { handleModeCommand } from './repl-mode-commands.js';
+import type { LLMProvider, HistoryMessage } from '../providers/types.js';
+import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
-import { needsWizard, runFirstRunWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
-import { runProviderWizard } from '../setup/provider-wizard.js';
+import { getApiKey } from '../util/env.js';
+import { needsWizard, hasGlobalConfig, hasAnyEnvKey } from '../setup/first-run.js';
+import { runProviderWizard, loadProviderConfig } from '../setup/provider-wizard.js';
+import { runWebWizard } from '../setup/web-wizard.js';
+import { platformWarning } from '../util/platform.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
 import { mineWeaknesses, saveReport, reportPath } from '../harness/weakness-miner.js';
@@ -35,16 +76,49 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner } from './diamond.js';
+import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { checkBuildFreshness } from './build-freshness.js';
+import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
+import { isAuthError } from '../util/errors.js';
+import { ContextHealthTracker } from './context-health.js';
+import { setLadder, setMaxContextTokens, compactionThreshold } from '../agent/context-policy.js';
+import { getContextWindow } from '../providers/factory.js';
+import { runTuner, type TunerIO } from './context-tuner.js';
+import { runDoctor, formatDoctorReport } from '../doctor/index.js';
+import { HELP_TEXT } from './help-data.js';
+import { loadImages, looksVisionCapable } from './image-utils.js';
 
+/**
+ * Feed raw keypresses to the context tuner. The caller must have released
+ * stdin first (stopInput) — this installs its own listener and restores raw
+ * mode on dispose, so the TUI's handler can be reinstalled cleanly after.
+ */
+function makeStdinTunerIO(): TunerIO {
+  return {
+    write: (s) => process.stdout.write(s),
+    columns: () => process.stdout.columns ?? 80,
+    onKey: (handler) => {
+      const wasRaw = process.stdin.isRaw === true;
+      if (process.stdin.isTTY) process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      const listener = (data: string) => handler(data);
+      process.stdin.on('data', listener);
+      return () => {
+        process.stdin.removeListener('data', listener);
+        if (process.stdin.isTTY && !wasRaw) process.stdin.setRawMode(false);
+      };
+    },
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -69,6 +143,12 @@ const cliProfile         = typeof argv.profile === 'string' ? argv.profile : und
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
 const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.AURA_API_RPM);
 const cliTpm             = num(argv['rate-limit-tpm']) ?? num(process.env.AURA_API_TPM);
+const cliImagePaths: string[] =
+  Array.isArray(argv.image)
+    ? argv.image.map(String)
+    : typeof argv.image === 'string'
+      ? [argv.image]
+      : [];
 const cliFallbacks: string[] =
   Array.isArray(argv.fallback)
     ? argv.fallback.map(String)
@@ -77,6 +157,13 @@ const cliFallbacks: string[] =
       : process.env.AURA_FALLBACK_MODEL
           ? [process.env.AURA_FALLBACK_MODEL]
         : [...FALLBACK_CHAIN];
+
+// Gazelle: lean conversational mode. Accept the --gazelle flag, --mode gazelle,
+// or AURA_MODE=gazelle. Detected here (module scope) so the non-TTY help gate
+// below can let a piped gazelle session through instead of printing help.
+const gazelleMode = argv.gazelle === true
+  || argv.mode === 'gazelle'
+  || process.env.AURA_MODE === 'gazelle';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Help / version
@@ -96,14 +183,14 @@ if (argv.models) {
     return acc;
   }, {});
   for (const [provider, models] of Object.entries(byProvider)) {
-    console.log(chalk.hex('#8a7768')(`  ${provider}`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  ${provider}`));
     for (const m of models) {
-      console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
+      console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex(FAINT_HEX)(m.speed)}`);
     }
   }
-  console.log(chalk.hex('#4e3d30')('\n  Use --model <id> or set AURA_MODEL env var'));
-  console.log(chalk.hex('#4e3d30')('  For Ollama: --model ollama/llama3.2'));
-  console.log(chalk.hex('#4e3d30')('  For OpenRouter: --model openrouter/<provider>/<name>\n'));
+  console.log(chalk.hex(FAINT_HEX)('\n  Use --model <id> or set AURA_MODEL env var'));
+  console.log(chalk.hex(FAINT_HEX)('  For Ollama: --model ollama/llama3.2'));
+  console.log(chalk.hex(FAINT_HEX)('  For OpenRouter: --model openrouter/<provider>/<name>\n'));
   process.exit(0);
 }
 
@@ -111,7 +198,7 @@ if (argv['list-sessions']) {
   const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
   const sessions = sessionStore.listSessions(root);
   if (sessions.length === 0) {
-    console.log(chalk.hex('#8a7768')('\n  No saved sessions for this project.\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions for this project.\n'));
   } else {
     console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
     for (const s of sessions) {
@@ -119,8 +206,8 @@ if (argv['list-sessions']) {
       const turns = Math.floor(s.history.length / 2);
       console.log(
         `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-        `${chalk.hex('#ede0cc')(s.title.slice(0, 45).padEnd(46))} ` +
-        `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}`,
+        `${chalk.hex(TEXT_HEX)(s.title.slice(0, 45).padEnd(46))} ` +
+        `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}`,
       );
     }
     console.log();
@@ -132,31 +219,41 @@ if (argv.analyze) {
   const report = mineWeaknesses();
   const outPath = saveReport(report);
   console.log(chalk.hex('#cc785c').bold('\n  Weakness Analysis Report\n'));
-  console.log(chalk.hex('#8a7768')(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
-  console.log(chalk.hex('#8a7768')(`  Report saved to: ${outPath}\n`));
+  console.log(chalk.hex(TEXT_DIM_HEX)(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
+  console.log(chalk.hex(TEXT_DIM_HEX)(`  Report saved to: ${outPath}\n`));
 
   if (report.patterns.length === 0) {
     console.log(chalk.hex('#5a9e6e')('  ✓ No recurring weakness patterns detected. Agent behavior looks healthy.\n'));
   } else {
     for (const p of report.patterns) {
       console.log(chalk.hex('#b15439').bold(`  ✗ ${p.pattern} (${p.frequency} occurrences)`));
-      console.log(chalk.hex('#8a7768')(`    ${p.description}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`    ${p.description}`));
       if (p.occurrences[0]) {
-        console.log(chalk.hex('#4e3d30')(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
-        console.log(chalk.hex('#4e3d30')(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
+        console.log(chalk.hex(FAINT_HEX)(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
+        console.log(chalk.hex(FAINT_HEX)(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
       }
       console.log(chalk.hex('#cc785c')(`    Suggestion: ${p.promptPatch.slice(0, 120)}...`));
       console.log();
     }
-    console.log(chalk.hex('#8a7768')(`  ${report.summary}\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  ${report.summary}\n`));
   }
   process.exit(0);
+}
+
+if (argv.doctor === true) {
+  const cwd = typeof argv.cwd === 'string' ? path.resolve(argv.cwd) : process.cwd();
+  const fix = process.argv.includes('--fix');
+  const offline = process.argv.includes('--offline');
+  runDoctor({ projectRoot: cwd, fix, offline }).then(report => {
+    console.log(formatDoctorReport(report));
+    process.exit(report.summary.error > 0 ? 1 : 0);
+  }).catch(e => { console.error('Doctor error:', String(e)); process.exit(1); });
 }
 
 if (argv['propose-harness']) {
   // Ensure a weakness report exists — mine if needed
   if (!fs.existsSync(reportPath())) {
-    console.log(chalk.hex('#8a7768')('\n  No weakness report found — mining sessions first...\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  No weakness report found — mining sessions first...\n'));
     const report = mineWeaknesses();
     saveReport(report);
   }
@@ -168,13 +265,13 @@ if (argv['propose-harness']) {
     console.log(chalk.hex('#cc785c').bold('\n  Harness Proposals\n'));
     for (const p of proposals) {
       console.log(chalk.hex('#cc785c')(`  ${p.id}`));
-      console.log(chalk.hex('#8a7768')(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
-      console.log(chalk.hex('#8a7768')(`    Section:  ${p.targetSection}`));
-      console.log(chalk.hex('#4e3d30')(`    Patch:    ${p.patchText.slice(0, 80)}...`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`    Section:  ${p.targetSection}`));
+      console.log(chalk.hex(FAINT_HEX)(`    Patch:    ${p.patchText.slice(0, 80)}...`));
       console.log();
     }
     console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
-    console.log(chalk.hex('#8a7768')('  Apply with: ruby --apply-harness <id>\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('  Apply with: aura --apply-harness <id>\n'));
   }
   process.exit(0);
 }
@@ -197,7 +294,7 @@ if (argv.workflows) {
   (async () => {
     const workflows = await listWorkflows();
     if (workflows.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved workflows.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
@@ -207,9 +304,9 @@ if (argv.workflows) {
         const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
         console.log(
           `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex('#ede0cc')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
-          `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
+          `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
         );
       }
       console.log();
@@ -223,7 +320,7 @@ if (argv.blueprints) {
   (async () => {
     const bps = await listArchitectBlueprints();
     if (bps.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved blueprints.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved blueprints.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved blueprints:\n'));
       for (const bp of bps) {
@@ -234,8 +331,8 @@ if (argv.blueprints) {
         console.log(
           `  ${chalk.hex(statusColor)(bp.status.padEnd(10))} ` +
           `${chalk.hex('#cc785c')(bp.id.slice(0, 16).padEnd(18))} ` +
-          `${chalk.hex('#ede0cc')(bp.task.slice(0, 40).padEnd(41))} ` +
-          `${chalk.hex('#4e3d30')(`${builtCount}/${totalFiles} files · ${created}`)}`,
+          `${chalk.hex(TEXT_HEX)(bp.task.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex(FAINT_HEX)(`${builtCount}/${totalFiles} files · ${created}`)}`,
         );
       }
       console.log();
@@ -255,26 +352,26 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
 
     const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
     console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-    console.log(`  ${chalk.hex('#8a7768')('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
-    console.log(`  ${chalk.hex('#8a7768')('Task:')}    ${chalk.hex('#ede0cc')(bp.task)}`);
-    console.log(`  ${chalk.hex('#8a7768')('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
-    console.log(`  ${chalk.hex('#8a7768')('Steps:')}   ${bp.estimatedSteps}`);
-    console.log(`  ${chalk.hex('#8a7768')('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
-    if (bp.builtAt) console.log(`  ${chalk.hex('#8a7768')('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Task:')}    ${chalk.hex(TEXT_HEX)(bp.task)}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Steps:')}   ${bp.estimatedSteps}`);
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Created:')} ${new Date(bp.createdAt).toLocaleString()}`);
+    if (bp.builtAt) console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
 
     if (bp.files.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Files:\n'));
       for (const f of bp.files) {
-        const fileStatusColor = f.status === 'built' ? '#5a9e6e' : f.status === 'skipped' ? '#8a7768' : '#cc785c';
+        const fileStatusColor = f.status === 'built' ? '#5a9e6e' : f.status === 'skipped' ? '#a68a2a' : '#cc785c';
         console.log(
           `    ${chalk.hex(fileStatusColor)(f.status.padEnd(8))} ${chalk.hex('#cc785c')(f.path)}`,
         );
-        console.log(`            ${chalk.hex('#8a7768')(f.purpose)}`);
+        console.log(`            ${chalk.hex(TEXT_DIM_HEX)(f.purpose)}`);
         if (f.exports.length > 0) {
-          console.log(`            ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
+          console.log(`            ${chalk.hex(FAINT_HEX)(`exports: ${f.exports.join(', ')}`)}`);
         }
         if (f.interfaces.length > 0) {
-          console.log(`            ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
+          console.log(`            ${chalk.hex(FAINT_HEX)(`interfaces: ${f.interfaces.join(', ')}`)}`);
         }
       }
     }
@@ -282,9 +379,9 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.dataModels.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
       for (const dm of bp.dataModels) {
-        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#8a7768')(dm.description)}`);
+        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
         for (const field of dm.fields) {
-          console.log(`      ${chalk.hex('#4e3d30')(field)}`);
+          console.log(`      ${chalk.hex(FAINT_HEX)(field)}`);
         }
       }
     }
@@ -292,14 +389,14 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.dependencies.length > 0) {
       console.log(chalk.hex('#cc785c').bold('\n  Dependencies:\n'));
       for (const dep of bp.dependencies) {
-        console.log(`    ${chalk.hex('#4e3d30')(dep)}`);
+        console.log(`    ${chalk.hex(FAINT_HEX)(dep)}`);
       }
     }
 
     if (bp.risks.length > 0) {
       console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
       for (const risk of bp.risks) {
-        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#8a7768')(risk)}`);
+        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
       }
     }
 
@@ -307,7 +404,7 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
       console.log(chalk.hex('#cc9e5c').bold('\n  Deviations:\n'));
       for (const dev of bp.deviations) {
         const time = new Date(dev.recordedAt).toLocaleString();
-        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex('#8a7768')(dev.description)} ${chalk.hex('#4e3d30')(`(${time})`)}`);
+        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex(TEXT_DIM_HEX)(dev.description)} ${chalk.hex(FAINT_HEX)(`(${time})`)}`);
       }
     }
 
@@ -324,7 +421,7 @@ if (argv.help) {
 // When run with no args + a TTY or piped input, fall through to the REPL/wizard.
 // Skip this gate when --reset-setup is set (the wizard should fire even if env
 // vars make needsWizard() return false).
-if (argv._.length === 0 && !argv.interactive && process.stdin.isTTY !== true && !argv['reset-setup']) {
+if (argv._.length === 0 && !argv.interactive && !argv.doctor && !gazelleMode && process.stdin.isTTY !== true && !argv['reset-setup']) {
   if (!needsWizard({})) {
     printHelp();
     process.exit(0);
@@ -338,19 +435,34 @@ if (argv._.length === 0 && !argv.interactive && process.stdin.isTTY !== true && 
 const cwd = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
 const fileConfig = loadProjectConfig(cwd);
 
+// No TLS patching needed — the DigiCert root CA used by the MiMo endpoint
+// is already trusted by Node's built-in certificate store.
+
 // Load persisted API keys (~/.aura/keys.json) into process.env before any
 // provider is built — so keys set once with :apikey survive across sessions
 // and every provider sees them, without depending on shell rc files. Real
 // environment values are never overridden.
 loadKeysIntoEnv();
 
-// Pull global config (saved by the first-run wizard) so the user doesn't have
-// to re-set their provider on every run.
+// Pull global config (saved by the setup wizard) so the user doesn't have
+// to re-set their provider on every run. provider.json is the fuller record
+// from the same wizard save — it also carries the API key and base URL, so a
+// choice made last session works next session without any env vars.
 const globalCfg = loadGlobalConfig();
+const savedProvider = loadProviderConfig();
 
 // Effective model = CLI > AURA_MODEL env > .aura.json > global config > undefined
 const cliModel = typeof argv.model === 'string' ? argv.model : undefined;
-const effectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel ?? process.env.AURA_MODEL;
+const rawEffectiveModel = cliModel ?? fileConfig.model ?? globalCfg?.defaultModel
+  ?? savedProvider?.model ?? process.env.AURA_MODEL;
+// Self-heal bare ids saved by older versions (e.g. an unprefixed Ollama tag
+// that would route to api.openai.com and 401).
+const effectiveModel = rawEffectiveModel ? normalizeModelId(rawEffectiveModel) : rawEffectiveModel;
+
+// The saved provider record only applies when we're actually running the
+// model it was saved with — its baseUrl/apiKey belong to that provider.
+const savedProviderApplies = !!savedProvider
+  && (effectiveModel === savedProvider.model || rawEffectiveModel === savedProvider.model);
 
 // Effective base URL = CLI > .aura.json > global config > undefined.
 // CRITICAL: the global config's baseUrl belongs to the provider the wizard
@@ -364,7 +476,9 @@ const globalBaseUrlApplies =
   !!globalCfg?.defaultModel &&
   effectiveModel === globalCfg.defaultModel;
 const effectiveBaseUrl =
-  cliBaseUrl ?? fileConfig.baseUrl ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined);
+  cliBaseUrl ?? fileConfig.baseUrl
+    ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined)
+    ?? (savedProviderApplies ? savedProvider!.baseUrl : undefined);
 
 const resolved = resolveConfig(
   { ...fileConfig, model: effectiveModel, baseUrl: effectiveBaseUrl },
@@ -385,13 +499,26 @@ const resolved = resolveConfig(
 // Register custom providers from .aura.json
 registerCustomProviders(resolved.providers);
 
+// Install the configured compaction ladder before any loop can run, so the
+// engine and the context bar read the same thresholds from turn one.
+if (fileConfig.context?.ladder) {
+  setLadder(fileConfig.context.ladder);
+}
+if (fileConfig.context?.maxTokens !== undefined) {
+  setMaxContextTokens(fileConfig.context.maxTokens);
+}
+
 const permissionLevel: PermissionLevel = resolved.mode;
 
 // Mutable runtime state — :model command updates this
 const runtimeConfig = {
   model: resolved.model,
   baseUrl: resolved.baseUrl,
-  apiKey: typeof argv['api-key'] === 'string' ? argv['api-key'] : undefined,
+  // --api-key wins; otherwise the key the wizard saved with this model last
+  // session. Env vars only apply when neither is present (factory fallback).
+  apiKey: typeof argv['api-key'] === 'string'
+    ? argv['api-key']
+    : (savedProviderApplies ? savedProvider!.apiKey : undefined),
 };
 
 // ── Profile: local → Ollama defaults ─────────────────────────────────────────
@@ -399,6 +526,17 @@ if (cliProfile === 'local') {
   resolved.baseUrl = 'http://localhost:11434/v1';
   if (!runtimeConfig.apiKey) {
     runtimeConfig.apiKey = 'ollama';
+  }
+}
+
+// ── Profile: remote-coder → remote Ollama (172.16.10.177) ───────────────────
+if (cliProfile === 'remote-coder') {
+  resolved.baseUrl = 'http://172.16.10.177:11434/v1';
+  if (!runtimeConfig.apiKey) {
+    runtimeConfig.apiKey = 'ollama';
+  }
+  if (!resolved.model) {
+    resolved.model = 'deepseek-coder:6.7b';
   }
 }
 
@@ -425,8 +563,175 @@ function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMPr
 // Main
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Shape a finished loop run's real API usage for session storage. Returns
+ *  undefined when the run produced no usage data (so upsertSession leaves any
+ *  previously accumulated session usage untouched). */
+function sessionUsageFrom(result: {
+  usage?: { inputTokens: number; outputTokens: number; cachedTokens: number };
+  costUsd?: number;
+  turnUsage?: SessionUsage['turns'];
+}): SessionUsage | undefined {
+  if (!result.usage) return undefined;
+  const turns = result.turnUsage ?? [];
+  return {
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    cachedTokens: result.usage.cachedTokens ?? 0,
+    cacheCreationTokens: turns.reduce((s, t) => s + t.cacheCreationTokens, 0),
+    costUsd: result.costUsd ?? 0,
+    turns,
+  };
+}
+
+// ── Phase 3: Gazelle ⇄ coder mode orchestrator ───────────────────────────────
+interface GazelleOrchestratorArgs {
+  gzProvider: LLMProvider;
+  display: ReturnType<typeof createTerminalDisplay>;
+  firstMessage?: string;
+  sessionPath?: string;
+  gzCliModel?: string;
+}
+
+/** Strip coder tool-noise from a carried-over history before re-entering
+ *  Gazelle, so its tiny prompt never inherits tool schemas or results. Keeps
+ *  the conversational spine (user turns + assistant prose); a very long coder
+ *  run is additionally compacted as a safety net. */
+function sanitizeForGazelle(history: HistoryMessage[], model: string): HistoryMessage[] {
+  const cleaned: HistoryMessage[] = [];
+  for (const m of history) {
+    if (m.role === 'tool_result') continue;               // drop tool output entirely
+    if (m.role === 'assistant') {
+      if (m.content && m.content.trim()) cleaned.push({ role: 'assistant', content: m.content });
+    } else {
+      cleaned.push(m);                                     // user turns
+    }
+  }
+  const est = estimateContextTokens('', cleaned);
+  if (est > 4000) compactHistory(cleaned, est, model);
+  return cleaned;
+}
+
+/** Gazelle is the front door; :coder (or an accepted escalation offer) hands off
+ *  to the heavy path, and :gazelle (or a conversational turn after a task) hands
+ *  back. History carries across each switch; coder deps load lazily on the first
+ *  switch — that's the Phase-1 setup the user explicitly asked for. */
+async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void> {
+  const input = process.stdin;
+  const output = process.stdout;
+  const interactive = (input as NodeJS.ReadStream).isTTY === true;
+  const reader = createLineReader(input, output, interactive);
+
+  let history: HistoryMessage[] = [];
+  let mode: 'gazelle' | 'coder' = 'gazelle';
+  let carry: string | undefined = a.firstMessage;
+
+  // Lazy coder dependencies — built only on the first switch into coder mode.
+  let coderCtx: Awaited<ReturnType<typeof loadProjectContext>> | undefined;
+  let coderPermissions: PermissionSystem | undefined;
+  let coderProvider: LLMProvider | undefined;
+
+  // One budget for the entire orchestrated session. Declared out here, not
+  // inside runCoderConversation, because this loop re-enters coder mode on
+  // every gazelle→coder switch — a budget created per call would reset on each
+  // switch and reproduce exactly the per-segment gap it exists to close.
+  const sessionBudget = new SessionBudget({
+    maxTurns: resolved.maxTurns ?? DEFAULT_MAX_TURNS,
+  });
+
+  for (;;) {
+    let outcome: LoopOutcome;
+    if (mode === 'gazelle') {
+      outcome = await runGazelleLoop({
+        provider: a.gzProvider, display: a.display, reader, input, output,
+        initialHistory: history, firstMessage: carry,
+        sessionPath: a.sessionPath, writeMemoryOnExit: false,
+      });
+      carry = undefined;
+      history = outcome.history;
+      if (outcome.action === 'exit') break;
+      if (!coderProvider) {
+        try {
+          a.display.header('Switching to coder mode', 'loading project context, tools, and file access…');
+          coderCtx = await loadProjectContext(cwd);
+          coderPermissions = new PermissionSystem(permissionLevel);
+          coderProvider = buildProvider(a.display);
+        } catch (e) {
+          a.display.error(`Could not enter coder mode: ${String(e)} — staying in conversation.`);
+          continue; // remain in gazelle
+        }
+      }
+      mode = 'coder';
+      carry = outcome.carryMessage;
+    } else {
+      outcome = await runCoderConversation({
+        provider: coderProvider!, ctx: coderCtx!, permissions: coderPermissions!,
+        display: a.display, reader, output, interactive,
+        initialHistory: history, firstMessage: carry,
+        maxTurns: resolved.maxTurns, sessionPath: a.sessionPath,
+        budget: sessionBudget,
+        spawnConfig: { apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
+      });
+      carry = undefined;
+      history = outcome.history;
+      if (outcome.action === 'exit') break;
+      history = sanitizeForGazelle(history, a.gzProvider.model); // no coder leakage into lean prompt
+      a.display.success('Back to conversational mode.');
+      mode = 'gazelle';
+      carry = outcome.carryMessage;
+    }
+  }
+
+  reader.close();
+  // One session-end memory write for the whole conversation (gazelle owns memory).
+  if (estimateContextTokens('', history) >= 200) {
+    try { await writeConversationalMemory(history, a.gzProvider.model); }
+    catch { /* best-effort */ }
+  }
+}
+
 async function main() {
   const display = createTerminalDisplay();
+
+  // Native Windows silently degrades both safety and usability (POSIX-only
+  // shell lists). Say so before any work starts rather than letting it be
+  // discovered mid-session. Not fatal — someone who understands the tradeoff
+  // can still proceed.
+  const platWarn = platformWarning();
+  if (platWarn) {
+    console.warn(chalk.hex('#b15439')('\n  ⚠ ' + platWarn.split('\n').join('\n  ') + '\n'));
+  }
+
+  // ── Gazelle: lean conversational mode ──────────────────────────────────────
+  // Radically smaller path than the coding agent: no ProjectContext, no tools,
+  // no Archimedes, no verification gate. Branch HERE — before the wizard,
+  // loadProjectContext(), resolveArchimedesConfig(), and tool selection — so
+  // none of that expensive setup runs. Defaults to the same cloud DeepSeek the
+  // coder path uses on this account — deepseek-v4-flash (api.deepseek.com only
+  // serves the v4 ids; "deepseek-chat" 400s there). Local models stay available
+  // via an explicit -m for anyone who wants them, but they are not the default
+  // and not a fallback tier — there is no fallback tier here at all.
+  if (gazelleMode) {
+    const gzCliModel = typeof argv.model === 'string' ? argv.model : undefined;
+    const gzModel = normalizeModelId(gzCliModel ?? 'deepseek/deepseek-v4-flash');
+    // With an explicit -m, honour the user's saved apiKey/baseUrl; the default
+    // cloud model resolves its own key/URL from the provider registry (env).
+    const gzConfig = gzCliModel
+      ? { model: gzModel, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined }
+      : { model: gzModel };
+    let gzProvider: LLMProvider;
+    try {
+      gzProvider = createResilientProvider(gzConfig, { maxRetries: resolved.maxRetries }, display);
+    } catch (e) {
+      display.error(`Could not initialize Gazelle provider: ${String(e)}`);
+      process.exit(1);
+    }
+    const firstMessage = argv._.length > 0 ? argv._.map(String).join(' ') : undefined;
+    const sessionPath = argv['no-session'] === true
+      ? undefined
+      : path.join(sessionStore.projectDir(cwd), `gazelle-${sessionStore.generateId()}.json`);
+    await runGazelleOrchestrator({ gzProvider, display, firstMessage, sessionPath, gzCliModel });
+    return;
+  }
 
   // ── First-run wizard ───────────────────────────────────────────────────────
   // Skip if: --no-setup flag, --api-key on CLI, env var set, or global config exists.
@@ -447,8 +752,10 @@ async function main() {
   const skipSetup = argv['no-setup'] === true || argv.help === true || argv.h === true || argv.models === true || argv.version === true || argv.v === true;
   const resetSetup = argv['reset-setup'] === true;
   if (resetSetup) {
-    // Wipe global config so the wizard fires unconditionally.
+    // Wipe both saved configs so the wizard fires unconditionally and no
+    // stale provider record (baseUrl/apiKey) survives the reset.
     try { fs.unlinkSync(globalConfigPath()); } catch { /* not present */ }
+    try { fs.unlinkSync(path.join(path.dirname(globalConfigPath()), 'provider.json')); } catch { /* not present */ }
   }
   // When --reset-setup is set, force the wizard to fire (overrides env-var
   // detection — the user explicitly wants to reconfigure).
@@ -460,26 +767,27 @@ async function main() {
     // hang. Skip with a helpful message instead.
     if (process.stdin.isTTY !== true && !process.stdin.readable) {
       console.error(chalk.hex('#b15439')('\n  ✗ No interactive input available.'));
-      console.error(chalk.hex('#8a7768')('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
-      console.error(chalk.hex('#8a7768')('  or pass --api-key <key> --model <id> on the command line,\n'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  or pass --api-key <key> --model <id> on the command line,\n'));
       process.exit(1);
     }
-    const cfg = await runFirstRunWizard();
+    // Full provider wizard: pick provider + model, detect/enter key, and
+    // TEST the connection (URL normalization + response validation) before
+    // saving. The choice is persisted and restored on every later run.
+    const cfg = await runProviderWizard();
     if (!cfg) {
       console.error(chalk.hex('#b15439')('\n  ✗ Setup cancelled. Set an API key env var (e.g. export OPENAI_API_KEY=...) or run with --api-key.\n'));
       process.exit(1);
     }
-    // Re-resolve with the new global config
-    const fresh = loadGlobalConfig();
-    if (fresh) {
-      resolved.model = fresh.defaultModel;
-      resolved.baseUrl = fresh.baseUrl;
-      runtimeConfig.model = fresh.defaultModel;
-      runtimeConfig.baseUrl = fresh.baseUrl;
-    }
+    // Apply the wizard's choice to this session (it already saved to disk).
+    resolved.model = cfg.model;
+    resolved.baseUrl = cfg.baseUrl || undefined;
+    runtimeConfig.model = cfg.model;
+    runtimeConfig.baseUrl = cfg.baseUrl || undefined;
+    if (cfg.apiKey) runtimeConfig.apiKey = cfg.apiKey;
   }
 
-  let ctx;
+  let ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   try {
     ctx = await loadProjectContext(cwd);
   } catch (e) {
@@ -490,9 +798,9 @@ async function main() {
   // ── Guard: we need a model before we can build a provider ─────────────────
   if (!resolved.model) {
     console.error(chalk.hex('#b15439')('\n  ✗ No model configured.'));
-    console.error(chalk.hex('#8a7768')('  Run `aura` with no args in a TTY to launch the setup wizard,'));
-    console.error(chalk.hex('#8a7768')('  or pass --model <id> --api-key <key> on the command line,'));
-    console.error(chalk.hex('#8a7768')('  or set the model in .aura.json (`"model": "..."`).'));
+    console.error(chalk.hex(TEXT_DIM_HEX)('  Run `aura` with no args in a TTY to launch the setup wizard,'));
+    console.error(chalk.hex(TEXT_DIM_HEX)('  or pass --model <id> --api-key <key> on the command line,'));
+    console.error(chalk.hex(TEXT_DIM_HEX)('  or set the model in .aura.json (`"model": "..."`).'));
     process.exit(1);
   }
 
@@ -514,6 +822,13 @@ async function main() {
   let activeChatId: string | undefined;
   let activeChatHistory: import('../providers/types.js').HistoryMessage[] = [];
   let activeChatTitle: string | undefined;
+  // Runtime Archimedes toggle: undefined = defer to .aura.json, true/false = session override
+  let archimedesOverride: boolean | undefined = undefined;
+  // Runtime Archimedes model override: undefined = defer to .aura.json, string = session override
+  let archimedesModelOverride: string | undefined = undefined;
+  // :small1 — force sessions to START with Archimedes, bypassing the competence
+  // gate (verification/escalation still run). Off by default; toggled per session.
+  let small1Override = false;
 
   if (!noSession) {
     if (argv['new-session']) {
@@ -572,7 +887,19 @@ async function main() {
     ],
   });
 
+  // You are running dist/, but you edit and test src/ — say so when they've
+  // diverged, or an edit looks landed while the binary runs the old code.
+  const stale = checkBuildFreshness(path.join(__dirname, '../..'));
+  if (stale) {
+    console.log(chalk.hex('#d4903a')(
+      `  ⚠ dist/ is ${stale.behindBy} behind src/ (newest: ${stale.newestSource}) — run \`npm run build\`.`,
+    ));
+  }
+
   const cumulative = { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  // One-shot-per-session flag for the stale-history nudge below — a session
+  // that's already been warned once shouldn't repeat it every turn.
+  let historyNudgeShown = false;
 
   // ── --build <id>: build from a saved blueprint in dependency order ───────────
   if (typeof argv.build === 'string' && argv.build) {
@@ -583,8 +910,8 @@ async function main() {
     }
 
     display.header('Architect Builder', `Building from blueprint: ${bp.id}`);
-    console.log(chalk.hex('#8a7768')(`  Task: ${bp.task}`));
-    console.log(chalk.hex('#8a7768')(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  Task: ${bp.task}`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  Files: ${bp.files.filter(f => f.status === 'planned').length} to build\n`));
 
     await updateBlueprintStatus(bp.id, 'building');
 
@@ -649,7 +976,7 @@ async function main() {
     const stepTasks = argv._.map(String);
     if (stepTasks.length === 0) {
       console.error(chalk.hex('#b15439')('\n  ✗ No step tasks provided.'));
-      console.error(chalk.hex('#8a7768')('  Usage: ruby --workflow <name> "step 1" "step 2" ...\n'));
+      console.error(chalk.hex(TEXT_DIM_HEX)('  Usage: aura --workflow <name> "step 1" "step 2" ...\n'));
       process.exit(1);
     }
 
@@ -697,11 +1024,11 @@ async function main() {
     }
 
     const totalTokens = finalState.totalTokens ?? 0;
-    console.log(chalk.hex('#4e3d30')(
+    console.log(chalk.hex(FAINT_HEX)(
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex('#8a7768')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: aura --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -751,11 +1078,11 @@ async function main() {
     }
 
     const totalTokens = finalState.totalTokens ?? 0;
-    console.log(chalk.hex('#4e3d30')(
+    console.log(chalk.hex(FAINT_HEX)(
       `  ↳ ${totalTokens.toLocaleString()} tokens · ${finalState.stepStates.length} steps · status: ${finalState.status}`,
     ));
     if (finalState.status === 'failed') {
-      console.log(chalk.hex('#8a7768')(`\n  Resume with: ruby --resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Resume with: aura --resume-workflow ${finalState.definition.id}\n`));
       process.exit(1);
     }
     return;
@@ -764,7 +1091,20 @@ async function main() {
   // ── Single task mode: aura "fix the bug" ──────────────────────────────────────
   if (argv._.length > 0) {
     const task = argv._.join(' ');
-    console.log(chalk.hex('#8a7768')(`\n  Task: ${chalk.hex('#ede0cc')(task)}\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Task: ${chalk.hex(TEXT_HEX)(task)}\n`));
+
+    // --image: load attachments into base64 data URIs. Failures degrade to
+    // text-only with a warning — never abort the session over a bad image.
+    const { images: taskImages, warnings: imageWarnings } = loadImages(cliImagePaths);
+    for (const w of imageWarnings) {
+      console.warn(chalk.hex('#b15439')(`  ⚠ ${w}`));
+    }
+    if (taskImages.length > 0 && !looksVisionCapable(provider.model)) {
+      console.warn(chalk.hex('#b15439')(
+        `  ⚠ Model "${provider.model}" may not support image input. Sending anyway — ` +
+        `if it fails, the provider will likely return a text-only response or an error.`,
+      ));
+    }
 
     // --architect: plan-only — decompose and display, then exit (no execution)
     if (argv.architect === true) {
@@ -831,6 +1171,7 @@ async function main() {
         loopOpts: {
           provider, task, context: ctx, permissions, display,
           initialHistory: activeChatHistory,
+          images: taskImages,
           maxTurns: resolved.maxTurns,
           spawnConfig: {
             apiKey: argv['api-key'] ?? undefined,
@@ -843,10 +1184,45 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
+    } else if (archimedesOverride ?? fileConfig.archimedes?.enabled) {
+      const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
+      if (!baseArchimedesConfig) {
+        display.warning(reason);
+        result = await runAgentLoop({
+          provider, task, context: ctx, permissions, display,
+          initialHistory: activeChatHistory,
+          images: taskImages,
+          maxTurns: resolved.maxTurns,
+          spawnConfig: {
+            apiKey: argv['api-key'] ?? undefined,
+            baseUrl: resolved.baseUrl ?? undefined,
+          },
+          sessionPath,
+        });
+      } else {
+        display.success(reason);
+        const archimedesConfig = {
+          ...baseArchimedesConfig,
+          ...(archimedesModelOverride ? { modelName: archimedesModelOverride } : {}),
+        };
+        const alternator = new ArchimedesAlternator({
+          archimedesConfig,
+          largeModelProvider: provider,
+          projectRoot: ctx.root,
+          context: ctx,
+          display,
+          permissions,
+          initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
+        });
+        const altResult = await alternator.run(task);
+        result = altResult.loopResult;
+      }
     } else {
       result = await runAgentLoop({
         provider, task, context: ctx, permissions, display,
         initialHistory: activeChatHistory,
+        images: taskImages,
         maxTurns: resolved.maxTurns,
         spawnConfig: {
           apiKey: argv['api-key'] ?? undefined,
@@ -857,7 +1233,7 @@ async function main() {
     }
 
     if (activeChatId && !noSession) {
-      await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle);
+      await sessionStore.upsertSession(projectRoot, activeChatId, result.history, activeChatTitle, sessionUsageFrom(result));
     }
     {
       const { recordEpisode } = await import('../dream/episode.js');
@@ -881,175 +1257,537 @@ async function main() {
     return;
   }
 
-  // ── Interactive REPL mode ──────────────────────────────────────────────────
-  if (activeChatHistory.length > 0) {
-    console.log(chalk.hex('#8a7768')(`  Continuing session with ${Math.floor(activeChatHistory.length / 2)} prior turns.`));
-  }
-  console.log(chalk.hex('#8a7768')('  Type a task, or :help for commands. Ctrl+C to exit.'));
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  // Let mid-task prompts (tool confirmations, plan approval) reuse this
-  // interface instead of opening a second readline on the same stdin.
-  setSharedReadline(rl);
+  // ── Interactive REPL mode (TUI — fixed bottom input) ────────────────────────
+  // Enter the alternate screen buffer for the whole interactive session —
+  // see enterAltScreen()'s doc comment in tui.ts for why: redrawing the
+  // header in place on the NORMAL screen (needed so it stays pinned while
+  // reflecting live typing) leaves every intermediate redraw frame
+  // permanently baked into the real terminal's scrollback the moment it
+  // scrolls past the top of the viewport — the live view was always
+  // correct, but scrolling up through history showed it stacked dozens of
+  // times. The alt screen is an isolated buffer with no persistent
+  // scrollback, so this can't happen; leaving it (destroyTui()/Ctrl+C)
+  // restores the terminal exactly as it was, same as quitting vim or less.
+  // The banner was already drawn once above (renderBanner() is shared with
+  // one-shot mode, which does NOT use the alt screen), so it has to be
+  // redrawn here — it rendered to the now-hidden normal screen, not this
+  // fresh alt-screen buffer.
+  enterAltScreen();
+  const tuiBannerInfo = {
+    version: pkg.version,
+    title: ctx.name,
+    provider: provider.name,
+    model: runtimeConfig.model,
+    language: ctx.language,
+    mode: permissionLevel,
+    cwd: projectRoot,
+    extras: [
+      ...(fileConfig.model ? ['.aura.json loaded'] : []),
+      ...(activeChatId ? [`chat ${activeChatId}`] : []),
+    ],
+  };
+  // The pinned header is deliberately the one-line `compact` tier: every
+  // banner row is subtracted from the scroll region for the whole session,
+  // so the full lockup goes into the scroll region below instead (see
+  // startInput()), where it scrolls away like any other output.
+  renderBanner(tuiBannerInfo, 'compact');
+  // The TUI keeps its own copy of the banner rows: when scroll mode hands
+  // the screen back, the live view is rebuilt from scratch, and on the alt
+  // screen there's no scrollback to recover the banner from.
+  setBannerLines(buildBannerLines(tuiBannerInfo, 'compact'));
 
-  // The input "field": a framed prompt pinned just under the header. Output
-  // from each run flows below it. Width caps at 100 cols so it stays tidy on
-  // wide terminals.
-  const fieldWidth = () => Math.min(process.stdout.columns ?? 80, 100) - 4;
-  const renderField = () => {
-    const w = fieldWidth();
-    const idTag = activeChatId ? ` ${activeChatId}` : '';
-    const label = ` ask aura${idTag} `;
-    const dashes = Math.max(0, w - label.length - 1);
-    console.log('');
-    console.log('  ' + chalk.hex('#9b1b30')('╭' + chalk.hex('#8a7768')(label) + '─'.repeat(dashes) + '╮'));
+  // Use the TUI display for output
+  
+  const tuiDisplay = createTuiDisplay();
+  // Shared context-health tracker: the loop records compaction events and
+  // per-turn snapshots into it; the /context command reads it back. The
+  // system-prompt source starts empty — the loop calls updateSystem() with
+  // the real (task-embedded) prompt each run.
+  const healthTracker = new ContextHealthTracker(
+    () => '',
+    () => activeChatHistory,
+    resolved.model ?? 'gpt-4o',
+    resolved.model ?? 'gpt-4o',
+  );
+  // ── Right-panel content: "Try" suggestions only ─────────────────────────
+  // The panel deliberately carries no Commands/Skills listings — the
+  // command list lives in :help and doesn't need permanent sidebar space
+  // next to the input.
+  const panelSuggestions = [
+    activeChatHistory.length === 0 ? ':help — see all commands' : ':doctor — scan for issues',
+    ctx.language ? `run: ${ctx.language === 'TypeScript' || ctx.language === 'JavaScript' ? 'npm test' : ':graph'}` : ':viz — memory dashboard',
+  ];
+  setPanelContent({ suggestions: panelSuggestions });
+  // Unboxed metadata line under the input box, mirroring the reference's
+  // "Build · <model> · <mode>" line under its own input box.
+  setStatusLine([provider.name, runtimeConfig.model, permissionLevel].filter(Boolean).join(' · '));
+
+  initTui();
+  if (activeChatId) setChatId(activeChatId);
+  startInput();
+  // Route permission confirmations through the TUI's own raw-mode-safe
+  // prompt instead of a plain readline.Interface, which forces stdin out
+  // of raw mode and fights the TUI's own input handler (see tui.ts).
+  setConfirmHandler(askConfirm);
+  // Must come after initTui() — writeOutput() assumes the "cursor at base
+  // row" invariant initTui() establishes; calling it any earlier corrupts
+  // that baseline.
+  //
+  // The mark greets you once, in the scroll region, and then gets out of the
+  // way — only when the terminal is big enough that it isn't the whole view.
+  if (preferredBannerTier() === 'hero') {
+    // Minus the closing rule: it spans the full terminal width, one column
+    // wider than the scroll region, so writeOutput() would reflow it onto a
+    // second line. The pinned header's own rule already separates the two.
+    buildBannerLines(tuiBannerInfo, 'hero').slice(0, -1).forEach(line => writeOutput(line));
+  }
+  // Same stale-build warning as one-shot mode, routed through the TUI.
+  const staleBuild = checkBuildFreshness(path.join(__dirname, '../..'));
+  if (staleBuild) {
+    writeOutput(chalk.hex('#d4903a')(
+      `  ⚠ dist/ is ${staleBuild.behindBy} behind src/ (newest: ${staleBuild.newestSource}) — run \`npm run build\`.`,
+    ));
+  }
+  if (activeChatHistory.length > 0) {
+    writeOutput(chalk.hex(TEXT_DIM_HEX)('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
+  }
+
+  // Buffer for :btw and :stop typed during the agent loop
+  let pendingBtw: string | null = null;
+let abortController: AbortController | null = null;
+
+  setCallbacks({
+    onEnter(line: string) {
+      if (abortController && !abortController.signal.aborted) {
+        const cmd = line.trim();
+        if (cmd === ':stop' || cmd === ':cancel') {
+          writeOutput(chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+          abortController.abort();
+          return;
+        }
+        if (cmd.startsWith(':btw ')) {
+          pendingBtw = cmd.slice(5).trim();
+          writeOutput(chalk.hex(FAINT_HEX)(`  Buffered side question: "${pendingBtw}"`));
+          return;
+        }
+      }
+      processLine(line);
+    },
+    onStop() {
+      if (abortController) abortController?.abort();
+    },
+  });
+
+  let tuiInputHistory = [];
+
+  // One budget for the whole REPL process, not one per user message. Each
+  // message starts a fresh runAgentLoop whose own turn counter restarts at
+  // zero, while the history — and therefore the input cost of every call —
+  // carries forward, so a per-segment counter cannot bound cumulative spend.
+  //
+  // Token ceiling only. maxTurns is deliberately omitted (SessionBudget reads
+  // that as Infinity), because a cumulative *turn* cap is the wrong guard for
+  // interactive use: a human types every message and watches every response.
+  // Measured on a real 96-minute REPL session — 58 turns across 9 messages,
+  // 86% cache hit rate, $0.50 total — a 50-turn ceiling would have interrupted
+  // a cheap, supervised session for crossing an arbitrary count. The
+  // per-invocation maxTurns guard still applies within each message and is
+  // what actually catches a runaway loop (that session peaked at 19).
+  const replBudget = new SessionBudget({});
+
+  // ── Mode: coder (full agent) ⇄ gazelle (lean conversation) ────────────────
+  // :help has advertised both since Gazelle landed, but only the --gazelle
+  // orchestrator implemented them — typed in here they fell through and were
+  // sent to the model as a *task*. The switch happens inside this TUI rather
+  // than handing off to runGazelleLoop, because that loop opens a readline on
+  // the same stdin the TUI holds in raw mode, and two readers on one stream
+  // double every keypress (see the ReplCtx.rl comment). Only what a turn *does*
+  // changes: no tools, no ProjectContext, no Archimedes, no verification gate.
+  let replMode: ReplMode = 'coder';
+  let gazelleChat: GazelleChat | null = null;
+  // The TUI keeps accepting input while a reply streams and does not await
+  // processLine, so a second line can arrive mid-turn. Two concurrent respond()
+  // calls would interleave their pushes into one history array and send a
+  // malformed conversation on the next request; a mode switch would drop the
+  // chat whose reply is still arriving. Both wait for the turn to land.
+  let gazelleTurnInFlight = false;
+
+  const refreshStatusLine = (): void => {
+    setStatusLine([
+      provider.name, runtimeConfig.model, permissionLevel,
+      ...(replMode === 'gazelle' ? ['gazelle'] : []),
+    ].filter(Boolean).join(' · '));
   };
 
-  const ask = () => {
-    renderField();
-    rl.question(chalk.hex('#9b1b30')('  ╰ ') + chalk.hex('#cc785c').bold('❯ '), async (line) => {
-      const input = line.trim();
-      if (!input) { ask(); return; }
+  /** Seed a chat from the conversation so far, minus coder tool noise — the
+   *  lean prompt must never inherit tool schemas or results. The provider is a
+   *  thunk so a mid-conversation :model switch applies to the next reply. */
+  const makeGazelleChat = (): GazelleChat => createGazelleChat({
+    provider: () => buildProvider(tuiDisplay),
+    display: tuiDisplay,
+    initialHistory: sanitizeForGazelle(activeChatHistory, runtimeConfig.model ?? resolved.model ?? ''),
+    sessionPath,
+  });
 
-      // Slash / colon commands
-      const replCtx: ReplCtx = {
-        rl, ctx, display,
-        providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
-        permissions, cumulative,
-        chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
-        sessionPath,
-      };
-      const cmdResult = await handleReplCommand(input, replCtx);
-      if (cmdResult.handled) {
-        // Commands may update chat state
-        if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
-        if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
-        if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
-        ask();
+  const enterMode = (next: ReplMode): void => {
+    // Switching out from under a streaming reply loses the rest of it and
+    // reports the pre-turn totals ("0 tokens over 1 message"), because the
+    // assistant half of the exchange has not landed yet.
+    if (gazelleTurnInFlight) {
+      tuiDisplay.warning(`Still answering — send :${next} again once the reply lands.`);
+      return;
+    }
+    replMode = next;
+    if (next === 'gazelle') {
+      gazelleChat = makeGazelleChat();
+      tuiDisplay.success('Conversational (Gazelle) mode — no tools, no project context. :coder switches back.');
+    } else {
+      // Only worth a line if something was actually said — an immediate
+      // :gazelle → :coder otherwise reports "0 tokens over 0 message(s)".
+      if (gazelleChat && gazelleChat.totals().messages > 0) {
+        tuiDisplay.warning(gazelleChat.statsLine());
+      }
+      gazelleChat = null;
+      tuiDisplay.success('Coder mode — tools and project context.');
+    }
+    refreshStatusLine();
+  };
+
+  /** One lean conversational turn, in place of the whole agent loop. */
+  const runGazelleTurn = async (input: string): Promise<void> => {
+    const chat = gazelleChat;
+    if (!chat) { enterMode('coder'); return; }
+    if (gazelleTurnInFlight) {
+      tuiDisplay.warning('Still answering — one conversational turn at a time.');
+      return;
+    }
+
+    gazelleTurnInFlight = true;
+    let turn;
+    try {
+      turn = await chat.respond(input);
+    } finally {
+      gazelleTurnInFlight = false;
+    }
+    if (turn.failed) return;
+
+    // :new, :resume, :clear-history and :compact re-seed the chat, and can land
+    // while this reply is still streaming. The conversation we just answered on
+    // is then no longer the REPL's, so writing it back would resurrect history
+    // the user just discarded. The call was still billed, so it is still counted.
+    const stillCurrent = gazelleChat === chat;
+
+    // Carry the conversation into the REPL's own history so :coder, :new and
+    // session persistence all see it — one conversation, two modes.
+    if (stillCurrent) {
+      activeChatHistory = [...chat.history];
+      if (activeChatId && !noSession) {
+        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
+      }
+    }
+
+    // Gazelle turns bill real tokens, so they count against the session
+    // ceiling and show up in /stats — a mode that spent invisibly would let a
+    // long chat sail past a budget the coder path respects.
+    replBudget.recordCall(turn.inputTokens);
+    replBudget.recordTurn();
+    const pricingModel = runtimeConfig.model ?? resolved.model ?? 'unknown';
+    const cost = costFor(pricingModel, turn.inputTokens, turn.outputTokens);
+    cumulative.turns += 1;
+    cumulative.inputTokens += turn.inputTokens;
+    cumulative.outputTokens += turn.outputTokens;
+    cumulative.costUsd += cost;
+    printUsageFooter(tuiDisplay, { inputTokens: turn.inputTokens, outputTokens: turn.outputTokens }, cost);
+
+    // Gazelle said, in its own words, that it needs tools. The reader-driven
+    // loop can accept that with a bare Enter; here Enter submits a line, so
+    // point at :coder instead of inventing a pending-answer state.
+    if (stillCurrent && turn.needsTools) {
+      writeOutput(chalk.hex(FAINT_HEX)('  ↳ needs tools? :coder switches to the full agent — this conversation carries over.'));
+    }
+  };
+
+  async function processLine(input: string) {
+    const replCtx = {
+      rl: null,
+      ctx, display: tuiDisplay,
+      providerConfig: { model: resolved.model!, apiKey: runtimeConfig.apiKey, baseUrl: runtimeConfig.baseUrl ?? undefined },
+      permissions, cumulative,
+      chatState: { projectRoot, activeChatId, activeChatHistory, activeChatTitle, noSession },
+      sessionPath,
+      healthTracker,
+      archimedesOverride,
+      archimedesModelOverride,
+      small1Override,
+      budget: replBudget,
+      mode: replMode,
+    };
+
+    // Check for REPL commands
+    const cmdResult = await handleReplCommand(input, replCtx);
+    if (cmdResult.handled) {
+      if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
+      if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
+      if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
+      if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
+      if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
+      if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
+      // Must come after newHistory: entering gazelle seeds its chat from the
+      // current history, and :resume/:new arrive as a command result too.
+      if (cmdResult.newMode !== undefined) {
+        enterMode(cmdResult.newMode);
+      } else if (cmdResult.newHistory !== undefined && replMode === 'gazelle') {
+        // :new, :resume, :clear-history and :compact all replace the REPL's
+        // history. The live chat holds its own copy, so without re-seeding it
+        // would keep answering from the conversation the user just discarded.
+        gazelleChat = makeGazelleChat();
+      }
+      if (activeChatId) setChatId(activeChatId);
+      return;
+    }
+
+    // In gazelle mode a plain line is conversation, not a task — none of the
+    // coder-path machinery below (verification, Archimedes, tools) applies.
+    if (replMode === 'gazelle') {
+      const stop = replBudget.exhausted();
+      if (stop) {
+        tuiDisplay.warning(
+          `${describeBudgetStop(stop)}. Start a fresh session with :new, or :clear-history to keep this session id.`,
+        );
         return;
       }
-
-      // Run task — pass current conversation history for stay-active mode
-      let result;
       try {
-        const currentProvider = buildProvider(display);
+        await runGazelleTurn(input);
+      } catch (err) {
+        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+        writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+      }
+      return;
+    }
 
-        const doVerify = argv.verify === true || !!fileConfig.verify;
-        if (doVerify) {
-          const { runWithVerification } = await import('../verify/index.js');
-          const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
-          const testCommand = cliTestCommand ?? fileConfig.testCommand;
-          const wrapperResult = await runWithVerification({
-            loopOpts: {
-              provider: currentProvider, task: input,
-              context: ctx, permissions, display,
-              initialHistory: activeChatHistory,
-              maxTurns: resolved.maxTurns,
-              spawnConfig: {
-                apiKey: runtimeConfig.apiKey,
-                baseUrl: runtimeConfig.baseUrl ?? undefined,
-              },
-              sessionPath,
-            },
-            config: { enabled: true, maxRetries, testCommand },
-            projectRoot: ctx.root,
-            display,
-          });
-          result = wrapperResult.loopResult;
-        } else {
-          result = await runAgentLoop({
+    // Nudge (once per session): a REPL session's history carries forward
+    // into every new task typed into it, even ones unrelated to what came
+    // before — task 8 in a session otherwise pays to resend task 1's tool
+    // output. Compaction eventually handles this within one task, but nothing
+    // previously told the user they could start clean between tasks. Fires
+    // once, at the same threshold compaction itself would use, so it doesn't
+    // nag on ordinary-sized sessions.
+    if (!historyNudgeShown && activeChatHistory.length > 0) {
+      const window = getContextWindow(runtimeConfig.model ?? resolved.model ?? '') ?? 128_000;
+      const estimated = estimateContextTokens('', activeChatHistory);
+      if (estimated >= compactionThreshold(window, 0)) {
+        historyNudgeShown = true;
+        tuiDisplay.warning(
+          `This session's history is ~${Math.round(estimated / 1000)}k tokens and gets resent on every task. ` +
+          `If this task is unrelated to earlier ones, :new starts fresh (or :clear-history keeps this session id).`,
+        );
+      }
+    }
+
+    // Refuse the next task rather than aborting one mid-response — same
+    // contract as runCoderConversation's runTask.
+    const budgetStop = replBudget.exhausted();
+    if (budgetStop) {
+      tuiDisplay.warning(
+        `${describeBudgetStop(budgetStop)}. Start a fresh session with :new, or :clear-history to keep this session id.`,
+      );
+      return;
+    }
+
+    // Run task
+    let result;
+    abortController = createAbortController();
+    const abortSignal = abortController.signal;
+    try {
+      const currentProvider = buildProvider(tuiDisplay);
+      pendingBtw = null;
+
+      const doVerify = argv.verify === true || !!fileConfig.verify;
+      if (doVerify) {
+        const { runWithVerification } = await import('../verify/index.js');
+        const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
+        const testCommand = cliTestCommand ?? fileConfig.testCommand;
+        const wrapperResult = await runWithVerification({
+          loopOpts: {
             provider: currentProvider, task: input,
-            context: ctx, permissions, display,
+            context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
             maxTurns: resolved.maxTurns,
+            budget: replBudget,
+            abortSignal,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
               baseUrl: runtimeConfig.baseUrl ?? undefined,
             },
             sessionPath,
+            healthTracker,
+          },
+          config: { enabled: true, maxRetries, testCommand },
+          projectRoot: ctx.root,
+          display: tuiDisplay,
+        });
+        result = wrapperResult.loopResult;
+      } else if (small1Override || (archimedesOverride !== undefined ? archimedesOverride : fileConfig.archimedes?.enabled)) {
+        const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
+        if (!baseArchimedesConfig) {
+          tuiDisplay.warning(reason);
+          result = await runAgentLoop({
+            provider: currentProvider, task: input,
+            context: ctx, permissions, display: tuiDisplay,
+            initialHistory: activeChatHistory,
+            maxTurns: resolved.maxTurns,
+            budget: replBudget,
+            spawnConfig: {
+              apiKey: runtimeConfig.apiKey,
+              baseUrl: runtimeConfig.baseUrl ?? undefined,
+            },
+            sessionPath,
+            abortSignal,
+            healthTracker,
           });
+        } else {
+          tuiDisplay.success(reason);
+          const archimedesConfig = {
+            ...baseArchimedesConfig,
+            ...(archimedesModelOverride ? { modelName: archimedesModelOverride } : {}),
+          };
+          const alternator = new ArchimedesAlternator({
+            archimedesConfig,
+            largeModelProvider: currentProvider,
+            projectRoot: ctx.root,
+            context: ctx,
+            display: tuiDisplay,
+            permissions,
+            initialHistory: activeChatHistory,
+            abortSignal,
+            healthTracker,
+            forceArchimedes: small1Override,
+            maxTurns: resolved.maxTurns,
+          });
+          const altResult = await alternator.run(input);
+          result = altResult.loopResult;
         }
-      } catch (err) {
-        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-        console.error(chalk.hex('#b15439')(`\n  ✗ Unhandled error: ${msg}\n`));
-        ask();
-        return;
-      }
-
-      // Update stay-active history
-      activeChatHistory = result.history;
-
-      // Persist session
-      if (activeChatId && !noSession) {
-        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle);
-      }
-
-      {
-        const { recordEpisode } = await import('../dream/episode.js');
-        recordEpisode(ctx.root, {
-          task: input,
-          model: runtimeConfig.model ?? resolved.model ?? 'unknown',
-          success: result.success,
-          tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
-          durationMs: 0,
+      } else {
+        result = await runAgentLoop({
+          provider: currentProvider, task: input,
+          context: ctx, permissions, display: tuiDisplay,
+          initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
+          budget: replBudget,
+          spawnConfig: {
+            apiKey: runtimeConfig.apiKey,
+            baseUrl: runtimeConfig.baseUrl ?? undefined,
+          },
+          sessionPath,
+          abortSignal,
+          healthTracker,
         });
       }
-
-      cumulative.turns += result.turns;
-      cumulative.toolCalls += result.toolCallCount;
-      cumulative.inputTokens += result.usage.inputTokens;
-      cumulative.outputTokens += result.usage.outputTokens;
-      cumulative.costUsd += result.costUsd;
-
-      if (result.success) {
-        display.summary(result.summary, result.turns, result.toolCallCount);
-        printUsageFooter(display, result.usage, result.costUsd);
-        if (speakEnabled) await speakSummary(result.summary);
+    } catch (err) {
+      if (isAuthError(err)) {
+        // 401/403 from the provider: offer an in-place key update instead of
+        // a bare stack trace. Same stdin dance as the selectors.
+        const wasActive = inputActive;
+        if (wasActive) { stopInput(); enterFullscreenPrompt(); }
+        try {
+          const newKey = await promptAuthKeyUpdate(resolved.model ?? runtimeConfig.model ?? '');
+          if (newKey) {
+            runtimeConfig.apiKey = newKey;
+            writeOutput(chalk.hex('#5a9e6e')('  ✓ Key updated — re-run the task.'));
+          }
+        } finally {
+          if (wasActive) { exitFullscreenPrompt(); startInput(); }
+        }
       } else {
-        display.error(result.summary);
+        const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+        writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
       }
-
-      ask();
-    });
-  };
-
-  // Ctrl+C: if a task is running, prompt to force-quit; second Ctrl+C exits.
-  let ctrlC = 0;
-  rl.on('SIGINT', () => {
-    ctrlC++;
-    if (ctrlC === 1) {
-      console.log(chalk.hex('#cc785c')('\n  ⏳ Press Ctrl+C again to exit (current task will keep running).'));
-      setTimeout(() => { ctrlC = 0; }, 3000);
-    } else {
-      console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
-      process.exit(0);
+      clearAbortController();
+      abortController = null;
+      return;
     }
-  });
 
-  ask();
-  rl.on('close', () => {
-    console.log(chalk.hex('#4e3d30')('\n  Aura closed.\n'));
-    process.exit(0);
-  });
+    // Check if task was cancelled by user
+    if (abortController?.signal.aborted && !result.success) {
+      writeOutput(chalk.hex('#d4903a')('  ⏹ Task cancelled.'));
+      // Don't record episode for cancelled tasks
+      clearAbortController();
+      abortController = null;
+      return;
+    }
+
+    // Update stay-active history
+    try {
+    activeChatHistory = result.history;
+
+    // Persist session
+    if (activeChatId && !noSession) {
+      await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle, sessionUsageFrom(result));
+    }
+
+    {
+      const { recordEpisode } = await import('../dream/episode.js');
+      recordEpisode(ctx.root, {
+        task: input,
+        model: runtimeConfig.model ?? resolved.model ?? 'unknown',
+        success: result.success,
+        tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+        durationMs: 0,
+      });
+    }
+
+    cumulative.turns += result.turns;
+    cumulative.toolCalls += result.toolCallCount;
+    cumulative.inputTokens += result.usage.inputTokens;
+    cumulative.outputTokens += result.usage.outputTokens;
+    cumulative.costUsd += result.costUsd;
+
+    if (result.success) {
+      tuiDisplay.summary(result.summary, result.turns, result.toolCallCount);
+      printUsageFooter(tuiDisplay, result.usage, result.costUsd);
+      if (speakEnabled) await speakSummary(result.summary);
+    } else {
+      tuiDisplay.error(result.summary);
+    }
+
+    clearAbortController();
+    abortController = null;
+
+    // Process any :btw that was typed during the loop
+    if (pendingBtw) {
+      const q = pendingBtw;
+      pendingBtw = null;
+      abortController = createAbortController();
+      const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
+      writeOutput(chalk.hex(FAINT_HEX)('  Side question: "' + q + '"'));
+      const btwResult = await runBtwQuery(q, buildProvider(tuiDisplay), ctx);
+      writeOutput(renderBtwAnswer(btwResult.answer, btwResult.tokens));
+      clearAbortController();
+      abortController = null;
+    }
+    } catch (err) {
+      const msg = err instanceof Error ? (err.stack || err.message) : String(err);
+      writeOutput(chalk.hex('#b15439')('  \u2717 Unhandled error after task completed: ' + msg));
+    }
+  }
+
+  writeOutput(chalk.hex(TEXT_DIM_HEX)('  Type a task, or :help for commands.'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REPL command handler
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ChatState {
-  projectRoot: string;
-  activeChatId: string | undefined;
-  activeChatHistory: import('../providers/types.js').HistoryMessage[];
-  activeChatTitle: string | undefined;
-  noSession: boolean;
-}
+// ChatState and ReplCommandResult are defined in repl-session-commands.ts and
+// imported above — that module owns them because it is the one that can be
+// loaded without executing this file.
 
 interface ReplCtx {
   // Shared REPL readline. Interactive commands must reuse this instead of
   // creating their own interface — two readlines on one stdin both echo
   // every keypress (doubled characters), and closing the second one pauses
   // stdin, which drains the event loop and kills the REPL.
-  rl: readline.Interface;
+  rl: readline.Interface | null;
   ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   display: ReturnType<typeof createTerminalDisplay>;
   providerConfig: { model: string; apiKey?: string; baseUrl?: string };
@@ -1057,109 +1795,371 @@ interface ReplCtx {
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
   sessionPath: string | undefined;
+  healthTracker: ContextHealthTracker;
+  archimedesOverride: boolean | undefined;
+  archimedesModelOverride: string | undefined;
+  small1Override: boolean;
+  /** The REPL-process budget, so commands that start a conversation over can
+   *  clear its totals. See SessionBudget.reset. */
+  budget: SessionBudget;
+  /** Which loop typed lines currently run through — read by :gazelle/:coder to
+   *  answer "already there", and by the commands that redraw the status line. */
+  mode: ReplMode;
 }
 
-interface ReplCommandResult {
-  handled: boolean;
-  newChatId?: string | undefined;
-  newHistory?: import('../providers/types.js').HistoryMessage[];
-  newTitle?: string | undefined;
-}
-
-/** Best-effort map from a model id to the env-var name its key lives under. */
+/**
+ * Best-effort map from a model id to the env-var name its key lives under.
+ * Delegates to the factory helper — custom providers from .aura.json are
+ * covered because registerCustomProviders runs at startup.
+ */
 function envNameForModel(model: string): string | undefined {
-  const m = model.toLowerCase();
-  // Custom providers from .aura.json declare their own apiKeyEnv + prefixes.
-  for (const p of fileConfig.providers ?? []) {
-    if (p.apiKeyEnv && (p.prefixes ?? []).some(pre => m.startsWith(pre.toLowerCase()))) {
-      return p.apiKeyEnv;
-    }
-  }
-  if (m.startsWith('deepseek/')) return 'DEEPSEEK_API_KEY';
-  if (m.startsWith('glm-') || m.startsWith('zhipu')) return 'ZHIPU_API_KEY';
-  if (m.startsWith('mimo-')) return 'XIAOMI_API_KEY';
-  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return 'OPENAI_API_KEY';
-  if (m.startsWith('claude') || m.startsWith('anthropic')) return 'ANTHROPIC_API_KEY';
-  if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
-  if (m.includes('grok')) return 'XAI_API_KEY';
-  if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
-  return undefined;
+  return apiKeyEnvVarForModel(model);
 }
 
 function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; err: string } {
+  // `:model granite4.1:3b` (bare Ollama tag) must not route to the OpenAI
+  // default — normalize before switching or persisting.
+  newModel = normalizeModelId(newModel);
   const prevModel = runtimeConfig.model;
   const prevResolved = resolved.model;
+  const prevApiKey = runtimeConfig.apiKey;
+  const prevBaseUrl = runtimeConfig.baseUrl;
+  const prevResolvedBaseUrl = resolved.baseUrl;
   runtimeConfig.model = newModel;
   resolved.model = newModel; // buildProvider reads resolved.model — keep in sync
+  const crossing = isProviderChange(prevModel ?? prevResolved, newModel);
+  if (crossing) {
+    // The old provider's key/baseUrl must not follow the model across a
+    // provider boundary — createProvider gives config.apiKey priority over
+    // the per-provider env fallback, so a stale key would be sent to the
+    // NEW provider's endpoint. Clear both so the factory falls through to
+    // the new provider's own getApiKey()/default-endpoint chain.
+    runtimeConfig.apiKey = undefined;
+    runtimeConfig.baseUrl = undefined;
+    resolved.baseUrl = undefined;
+  }
   try {
     const test = buildProvider(c.display);
     c.providerConfig.model = newModel;
+    if (crossing) {
+      c.providerConfig.apiKey = undefined;
+      c.providerConfig.baseUrl = undefined;
+    }
     console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
+    // Update the TUI status line so the model change is immediately visible.
+    // The mode marker has to be re-appended — setStatusLine replaces the line.
+    setStatusLine([test.name, newModel, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
+      .filter(Boolean).join(' · '));
+    // Remember the choice for the next session. The saved baseUrl belongs to
+    // the wizard-configured model — keep it only when switching back to that
+    // model, otherwise the factory's per-provider default applies.
+    try {
+      saveGlobalConfig({
+        provider: globalCfg?.provider ?? test.name,
+        // loadGlobalConfig treats an empty apiKeyEnv as "not configured", so
+        // resolve from the NEW model's provider — never inherit the old
+        // provider's env name across a provider change (a silently wrong
+        // apiKeyEnv on disk pairs the wrong key with the model on the next
+        // startup).
+        apiKeyEnv: apiKeyEnvForModelSwitch(newModel, prevModel ?? prevResolved, globalCfg?.apiKeyEnv),
+        defaultModel: newModel,
+        baseUrl: savedProvider && newModel === savedProvider.model ? savedProvider.baseUrl : undefined,
+      });
+    } catch { /* persistence is best-effort; the switch itself succeeded */ }
     return { ok: true };
   } catch (e) {
     runtimeConfig.model = prevModel;  // rollback on error
     resolved.model = prevResolved;
+    runtimeConfig.apiKey = prevApiKey;
+    runtimeConfig.baseUrl = prevBaseUrl;
+    resolved.baseUrl = prevResolvedBaseUrl;
     return { ok: false, err: String(e) };
   }
 }
+
+/**
+ * After a model switch, make sure the new provider actually has an API key
+ * (env var, key store, or runtime override). If none is configured, prompt
+ * for one and persist it via the key store — same behavior as :apikey.
+ * No-ops for models that need no key (ollama/local, unknown prefixes).
+ */
+async function ensureApiKeyForModel(c: ReplCtx): Promise<void> {
+  const model = resolved.model ?? runtimeConfig.model ?? '';
+  const envName = envNameForModel(model);
+  if (!envName) return;
+  if (runtimeConfig.apiKey || getApiKey(envName)) return;
+
+  // Same stdin-collision dance as showModelSelector; no-ops when the caller
+  // already stopped TUI input (inputActive is false inside the selector).
+  const wasActive = inputActive;
+  if (wasActive) { stopInput(); enterFullscreenPrompt(); }
+  try {
+    console.log(chalk.hex('#d4903a')(`\n  ⚠ No API key configured for this provider (${envName} is not set).`));
+    const answer = await new Promise<string>(resolve => {
+      const promptText = chalk.hex('#cc785c')(`  Enter ${envName} (press Enter to skip): `);
+      if (c.rl) { c.rl.question(promptText, resolve); return; }
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(promptText, ans => { rl.close(); resolve(ans); });
+    });
+    const key = answer.trim();
+    if (!key) {
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Skipped — requests will fail until a key is set (:apikey <key>).\n`));
+      return;
+    }
+    runtimeConfig.apiKey = key;
+    c.providerConfig.apiKey = key;
+    try {
+      const p = saveKey(envName, key);
+      console.log(chalk.hex('#5a9e6e')(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).\n`));
+    } catch (e) {
+      console.log(chalk.hex('#5a9e6e')(`  ✓ API key set for this session (could not persist: ${String(e)}).\n`));
+    }
+  } finally {
+    if (wasActive) { exitFullscreenPrompt(); startInput(); }
+  }
+}
+
+/**
+ * Zhipu GLM is served from two endpoints with separate billing:
+ *   glm-* / zhipu/*     → general API (pay-as-you-go)
+ *   zhipu-coding/*      → Coding Plan (https://api.z.ai/api/coding/paas/v4)
+ * When the user switches to a plain GLM model, ask which plan they are on
+ * and re-route to the zhipu-coding/ prefix if they picked the Coding Plan.
+ */
+async function ensureZhipuPlanChoice(c: ReplCtx): Promise<void> {
+  const model = resolved.model ?? runtimeConfig.model ?? '';
+  const m = model.toLowerCase();
+  if (!(m.startsWith('glm-') || m.startsWith('zhipu/'))) return;
+
+  const wasActive = inputActive;
+  if (wasActive) { stopInput(); enterFullscreenPrompt(); }
+  try {
+    console.log(chalk.hex('#cc785c')('\n  GLM billing plan:'));
+    console.log(`    ${chalk.hex('#cc785c')('1')}. Pay-as-you-go ${chalk.hex(FAINT_HEX)('(general API)')}`);
+    console.log(`    ${chalk.hex('#cc785c')('2')}. Coding Plan   ${chalk.hex(FAINT_HEX)('(api.z.ai coding endpoint)')}`);
+    const answer = await new Promise<string>(resolve => {
+      const promptText = chalk.hex('#cc785c')('  Which plan? [1/2, Enter = 1]: ');
+      if (c.rl) { c.rl.question(promptText, resolve); return; }
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(promptText, ans => { rl.close(); resolve(ans); });
+    });
+    if (answer.trim() === '2') {
+      const glmModel = model.replace(/^zhipu\//, '');
+      const r = trySetModel(c, `zhipu-coding/${glmModel}`);
+      if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+    } else {
+      console.log(chalk.hex(TEXT_DIM_HEX)('  Using pay-as-you-go (general endpoint).\n'));
+    }
+  } finally {
+    if (wasActive) { exitFullscreenPrompt(); startInput(); }
+  }
+}
+
+/**
+ * Post-switch follow-ups shared by every model-switch path: make sure the
+ * new provider has an API key, then provider-specific plan routing.
+ */
+async function postModelSwitch(c: ReplCtx): Promise<void> {
+  await ensureApiKeyForModel(c);
+  await ensureZhipuPlanChoice(c);
+}
+
+/**
+ * Maps modelProviderFamily() names onto PROVIDER_LIST ids so :model can jump
+ * straight to the current provider's model list. Families with no selector
+ * entry (xai, openai-compatible fallback) open the provider list instead.
+ */
+const FAMILY_TO_PROVIDER_ID: Record<string, string | undefined> = {
+  deepseek: 'deepseek',
+  xiaomi: 'mimo',
+  zhipu: 'glm',
+  anthropic: 'anthropic',
+  google: 'gemini',
+  openrouter: 'openrouter',
+  opencode: 'opencode-zen',
+  ollama: 'ollama',
+  groq: 'groq',
+  nvidia: 'nvidia',
+  huggingface: 'huggingface',
+  kimi: 'kimi',
+  qwen: 'qwen',
+  lmstudio: 'lmstudio',
+  minimax: 'minimax',
+  stepfun: 'stepfun',
+  fireworks: 'fireworks',
+  upstage: 'upstage',
+  arcee: 'arcee',
+  tencent: 'tencent',
+  gmi: 'gmi',
+  kilocode: 'kilocode',
+  alibaba: 'alibaba',
+  'openai-compatible': 'openai',
+};
 
 /**
  * Interactive model selector — shows all models grouped by provider,
  * lets the user pick by number or type a custom model ID.
  */
 async function showModelSelector(c: ReplCtx): Promise<void> {
-  const allModels = getAllModels();
+  // Same stdin-collision fix as :provider (see handleReplCommand): the TUI's
+  // raw-mode stdin handler competes with any prompt for keystrokes, so stop
+  // TUI input entirely (this also hides the main input box), let a plain
+  // readline own stdin, then restart TUI input once the selector exits.
+  // enterFullscreenPrompt resets the scroll region so the selector's output
+  // isn't crammed into the small scroll area (numbers were invisible because
+  // the bottom block was overwriting them).
+  const wasInputActive = inputActive;
+  if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
+  try {
+    // Grouped list where section headers are display-only: they carry no
+    // number, so numbering is gap-free and a header can never be selected.
+    const rows = buildModelRows(getAllModels());
 
-  // Build flat numbered list grouped by provider
-  const entries: { id: string; label: string; provider: string }[] = [];
-  let currentProvider = '';
-  for (const m of allModels) {
-    if (m.provider !== currentProvider) {
-      currentProvider = m.provider;
-      entries.push({ id: '', label: chalk.hex('#8a7768').bold(`  ── ${currentProvider} ──`), provider: currentProvider });
+    console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
+    // Multi-column per provider group — 100+ models in a single column push
+    // the top of the list off-screen (the selector runs outside the scroll
+    // region, so there is no way to scroll back up).
+    const termWidth = process.stdout.columns ?? 80;
+    let group: Extract<ModelRow, { kind: 'model' }>[] = [];
+    const flushGroup = () => {
+      if (group.length === 0) return;
+      const cellWidth = Math.max(...group.map(m => `${String(m.num).padStart(3)}. ${m.name}`.length)) + 3;
+      for (const line of layoutColumns(group, cellWidth, termWidth, 4)) {
+        console.log('    ' + line.map(m => {
+          const plain = `${String(m.num).padStart(3)}. ${m.name}`;
+          return chalk.hex('#cc785c')(String(m.num).padStart(3)) + '. '
+            + chalk.hex(TEXT_HEX)(m.name)
+            + ' '.repeat(cellWidth - plain.length);
+        }).join(''));
+      }
+      group = [];
+    };
+    for (const r of rows) {
+      if (r.kind === 'header') {
+        flushGroup();
+        console.log(chalk.hex(TEXT_DIM_HEX).bold(`  ── ${r.provider} ──`));
+      } else {
+        group.push(r);
+      }
     }
-    entries.push({
-      id: m.id,
-      label: `    ${chalk.hex('#cc785c')(String(entries.length + 1).padStart(2))}. ${chalk.hex('#ede0cc')(m.name.padEnd(30))} ${chalk.hex('#4e3d30')(m.speed)}`,
-      provider: m.provider,
+    flushGroup();
+    console.log(chalk.hex(FAINT_HEX)(`\n  Current: ${runtimeConfig.model}`));
+    console.log(chalk.hex(FAINT_HEX)('  Type a number, model ID, or press Enter to cancel:\n'));
+
+    const answer = await new Promise<string>(resolve => {
+      const promptRl = c.rl;
+      if (!promptRl) {
+        // TUI mode: TUI input is stopped above, so a temporary readline can
+        // own stdin without the two-readers-one-stream conflict.
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        rl.question(chalk.hex('#cc785c')('  ▸ '), ans => { rl.close(); resolve(ans); });
+        return;
+      }
+      promptRl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
     });
-  }
+    const choice = answer.trim();
 
-  console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
-  for (const e of entries) {
-    console.log(e.label);
-  }
-  console.log(chalk.hex('#4e3d30')(`\n  Current: ${runtimeConfig.model}`));
-  console.log(chalk.hex('#4e3d30')('  Type a number, model ID, or press Enter to cancel:\n'));
-
-  const answer = await new Promise<string>(resolve => {
-    c.rl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
-  });
-  const choice = answer.trim();
-
-  if (!choice) {
-    console.log(chalk.hex('#4e3d30')('  Cancelled.\n'));
-    return;
-  }
-
-  // Try as a number
-  const num = parseInt(choice, 10);
-  if (!isNaN(num) && num >= 1 && num <= entries.length) {
-    const selected = entries[num - 1];
-    if (selected.id) {
-      trySetModel(c, selected.id);
-    } else {
-      console.log(chalk.hex('#b15439')('  ✗ That\'s a section header, pick a model number.'));
+    if (!choice) {
+      console.log(chalk.hex(FAINT_HEX)('  Cancelled.\n'));
+      return;
     }
-    return;
-  }
 
-  // Treat as a raw model ID
-  trySetModel(c, choice);
+    // Try as a number — every listed number is a real, selectable model
+    const num = parseInt(choice, 10);
+    if (!isNaN(num) && num >= 1 && num <= modelCount(rows)) {
+      const r = trySetModel(c, modelIdForNumber(rows, num)!);
+      if (r.ok) await postModelSwitch(c);
+      return;
+    }
+
+    // Treat as a raw model ID
+    const r = trySetModel(c, choice);
+    if (r.ok) await postModelSwitch(c);
+  } finally {
+    if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
+  }
 }
 
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
   const unhandled: ReplCommandResult = { handled: false };
+
+  // ── :q — Task queue (with subcommands, keep bare :q as quit) ─────────────
+  if (input.startsWith(':q ')) {
+    const sub = input.slice(3).trimStart();
+    const { addToQueue, loadQueue, removeFromQueue, clearQueue, runQueueItem, formatQueue }
+      = await import('../repl/queue.js');
+
+    if (sub.startsWith('add ')) {
+      const prompt = sub.slice(4).trim();
+      if (!prompt) {
+        c.display.warning('Usage: :q add <prompt> -- add a task to the queue.');
+        return { handled: true };
+      }
+      const item = addToQueue(prompt);
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Queued #${loadQueue().length}: "${prompt.slice(0, 60)}"\n`));
+      return { handled: true };
+    }
+
+    if (sub === 'list') {
+      const items = loadQueue();
+      console.log(formatQueue(items));
+      return { handled: true };
+    }
+
+    if (sub.startsWith('run ')) {
+      const n = parseInt(sub.slice(4).trim(), 10);
+      if (isNaN(n) || n < 1) {
+        c.display.warning('Usage: :q run <number> — run the task at that position (see :q list).');
+        return { handled: true };
+      }
+      const items = loadQueue();
+      if (n > items.length) {
+        c.display.warning(`Queue only has ${items.length} item(s).`);
+        return { handled: true };
+      }
+      c.display.agentThinking();
+      const result = await runQueueItem(n - 1, buildProvider(c.display), c.ctx, c.permissions, c.display);
+      if (!result) {
+        c.display.warning('Could not run that item.');
+        return { handled: true };
+      }
+      c.display.success(`Queue item #${n}: ${result.success ? 'done' : 'failed'}`);
+      if (result.output) {
+        console.log(chalk.hex(TEXT_HEX)(`  ${result.output.slice(0, 240)}`));
+      }
+      console.log(chalk.hex(FAINT_HEX)(`  ${result.turns} turn(s) · ${result.toolCalls} tool call(s).\n`));
+      return { handled: true };
+    }
+
+    if (sub.startsWith('drop ')) {
+      const n = parseInt(sub.slice(5).trim(), 10);
+      if (isNaN(n) || n < 1) {
+        c.display.warning('Usage: :q drop <number> — remove the task at that position.');
+        return { handled: true };
+      }
+      const removed = removeFromQueue(n - 1);
+      if (!removed) {
+        c.display.warning(`No item at position ${n}.`);
+        return { handled: true };
+      }
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Dropped #${n}: "${removed.prompt.slice(0, 60)}"\n`));
+      return { handled: true };
+    }
+
+    if (sub === 'clear') {
+      const count = loadQueue().length;
+      if (count === 0) {
+        c.display.warning('Queue is already empty.');
+        return { handled: true };
+      }
+      clearQueue();
+      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Queue cleared (${count} item(s) removed).\n`));
+      return { handled: true };
+    }
+
+    c.display.warning('Usage: :q add <prompt> | :q list | :q run <n> | :q drop <n> | :q clear');
+    return { handled: true };
+  }
 
   if (input === ':quit' || input === ':q' || input === '/exit') {
     process.exit(0);
@@ -1167,7 +2167,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   if (input === ':speak') {
     speakEnabled = !speakEnabled;
-    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#8a7768')(
+    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#a68a2a')(
       `  🔊 Voice replies ${speakEnabled ? 'ON — Aura will read its answers aloud' : 'OFF'}.\n`,
     ));
     return { handled: true };
@@ -1195,15 +2195,84 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':dream') {
+  if (input === ':dream' || input === ':dream full') {
+    const full = input === ':dream full';
     const { runDream } = await import('../dream/dream.js');
     c.display.agentThinking();
-    const res = await runDream(c.ctx.root, buildProvider(c.display));
-    if (res.episodeCount === 0) {
-      c.display.warning('No new episodes since the last dream.');
+    const res = await runDream({ projectRoot: c.ctx.root, provider: buildProvider(c.display), full });
+    if (res.skipped) {
+      c.display.warning(res.providerError
+        ? `Dream skipped (episodes preserved): ${res.providerError}`
+        : (res.reason ?? 'Nothing to consolidate.'));
     } else {
-      c.display.success(`Dream written: ${res.dreamPath} (${res.episodeCount} episodes)`);
+      c.display.success(`Dream written: ${res.path} (${res.episodeCount} episodes${full ? ', full run' : ''})`);
       if (res.reconciled) c.display.success('Reconciliation also ran (>=3 dreams exist) -> dreams/.reconciled.md');
+    }
+    return { handled: true };
+  }
+  if (input.startsWith(':research ') || input === ':research') {
+    const topic = input.slice(':research '.length).trim();
+    if (!topic) {
+      c.display.warning('Usage: :research <topic> -- runs a multi-step research pass and saves to research/*.md.');
+      return { handled: true };
+    }
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Researching "${topic}"…\n`));
+    try {
+      const { runResearch } = await import('../research/research.js');
+      const res = await runResearch({
+        projectRoot: c.ctx.root,
+        topic,
+        provider: buildProvider(c.display),
+        context: c.ctx,
+        permissions: c.permissions,
+        display: c.display,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+  if (input === ':confessions') {
+    const { listConfessions } = await import('../agent/confess.js');
+    const confs = listConfessions();
+    if (confs.length === 0) {
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No confessions yet. Run :confess after a high-token episode.\n'));
+    } else {
+      console.log(chalk.hex('#cc785c').bold(`\n  ${confs.length} confession(s):\n`));
+      for (const c of confs) {
+        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${c.file}`));
+        console.log(chalk.hex(FAINT_HEX)(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
+      }
+      console.log('');
+    }
+    return { handled: true };
+  }
+  if (input === ':confess') {
+    const { runConfession, findEpisodeToConfess } = await import('../agent/confess.js');
+    const targetEp = findEpisodeToConfess(c.ctx.root);
+    if (!targetEp) {
+      console.log(chalk.hex('#cc9e5c')('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
+      return { handled: true };
+    }
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
+    try {
+      // Use a different model than the one that made the mistake
+      const confessorModel = targetEp.model.startsWith('deepseek') ? 'glm-5.2' : 'deepseek/deepseek-chat';
+      const { createProvider } = await import('../providers/factory.js');
+      const provider = createProvider({ model: confessorModel });
+      const result = await runConfession({
+        projectRoot: c.ctx.root,
+        episodeId: targetEp.id,
+        provider,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Confession written: ${result.path}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
+      console.log(chalk.hex('#cc9e6c')('  Permanent lesson:'));
+      console.log(chalk.hex(TEXT_HEX)(`  "${result.lesson}"\n`));
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -1213,11 +2282,60 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (!res) {
       c.display.warning('No dreams yet. Run :dream first.');
     } else {
-      console.log(chalk.hex('#8a7768')(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
       console.log(res.content);
     }
     return { handled: true };
   }
+  // ── :mine — Baby Archimedes experience mining (src/mining/). The base pass is
+  // zero-LLM (pure clustering over episodes/*.json); --refine additionally
+  // runs Papa Archimedes, one local-model call per qualifying concept, appending
+  // accepted lessons to training-data/<date>.jsonl.
+  if (input === ':mine' || input === ':mine --refine') {
+    const refine = input.endsWith('--refine');
+    const { mineExperience } = await import('../mining/extract.js');
+    const mined = await mineExperience(c.ctx.root);
+    if (mined.episodeCount === 0) {
+      c.display.warning('No episodes to mine yet — run some tasks first.');
+      return { handled: true };
+    }
+    console.log(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
+    for (const con of mined.concepts.slice(0, 15)) {
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${con.concept}`) + chalk.hex(FAINT_HEX)(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
+      if (con.keywords.length > 0) console.log(chalk.hex(FAINT_HEX)(`    keywords: ${con.keywords.join(', ')}`));
+    }
+    if (mined.concepts.length > 15) {
+      console.log(chalk.hex(FAINT_HEX)(`  … and ${mined.concepts.length - 15} more.`));
+    }
+    if (refine) {
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refining with the local Archimedes model (Papa Archimedes)…'));
+      const { refineConcepts } = await import('../mining/refine.js');
+      const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
+      if (res.accepted.length > 0) {
+        console.log(chalk.hex('#5a9e6e')(`  ✓ ${res.accepted.length} training example(s) appended: ${res.outputPath}`));
+        console.log(chalk.hex(FAINT_HEX)(`    ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.\n`));
+      } else {
+        c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
+      }
+    } else if (mined.concepts.length > 0) {
+      console.log(chalk.hex(FAINT_HEX)('\n  :mine --refine judges these with the local Archimedes model and writes training-data/*.jsonl\n'));
+    }
+    return { handled: true };
+  }
+
+  if (input === ':doctor' || input.startsWith(':doctor')) {
+    const fix = input.includes('--fix');
+    const offline = input.includes('--offline');
+    c.display.agentThinking();
+    const report = await runDoctor({ projectRoot: c.ctx.root, fix, offline });
+    if (typeof writeOutput === 'function') {
+      writeOutput(formatDoctorReport(report));
+    } else {
+      console.log(formatDoctorReport(report));
+    }
+    return { handled: true };
+  }
+
   if (input.startsWith(':machina ') || input === ':machina') {
     const machinaTask = input.slice(':machina '.length).trim();
     if (!machinaTask) {
@@ -1270,61 +2388,113 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     return { handled: true };
   }
-  if (input === ':help' || input === '/help') {
-    console.log(chalk.hex('#8a7768')([
-      '',
-      '  ── Session ──────────────────────────────────────',
-      '  :id                     Show current chat ID',
-      '  :sessions               List all saved sessions',
-      '  :resume                 Resume the latest session',
-      '  :resume <id>            Resume a specific session by ID',
-      '  :new                    Start a new session (fresh history)',
-      '  :history                Show turn count in current session',
-      '  :clear-history          Wipe conversation history (keep session ID)',
-      '  :save [title]           Rename / save current session',
-      '  :delete <id>            Delete a saved session',
-      '',
-      '  ── Model / API ──────────────────────────────────',
-      '  :model                  Interactive model selector',
-      '  :model <id>             Switch to a specific model',
-      '  :models                 List all available models',
-      '  :provider               Provider setup wizard (pick provider, model, key)',
-      '  :apikey <key>           Set API key for current session',
-      '',
-      '  ── Workflows ─────────────────────────────────────',
-      '  :workflows              List all saved workflows',
-      '  :workflow               Create & run a multi-step workflow',
-      '    <name> "step1" "step2" ...',
-      '  :resume-workflow <id>   Resume a paused/failed workflow',
-      '  :machina <task>         Run task with self-verification + auto-retry',
-      '  :council <task>         2-3 parallel read-only specialists, then synthesis',
-      '',
-      '  ── Memory ───────────────────────────────────────',
-      '  :dream                  Consolidate recent episodes into a dream entry',
-      '  :rem                    Show reconciled memory (or latest dream)',
-      '',
-      '  ── Voice ─────────────────────────────────────────',
-      '  :speak                  Toggle reading replies aloud (or launch with --speak)',
-      '',
-      '  ── Safety ────────────────────────────────────────',
-      '  :approve                Toggle auto-approve (skip per-command y/N prompts)',
-      '  :approve all            Approve everything this session',
-      '  :approve off            Re-enable confirmation for destructive commands',
-      '',
-      '  ── Context / Stats ──────────────────────────────',
-      '  :context                Show loaded project context',
-      '  :graph                  Show codebase knowledge graph summary',
-      '  :graph refresh          Reload graph from graphify-out/graph.json',
-      '  :plans                  List saved execution plans',
-      '  :viz, :dashboard        Generate and open the memory dashboard',
-      '  /stats, /usage          Show token + cost usage this session',
-      '  /clear, /reset          Reset cumulative usage stats',
-      '',
-      '  ── General ──────────────────────────────────────',
-      '  :quit, :q, /exit        Exit',
-      '',
-    ].join('\n')));
+  // ── :ecclesia — 5-agent independent research council (research/council.ts).
+  // Distinct from :council above (mixture-of-agents over the current task):
+  // the Ecclesia runs N agents that research a topic WITHOUT seeing each
+  // other's findings, then one synthesis call reconciles them into a verdict.
+  if (input.startsWith(':ecclesia ') || input === ':ecclesia') {
+    let topic = input.slice(':ecclesia '.length).trim();
+    if (!topic) {
+      c.display.warning('Usage: :ecclesia <topic> [--panel <model>] [--seats <n>] -- N independent research agents (default 5) + a synthesis verdict, saved to council/*.md|.html.');
+      return { handled: true };
+    }
+    let panelModel: string | undefined;
+    let panelSize: number | undefined;
+    const panelMatch = topic.match(/\s--panel\s+(\S+)/);
+    if (panelMatch) { panelModel = panelMatch[1]; topic = topic.replace(panelMatch[0], '').trim(); }
+    const seatsMatch = topic.match(/\s--seats\s+(\d+)/);
+    if (seatsMatch) { panelSize = Number(seatsMatch[1]); topic = topic.replace(seatsMatch[0], '').trim(); }
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Convening the Ecclesia on "${topic}"…\n`));
+    try {
+      const { runCouncil } = await import('../research/council.js');
+      const res = await runCouncil({
+        projectRoot: c.ctx.root, topic,
+        synthesisProvider: buildProvider(c.display),
+        context: c.ctx, permissions: c.permissions, display: c.display,
+        panelSize, panelModel,
+        configuredModel: c.providerConfig.model,
+      });
+      console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict written: ${res.path}`));
+      console.log(chalk.hex('#5a9e6e')(`    HTML: ${res.htmlPath}`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.panelSize} seats on ${res.panelModel}.`));
+      if (res.agentFailures > 0) {
+        c.display.warning(`${res.agentFailures} of ${res.panelSize} panel agent(s) failed — verdict is based on the rest.`);
+      }
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
     return { handled: true };
+  }
+  // ── :btw — Side channel question (read-only, no history) ────────────────
+  if (input.startsWith(':btw ')) {
+    const question = input.slice(5).trim();
+    if (!question) {
+      c.display.warning('Usage: :btw <question> — ask a quick side question without interrupting the current task.');
+      return { handled: true };
+    }
+    const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
+    c.display.agentThinking();
+    const result = await runBtwQuery(question, buildProvider(c.display), c.ctx);
+    console.log(renderBtwAnswer(result.answer, result.tokens));
+    return { handled: true };
+  }
+
+  if (input === ':small1' || input === ':small1 on') {
+    const { getEpisodeStats } = await import('../archimedes/index.js');
+    const stats = await getEpisodeStats(c.ctx.root);
+    const attempts = stats.archimedesSuccesses + stats.archimedesFailures;
+    const score = attempts > 0
+      ? `${Math.round((stats.archimedesSuccesses / attempts) * 100)}% over ${attempts} attempt(s)`
+      : 'no recorded attempts yet';
+    c.display.success(
+      `Starting with Archimedes (small1 override — competence gate bypassed, current score: ${score}). ` +
+      `Verification and escalation still apply; attempts update the score normally. :small1 off to revert.`,
+    );
+    return { handled: true, newSmall1Override: true };
+  }
+
+  if (input === ':small1 off') {
+    c.display.success('small1 override: OFF — normal Archimedes competence routing restored.');
+    return { handled: true, newSmall1Override: false };
+  }
+
+  if (input === ':archon') {
+    c.display.success('Archimedes Alternator: ON for this session (overrides .aura.json until :archoff or restart).');
+    return { handled: true, newArchimedesOverride: true };
+  }
+
+  if (input === ':archoff') {
+    c.display.success('Archimedes Alternator: OFF for this session (overrides .aura.json until :archon or restart).');
+    return { handled: true, newArchimedesOverride: false };
+  }
+
+  if (input.startsWith(':archmodel ')) {
+    const modelTag = input.slice(11).trim();
+    if (!modelTag) {
+      c.display.warning('Usage: :archmodel <ollama-model-tag>  e.g. :archmodel qwen3-vl:4b');
+      return { handled: true };
+    }
+    return { handled: true, newArchimedesModelOverride: modelTag };
+  }
+
+  if (input === ':archmodel') {
+    const current = c.archimedesModelOverride ?? '(from .aura.json or auto-detect)';
+    c.display.success(`Archimedes model: ${current}`);
+    return { handled: true };
+  }
+
+  if (input === ':help' || input === '/help') {
+    console.log(chalk.hex(TEXT_DIM_HEX)(HELP_TEXT.join('\n')));
+    return { handled: true };
+  }
+
+  // ── Modes ────────────────────────────────────────────────────────────────
+  // :coder / :gazelle. The REPL owns the switch itself (see enterMode); these
+  // only report the intent. In repl-mode-commands.ts so they can be tested —
+  // being unreachable from a test is how they stayed advertised-but-unhandled.
+  {
+    const modeResult = handleModeCommand(input, { mode: c.mode, display: c.display });
+    if (modeResult) return modeResult;
   }
 
   // ── Session commands ─────────────────────────────────────────────────────
@@ -1332,11 +2502,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':id') {
     const cs = c.chatState;
     if (cs.activeChatId) {
-      console.log(chalk.hex('#8a7768')(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
-      if (cs.activeChatTitle) console.log(chalk.hex('#8a7768')(`  Title:   ${cs.activeChatTitle}`));
-      console.log(chalk.hex('#4e3d30')(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
+      if (cs.activeChatTitle) console.log(chalk.hex(TEXT_DIM_HEX)(`  Title:   ${cs.activeChatTitle}`));
+      console.log(chalk.hex(FAINT_HEX)(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
     } else {
-      console.log(chalk.hex('#8a7768')('\n  No active session (--no-session mode).\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No active session (--no-session mode).\n'));
     }
     return { handled: true };
   }
@@ -1344,7 +2514,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':sessions') {
     const sessions = sessionStore.listSessions(c.chatState.projectRoot);
     if (sessions.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved sessions.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
       for (const s of sessions) {
@@ -1353,8 +2523,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
         console.log(
           `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-          `${chalk.hex('#ede0cc')(s.title.slice(0, 40).padEnd(41))} ` +
-          `${chalk.hex('#4e3d30')(`${turns}t · ${updated}`)}${marker}`,
+          `${chalk.hex(TEXT_HEX)(s.title.slice(0, 40).padEnd(41))} ` +
+          `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}${marker}`,
         );
       }
       console.log();
@@ -1362,98 +2532,70 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':resume' || input === ':resume ') {
-    const latest = sessionStore.findLatestSession(c.chatState.projectRoot);
-    if (!latest) {
-      console.log(chalk.hex('#8a7768')('\n  No saved sessions to resume.\n'));
-      return { handled: true };
-    }
-    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
-    return { handled: true, newChatId: latest.id, newHistory: latest.history, newTitle: latest.title };
-  }
-
-  if (input.startsWith(':resume ')) {
-    const id = input.slice(':resume '.length).trim();
-    const loaded = await sessionStore.loadSession(c.chatState.projectRoot, id);
-    if (!loaded) {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
-      return { handled: true };
-    }
-    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
-    return { handled: true, newChatId: loaded.id, newHistory: loaded.history, newTitle: loaded.title };
-  }
-
-  if (input === ':new') {
-    const newId = sessionStore.generateId();
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
-    return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
-  }
-
-  if (input === ':history') {
-    const turns = Math.floor(c.chatState.activeChatHistory.length / 2);
-    console.log(chalk.hex('#8a7768')(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
-    return { handled: true };
-  }
-
-  if (input === ':clear-history') {
-    console.log(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
-    return { handled: true, newHistory: [] };
-  }
-
-  if (input === ':save' || input.startsWith(':save ')) {
-    const title = input.startsWith(':save ') ? input.slice(':save '.length).trim() : undefined;
-    const cs = c.chatState;
-    if (!cs.activeChatId) {
-      console.log(chalk.hex('#8a7768')('\n  No active session to save (--no-session mode).\n'));
-      return { handled: true };
-    }
-    const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
-    return { handled: true, newTitle: session.title };
-  }
-
-  if (input.startsWith(':delete ')) {
-    const id = input.slice(':delete '.length).trim();
-    const deleted = await sessionStore.deleteSession(c.chatState.projectRoot, id);
-    if (deleted) {
-      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
-      if (id === c.chatState.activeChatId) {
-        const newId = sessionStore.generateId();
-        console.log(chalk.hex('#8a7768')(`  Starting new session: ${newId}\n`));
-        return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
-      }
-    } else {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
-    }
-    return { handled: true };
-  }
+  // Session/history commands (:resume, :resume <id>, :new, :history,
+  // :clear-history, :save, :delete) live in repl-session-commands.ts so they
+  // can be tested without importing this self-executing module. Called from
+  // the exact position those branches occupied — moving this call earlier
+  // would let them shadow commands declared above.
+  const sessionCmd = await handleSessionCommand(input, c);
+  if (sessionCmd) return sessionCmd;
 
   // ── Model / API commands ─────────────────────────────────────────────────
 
+  if (input === ':compact' || input === ':compress') {
+    const { compactHistory, estimateContextTokens, getRecapGeneration } = await import('../agent/compactor.js');
+    const { getContextWindow } = await import('../providers/factory.js');
+    const history = c.chatState.activeChatHistory;
+    if (history.length <= 1) {
+      console.log(chalk.hex('#d4903a')('\n  Nothing to compact — history is empty or has only the task.\n'));
+      return { handled: true };
+    }
+    const model = c.providerConfig.model;
+    const beforeTokens = estimateContextTokens('', history);
+    const window = getContextWindow(model) ?? 128_000;
+    const generation = getRecapGeneration(history);
+    // Force compaction by passing totalTokens = Infinity so the threshold check is bypassed.
+    const compacted = compactHistory(history, Infinity, model);
+    if (!compacted) {
+      console.log(chalk.hex('#d4903a')('\n  Compaction had no effect — history is already minimal.\n'));
+      return { handled: true };
+    }
+    const afterTokens = estimateContextTokens('', history);
+    const saved = beforeTokens > 0 ? ((1 - afterTokens / beforeTokens) * 100).toFixed(0) : '0';
+    const newGen = getRecapGeneration(history);
+    console.log(chalk.hex('#5a9e6e')(
+      `\n  ✓ Context compacted: ${beforeTokens.toLocaleString()} → ${afterTokens.toLocaleString()} tokens ` +
+      chalk.hex('#5a9e6e')(`(-${saved}%)`) +
+      ` · gen ${generation}→${newGen} · window ${(window / 1000).toFixed(0)}k\n`,
+    ));
+    c.healthTracker.recordCompaction(beforeTokens, afterTokens, newGen);
+    return { handled: true, newHistory: [...history] };
+  }
+
   if (input === ':context') {
-    console.log(chalk.hex('#8a7768')(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
-    console.log(chalk.hex('#4e3d30')(`  Root: ${c.ctx.root}\n`));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
+    console.log(chalk.hex(FAINT_HEX)(`  Root: ${c.ctx.root}\n`));
     return { handled: true };
   }
 
   if (input === ':graph') {
     const summary = loadGraphSummary(c.ctx.root);
     if (!summary) {
-      console.log(chalk.hex('#8a7768')('\n  No graph.json found. Run :graph refresh to extract.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No graph.json found. Run :graph refresh to extract.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
-      console.log(chalk.hex('#8a7768')(summary));
+      console.log(chalk.hex(TEXT_DIM_HEX)(summary));
       console.log();
     }
     return { handled: true };
   }
 
   if (input === ':viz' || input === ':dashboard') {
-    console.log(chalk.hex('#8a7768')('\n  Generating dashboard…\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  Generating dashboard…\n'));
     try {
       const outPath = generateDashboard(c.ctx.root);
       console.log(chalk.hex('#5a9e6e')(`  ✓ Dashboard written to ${outPath}`));
-      console.log(chalk.hex('#8a7768')('  Opening in browser…\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('  Opening in browser…\n'));
       openDashboard(outPath);
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
@@ -1465,7 +2607,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const { planStore } = await import('../orchestration/plan-store.js');
     const plans = await planStore.list();
     if (!plans.length) {
-      console.log(chalk.hex('#8a7768')('\n  No execution plans found.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No execution plans found.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Execution plans:\n'));
       for (const p of plans.slice(0, 15)) {
@@ -1475,8 +2617,8 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         console.log(
           `  ${chalk.hex(statusColor)(p.status.padEnd(8))} ` +
           `${chalk.hex('#cc785c')(p.id.slice(0, 12).padEnd(14))} ` +
-          `${chalk.hex('#ede0cc')(p.goal.slice(0, 50).padEnd(51))} ` +
-          `${chalk.hex('#4e3d30')(`${p.steps.length}s · ${dur} · ${created}`)}`,
+          `${chalk.hex(TEXT_HEX)(p.goal.slice(0, 50).padEnd(51))} ` +
+          `${chalk.hex(FAINT_HEX)(`${p.steps.length}s · ${dur} · ${created}`)}`,
         );
       }
       console.log();
@@ -1485,7 +2627,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   if (input === ':graph refresh') {
-    console.log(chalk.hex('#8a7768')('\n  Refreshing codebase graph...\n'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refreshing codebase graph...\n'));
     const { execSync } = await import('child_process');
     try {
       execSync(
@@ -1501,56 +2643,61 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (c.ctx.graphSummary) {
       console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
     } else {
-      console.log(chalk.hex('#8a7768')('  No graph.json found after refresh. Run graphify extract first.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('  No graph.json found after refresh. Run graphify extract first.\n'));
     }
     return { handled: true };
   }
 
-  // ── Provider wizard command ────────────────────────────────────────────────
+  // ── Two-level provider → model selector ──────────────────────────────────
   if (input === ':provider' || input === '/provider') {
-    const cfg = await runProviderWizard(c.rl);
-    if (cfg) {
-      // Update current session's provider without restart
-      runtimeConfig.model = cfg.model;
-      runtimeConfig.baseUrl = cfg.baseUrl;
-      runtimeConfig.apiKey = cfg.apiKey;
-      c.providerConfig.model = cfg.model;
-      c.providerConfig.baseUrl = cfg.baseUrl;
-      c.providerConfig.apiKey = cfg.apiKey;
-      // Keep resolved in sync
-      resolved.model = cfg.model;
-      resolved.baseUrl = cfg.baseUrl;
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Now using ${cfg.provider} · ${cfg.model}`));
-      // The wizard saves to the global config, but a project .aura.json model
-      // outranks it on the next startup — warn so the switch doesn't appear lost.
-      if (fileConfig.model && fileConfig.model !== cfg.model) {
-        console.log(chalk.hex('#8a7768')(
-          `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
-          `    Remove the "model" field from .aura.json (or set it to ${cfg.model}) to keep this choice.`,
-        ));
+    // Same stdin-collision fix as showModelSelector: stop TUI input, let the
+    // selector own stdin completely, then restart TUI input.
+    const wasInputActive = inputActive;
+    if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
+    try {
+      const modelId = await showProviderSelector();
+      if (modelId) {
+        const r = trySetModel(c, modelId);
+        if (!r.ok) {
+          console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+        } else {
+          await postModelSwitch(c);
+          setStatusLine([resolved.model ?? modelId, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
+            .filter(Boolean).join(' · '));
+          if (fileConfig.model && fileConfig.model !== modelId) {
+            writeOutput(chalk.hex(TEXT_DIM_HEX)(
+              `  ⚠ .aura.json pins model "${fileConfig.model}" — next startup in this project will use it.\n` +
+              `    Remove the "model" field from .aura.json (or set it to ${modelId}) to keep this choice.`,
+            ));
+          }
+        }
       }
+    } finally {
+      if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
     }
-    return { handled: true };
-  }
-
-  if (input === ':models') {
-    const allModels = getAllModels();
-    const byProvider = allModels.reduce<Record<string, typeof allModels>>((acc, m) => {
-      (acc[m.provider] ??= []).push(m);
-      return acc;
-    }, {});
-    for (const [provider, models] of Object.entries(byProvider)) {
-      console.log(chalk.hex('#8a7768')(`\n  ${provider}`));
-      for (const m of models) {
-        console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex('#4e3d30')(m.speed)}`);
-      }
-    }
-    console.log();
     return { handled: true };
   }
 
   if (input === ':model' || input === '/model') {
-    await showModelSelector(c);
+    // Shortcut: skip Level 1 and open the model list for the current
+    // provider. ESC from the model list goes up to the provider list.
+    const family = modelProviderFamily(resolved.model ?? runtimeConfig.model ?? '');
+    const providerId = FAMILY_TO_PROVIDER_ID[family];
+    const wasInputActive = inputActive;
+    if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
+    try {
+      let modelId: string | 'back' | undefined = providerId
+        ? await showModelSelectorForProvider(providerId)
+        : 'back';
+      if (modelId === 'back') modelId = await showProviderSelector();
+      if (modelId) {
+        const r = trySetModel(c, modelId);
+        if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+        else await postModelSwitch(c);
+      }
+    } finally {
+      if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
+    }
     return { handled: true };
   }
 
@@ -1559,6 +2706,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const newModel = input.slice(sep.length).trim();
     const r = trySetModel(c, newModel);
     if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+    else await postModelSwitch(c);
     return { handled: true };
   }
 
@@ -1591,13 +2739,18 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     c.cumulative.outputTokens = 0;
     c.cumulative.costUsd = 0;
     console.log(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
+    // This zeroes the *displayed* counters only — the underlying history
+    // (what actually gets resent and billed on the next task) is untouched.
+    // Say so explicitly: "reset"/"clear" reads as "start fresh" otherwise,
+    // and a user who believes that will keep paying to resend everything.
+    console.log(chalk.hex(TEXT_DIM_HEX)('    (conversation history is unchanged — use :new or :clear-history to actually reset it)'));
     return { handled: true };
   }
 
   if (input === '/stats' || input === '/usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
-    console.log(chalk.hex('#8a7768')([
+    console.log(chalk.hex(TEXT_DIM_HEX)([
       '',
       `  Session usage:`,
       `    Turns:        ${u.turns}`,
@@ -1611,12 +2764,56 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
+  if (input === '/context') {
+    const u = c.cumulative;
+    const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
+    h.turnCount = u.turns;
+    h.toolCallCount = u.toolCalls;
+    c.display.contextDashboard?.(h);
+    return { handled: true };
+  }
+
+  if (input === '/cost' || input.startsWith('/cost ')) {
+    const { readTokenLog, formatCostReport } = await import('./cost-report.js');
+    const arg = input.startsWith('/cost ') ? input.slice('/cost '.length).trim() : '';
+    const recent = /^\d+$/.test(arg) ? Number(arg) : 20;
+    console.log(formatCostReport(readTokenLog(c.ctx.root), recent));
+    return { handled: true };
+  }
+
+  if (input === '/context tune' || input === '/ct') {
+    const u = c.cumulative;
+    const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
+    const wasInputActive = inputActive;
+    if (wasInputActive) { stopInput(); enterFullscreenPrompt(); }
+    try {
+      const saved = await runTuner(
+        makeStdinTunerIO(),
+        h.contextWindow,
+        h.estimatedTokens,
+      );
+      if (saved) {
+        const pretty = saved.map(r => (r * 100).toFixed(0) + '%').join(' → ');
+        console.log(chalk.hex('#5a9e6e')(`\n  ✓ Compaction ladder: ${pretty}`));
+        console.log(chalk.hex(TEXT_DIM_HEX)(
+          '    Applies to this session. To persist it, add to .aura.json:\n' +
+          `      "context": { "ladder": [${saved.join(', ')}] }\n`,
+        ));
+      } else {
+        console.log(chalk.hex(TEXT_DIM_HEX)('\n  Cancelled — ladder unchanged.\n'));
+      }
+    } finally {
+      if (wasInputActive) { exitFullscreenPrompt(); startInput(); }
+    }
+    return { handled: true };
+  }
+
   // ── Workflow commands ──────────────────────────────────────────────────────
 
   if (input === ':workflows') {
     const workflows = await listWorkflows();
     if (workflows.length === 0) {
-      console.log(chalk.hex('#8a7768')('\n  No saved workflows.\n'));
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
@@ -1626,9 +2823,9 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
         const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
         console.log(
           `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex('#ede0cc')(ws.definition.name.slice(0, 36).padEnd(37))} ` +
+          `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
-          `${chalk.hex('#4e3d30')(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
+          `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
         );
       }
       console.log();
@@ -1681,7 +2878,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const result = await runAgentLoop({
         provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: undefined,
+        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
         spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
       });
 
@@ -1699,7 +2896,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
       console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex('#8a7768')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
     return { handled: true };
@@ -1725,7 +2922,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       const result = await runAgentLoop({
         provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: undefined,
+        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
         spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
       });
 
@@ -1748,7 +2945,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
       console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex('#8a7768')(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
+      console.log(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
     return { handled: true };
@@ -1875,36 +3072,36 @@ async function runArchitectPlan(
 
   // Display result
   console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-  console.log(chalk.hex('#ede0cc')(`  Task: ${blueprint.task}`));
-  console.log(chalk.hex('#4e3d30')(`  ID: ${blueprint.id}\n`));
+  console.log(chalk.hex(TEXT_HEX)(`  Task: ${blueprint.task}`));
+  console.log(chalk.hex(FAINT_HEX)(`  ID: ${blueprint.id}\n`));
 
   if (blueprint.files.length > 0) {
     console.log(chalk.hex('#cc785c').bold('  Files:\n'));
     for (const f of blueprint.files) {
       console.log(`    ${chalk.hex('#cc785c')(f.path)}`);
-      console.log(`      ${chalk.hex('#8a7768')(f.purpose)}`);
-      if (f.exports.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`exports: ${f.exports.join(', ')}`)}`);
-      if (f.interfaces.length > 0) console.log(`      ${chalk.hex('#4e3d30')(`interfaces: ${f.interfaces.join(', ')}`)}`);
+      console.log(`      ${chalk.hex(TEXT_DIM_HEX)(f.purpose)}`);
+      if (f.exports.length > 0) console.log(`      ${chalk.hex(FAINT_HEX)(`exports: ${f.exports.join(', ')}`)}`);
+      if (f.interfaces.length > 0) console.log(`      ${chalk.hex(FAINT_HEX)(`interfaces: ${f.interfaces.join(', ')}`)}`);
     }
   }
 
   if (blueprint.dataModels.length > 0) {
     console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
     for (const dm of blueprint.dataModels) {
-      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex('#8a7768')(dm.description)}`);
+      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
     }
   }
 
   if (blueprint.risks.length > 0) {
     console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
     for (const risk of blueprint.risks) {
-      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex('#8a7768')(risk)}`);
+      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
     }
   }
 
   console.log(chalk.hex('#5a9e6e')('\n  Blueprint saved. No files were modified.'));
-  console.log(chalk.hex('#5a9e6e')(`  Review with: ruby --blueprint ${blueprint.id}`));
-  console.log(chalk.hex('#5a9e6e')(`  Build with: ruby --build ${blueprint.id}\n`));
+  console.log(chalk.hex('#5a9e6e')(`  Review with: aura --blueprint ${blueprint.id}`));
+  console.log(chalk.hex('#5a9e6e')(`  Build with: aura --build ${blueprint.id}\n`));
 }
 
 async function runOrchestratedTask(
@@ -1942,7 +3139,7 @@ async function runOrchestratedTask(
     });
 
     if (!approved) {
-      console.log(chalk.hex('#4e3d30')('  Plan cancelled.\n'));
+      console.log(chalk.hex(FAINT_HEX)('  Plan cancelled.\n'));
       process.exit(0);
     }
   }
@@ -1968,7 +3165,7 @@ async function runOrchestratedTask(
   }
 
   const totalTokens = executedPlan.totalTokens ?? 0;
-  console.log(chalk.hex('#4e3d30')(
+  console.log(chalk.hex(FAINT_HEX)(
     `  ↳ ${totalTokens.toLocaleString()} tokens · ${executedPlan.steps.length} steps · status: ${executedPlan.status}`,
   ));
 }
@@ -1979,7 +3176,7 @@ function printUsageFooter(
   costUsd: number,
 ): void {
   const total = usage.inputTokens + usage.outputTokens;
-  console.log(chalk.hex('#4e3d30')(
+  console.log(chalk.hex(FAINT_HEX)(
     `  ↳ ${total.toLocaleString()} tokens (${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out) · est. $${costUsd.toFixed(4)}`,
   ));
 }
@@ -2010,20 +3207,31 @@ async function speakSummary(text: string): Promise<void> {
 
 function printHelp() {
   console.log(`
-${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: model-agnostic AI coding agent")}
+${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code: model-agnostic AI coding agent")}
 
-  ${chalk.hex('#4e3d30')('Usage:')}
-    aura ${chalk.hex('#8a7768')('"<task>"')}                           Run a single task
-    aura ${chalk.hex('#8a7768')('serve')}                              Start the HTTP API server
-    aura ${chalk.hex('#8a7768')('--interactive')}                      Start interactive REPL
-    aura ${chalk.hex('#8a7768')('--models')}                           List available models
+  ${chalk.hex(FAINT_HEX)('Usage:')}
+    aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve --lan')}                        Also serve phones over Wi-Fi (TLS, pinned)
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve --tailscale')}                  Also serve phones on any network, via Tailscale
+    aura ${chalk.hex(TEXT_DIM_HEX)('sidecar')}                            Engine over stdio (NDJSON) — see docs/PROTOCOL.md
+    aura ${chalk.hex(TEXT_DIM_HEX)('devices')}                            List phones paired to this desktop
+    aura ${chalk.hex(TEXT_DIM_HEX)('devices add <name>')}                 Pair a phone; prints its token once
+    aura ${chalk.hex(TEXT_DIM_HEX)('devices revoke <id>')}               Cut a phone off
+    aura ${chalk.hex(TEXT_DIM_HEX)('setup')}                              Configure provider, model, and API key
+    aura ${chalk.hex(TEXT_DIM_HEX)('setup --web')}                        Same, as a browser page (used by installers)
+    aura ${chalk.hex(TEXT_DIM_HEX)('--interactive')}                      Start interactive REPL
+    aura ${chalk.hex(TEXT_DIM_HEX)('--gazelle')}                          Lean conversational mode (no tools; cloud model)
+    aura ${chalk.hex(TEXT_DIM_HEX)('--models')}                           List available models
 
-  ${chalk.hex('#4e3d30')('Options:')}
+  ${chalk.hex(FAINT_HEX)('Options:')}
     --model, -m <id>         Model to use (default: from ~/.config/aura-code/config.json)
     --api-key <key>          API key (overrides env var)
     --base-url <url>         Custom API endpoint (for Ollama, proxies, etc.)
     --auto                   Auto-approve all tool calls (no confirmation)
     --readonly               Read-only mode (no file writes or shell commands)
+    --gazelle                Lean conversational mode: no tools, no project context
+    --mode gazelle           Same as --gazelle (env: AURA_MODE=gazelle)
     --cwd <path>             Working directory (default: current)
     --models                 List all known model IDs
     --no-session             Disable conversation history persistence
@@ -2042,11 +3250,15 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
-    --max-turns <n>          Max agent loop turns before stopping (default: sized by task shape)
+    --max-turns <n>          Max agent loop turns before stopping (default: 50)
     --moa                    Mixture of agents: parallel read-only domain perspectives + synthesis (exploratory tasks only)
+    --image <path>           Attach an image to the initial message (repeatable; png/jpg/webp/gif)
     --analyze                Mine session history for weakness patterns; save report
     --propose-harness        Generate system-prompt patches from weakness report
     --apply-harness <id>     Apply a proposal patch; reverts if tests fail
+    --doctor                 Scan Aura itself for issues (build, config, deps, env, git)
+    --doctor --fix           Scan and attempt auto-repairs (rebuild, restore, reinstall)
+    --doctor --offline       Skip the network version check
     --workflow <name> ...    Create and run a sequential workflow with named steps
     --resume-workflow <id>   Resume a paused/failed workflow from last completed step
     --workflows              List all persisted workflows
@@ -2058,7 +3270,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     --fallback <model>       Fallback model if primary exhausts retries (repeatable)
     --verify                 Enable post-task verification with automatic retries
 
-  ${chalk.hex('#4e3d30')('Resilience:')}
+  ${chalk.hex(FAINT_HEX)('Resilience:')}
     All API calls automatically:
     1. Honour Retry-After / Google's retryDelay on 429s
     2. Back off with exponential + jitter (capped at 60s)
@@ -2066,7 +3278,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     4. Fail over to the next --fallback model if retries exhaust
     5. Pace requests when --rate-limit-rpm / --rate-limit-tpm is set
 
-  ${chalk.hex('#4e3d30')('Project config (.aura.json):')}
+  ${chalk.hex(FAINT_HEX)('Project config (.aura.json):')}
     {
       "model": "claude-sonnet-4-5-20251001",
       "mode":  "auto",
@@ -2084,7 +3296,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
       ],
       "rateLimitRpm": 30,
       "rateLimitTpm": 1000000,
-      "maxTurns": 150,
+      "maxTurns": 50,
       "maxRetries": 6,
       "fallbacks": ["gpt-4o-mini", "gemini-2.5-flash"],
       "ignore": ["dist/", "*.generated.ts"]
@@ -2092,13 +3304,26 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     CLI flags always override .aura.json.
     Custom providers are OpenAI-compatible endpoints.
 
-  ${chalk.hex('#4e3d30')('Model examples:')}
+  ${chalk.hex(FAINT_HEX)('.auraignore:')}
+    One glob per line; matching directories are left out of the project tree
+    sent to the system prompt. Mirrors .rgignore, which governs search instead.
+
+  ${chalk.hex(FAINT_HEX)('Environment:')}
+    AURA_MODE=gazelle        Start in lean conversational mode
+    AURA_MODEL               Default model (overridden by --model)
+    AURA_FALLBACK_MODEL      Fallback model
+    AURA_MAX_RETRIES         Max retry attempts on 429/5xx
+    AURA_API_RPM / _TPM      Rate-limit caps
+    AURA_RTK=0               Don't route shell/git output through RTK
+    AURA_REPETITION_GUARD=0  Don't cut off replies that collapse into a loop
+
+  ${chalk.hex(FAINT_HEX)('Model examples:')}
     aura -m claude-opus-4-5-20251001  "refactor auth"
     aura -m gpt-4o                    "add unit tests"
     aura -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
     aura -m ollama/llama3.2           "local model, no API key needed"
 
-  ${chalk.hex('#4e3d30')('API keys (set as env vars):')}
+  ${chalk.hex(FAINT_HEX)('API keys (set as env vars):')}
     ANTHROPIC_API_KEY    Claude models
     OPENAI_API_KEY       GPT models
     GOOGLE_API_KEY       Gemini models
@@ -2112,12 +3337,99 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex('#8a7768')("— Aura Code: mo
     AURA_API_TPM         Default token rate limit (Gemini)
     AURA_MAX_RETRIES     Default max retry attempts
     AURA_FALLBACK_MODEL  Comma-separated fallback models
+    AURA_SESSION_BUDGET  Cumulative billed input-token ceiling per conversation
+                         (default 1000000; 0 = no ceiling)
 `);
 }
 
-if (argv._[0] === 'serve') {
+// Only dispatch when run as the entry point, not when imported. Note this
+// guard is necessary but NOT sufficient to make this module safe to import:
+// the env-file load at the top of this file and the config loading at module
+// scope still run on import. Prefer extracting logic into a side-effect-free
+// module (see repl-session-commands.ts) over importing this one.
+if (require.main !== module) {
+  // imported, not executed — dispatch nothing
+} else if (argv.doctor === true) {
+  // --doctor runs async above and exits on completion; don't start main().
+} else if (argv._[0] === 'setup') {
+  // `aura setup --web` is what the desktop installers launch as their final
+  // step: a browser page beats dropping someone who just clicked through an
+  // installer into a terminal prompt. Without --web, fall through to the
+  // existing TUI wizard.
+  if (argv.web === true) {
+    const port = Number(argv.port ?? argv.p ?? 7338);
+    runWebWizard({ port, open: argv.open !== false })
+      .then(result => {
+        if (result) console.log(`  Saved: ${result.provider} · ${result.model}\n`);
+        else console.log('  Setup skipped — run `aura setup --web` any time.\n');
+        process.exit(0);
+      })
+      .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+  } else {
+    runProviderWizard()
+      .then(cfg => {
+        if (cfg) console.log(`\n  Saved: ${cfg.provider} · ${cfg.model}\n`);
+        process.exit(0);
+      })
+      .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+  }
+} else if (argv._[0] === 'sidecar') {
+  // stdio transport: the client spawns this as a child process and speaks
+  // newline-delimited JSON over the pipes. Same message schema as `serve`
+  // (see docs/PROTOCOL.md); only the framing differs.
+  //
+  // Every diagnostic goes to stderr — stdout is the frame stream. A model
+  // is NOT required up front: the client can supply one per session.create,
+  // which is how Mathetes' per-agent provider/model wizard works.
+  if (!runtimeConfig.model) {
+    console.error(
+      'aura sidecar: no default model configured — '
+      + 'clients must pass `model` on session.create.',
+    );
+  }
+  runSidecar({
+    defaultModel: runtimeConfig.model ?? '',
+    defaultApiKey: runtimeConfig.apiKey,
+    defaultBaseUrl: runtimeConfig.baseUrl,
+    defaultProjectRoot: cwd,
+  })
+    .then(() => process.exit(0))
+    .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+} else if (argv._[0] === 'devices') {
+  // Pairing credentials for phones. Each device gets its own token so that
+  // two people sharing one desktop keep separate conversations, budgets and
+  // approval prompts — and so one of them can be cut off without disturbing
+  // the other or restarting the server.
+  runDevices(String(argv._[1] ?? 'list'), argv._.slice(2).map(String), Number(argv.port ?? argv.p ?? 7337))
+    .then(code => process.exit(code))
+    .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+} else if (argv._[0] === 'serve') {
   const port = Number(argv.port ?? argv.p ?? 7337);
-  startServer({ port, cwd, model: argv.model, apiKey: argv['api-key'] ?? undefined, baseUrl: argv['base-url'] ?? undefined, open: argv.open !== false }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+  // Use the *resolved* config, not raw argv: argv.model is undefined unless
+  // -m or AURA_MODEL was given, so serving on a wizard-configured setup used
+  // to hand createProvider an undefined model and throw on the first task.
+  // runtimeConfig carries the same CLI > .aura.json > global-config > wizard
+  // precedence the interactive path uses.
+  if (!runtimeConfig.model) {
+    // Fail here rather than at the first task: the server would otherwise
+    // start, look healthy, and only break once a client sends something.
+    console.error(chalk.hex('#b15439')(
+      '\nNo model configured. Run `aura` once to complete setup, '
+      + 'or pass `aura serve -m <model>`.\n',
+    ));
+    process.exit(1);
+  }
+  startServer({
+    port,
+    cwd,
+    model: runtimeConfig.model,
+    apiKey: runtimeConfig.apiKey,
+    baseUrl: runtimeConfig.baseUrl,
+    open: argv.open !== false,
+    lan: argv.lan === true,
+    lanAddress: typeof argv.lan === 'string' ? argv.lan : undefined,
+    tailscale: argv.tailscale === true || argv.remote === true,
+  }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {
   main().catch(e => { console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`)); process.exit(1); });
 }
