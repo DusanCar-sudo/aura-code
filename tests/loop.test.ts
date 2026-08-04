@@ -81,17 +81,16 @@ describe('runAgentLoop', () => {
       { text: '', toolCalls: [], stopReason: 'done' },
       { text: '', toolCalls: [], stopReason: 'done' },
       { text: '', toolCalls: [], stopReason: 'done' },
-      { text: '', toolCalls: [], stopReason: 'done' },
     ]);
     const ctx = await loadProjectContext(tmpDir);
     const result = await runAgentLoop({
       provider, task: 'hi', context: ctx,
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
-    // After 4 attempts the loop gives up — the provider clearly can't respond
+    // After 3 attempts the loop gives up — the provider clearly can't respond
     expect(result.success).toBe(false);
     expect(result.summary).toContain('empty response');
-    expect(result.turns).toBe(4);
+    expect(result.turns).toBe(3);
   });
 
   it('executes a tool call and feeds the result back', async () => {

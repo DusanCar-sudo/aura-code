@@ -211,27 +211,24 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
     if (responseText) display.streamEnd();
 
-    // Guard: an empty response with no tools and stop reason "done"
-    // usually means the provider returned a silent error / rate-limit /
-    // content filter. Retry up to 3 times before accepting it as "done"
-    // so sessions don't silently die with no output.
+    // Guard: empty response with no tools = provider error/rate-limit/filter.
+    // Retry twice then bail to avoid burning tokens on a stuck session.
     const noProgress = !responseText && responseToolCalls.length === 0;
     if (finalResponse?.stopReason === 'done' && noProgress) {
       if (!('_emptyRetries' in loopState)) loopState._emptyRetries = 0;
       loopState._emptyRetries++;
-      if (loopState._emptyRetries <= 3) {
+      if (loopState._emptyRetries <= 2) {
         display.warning(
-          `Empty response from provider (attempt ${loopState._emptyRetries}/3) — retrying…`,
+          `Empty response (attempt ${loopState._emptyRetries}/2) — retrying…`,
         );
         display.agentThinking();
         continue;
       }
-      // Exhausted retries — provider can't produce output
       history.push({ role: 'assistant', content: '' });
       await persist(opts.sessionPath, history);
       return {
         success: false,
-        summary: 'Provider returned empty response after 4 attempts — likely rate-limited or filtered',
+        summary: 'Provider returned empty response after 3 attempts — likely rate-limited or filtered',
         turns, toolCallCount, usage, history, toolCallLog,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
@@ -270,9 +267,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     const toolResults: ToolResult[] = [];
-    // One checkpoint per turn, taken lazily before the first mutating call —
-    // a turn's writes form one burst, and the engine dedupes identical trees.
+    // Skip checkpoint for read-only turns — only snapshot before mutations.
     let checkpointedThisTurn = false;
+    const hasMutatingCall = responseToolCalls.some(c => MUTATING_TOOLS.has(c.name));
 
     for (const call of responseToolCalls) {
       toolCallCount++;
@@ -298,12 +295,13 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           }
         }
 
-        if (opts.checkpoints !== false && !checkpointedThisTurn && MUTATING_TOOLS.has(call.name)) {
+        // Lazy checkpoint before first mutating tool in a turn
+        if (opts.checkpoints !== false && !checkpointedThisTurn && hasMutatingCall) {
           checkpointedThisTurn = true;
           try {
             const cp = await createCheckpoint(opts.context.root, `turn ${turns}: ${opts.task}`);
             if (cp) await pruneCheckpoints(opts.context.root, DEFAULTS.maxCheckpoints);
-          } catch { /* checkpointing must never block the tool call */ }
+          } catch { /* never block tool execution */ }
         }
 
         if (opts.hooks && opts.hooks.length > 0) {
