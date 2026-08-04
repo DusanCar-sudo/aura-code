@@ -25,7 +25,7 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     name,
     language,
     framework,
-    readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
+    readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 1000),
     tree:          buildTree(root),
     config:        readConfig(root),
     recentCommits: readGitLog(root),
@@ -139,7 +139,7 @@ function readConfig(root: string): string {
     if (fs.existsSync(p)) {
       try {
         const content = fs.readFileSync(p, 'utf8');
-        return `${name}:\n${content.slice(0, 1500)}${content.length > 1500 ? '\n[...truncated]' : ''}`;
+        return `${name}:\n${content.slice(0, 800)}${content.length > 800 ? '\n[...truncated]' : ''}`;
       } catch { /* next */ }
     }
   }
@@ -148,7 +148,7 @@ function readConfig(root: string): string {
 
 function readGitLog(root: string): string {
   try {
-    return execSync('git log --oneline -10', { cwd: root, encoding: 'utf8' }).trim();
+    return execSync('git log --oneline -5', { cwd: root, encoding: 'utf8' }).trim();
   } catch {
     return '(not a git repository)';
   }

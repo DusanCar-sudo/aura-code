@@ -29,110 +29,110 @@ import { CRON_DEFINITION, cronTool } from './cron.js';
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'read_file',
-    description: 'Read the contents of a file. Returns the file with line numbers. Use start_line/end_line to read a specific range in large files.',
+    description: 'Read file contents with line numbers. Use start_line/end_line for ranges.',
     parameters: {
       type: 'object',
       properties: {
-        path:       { type: 'string', description: 'Path to the file (relative to project root)' },
-        start_line: { type: 'number', description: 'First line to read (1-indexed, inclusive)' },
-        end_line:   { type: 'number', description: 'Last line to read (inclusive)' },
+        path:       { type: 'string', description: 'File path (relative to project root)' },
+        start_line: { type: 'number', description: 'First line (1-indexed, inclusive)' },
+        end_line:   { type: 'number', description: 'Last line (inclusive)' },
       },
       required: ['path'],
     },
   },
   {
     name: 'list_dir',
-    description: 'List files and directories in a path. Respects .gitignore. Use recursive=true to see the whole tree.',
+    description: 'List directory contents. Respects .gitignore.',
     parameters: {
       type: 'object',
       properties: {
-        path:      { type: 'string',  description: 'Directory path (default: project root)' },
-        recursive: { type: 'boolean', description: 'Whether to list recursively (default: false)' },
-        depth:     { type: 'number',  description: 'Max depth for recursive listing (default: 3)' },
+        path:      { type: 'string',  description: 'Directory path (default: root)' },
+        recursive: { type: 'boolean', description: 'Recursive listing (default: false)' },
+        depth:     { type: 'number',  description: 'Max depth (default: 3)' },
       },
       required: [],
     },
   },
   {
     name: 'edit_file',
-    description: 'Edit a file by finding an exact block of text and replacing it. More reliable than rewriting the whole file. If the find block is not found, an error is returned with enough context to retry.',
+    description: 'Replace exact text block in file. More reliable than full rewrite.',
     parameters: {
       type: 'object',
       properties: {
-        path:    { type: 'string', description: 'Path to the file to edit' },
-        find:    { type: 'string', description: 'The exact block of text to find and replace. Must be unique in the file. Include enough surrounding lines for uniqueness.' },
-        replace: { type: 'string', description: 'The new text to replace the found block with' },
+        path:    { type: 'string', description: 'File path' },
+        find:    { type: 'string', description: 'Exact block to find (must be unique)' },
+        replace: { type: 'string', description: 'New replacement text' },
       },
       required: ['path', 'find', 'replace'],
     },
   },
   {
     name: 'write_file',
-    description: 'Write content to a file. Creates the file if it does not exist. For existing files, use edit_file instead unless you need to replace the entire file.',
+    description: 'Write file (creates or replaces). Use edit_file for partial changes.',
     parameters: {
       type: 'object',
       properties: {
-        path:    { type: 'string', description: 'Path to the file' },
-        content: { type: 'string', description: 'Full content to write to the file' },
+        path:    { type: 'string', description: 'File path' },
+        content: { type: 'string', description: 'Full content' },
       },
       required: ['path', 'content'],
     },
   },
   {
     name: 'search_code',
-    description: 'Search for a pattern in the codebase using ripgrep (or grep as fallback). Returns matching lines with file paths and line numbers.',
+    description: 'Search codebase with regex/literal. Returns matches with file:line.',
     parameters: {
       type: 'object',
       properties: {
-        pattern:    { type: 'string', description: 'Search pattern (regex or literal string)' },
-        path:       { type: 'string', description: 'Directory to search in (default: project root)' },
-        file_glob:  { type: 'string', description: 'File pattern filter, e.g. "*.ts" or "*.py"' },
-        literal:    { type: 'boolean', description: 'Treat pattern as literal string, not regex (default: false)' },
-        case_sensitive: { type: 'boolean', description: 'Case-sensitive search (default: false)' },
-        max_results: { type: 'number', description: 'Maximum number of results to return (default: 50)' },
+        pattern:         { type: 'string', description: 'Search pattern' },
+        path:            { type: 'string', description: 'Directory (default: root)' },
+        file_glob:       { type: 'string', description: 'File filter (*.ts)' },
+        literal:         { type: 'boolean', description: 'Literal match (default: false)' },
+        case_sensitive:  { type: 'boolean', description: 'Case sensitive (default: false)' },
+        max_results:     { type: 'number', description: 'Max results (default: 50)' },
       },
       required: ['pattern'],
     },
   },
   {
     name: 'run_shell',
-    description: 'Run a shell command in the project directory. Use for build commands, package managers, formatters, linters. Avoid destructive commands.',
+    description: 'Run shell command. Use for builds, installs, linters.',
     parameters: {
       type: 'object',
       properties: {
-        command: { type: 'string', description: 'Shell command to run' },
-        cwd:     { type: 'string', description: 'Working directory (default: project root)' },
-        timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
+        command: { type: 'string', description: 'Command to run' },
+        cwd:     { type: 'string', description: 'Working directory (default: root)' },
+        timeout: { type: 'number', description: 'Timeout ms (default: 30000)' },
       },
       required: ['command'],
     },
   },
   {
     name: 'run_tests',
-    description: 'Run the test suite (or a specific test file). Automatically detects the test framework (Jest, Vitest, pytest, go test, etc.).',
+    description: 'Run tests. Auto-detects framework (Jest, pytest, etc.).',
     parameters: {
       type: 'object',
       properties: {
-        file_or_pattern: { type: 'string', description: 'Specific test file or pattern to run (runs all tests if omitted)' },
+        file_or_pattern: { type: 'string', description: 'Test file/pattern (all if omitted)' },
       },
       required: [],
     },
   },
   {
     name: 'git_status',
-    description: 'Show the current git status: modified files, staged changes, and recent commits.',
+    description: 'Show git status: modified, staged, commits.',
     parameters: {
       type: 'object', properties: {}, required: [],
     },
   },
   {
     name: 'git_diff',
-    description: 'Show the diff for a specific file or all changes.',
+    description: 'Show diff for file or all changes.',
     parameters: {
       type: 'object',
       properties: {
-        path:   { type: 'string',  description: 'Specific file to diff (all files if omitted)' },
-        staged: { type: 'boolean', description: 'Show staged (indexed) changes (default: false)' },
+        path:   { type: 'string',  description: 'File (all if omitted)' },
+        staged: { type: 'boolean', description: 'Staged changes (default: false)' },
       },
       required: [],
     },
