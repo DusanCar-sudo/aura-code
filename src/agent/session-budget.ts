@@ -35,7 +35,7 @@
 /** Cumulative billed input tokens before a conversation is a runaway.
  *  A backstop above the turn cap, not a routine limit: a 50-turn session that
  *  caches well bills a small fraction of this, while a cold one reaches it. */
-export const DEFAULT_MAX_INPUT_TOKENS = 1_000_000;
+export const DEFAULT_MAX_INPUT_TOKENS = 200_000;
 
 /** Env override for the token ceiling, for the case the default is wrong for
  *  the work at hand (a large planned refactor that legitimately bills past 1M).
