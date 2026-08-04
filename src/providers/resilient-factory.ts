@@ -23,9 +23,9 @@ export interface ResilienceConfig {
 
 /** Sensible defaults per provider family. */
 const DEFAULTS_BY_KIND: Record<string, Partial<ResilienceConfig>> = {
-  google: { rpm: 30, tpm: 1_000_000, burst: 5, maxRetries: 6 },
-  anthropic: { rpm: 50, burst: 8, maxRetries: 5 },
-  'openai-compatible': { rpm: 60, burst: 10, maxRetries: 5 },
+  google: { rpm: 30, tpm: 200_000, burst: 5, maxRetries: 3 },
+  anthropic: { rpm: 50, burst: 8, maxRetries: 3 },
+  'openai-compatible': { rpm: 60, burst: 10, maxRetries: 3 },
 };
 
 /**
