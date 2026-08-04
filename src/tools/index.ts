@@ -1,10 +1,9 @@
-import type { ToolDefinition, HistoryMessage } from '../providers/types.js';
+import type { ToolDefinition } from '../providers/types.js';
 import { readFile } from './read-file.js';
 import { listDir } from './list-dir.js';
 import { editFile } from './edit-file.js';
 import { writeFile } from './write-file.js';
 import { searchCode } from './search-code.js';
-import { searchSemantic } from './search-semantic.js';
 import { runShell } from './run-shell.js';
 import { runTests } from './run-tests.js';
 import { gitStatus, gitDiff } from './git.js';
@@ -14,7 +13,6 @@ import { BROWSER_DEFINITION, browserTool } from './browser.js';
 import { WEB_SEARCH_DEFINITION, webSearch } from './web-search.js';
 import { HTTP_REQUEST_DEFINITION, httpRequest } from './http-request.js';
 import { MEMORY_DEFINITION, memoryTool } from './memory.js';
-import { RECALL_DEFINITION, recallTool } from './recall.js';
 import { CLIPBOARD_DEFINITION, clipboardTool } from './clipboard.js';
 import { NOTIFY_DEFINITION, notifyTool } from './notify.js';
 import { IMAGE_READ_DEFINITION, imageRead } from './image-read.js';
@@ -23,8 +21,6 @@ import { CALENDAR_DEFINITION, calendarTool } from './calendar.js';
 import { TELEGRAM_DEFINITION, telegramTool } from './telegram.js';
 import { WHATSAPP_DEFINITION, whatsAppTool } from './whatsapp.js';
 import { CRON_DEFINITION, cronTool } from './cron.js';
-import { MCP_DEFINITION, mcpTool } from './mcp.js';
-import { GITHUB_DEFINITION, githubTool } from './github.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool schemas (what the model sees)
@@ -37,118 +33,106 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
-        path:       { type: 'string', description: 'Path to the file (relative to project root)' },
-        start_line: { type: 'number', description: 'First line to read (1-indexed, inclusive)' },
-        end_line:   { type: 'number', description: 'Last line to read (inclusive)' },
+        path:       { type: 'string', description: 'File path (relative to project root)' },
+        start_line: { type: 'number', description: 'First line (1-indexed, inclusive)' },
+        end_line:   { type: 'number', description: 'Last line (inclusive)' },
       },
       required: ['path'],
     },
   },
   {
     name: 'list_dir',
-    description: 'List files/directories. Respects .gitignore. recursive=true for full tree.',
+    description: 'List directory contents. Respects .gitignore.',
     parameters: {
       type: 'object',
       properties: {
-        path:      { type: 'string',  description: 'Directory path (default: project root)' },
-        recursive: { type: 'boolean', description: 'List recursively (default: false)' },
-        depth:     { type: 'number',  description: 'Max depth for recursive listing (default: 3)' },
+        path:      { type: 'string',  description: 'Directory path (default: root)' },
+        recursive: { type: 'boolean', description: 'Recursive listing (default: false)' },
+        depth:     { type: 'number',  description: 'Max depth (default: 3)' },
       },
       required: [],
     },
   },
   {
     name: 'edit_file',
-    description: 'Replace exact text block in file. Returns error context if block not found.',
+    description: 'Replace exact text block in file. More reliable than full rewrite.',
     parameters: {
       type: 'object',
       properties: {
-        path:    { type: 'string', description: 'Path to the file to edit' },
-        find:    { type: 'string', description: 'Exact text block to find and replace. Must be unique in file.' },
-        replace: { type: 'string', description: 'New text to replace the found block with' },
+        path:    { type: 'string', description: 'File path' },
+        find:    { type: 'string', description: 'Exact block to find (must be unique)' },
+        replace: { type: 'string', description: 'New replacement text' },
       },
       required: ['path', 'find', 'replace'],
     },
   },
   {
     name: 'write_file',
-    description: 'Write content to file (creates if new). For existing files, prefer edit_file unless replacing entire file.',
+    description: 'Write file (creates or replaces). Use edit_file for partial changes.',
     parameters: {
       type: 'object',
       properties: {
-        path:    { type: 'string', description: 'Path to the file' },
-        content: { type: 'string', description: 'Full content to write to the file' },
+        path:    { type: 'string', description: 'File path' },
+        content: { type: 'string', description: 'Full content' },
       },
       required: ['path', 'content'],
     },
   },
   {
     name: 'search_code',
-    description: 'Search codebase with ripgrep/grep. Returns matches with file/line numbers.',
+    description: 'Search codebase with regex/literal. Returns matches with file:line.',
     parameters: {
       type: 'object',
       properties: {
-        pattern:    { type: 'string', description: 'Search pattern (regex or literal string)' },
-        path:       { type: 'string', description: 'Directory to search in (default: project root)' },
-        file_glob:  { type: 'string', description: 'File pattern filter, e.g. "*.ts" or "*.py"' },
-        literal:    { type: 'boolean', description: 'Treat pattern as literal string, not regex (default: false)' },
-        case_sensitive: { type: 'boolean', description: 'Case-sensitive search (default: false)' },
-        max_results: { type: 'number', description: 'Maximum number of results to return (default: 50)' },
+        pattern:         { type: 'string', description: 'Search pattern' },
+        path:            { type: 'string', description: 'Directory (default: root)' },
+        file_glob:       { type: 'string', description: 'File filter (*.ts)' },
+        literal:         { type: 'boolean', description: 'Literal match (default: false)' },
+        case_sensitive:  { type: 'boolean', description: 'Case sensitive (default: false)' },
+        max_results:     { type: 'number', description: 'Max results (default: 50)' },
       },
       required: ['pattern'],
     },
   },
   {
-    name: 'search_semantic',
-    description: 'Semantically extract file outlines (classes/functions) and specific snippets instead of reading entire files. Highly token-efficient.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path:  { type: 'string', description: 'Path to the file to extract' },
-        query: { type: 'string', description: 'Optional search query to extract specific surrounding context' },
-      },
-      required: ['path'],
-    },
-  },
-  {
     name: 'run_shell',
-    description: 'Run shell command in project directory. Use for build/pkgmgr/fmt/lint. Avoid destructive commands.',
+    description: 'Run shell command. Use for builds, installs, linters.',
     parameters: {
       type: 'object',
       properties: {
-        command: { type: 'string', description: 'Shell command to run' },
-        cwd:     { type: 'string', description: 'Working directory (default: project root)' },
-        timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
+        command: { type: 'string', description: 'Command to run' },
+        cwd:     { type: 'string', description: 'Working directory (default: root)' },
+        timeout: { type: 'number', description: 'Timeout ms (default: 30000)' },
       },
       required: ['command'],
     },
   },
   {
     name: 'run_tests',
-    description: 'Run test suite or specific file. Auto-detects framework (Jest/Vitest/pytest/go test).',
+    description: 'Run tests. Auto-detects framework (Jest, pytest, etc.).',
     parameters: {
       type: 'object',
       properties: {
-        file_or_pattern: { type: 'string', description: 'Specific test file or pattern to run (runs all tests if omitted)' },
+        file_or_pattern: { type: 'string', description: 'Test file/pattern (all if omitted)' },
       },
       required: [],
     },
   },
   {
     name: 'git_status',
-    description: 'Show git status: modified files, staged changes, recent commits.',
+    description: 'Show git status: modified, staged, commits.',
     parameters: {
       type: 'object', properties: {}, required: [],
     },
   },
   {
     name: 'git_diff',
-    description: 'Show diff for specific file or all changes.',
+    description: 'Show diff for file or all changes.',
     parameters: {
       type: 'object',
       properties: {
-        path:   { type: 'string',  description: 'Specific file to diff (all files if omitted)' },
-        staged: { type: 'boolean', description: 'Show staged (indexed) changes (default: false)' },
+        path:   { type: 'string',  description: 'File (all if omitted)' },
+        staged: { type: 'boolean', description: 'Staged changes (default: false)' },
       },
       required: [],
     },
@@ -159,7 +143,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   WEB_SEARCH_DEFINITION,
   HTTP_REQUEST_DEFINITION,
   MEMORY_DEFINITION,
-  RECALL_DEFINITION,
   CLIPBOARD_DEFINITION,
   NOTIFY_DEFINITION,
   IMAGE_READ_DEFINITION,
@@ -168,141 +151,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   TELEGRAM_DEFINITION,
   WHATSAPP_DEFINITION,
   CRON_DEFINITION,
-  MCP_DEFINITION,
-  GITHUB_DEFINITION,
 ];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Relevance gate — conditional tools are only sent to the model when the task
-// or conversation mentions their domain. Same mechanic as the plugin-skill
-// keyword gate in system-prompt.ts. Triggers are deliberately generous: a
-// false positive costs a few hundred tokens, a false negative breaks the task.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
-  telegram:     /telegram|\btg\b|\bbot\b|send me|message me|text me|ping me|notify me/,
-  browser:      /browser|chrome|website|webpage|web page|screenshot|click|navigate|scrape|open .{0,20}page|\burl\b/,
-  http_request: /\bhttp\b|\bapi\b|endpoint|curl|webhook|\brest\b|\brequest\b|post to/,
-  calendar:     /calendar|\bevents?\b|meeting|appointment|schedule|remind/,
-  cron:         /\bcron\b|schedule|recurring|daily|weekly|hourly|\bevery\b|periodically/,
-  whatsapp:     /whatsapp|\bwa\b|send me|message me/,
-  email:        /e-?mail|\bmail\b|inbox|gmail|smtp/,
-  notify:       /notify|notification|alert|when done|ping|desktop/,
-  image_read:   /image|screenshot|png|jpe?g|photo|picture|webcam/,
-  clipboard:    /clipboard|copy to|paste/,
-  spawn_task:   /\b(spawn|sub.?agent|parallel|delegate|orchestrat|multi.?agent)\b/i,
-  web_fetch:    /\b(http|https|url|fetch|curl|download|website|webpage|endpoint)\b/i,
-  web_search:   /\b(web.?search|search|look up|find online|google|latest|current|news|recent)\b/i,
-  memory:       /\b(remember|recall|memory|forget|note|store|what did|last time)\b/i,
-  mcp:          /\b(mcp|tool server|external tool|connect to)\b/i,
-  github:       /\bgit\b|\bgithub\b|\b(pr|prs)\s*#?\d+|pull[ .-]?request|\bcommit\b|\brepo\b|\bbranch\b|\bfork\b|\bclone\b|\bgh\b/i,
-};
-
-/** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy). */
-function gateText(task: string, history: HistoryMessage[]): string {
-  const parts = [task];
-  for (const msg of history) {
-    if (msg.role === 'user') parts.push(msg.content);
-    else if (msg.role === 'assistant' && msg.content) parts.push(msg.content);
-  }
-  return parts.join('\n').toLowerCase();
-}
-
-/**
- * Select the tool definitions to send this turn: all CORE tools plus any
- * conditional tool whose trigger matches the task or conversation so far.
- *
- * `included` is a sticky per-session set: once a conditional tool is
- * triggered it stays for the rest of the session, even if compaction later
- * rewrites the keyword out of history. Additive-only also means the
- * Anthropic prompt-cache prefix (tools block) is busted at most once per
- * newly triggered tool instead of thrashing.
- *
- * Call once per turn — mid-session pivots ("actually send this via
- * telegram") land in history as user messages, so the tool is present
- * before the model responds to them.
- */
-export function selectTools(
-  task: string,
-  history: HistoryMessage[],
-  included: Set<string> = new Set(),
-): ToolDefinition[] {
-  const text = gateText(task, history);
-  for (const [name, trigger] of Object.entries(CONDITIONAL_TOOL_TRIGGERS)) {
-    if (!included.has(name) && trigger.test(text)) included.add(name);
-  }
-  const selected = TOOL_DEFINITIONS.filter(
-    t => !(t.name in CONDITIONAL_TOOL_TRIGGERS) || included.has(t.name),
-  );
-  if (process.env.AURA_DEBUG_TOOLS) {
-    const chars = JSON.stringify(selected).length;
-    console.error(`[tools] sent=${selected.length}/${TOOL_DEFINITIONS.length} chars=${chars}`);
-  }
-  return selected;
-}
-
-/**
- * Eviction-enabled variant of {@link selectTools} for small local models
- * (Archimedes via Ollama), where context window is scarcer than the prompt-cache
- * stability the sticky set protects. A conditional tool that hasn't been
- * called for more than `evictAfterTurns` turns is dropped from the schema
- * block; CORE tools are never evicted.
- *
- * State contract (all owned by the caller, one instance per loop run):
- * - `included`: currently offered conditional tools.
- * - `lastUsedTurn`: turn a tool was last *called* (seeded to the turn it was
- *   first offered). Offered-but-not-called does not refresh it.
- * - `evicted`: tools removed by staleness. An evicted tool is NOT re-added
- *   by its trigger still matching old history text (that would undo every
- *   eviction immediately) — only a fresh mention in the latest user message
- *   re-admits it, so mid-session pivots still work.
- */
-export function selectToolsWithEviction(
-  task: string,
-  history: HistoryMessage[],
-  included: Set<string>,
-  lastUsedTurn: Map<string, number>,
-  currentTurn: number,
-  evictAfterTurns: number = 3,
-  evicted: Set<string> = new Set(),
-): ToolDefinition[] {
-  const text = gateText(task, history);
-  const lastUserMsg = [...history].reverse()
-    .find(m => m.role === 'user')?.content?.toLowerCase() ?? '';
-
-  for (const [name, trigger] of Object.entries(CONDITIONAL_TOOL_TRIGGERS)) {
-    if (included.has(name)) continue;
-    if (evicted.has(name)) {
-      if (trigger.test(lastUserMsg)) {
-        evicted.delete(name);
-        included.add(name);
-        lastUsedTurn.set(name, currentTurn);
-      }
-      continue;
-    }
-    if (trigger.test(text)) {
-      included.add(name);
-      if (!lastUsedTurn.has(name)) lastUsedTurn.set(name, currentTurn);
-    }
-  }
-
-  for (const name of [...included]) {
-    const last = lastUsedTurn.get(name) ?? currentTurn;
-    if (currentTurn - last > evictAfterTurns) {
-      included.delete(name);
-      evicted.add(name);
-    }
-  }
-
-  const selected = TOOL_DEFINITIONS.filter(
-    t => !(t.name in CONDITIONAL_TOOL_TRIGGERS) || included.has(t.name),
-  );
-  if (process.env.AURA_DEBUG_TOOLS) {
-    const chars = JSON.stringify(selected).length;
-    console.error(`[tools/evict] sent=${selected.length}/${TOOL_DEFINITIONS.length} evicted=[${[...evicted].join(',')}] chars=${chars}`);
-  }
-  return selected;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool executor — dispatches to the right implementation
@@ -319,8 +168,7 @@ export async function executeTool(
       case 'list_dir':     return listDir({ path: (input.path as string) ?? '.', recursive: (input.recursive as boolean) ?? false, depth: (input.depth as number) ?? 3 }, cwd);
       case 'edit_file':    return editFile({ path: input.path as string, find: input.find as string, replace: input.replace as string }, cwd);
       case 'write_file':   return writeFile({ path: input.path as string, content: input.content as string }, cwd);
-      case 'search_semantic': return searchSemantic({ path: input.path as string, query: input.query as string | undefined }, cwd);
-      case 'search_code':  return searchCode({ pattern: input.pattern as string, path: input.path as string | undefined, file_glob: input.file_glob as string | undefined, literal: (input.literal as boolean) ?? false, case_sensitive: (input.case_sensitive as boolean) ?? false, max_results: (input.max_results as number) ?? 15 }, cwd);
+      case 'search_code':  return searchCode({ pattern: input.pattern as string, path: input.path as string | undefined, file_glob: input.file_glob as string | undefined, literal: (input.literal as boolean) ?? false, case_sensitive: (input.case_sensitive as boolean) ?? false, max_results: (input.max_results as number) ?? 50 }, cwd);
       case 'run_shell':    return runShell({ command: input.command as string, cwd: input.cwd as string | undefined, timeout: input.timeout as number | undefined }, cwd);
       case 'run_tests':    return runTests({ file_or_pattern: input.file_or_pattern as string | undefined }, cwd);
       case 'git_status':   return gitStatus(cwd);
@@ -331,7 +179,6 @@ export async function executeTool(
       case 'web_search':   return webSearch({ query: input.query as string, max_results: input.max_results as number | undefined, region: input.region as string | undefined });
       case 'http_request': return httpRequest({ url: input.url as string, method: input.method as any, headers: input.headers as Record<string, string> | undefined, body: input.body as string | undefined, json: input.json, max_chars: input.max_chars as number | undefined, timeout_ms: input.timeout_ms as number | undefined });
       case 'memory':       return memoryTool(input as any);
-      case 'recall':       return recallTool(input as any);
       case 'clipboard':    return clipboardTool(input as any);
       case 'notify':       return notifyTool(input as any);
       case 'image_read':   return imageRead(input as any);
@@ -340,8 +187,6 @@ export async function executeTool(
       case 'telegram':     return telegramTool(input as any);
       case 'whatsapp':     return whatsAppTool(input as any);
       case 'cron':         return cronTool(input as any);
-      case 'mcp':          return mcpTool(input as any);
-      case 'github':       return githubTool(input as any);
       default:             return `Error: Unknown tool '${name}'`;
     }
   } catch (e) {

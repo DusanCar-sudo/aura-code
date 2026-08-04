@@ -1,53 +1,17 @@
 import * as path from 'path';
-import * as fs from 'fs';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
-import { selectTools, selectToolsWithEviction, executeTool } from '../tools/index.js';
+import { TOOL_DEFINITIONS, executeTool } from '../tools/index.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import type { ProjectContext } from './context.js';
 import type { Display } from '../cli/display.js';
-import { sessionStore, type TurnUsage } from './session-store.js';
-export type { TurnUsage };
+import { sessionStore } from './session-store.js';
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
 import type { VerificationConfig } from '../verify/types.js';
 import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
-import { describeBudgetStop, type BudgetStop } from './session-budget.js';
 import { createCheckpoint, pruneCheckpoints } from '../checkpoints/engine.js';
 import { DEFAULTS } from '../config/defaults.js';
-import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
-import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } from './compactor.js';
-import { maybeRollover } from './generational-flush.js';
-import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.js';
-import { detectFrustration } from './affect.js';
-import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
-import { ContextHealthTracker } from '../cli/context-health.js';
-
-/** How many times one task may have its reply cut off for collapsing into
- *  repetition before the run gives up on the model. Two, because the first
- *  correction usually lands and a third attempt is just paying for the same
- *  failure again. */
-const MAX_REPETITION_RETRIES = 2;
-
-/** Sent after a collapsed reply is cut off. Names the failure, then aims the
- *  model at the tool call it was narrating instead of making. */
-const REPETITION_CORRECTION =
-  'Your previous reply collapsed: it repeated the same phrase over and over until it was cut off. ' +
-  'Do not describe or narrate what you are about to write. Make the tool call directly — ' +
-  'call write_file once with the complete file content. If the file is genuinely too large for one ' +
-  'call, write a first section with write_file and append the rest with follow-up edit_file calls.';
-
-/**
- * Provider errors can carry entire HTML error pages (e.g. a 404 from a
- * misconfigured endpoint). Dumping those into the terminal floods the TUI
- * with kilobytes of markup — keep the status line, drop the page body.
- */
-export function formatProviderError(e: unknown): string {
-  let msg = String(e).replace(/\s+/g, ' ').trim();
-  const htmlIdx = msg.search(/<!DOCTYPE|<html[\s>]/i);
-  if (htmlIdx !== -1) msg = msg.slice(0, htmlIdx).trim() + ' [HTML error page omitted]';
-  return msg.length > 400 ? msg.slice(0, 400) + '…' : msg;
-}
 
 export interface LoopOptions {
   provider: LLMProvider;
@@ -62,8 +26,6 @@ export interface LoopOptions {
   sessionPath?: string;
   /** Pre-existing conversation history to resume from (e.g. loaded session). */
   initialHistory?: HistoryMessage[];
-  /** Base64 data URIs attached to the initial user message (multimodal input). */
-  images?: string[];
   /** Base config passed to spawned sub-agents. If undefined, spawn_task returns an error. */
   spawnConfig?: { apiKey?: string; baseUrl?: string };
   /** Disables subagent tool entirely (e.g. for tests) */
@@ -74,50 +36,6 @@ export interface LoopOptions {
   checkpoints?: boolean;
   /** Plugin hooks fired around tool execution (PreToolUse can block). */
   hooks?: import('../plugins/types.js').HookEntry[];
-  /** Optional abort signal — when aborted the loop stops after the current tool turn. */
-  abortSignal?: AbortSignal;
-  /** Confirmation prompt override for needs-confirm tool calls. Defaults to the
-   *  terminal readline confirm — embedded callers (alternator, bots) supply
-   *  their own so confirmation isn't silently impossible off-terminal. */
-  confirmFn?: (message: string) => Promise<boolean>;
-  /** Optional shared context-health tracker (e.g. the REPL's). When omitted the
-   *  loop creates an internal one. Passing it in lets a /context command read
-   *  the accumulated compaction history and per-turn snapshots. */
-  healthTracker?: import('../cli/context-health.js').ContextHealthTracker;
-  /** Internal: skip pre-planning inspector phase to avoid recursive spawning */
-  skipInspector?: boolean;
-  /** Replaces the full built system prompt (e.g. minimal prompt for small
-   *  local models with tiny context windows). When set, buildSystemPrompt
-   *  is not called at all. */
-  systemPromptOverride?: string;
-  /** When set, only tool definitions with these names are sent to the
-   *  provider. Cuts context cost for small local models; execution-side
-   *  blocking is still the PermissionSystem's job. */
-  allowedTools?: string[];
-  /** Conditional-tool eviction (small local models only). When enabled, a
-   *  triggered conditional tool that goes uncalled for `evictAfterTurns`
-   *  turns is dropped from the schema block instead of staying sticky.
-   *  Defaults ON for the Archimedes (Ollama) provider, OFF everywhere else —
-   *  cloud providers keep sticky selectTools() to protect the Anthropic
-   *  prompt-cache prefix. */
-  toolEviction?: { enabled: boolean; evictAfterTurns?: number };
-  /** Primary-argument repetition limit for small local models (Archimedes).
-   *  When set, the loop breaks early if any (tool_name, primary_arg) pair is
-   *  called this many times — signals a stuck loop that won't self-correct.
-   *  Only the primary argument is tracked (path for file tools, pattern for
-   *  search_code) so reading different line ranges of the same file still
-   *  counts as the same repeated call. Undefined = disabled (default). */
-  maxRepetitionsPerTool?: number;
-  /** Cumulative turn/token guard shared across every runAgentLoop call in one
-   *  conversation. `maxTurns` above only bounds a single invocation; a
-   *  multi-segment coder conversation resets that counter on each user
-   *  message while history (and cost) carries forward. See session-budget.ts. */
-  budget?: import('./session-budget.js').SessionBudget;
-  /** Maximum chars kept from a single tool result before it enters history
-   *  (non-error results only — errors keep a higher ceiling for diagnostics).
-   *  Default: 4,000. Set lower (e.g. 1,500) for Archimedes Q&A sessions to
-   *  reduce history noise from large ripgrep / file outputs. */
-  toolResultMaxChars?: number;
 }
 
 export interface LoopResult {
@@ -131,36 +49,18 @@ export interface LoopResult {
   history: HistoryMessage[];
   /** Every tool call made during this loop run — used by the verify layer. */
   toolCallLog: Array<{ name: string; input: Record<string, unknown> }>;
-  /** Real per-API-call usage as reported by the provider, one entry per
-   *  completed call. Optional so older consumers/paths (MoA, Archimedes) that
-   *  don't collect it stay type-compatible. */
-  turnUsage?: TurnUsage[];
 }
 
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  cachedTokens: number;
 }
 
-/**
- * Read-only, deterministic tools whose result depends solely on workspace
- * state. Safe to serve from the per-run cache until something mutates.
- * Deliberately excludes non-deterministic tools (web_fetch, web_search,
- * http_request, browser) and anything with side effects.
- */
-const CACHEABLE_READ_TOOLS = new Set([
-  'read_file', 'list_dir', 'git_diff', 'git_status', 'search_code', 'search_semantic',
-]);
+/** Tools that can change the working tree — the checkpoint trigger set. */
+const MUTATING_TOOLS = new Set(['write_file', 'edit_file', 'run_shell']);
 
-/** Stable cache key for a tool call — key order must not affect identity. */
-function callSignature(name: string, input: Record<string, unknown>): string {
-  const keys = Object.keys(input).sort();
-  return `${name}(${keys.map(k => `${k}=${JSON.stringify(input[k])}`).join(',')})`;
-}
-
-const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number }> = {
+const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number }> = {
   'claude-opus-4-5-20251001':   { in: 15,  out: 75  },
   'claude-sonnet-4-5-20251001': { in: 3,   out: 15  },
   'claude-haiku-4-5-20251001':  { in: 0.8, out: 4   },
@@ -169,80 +69,35 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?:
   'gemini-2.5-pro':             { in: 1.25,out: 10  },
   'gemini-2.5-flash':           { in: 0.075,out: 0.3},
   'grok-beta':                  { in: 5,   out: 15  },
-  // Published rates, docs.z.ai/guides/overview/pricing (checked 2026-07-26).
-  // 5.1/5.2 were previously carried at the GLM-5 rate on the assumption they
-  // matched; they don't — both input and output were understated.
-  'glm-5.2':                    { in: 1.4, out: 4.4, cachedIn: 0.26 },
-  'glm-5.1':                    { in: 1.4, out: 4.4, cachedIn: 0.26 },
-  'glm-5':                      { in: 1,   out: 3.2, cachedIn: 0.2  },
-  'glm-5-turbo':                { in: 1.2, out: 4,   cachedIn: 0.24 },
+  // Zhipu publishes GLM-5 rates only; 5.1/5.2 assumed equal until announced.
+  'glm-5.2':                    { in: 1,   out: 3.2 },
+  'glm-5.1':                    { in: 1,   out: 3.2 },
+  'glm-5':                      { in: 1,   out: 3.2 },
   'mimo-v2.5-pro':              { in: 1,   out: 4   },
   'mimo-v2.5':                  { in: 0.5, out: 2   },
   'mimo-v2-flash':              { in: 0.1, out: 0.4 },
-  // DeepSeek V4 — cache hits billed at 1/10th of standard input rate.
-  'deepseek-v4-flash':          { in: 0.14, out: 0.28, cachedIn: 0.014 },
-  'deepseek-v4-pro':            { in: 0.435, out: 0.87, cachedIn: 0.0435 },
 };
 
-export function costFor(model: string, input: number, output: number, cachedTokens?: number): number {
+export function costFor(model: string, input: number, output: number): number {
   const p = PRICING_USD_PER_MTOK[model] ?? PRICING_USD_PER_MTOK[Object.keys(PRICING_USD_PER_MTOK).find(k => model.includes(k.split('-')[1] ?? '') && k.startsWith(model.split('-')[0] ?? '')) ?? ''] ?? { in: 0, out: 0 };
-  const cached = Math.min(cachedTokens ?? 0, input);
-  const billable = input - cached;
-  const cachedRate = p.cachedIn ?? p.in / 10;
-  return (billable / 1_000_000) * p.in + (cached / 1_000_000) * cachedRate + (output / 1_000_000) * p.out;
-}
-
-/**
- * Scan `calls` from the current turn, update `counts`, and return a
- * human-readable reason string if any (tool_name, primary_arg) pair has now
- * been called `threshold` or more times, or null if no loop detected.
- *
- * Only the primary argument is inspected — `path` for read_file / list_dir /
- * search_semantic, `pattern` for search_code. Secondary args (start_line,
- * end_line, …) are intentionally ignored: reading different line ranges of
- * the same file is the same stuck behaviour, not progress.
- * Pure except for updating `counts` in place.
- */
-function checkPrimaryArgRepetition(
-  counts: Map<string, number>,
-  calls: ToolCall[],
-  threshold: number,
-): string | null {
-  for (const call of calls) {
-    const input = call.input as Record<string, unknown>;
-    const primaryArg = String(input.path ?? input.pattern ?? input.query ?? '');
-    const key = `${call.name}:${primaryArg}`;
-    const n = (counts.get(key) ?? 0) + 1;
-    counts.set(key, n);
-    if (n >= threshold) {
-      return `repetition loop — ${call.name}('${primaryArg}') called ${n}x with no new information`;
-    }
-  }
-  return null;
+  return (input / 1_000_000) * p.in + (output / 1_000_000) * p.out;
 }
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const { provider, task, context, permissions, display } = opts;
 
-  let finalTask = task;
-  if (!opts.skipInspector && process.env.AURA_ENABLE_INSPECTOR === 'true') {
-    const { runInspector } = await import('../orchestration/inspector.js');
-    const report = await runInspector(task, context, display);
-    finalTask = `${task}\n\n${report}`;
-  }
-
-  const profile = getLoopProfile(opts.maxTurns);
+  const profile = getLoopProfile(task, opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name, finalTask);
+  const system = buildSystemPrompt(context, provider.name, task);
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
-    { role: 'user', content: finalTask, ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}) },
+    { role: 'user', content: task },
   ];
 
   let turns = 0;
   let toolCallCount = 0;
-  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 };
+  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
   if (!opts.disableSpawn) {
     registerSpawner(makeDefaultSpawner(context, opts.spawnConfig ?? {}, display));
@@ -253,7 +108,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   try {
     return await runLoopBody({ opts, provider, system, history, profile, pricingModel, display, permissions, turns, toolCallCount, usage });
   } finally {
-    display.stopThinking?.();
     clearSpawner();
   }
 }
@@ -276,16 +130,6 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const { opts, provider, system, history, profile, pricingModel, display, permissions } = args;
   let { turns, toolCallCount, usage } = args;
   const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
-  const turnUsage: TurnUsage[] = [];
-  // Bounded record of state-altering calls; its digest survives compaction so
-  // the model never repeats a write/edit/command it already executed.
-  const execQueue = new ExecutiveQueue();
-
-  // Context health tracker: observational visibility into token pressure,
-  // compaction ladder, and session cost. Never mutates history itself.
-  // Use the caller-provided tracker (so /context can read it) or make one.
-  const health = opts.healthTracker ?? new ContextHealthTracker(() => system, () => history, provider.model, pricingModel);
-  health.updateSystem(system);
 
   // Stall detection: if the recent turns repeat the exact same tool call(s)
   // (or alternate between the same two), the agent is stuck rather than
@@ -294,164 +138,41 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const turnSignatures: string[] = [];
   let stall: StallKind | null = null;
 
-  // Flat ceiling — checked once per turn, no widening. See loop-profile.ts
-  // for why this replaced the old shape-based ladder.
-  const maxTurns = profile.maxTurns;
+  // Adaptive widening: a run that hits its profile ceiling while still
+  // making progress gets ONE upgrade to profile.widenTo instead of dying
+  // with a resume hint. Explicit --max-turns never widens.
+  let maxTurns = profile.maxTurns;
+  let widened = false;
 
   // Mutable bag for per-loop state (empty-response retry counter, etc.).
   const loopState: Record<string, number> = {};
-
-  // Redundant-read cache. Exploratory runs routinely re-read the same file or
-  // re-list the same directory several turns apart, paying full I/O and a full
-  // second copy of the content in context each time. Cached results are keyed
-  // by exact call signature and dropped wholesale the moment anything mutates
-  // the workspace, so a hit can never serve stale content.
-  const readCache = new Map<string, string>();
-
-  // Sticky set of triggered conditional tools — survives history compaction.
-  const includedTools = new Set<string>();
-
-  // Tool eviction: Archimedes's call site (alternator.ts) is owned by another
-  // track, so eviction defaults on by provider identity; the flag remains
-  // the explicit override for other embedders. Cloud providers stay sticky.
-  const evictionEnabled = opts.toolEviction?.enabled
-    ?? provider.name === 'Archimedes (Ollama)';
-  const evictAfterTurns = opts.toolEviction?.evictAfterTurns ?? 3;
-  const lastUsedTurn = new Map<string, number>();
-  const evictedTools = new Set<string>();
-
-  // Optional allowlist filter — applied after selectTools so conditional
-  // triggers still work, but nothing outside the allowlist is ever sent.
-  const allowedToolNames = opts.allowedTools ? new Set(opts.allowedTools) : null;
-
-  // Primary-arg repetition tracking — Archimedes early-exit only.
-  // Null when the option is not set so there is zero overhead on normal runs.
-  const primaryArgCounts = opts.maxRepetitionsPerTool !== undefined
-    ? new Map<string, number>()
-    : null;
-  let primaryArgLoopReason: string | null = null;
-
-  // Cumulative guard across the whole conversation. Checked alongside the
-  // per-invocation cap below: on a single-segment run the two agree, but on a
-  // multi-segment coder conversation only this one carries forward.
-  let budgetStop: BudgetStop | null = null;
+  
 
   while (true) {
-    // Flat turn cap — pi's loop has no equivalent check at all (it runs
-    // until the model stops calling tools); this is the one guard we kept.
-    if (turns >= maxTurns) break;
-
-    if (opts.budget) {
-      budgetStop = opts.budget.exhausted();
-      if (budgetStop) break;
-    }
-
-    // Abort check — user requested stop via :stop / Ctrl+C
-    if (opts.abortSignal?.aborted) {
-      display.warning('Task cancelled by user — stopping loop.');
-      break;
-    }
-
-    turns++;
-    opts.budget?.recordTurn();
-    health.incrementTurn();
-
-    // Compaction check runs pre-call: estimateContextTokens measures the
-    // payload about to be sent (see its doc for why not per-turn usage sums).
-    {
-      const compactionExtras = {
-        executiveDigest: execQueue.size > 0 ? execQueue.digest() : undefined,
-        affectHint: detectFrustration(history) ?? undefined,
-      };
-      if (isTieredStrategyEnabled()) {
-        // Tiered strategy (ANCHOR + FACT LOG + TAIL) — see tiered-context.ts.
-        // No rollover step: the fact log stays lightweight bullets rather
-        // than a growing prose recap, so it doesn't need the dream-store
-        // flush the default strategy relies on to bound recap size.
-        const estimated = estimateContextTokens(system, history);
-        const { compacted, metrics } = await compactHistoryTiered(
-          history, estimated, provider.model, opts.sessionPath, compactionExtras,
+    if (turns >= maxTurns) {
+      if (profile.widenTo !== undefined && !widened) {
+        widened = true;
+        maxTurns = profile.widenTo;
+        display.warning(
+          `Turn budget (${profile.maxTurns}) reached with work in progress — widening once to ${maxTurns}.`,
         );
-        if (compacted && metrics) {
-          health.recordCompaction(metrics.beforeTokens, metrics.afterTokens, metrics.compactionCount);
-          display.compactionEvent?.({
-            beforeTokens: metrics.beforeTokens, afterTokens: metrics.afterTokens,
-            generation: metrics.compactionCount, threshold: metrics.beforeTokens,
-          });
-          logContextMetrics(opts.context.root, { ...metrics });
-          await persist(opts.sessionPath, history);
-        }
-      } else
-      // The ladder in compactHistory escalates its own trigger per recap
-      // generation; once a recap has been recompacted ROLLOVER_AT_GENERATION
-      // times, a further in-place pass would just be lossy recompaction —
-      // flush it to the dream store instead (one LLM call) and start clean.
-      if (getRecapGeneration(history) >= ROLLOVER_AT_GENERATION) {
-        const beforeTokens = estimateContextTokens(system, history);
-        const { flushed } = await maybeRollover(history, opts.context.root, provider, compactionExtras);
-        if (flushed) {
-          const afterTokens = estimateContextTokens(system, history);
-          const generation = getRecapGeneration(history);
-          health.recordCompaction(beforeTokens, afterTokens, generation);
-          display.compactionEvent?.({ beforeTokens, afterTokens, generation, threshold: beforeTokens });
-          logContextMetrics(opts.context.root, { strategy: 'default-rollover', beforeTokens, afterTokens, generation });
-          await persist(opts.sessionPath, history);
-        }
       } else {
-        const estimated = estimateContextTokens(system, history);
-        const compacted = compactHistory(history, estimated, provider.model, compactionExtras);
-        if (compacted) {
-          const afterTokens = estimateContextTokens(system, history);
-          const generation = getRecapGeneration(history);
-          health.recordCompaction(estimated, afterTokens, generation);
-          display.compactionEvent?.({ beforeTokens: estimated, afterTokens, generation, threshold: estimated });
-          logContextMetrics(opts.context.root, { strategy: 'default', beforeTokens: estimated, afterTokens, generation });
-          await persist(opts.sessionPath, history);
-        }
-      }
-    }
-
-    // Predictive ceiling check — runs AFTER compaction, so it measures the
-    // payload we are actually about to send rather than the pre-compaction
-    // one. exhausted() above only notices an overshoot once the offending
-    // call has already been billed; this stops before it. Costs one
-    // tokenizer pass over the same text compaction just measured.
-    if (opts.budget) {
-      const projected = opts.budget.wouldExceed(estimateContextTokens(system, history));
-      if (projected) {
-        budgetStop = projected;
-        turns--;           // this turn never happened — no call was made
-        opts.budget.unrecordTurn();
         break;
       }
     }
-
-    display.contextBar?.(health.snapshot(usage.inputTokens, usage.outputTokens));
+    turns++;
 
     let responseText = '';
     const responseToolCalls: ToolCall[] = [];
     let finalResponse: { stopReason: 'done' | 'tools' | 'limit' } | null = null;
-    // Watches for a reply that collapses into repeating one phrase. Left to run
-    // to the output cap, that costs a full max_tokens of output and returns
-    // nothing usable — see repetition-guard.ts.
-    const repGuard = createRepetitionGuard();
-    let repetition: Repetition | null = null;
 
     try {
-      let tools = evictionEnabled
-        ? selectToolsWithEviction(opts.task, history, includedTools, lastUsedTurn, turns, evictAfterTurns, evictedTools)
-        : selectTools(opts.task, history, includedTools);
-      if (allowedToolNames) tools = tools.filter(t => allowedToolNames.has(t.name));
-      const stream = provider.stream(system, history, tools);
-      streamLoop: for await (const chunk of stream) {
+      const stream = provider.stream(system, history, TOOL_DEFINITIONS);
+      for await (const chunk of stream) {
         switch (chunk.type) {
           case 'text':
             display.streamText(chunk.text);
             responseText += chunk.text;
-            // Breaking out returns the generator, which aborts the request, so
-            // the provider stops generating (and billing) the rest of the loop.
-            repetition = repGuard.push(chunk.text);
-            if (repetition) break streamLoop;
             break;
           case 'tool_start':
             display.toolStart(chunk.name, chunk.id);
@@ -462,120 +183,54 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             responseToolCalls.push(chunk.call);
             break;
           case 'done':
-            finalResponse = chunk.response;
+            finalResponse = { stopReason: chunk.response.stopReason };
             if (chunk.response.toolCalls.length > 0 && responseToolCalls.length === 0) {
               responseToolCalls.push(...chunk.response.toolCalls);
             }
-            const u = (chunk.response as { usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; cacheCreationTokens?: number } }).usage;
+            const u = (chunk.response as { usage?: { inputTokens?: number; outputTokens?: number } }).usage;
             if (u) {
               const inT = u.inputTokens ?? 0;
               const outT = u.outputTokens ?? 0;
-              const cachedT = u.cachedTokens ?? 0;
               usage.inputTokens += inT;
               usage.outputTokens += outT;
               usage.totalTokens += inT + outT;
-              usage.cachedTokens += cachedT;
-              // Net of cache hits, not raw prompt size — this is the ceiling
-              // that actually tracks cost across conversation segments.
-              opts.budget?.recordCall(inT, cachedT);
-              const at = new Date().toISOString();
-              const turnCost = costFor(pricingModel, inT, outT, cachedT);
-              turnUsage.push({
-                turn: turns,
-                at,
-                inputTokens: inT,
-                outputTokens: outT,
-                cachedTokens: cachedT,
-                cacheCreationTokens: u.cacheCreationTokens ?? 0,
-                costUsd: turnCost,
-              });
-              logTokenUsage(opts.context.root, {
-                turn: turns, ts: at, model: provider.model,
-                input: inT, output: outT,
-                cacheHit: cachedT, cacheWrite: u.cacheCreationTokens ?? 0,
-                hitRatio: inT > 0 ? cachedT / inT : 0,
-                costUsd: turnCost,
-                ...(opts.sessionPath ? { sessionId: path.basename(opts.sessionPath, '.json') } : {}),
-              });
             }
             break;
         }
       }
     } catch (e) {
-      const errMsg = formatProviderError(e);
-      display.error(`Provider error: ${errMsg}`);
+      display.error(`Provider error: ${String(e)}`);
       await persist(opts.sessionPath, history);
       return {
         success: false,
-        summary: `Provider error on turn ${turns}: ${errMsg}`,
-        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        summary: `Provider error on turn ${turns}: ${String(e)}`,
+        turns, toolCallCount, usage, history, toolCallLog,
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
 
     if (responseText) display.streamEnd();
 
-    // The reply collapsed into a repeating phrase and was cut off. Two things
-    // matter here: the degenerate text must not reach history (a model shown its
-    // own loop continues it), and the turn is worth one more attempt with the
-    // collapse named explicitly — the task itself is usually still doable.
-    if (repetition) {
-      loopState._repetitionRetries = ((loopState._repetitionRetries as number) ?? 0) + 1;
-      const attempts = loopState._repetitionRetries as number;
-      display.warning(
-        `Reply collapsed — ${describeRepetition(repetition)}. Cut it off` +
-        (attempts <= MAX_REPETITION_RETRIES ? ' and retrying with a correction…' : '.'),
-      );
-      if (attempts <= MAX_REPETITION_RETRIES) {
-        // A short, honest stand-in keeps role alternation valid for providers
-        // that require it, without feeding the loop back to the model. Only the
-        // text from before the collapse is kept — a model shown even a handful
-        // of copies of its own loop tends to carry on with it.
-        const collapseAt = responseText.indexOf(repetition.unit);
-        const preamble = (collapseAt > 0 ? responseText.slice(0, collapseAt) : '').trim().slice(0, 200);
-        history.push({
-          role: 'assistant',
-          content: `${preamble ? `${preamble}\n` : ''}[reply cut off: ${describeRepetition(repetition)}]`,
-        });
-        history.push({ role: 'user', content: REPETITION_CORRECTION });
-        display.agentThinking();
-        continue;
-      }
-      await persist(opts.sessionPath, history);
-      return {
-        success: false,
-        summary:
-          `The model's reply collapsed into repetition ${attempts}× in a row ` +
-          `(${describeRepetition(repetition)}). This is a model failure, not a task failure — ` +
-          `try a narrower step, or a stronger model with --model / :model.`,
-        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
-      };
-    }
-
-    // Guard: an empty response with no tools and stop reason "done"
-    // usually means the provider returned a silent error / rate-limit /
-    // content filter. Retry up to 3 times before accepting it as "done"
-    // so sessions don't silently die with no output.
+    // Guard: empty response with no tools = provider error/rate-limit/filter.
+    // Retry twice then bail to avoid burning tokens on a stuck session.
     const noProgress = !responseText && responseToolCalls.length === 0;
     if (finalResponse?.stopReason === 'done' && noProgress) {
       if (!('_emptyRetries' in loopState)) loopState._emptyRetries = 0;
       loopState._emptyRetries++;
-      if (loopState._emptyRetries <= 3) {
+      if (loopState._emptyRetries <= 2) {
         display.warning(
-          `Empty response from provider (attempt ${loopState._emptyRetries}/3) — retrying…`,
+          `Empty response (attempt ${loopState._emptyRetries}/2) — retrying…`,
         );
         display.agentThinking();
         continue;
       }
-      // Exhausted retries — provider can't produce output
       history.push({ role: 'assistant', content: '' });
       await persist(opts.sessionPath, history);
       return {
         success: false,
-        summary: 'Provider returned empty response after 4 attempts — likely rate-limited or filtered',
-        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        summary: 'Provider returned empty response after 3 attempts — likely rate-limited or filtered',
+        turns, toolCallCount, usage, history, toolCallLog,
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
 
@@ -585,8 +240,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       return {
         success: true,
         summary: responseText,
-        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        turns, toolCallCount, usage, history, toolCallLog,
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
       };
     }
 
@@ -595,15 +250,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       break;
     }
 
-    const assistantMsg: HistoryMessage = {
+    history.push({
       role: 'assistant',
       content: responseText,
       toolCalls: responseToolCalls,
-    };
-    if ((finalResponse as any)?.googleParts) {
-      (assistantMsg as any).googleParts = (finalResponse as any).googleParts;
-    }
-    history.push(assistantMsg);
+    });
 
     // Record this turn's tool-call signature before executing, so a
     // stall is detected even if every call in the streak errors out.
@@ -615,23 +266,13 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       stall = detectStall(turnSignatures, profile.stallThreshold);
     }
 
-    // Primary-arg repetition check — Archimedes early-exit (maxRepetitionsPerTool).
-    if (primaryArgCounts && responseToolCalls.length > 0) {
-      primaryArgLoopReason = checkPrimaryArgRepetition(
-        primaryArgCounts, responseToolCalls, opts.maxRepetitionsPerTool!,
-      );
-    }
-
     const toolResults: ToolResult[] = [];
-    // One checkpoint per turn, taken lazily before the first mutating call —
-    // a turn's writes form one burst, and the engine dedupes identical trees.
+    // Skip checkpoint for read-only turns — only snapshot before mutations.
     let checkpointedThisTurn = false;
+    const hasMutatingCall = responseToolCalls.some(c => MUTATING_TOOLS.has(c.name));
 
     for (const call of responseToolCalls) {
       toolCallCount++;
-      // Any attempted call counts as "used" for eviction — the model
-      // demonstrably wants the tool even if the call is blocked or errors.
-      lastUsedTurn.set(call.name, turns);
       display.toolCall(call.name, call.input);
 
       let result: string;
@@ -646,27 +287,21 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
         if (perm.needsConfirm) {
           const desc = formatCallForConfirmation(call);
-          const approved = await (opts.confirmFn ?? confirm)(
-            `Allow: ${desc}?`,
-            { toolName: call.name, input: call.input },
-          );
+          const approved = await confirm(`Allow: ${desc}?`);
           if (!approved) {
             display.toolBlocked(call.name, 'denied by user');
             toolResults.push({ id: call.id, name: call.name, content: 'User denied this action.', isError: true });
             continue;
           }
-          // Remember it, so writing the same file across several turns asks
-          // once. Without this the approval is forgotten immediately and the
-          // prompt repeats until the user stops reading it.
-          if (perm.approvalKey) opts.permissions.approveForSession(perm.approvalKey);
         }
 
-        if (opts.checkpoints !== false && !checkpointedThisTurn && MUTATING_TOOLS.has(call.name)) {
+        // Lazy checkpoint before first mutating tool in a turn
+        if (opts.checkpoints !== false && !checkpointedThisTurn && hasMutatingCall) {
           checkpointedThisTurn = true;
           try {
             const cp = await createCheckpoint(opts.context.root, `turn ${turns}: ${opts.task}`);
             if (cp) await pruneCheckpoints(opts.context.root, DEFAULTS.maxCheckpoints);
-          } catch { /* checkpointing must never block the tool call */ }
+          } catch { /* never block tool execution */ }
         }
 
         if (opts.hooks && opts.hooks.length > 0) {
@@ -680,55 +315,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           }
         }
 
-        // Any mutation invalidates every cached read: a shell command or file
-        // write can change arbitrary paths, so partial invalidation would be
-        // guesswork. Cleared before execution so a mutation that throws still
-        // drops the cache rather than leaving it falsely warm.
-        if (MUTATING_TOOLS.has(call.name) || call.name === 'run_tests') {
-          readCache.clear();
-        }
-
-        const sig = callSignature(call.name, call.input);
-        const cacheable = CACHEABLE_READ_TOOLS.has(call.name);
-        const cached = cacheable ? readCache.get(sig) : undefined;
-
-        if (cached !== undefined) {
-          // The content is only elided if it is still verbatim in the live
-          // history — if compaction has since dropped it, the model genuinely
-          // no longer has it and must get the full result back.
-          const stillInContext = history.some(m =>
-            m.role === 'tool_result' && m.results.some(r => r.content === cached));
-          result = stillInContext
-            ? `[identical to the earlier ${sig} call this session; workspace unchanged since. Result omitted — reuse the copy already in context.]`
-            : cached;
-          display.toolResult(call.name, result, 0);
-        } else {
-          const startMs = Date.now();
-          result = await executeTool(call.name, call.input, opts.context.root);
-          const elapsed = Date.now() - startMs;
-          display.toolResult(call.name, result, elapsed);
-        }
-        // Proactive truncation: align with the compactor's MAX_RESULT_CHARS
-        // (4K chars ~1K tokens). Oversized results pollute context between
-        // compaction cycles — truncate early so every API call carries less
-        // dead weight. Errors get a higher ceiling so diagnostics survive.
-        // toolResultMaxChars narrows the normal limit for small-model sessions
-        // (e.g. Archimedes at 1,500 chars) without affecting error diagnostics.
-        const normalLimit = opts.toolResultMaxChars ?? 4_000;
-        const RESULT_TRUNCATE_AT = result.startsWith('Error:') || result.startsWith('Tool error') ? 8_000 : normalLimit;
-        if (result.length > RESULT_TRUNCATE_AT) {
-          result = result.slice(0, RESULT_TRUNCATE_AT)
-            + `\n[truncated — ${(result.length - RESULT_TRUNCATE_AT).toLocaleString()} chars omitted]`;
-        }
+        const startMs = Date.now();
+        result = await executeTool(call.name, call.input, opts.context.root);
+        const elapsed = Date.now() - startMs;
+        display.toolResult(call.name, result, elapsed);
         isError = result.startsWith('Error:') || result.startsWith('Tool error');
-        // Cache the post-truncation text — that is exactly what lands in
-        // history, so a later hit can compare against it verbatim. Errors are
-        // never cached: they are frequently transient and re-reading is cheap.
-        if (cached === undefined && cacheable && !isError) {
-          readCache.set(sig, result);
-        }
         toolCallLog.push({ name: call.name, input: call.input });
-        if (!isError) execQueue.push(call.name, call.input, turns);
 
         if (opts.hooks && opts.hooks.length > 0) {
           const { runHooks } = await import('../plugins/hooks.js');
@@ -739,18 +331,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         isError = true;
         display.error(result);
       }
-      // Safety net: prevent any single tool result from consuming excessive
-      // context. 8K chars (~2K tokens) is enough for any meaningful output;
-      // larger results mean the agent should narrow its query or use ranges.
-      const MAX_TOOL_RESULT_CHARS = 8_000;
-      if (result.length > MAX_TOOL_RESULT_CHARS) {
-        result = result.slice(0, MAX_TOOL_RESULT_CHARS)
-          + `\n[result truncated: ${result.length.toLocaleString()} chars total — narrow the query or read the file in ranges]`;
-      }
       toolResults.push({ id: call.id, name: call.name, content: result, isError });
     }
-
-    health.incrementToolCalls(responseToolCalls.length);
 
     history.push({ role: 'tool_result', results: toolResults });
 
@@ -761,27 +343,20 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       break;
     }
 
-    if (primaryArgLoopReason) {
-      display.warning(`Archimedes repetition loop — escalating early: ${primaryArgLoopReason}`);
-      break;
-    }
-
     display.agentThinking();
   }
 
   await persist(opts.sessionPath, history);
   const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
   const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
-  const reason = primaryArgLoopReason ? primaryArgLoopReason
-    : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
+  const reason = stall === 'repeat' ? 'stalled (repeated identical tool calls)'
     : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
-    : budgetStop ? describeBudgetStop(budgetStop)
-    : `ended after ${turns} turns (cap: ${profile.maxTurns})`;
+    : `ended after ${turns} turns${widened ? `, after widening once from ${profile.maxTurns}` : ''}`;
   return {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,
-    turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-    costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+    turns, toolCallCount, usage, history, toolCallLog,
+    costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens),
   };
 }
 
@@ -800,61 +375,8 @@ async function persist(path: string | undefined, history: HistoryMessage[]): Pro
   catch { /* persistence is best-effort */ }
 }
 
-/**
- * Appends one JSON line per compaction event to <root>/.aura/context-metrics.jsonl,
- * tagged by strategy, so old-vs-new (default vs AURA_CONTEXT_STRATEGY=tiered)
- * runs can be diffed after the fact independent of the live display.
- */
-function logContextMetrics(root: string, entry: Record<string, unknown>): void {
-  try {
-    const dir = path.join(root, '.aura');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(
-      path.join(dir, 'context-metrics.jsonl'),
-      JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + '\n',
-    );
-  } catch { /* metrics logging is best-effort */ }
-}
-
-/** One per-call record in <root>/.aura/token-log.jsonl. */
-export interface TokenLogEntry {
-  turn: number;
-  ts: string;
-  model: string;
-  input: number;
-  output: number;
-  cacheHit: number;
-  cacheWrite: number;
-  /** cacheHit / input, 0 when input is 0. The number that actually matters. */
-  hitRatio: number;
-  costUsd: number;
-  sessionId?: string;
-}
-
-/**
- * Append one line per provider call to <root>/.aura/token-log.jsonl.
- *
- * Separate from context-metrics.jsonl (which only records compaction events):
- * a session can be ruinously expensive without ever compacting, which is
- * exactly the failure this exists to make visible. Cache hit ratio is the
- * dominant cost lever — a 98%-cached call costs ~1/10th of an uncached one at
- * the same token count — but it was previously invisible unless you dug
- * through session JSON after the fact.
- */
-function logTokenUsage(root: string, entry: TokenLogEntry): void {
-  try {
-    const dir = path.join(root, '.aura');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, 'token-log.jsonl'), JSON.stringify(entry) + '\n');
-  } catch { /* logging is best-effort — never break a run over telemetry */ }
-}
-
 function formatCallForConfirmation(call: ToolCall): string {
   if (call.name === 'run_shell') return `$ ${call.input.command}`;
   if (call.name === 'write_file') return `overwrite ${call.input.path}`;
-  if (call.name === 'mcp' && call.input.action === 'connect') {
-    const args = Array.isArray(call.input.args_list) ? (call.input.args_list as string[]).join(' ') : '';
-    return `spawn MCP server '${call.input.server}': ${call.input.command} ${args}`.trim();
-  }
   return `${call.name}(${JSON.stringify(call.input).slice(0, 80)})`;
 }

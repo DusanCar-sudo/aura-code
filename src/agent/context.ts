@@ -9,7 +9,6 @@ export interface ProjectContext {
   language: string;      // primary language detected
   framework: string;     // framework detected (React, Django, etc.)
   readme: string;        // README contents (truncated)
-  auraRules: string;     // AURA.md standing rules (truncated), if present
   tree: string;          // directory tree
   config: string;        // package.json / requirements.txt / Cargo.toml
   recentCommits: string; // last 5 git commits
@@ -26,9 +25,8 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     name,
     language,
     framework,
-    readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
-    auraRules:     readTruncated(root, ['AURA.md'], 2000, 'AURA.md'),
-    tree:          buildTree(root).split('\n').slice(0, 150).join('\n'),
+    readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 1000),
+    tree:          buildTree(root),
     config:        readConfig(root),
     recentCommits: readGitLog(root),
     graphSummary:  loadGraphSummary(root),
@@ -94,7 +92,7 @@ function detectStack(root: string): { language: string; framework: string } {
   return { language: 'Unknown', framework: 'Unknown' };
 }
 
-function readTruncated(root: string, names: string[], maxChars: number, notFoundLabel = 'README'): string {
+function readTruncated(root: string, names: string[], maxChars: number): string {
   for (const name of names) {
     const p = path.join(root, name);
     if (fs.existsSync(p)) {
@@ -106,30 +104,10 @@ function readTruncated(root: string, names: string[], maxChars: number, notFound
       } catch { /* next */ }
     }
   }
-  return `(no ${notFoundLabel} found)`;
-}
-
-function loadAuraIgnore(root: string): string[] {
-  const p = path.join(root, '.auraignore');
-  if (!fs.existsSync(p)) return [];
-  return fs.readFileSync(p, 'utf8')
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l && !l.startsWith('#'));
-}
-
-function isAuraIgnored(name: string, patterns: string[]): boolean {
-  return patterns.some(p => {
-    const bare = p.replace(/\/$/, '');
-    // Suffix glob: *.log matches foo.log
-    if (bare.startsWith('*')) return name.endsWith(bare.slice(1));
-    // Exact or prefix match (trailing slash stripped above)
-    return name === bare;
-  });
+  return '(no README found)';
 }
 
 function buildTree(root: string): string {
-  const auraIgnore = loadAuraIgnore(root);
   const lines: string[] = [path.basename(root) + '/'];
   function walk(dir: string, prefix: string, depth: number) {
     if (depth > 3) return;
@@ -139,7 +117,6 @@ function buildTree(root: string): string {
     const filtered = entries.filter(e =>
       !IGNORE_PATTERNS.some(p => e.name === p || (p.startsWith('*') && e.name.endsWith(p.slice(1))))
       && !e.name.startsWith('.')
-      && !isAuraIgnored(e.name, auraIgnore)
     );
     filtered.sort((a, b) => {
       if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
@@ -162,7 +139,7 @@ function readConfig(root: string): string {
     if (fs.existsSync(p)) {
       try {
         const content = fs.readFileSync(p, 'utf8');
-        return `${name}:\n${content.slice(0, 1500)}${content.length > 1500 ? '\n[...truncated]' : ''}`;
+        return `${name}:\n${content.slice(0, 800)}${content.length > 800 ? '\n[...truncated]' : ''}`;
       } catch { /* next */ }
     }
   }
@@ -171,7 +148,7 @@ function readConfig(root: string): string {
 
 function readGitLog(root: string): string {
   try {
-    return execSync('git log --oneline -10', { cwd: root, encoding: 'utf8' }).trim();
+    return execSync('git log --oneline -5', { cwd: root, encoding: 'utf8' }).trim();
   } catch {
     return '(not a git repository)';
   }

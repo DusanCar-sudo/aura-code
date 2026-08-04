@@ -67,7 +67,7 @@ export function classifyTask(task: string): TaskShape {
 export const DEFAULT_MAX_TURNS = 50;
 
 /** Default stall-detection sensitivity — same for every task, no ladder. */
-export const DEFAULT_STALL_THRESHOLD = 3;
+export const DEFAULT_STALL_THRESHOLD = 2;
 
 /**
  * Get the loop profile for a run.

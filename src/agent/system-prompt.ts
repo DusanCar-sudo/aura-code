@@ -1,116 +1,46 @@
 import type { ProjectContext } from './context.js';
 import { getDomainPromptBlock } from './domain-expertise.js';
 import { loadUnifiedMemory } from './unified-memory.js';
-import { loadConfessionsSection } from './confess.js';
-import { loadAllPlugins } from '../plugins/loader.js';
-
-const WEB_KEYWORDS = /website|webpage|frontend|front-end|ui component|landing page|homepage|web app|portfolio|hero section|marketing page|site design|visual design|html.*css|make.*page|create.*page|build.*site/;
-
-let _cachedMemory: string | null = null;
-let _cachedConfessions: string | null = null;
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
-  // Unified memory: global identity/facts (shared with the Telegram bot) plus
-  // this project's reconciled lessons. Replaces the old dreams-only block.
-  const memoryBlock = _cachedMemory ?? (_cachedMemory = loadUnifiedMemory({ projectRoot: ctx.root }));
-  // Confessions: permanent lessons extracted from high-cost failures.
-  // Loaded separately so they sit above regular memory with elevated priority.
-  // Memoized like the memory block above: this is a directory scan + stat +
-  // read per call, and more importantly the result sits inside the cacheable
-  // system prefix. A REPL session runs buildSystemPrompt once per task, so an
-  // unmemoized read meant a confession written mid-session silently changed
-  // the prefix between tasks and invalidated the provider's prompt cache.
-  // Trade-off (same one already accepted for memory): new confessions are
-  // picked up on next start, not mid-session.
-  const confessionsBlock = _cachedConfessions ?? (_cachedConfessions = loadConfessionsSection());
-  // Plugin skills: inject relevant plugin skills when task matches their domain.
-  const pluginBlock = loadPluginSkillsBlock(task);
+  const memoryBlock = loadUnifiedMemory({ projectRoot: ctx.root });
 
-  return `You are Aura — a precise, efficient AI coding agent.
-You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
+  return `You are Aura — a precise AI coding agent for this ${ctx.language} project ("${ctx.name}").
 
-## How you operate
-- Work in a loop: read context → plan → execute tools → verify → repeat until done.
-- Always READ files before EDITING them. Never guess at file structure.
-- Prefer search_semantic over read_file when examining long files to save tokens — it provides the file outline and specific snippets without dumping thousands of lines into context.
-- Use search_code for exact locations — don't assume line numbers.
-- Use edit_file for existing files; only write_file for new/tiny files — prefer targeted, minimal changes over rewrites.
-- After changes, run_tests. Fix new failures before proceeding.
-- State intent in 1-2 sentences before each tool call; always start with a tool (search_semantic/search_code/read_file/list_dir) — never respond with prose alone.
-- If the task requires a code change, you must eventually call write_file or edit_file to apply it. Aim for a 2:1 ratio of reads to writes, not 100% reads.
-- When done, summarize exactly what changed and what was verified — not what was attempted. Cite specifics (file paths, line numbers, function names), never generalities. State findings and act on evidence, never hedge with "I think" or "I believe".
+## Core rules
+- READ files before EDITING. Use search_code to find exact locations first.
+- Prefer edit_file over write_file for existing files. Never rewrite entire files unless new or tiny.
+- After changes, run_tests to verify. Fix any regressions immediately.
+- If a tool errors, read carefully and adjust.
+- Be explicit about what/why in 1 sentence before each tool call.
+- When done, summarize exactly what changed and what was verified.
+- Make changes, not just observations. Target 2:1 reads-to-writes ratio.
+- Always start with a tool (search_code/read_file/list_dir). Zero tool calls = incomplete.
 
 ## Tool call arguments
-- Never inline large multi-line content (HTML, generated code, long files) as a raw string inside a tool call's JSON arguments — models frequently produce invalid JSON when escaping quotes/newlines in big blocks, causing repeated failed calls.
-- For content longer than ~30 lines, write it via run_shell using a heredoc (cat > file << 'EOF' ... EOF), or build it incrementally with edit_file on small, well-escaped chunks.
+- For content >30 lines, use heredoc via run_shell or incremental edit_file chunks. Don't inline large blocks in JSON.
 
-## Images and screenshots
-- You CAN read local image files (screenshots, diagrams, photos). Never tell the user you cannot access local files or \`file://\` paths — you have the image_read tool.
-- When the user references an image path — a plain path, or a \`file://\` URL like \`file:///home/user/shot.png\` — call \`image_read\` with \`action=ocr\` to extract the text/content, then answer from what it actually contains. Use \`action=info\` for dimensions/format.
-- Never guess or invent what an image shows, and never ask the user to describe it before trying image_read first. Read it, then reason about it.
-
-## Code standards
-- Match the existing code style: indentation, naming conventions, comment style.
-- Do not introduce new dependencies unless explicitly asked.
-- Add or update tests when you modify logic.
-${domainBlock}${memoryBlock}${confessionsBlock}${pluginBlock}
+## Standards
+- Match existing style (indentation, naming, comments).
+- No new dependencies unless asked.
+- Minimal, targeted changes over rewrites.
+- Add/update tests when modifying logic.
+${domainBlock}${memoryBlock}
 ## Safety
-- Never delete files unless explicitly instructed.
-- Never commit to git unless explicitly instructed.
-- Ask before running any installation commands (npm install, pip install, etc.).
-- If a command seems destructive, explain what it does and ask for confirmation.
-- The safety system may occasionally block harmless commands (mkdir, ls, touch, cp, etc.). If a common file-manipulation command is blocked, try using write_file or edit_file as an alternative, or explain in your response that the safety layer is being overly cautious.
+- Never delete files unless instructed. Never commit to git unless instructed.
+- Ask before install commands (npm/pip install).
+- Explain destructive commands and ask confirmation.
+- If mkdir/ls/touch/cp blocked, try write_file/edit_file alternatives.
 
-## Project context
-Language: ${ctx.language}
-Framework: ${ctx.framework}
-Root: ${ctx.root}
+## Context
+Config: ${ctx.config.slice(0, 800)}${ctx.config.length > 800 ? '\n[...truncated]' : ''}
 
-### Directory structure
-\`\`\`
-${ctx.tree}
-\`\`\`
+README: ${ctx.readme}
 
-### Project config
-\`\`\`
-${ctx.config}
-\`\`\`
+Git: ${ctx.recentCommits}
 
-### Aura Standing Rules
-${ctx.auraRules}
-
-### README
-${ctx.readme}
-
-### Recent git history
-${ctx.recentCommits}
-
-Provider: ${providerName}. Work efficiently — minimize unnecessary tool calls.`;
-}
-
-/** Load plugin skills relevant to the current task. Cached per process. */
-let _pluginSkillsCache: string | null = null;
-
-function loadPluginSkillsBlock(task: string): string {
-  if (_pluginSkillsCache === null) {
-    try {
-      const plugins = loadAllPlugins();
-      const lines: string[] = [];
-      for (const p of plugins) {
-        for (const s of p.skills) {
-          lines.push(`\n\n## Plugin skill: ${s.name} (from ${p.name})\n${s.body}`);
-        }
-      }
-      _pluginSkillsCache = lines.join('');
-    } catch {
-      _pluginSkillsCache = '';
-    }
-  }
-  if (!_pluginSkillsCache) return '';
-  // Only inject for web/UI tasks — avoid polluting non-design prompts
-  if (!WEB_KEYWORDS.test(task.toLowerCase())) return '';
-  return `\n\n## Plugin instructions\nThese skill instructions from installed plugins apply to this task:${_pluginSkillsCache}`;
+Provider: ${providerName}. Minimize tool calls.`;
 }
 
 export function buildArchitectPrompt(task: string, projectRoot: string): string {
