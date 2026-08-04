@@ -2,12 +2,19 @@ export const DEFAULTS = {
   // No default model — the user picks their own on first run via the wizard.
   // This keeps the codebase provider-agnostic: nothing here assumes a specific vendor.
   defaultModel: undefined as string | undefined,
-  maxTokens: 32000,
+  // NOTE: there is deliberately no `maxTokens` here. Per-call output caps are
+  // per-provider, because each vendor's ceiling differs, and the factory never
+  // passed a value through — so a `maxTokens` on this object was dead config
+  // that disagreed with what actually shipped. The live defaults are:
+  //   openai-compatible.ts  16384
+  //   anthropic.ts           8192
+  //   google.ts              8192
+  // Override per provider via ProviderConfig.maxTokens.
   maxContextFiles: 20,
   maxFileLinesInContext: 300,
   maxDirDepth: 4,
   toolTimeout: 30_000,     // 30s max per tool execution
-  maxTurns: 150,            // prevent infinite loops
+  maxTurns: 50,             // prevent infinite loops; matches DEFAULT_MAX_TURNS
   confirmDangerous: true,   // ask before destructive ops
   autoApprove: false,       // --auto flag overrides
   verify: false,            // --verify flag enables post-task verification
@@ -55,6 +62,62 @@ export const DANGEROUS_PATTERNS: RegExp[] = [
   /\bsource\s+\/dev\//,
 ];
 
+/**
+ * The same screen for cmd.exe and PowerShell.
+ *
+ * Every pattern above is POSIX — rm, dd, mkfs, chmod — and none of them can
+ * match anything cmd.exe or PowerShell would run, so on Windows the denylist
+ * caught nothing at all. `del /s /q C:\` and `format C: /y` went straight
+ * through.
+ *
+ * Applied on every platform rather than switched by process.platform: Git
+ * Bash, WSL invoked from a Windows shell, and Windows containers all mean the
+ * running shell is a poor proxy for which syntax can reach the OS, and a
+ * PowerShell string is inert on Linux anyway. Screening both costs nothing
+ * and removes the chance of guessing wrong.
+ */
+export const WINDOWS_DANGEROUS_PATTERNS: RegExp[] = [
+  // Recursive delete: del /s, rd /s, rmdir /s. The /s is what makes it the
+  // equivalent of rm -rf rather than a single-file removal.
+  /\b(?:del|erase)\b[^|&;]*\s\/s\b/i,
+  /\b(?:rd|rmdir)\b[^|&;]*\s\/s\b/i,
+  // PowerShell's Remove-Item and its aliases (ri, rm, del, rd) with -Recurse.
+  /\b(?:remove-item|ri)\b[^|&;]*\s-recurse\b/i,
+  /\bget-childitem\b[^|&;]*\|\s*(?:remove-item|ri|rm|del)\b/i,
+  // Whole-volume operations.
+  /\bformat\s+[a-z]:/i,
+  /\bformat-volume\b/i,
+  /\bclear-disk\b/i,
+  /\bdiskpart\b/i,
+  // Shadow-copy and backup destruction — the signature move of ransomware,
+  // and never something a coding agent has cause to do.
+  /\bvssadmin\b[^|&;]*\bdelete\b/i,
+  /\bwbadmin\b[^|&;]*\bdelete\b/i,
+  /\bcipher\b[^|&;]*\s\/w\b/i,
+  // Boot configuration and registry hives.
+  /\bbcdedit\b/i,
+  /\breg\s+delete\s+"?hk(?:lm|cr|u|ey_local_machine|ey_classes_root)\b/i,
+  /\bremove-item\b[^|&;]*\bhk(?:lm|cr):/i,
+  // Ownership and ACL takeovers across a tree.
+  /\btakeown\b[^|&;]*\s\/r\b/i,
+  /\bicacls\b[^|&;]*\/grant\s+\S*everyone/i,
+  // Download-and-execute, the PowerShell counterpart of `curl … | sh`.
+  /\|\s*(?:iex|invoke-expression)\b/i,
+  /\b(?:iex|invoke-expression)\s*\(/i,
+  /\b(?:iwr|invoke-webrequest|curl|wget)\b[^|&;]*\|\s*(?:iex|invoke-expression)\b/i,
+  /\bdownloadstring\s*\(/i,
+  // Living-off-the-land download vectors.
+  /\bcertutil\b[^|&;]*-urlcache\b/i,
+  /\bbitsadmin\b[^|&;]*\/transfer\b/i,
+  /\bmshta\b\s+https?:/i,
+  /\bregsvr32\b[^|&;]*\/i:\s*https?:/i,
+  // Turning script signing off wholesale.
+  /\bset-executionpolicy\b[^|&;]*\b(?:bypass|unrestricted)\b/i,
+  // Power state, matching the POSIX shutdown/reboot entries above.
+  /\b(?:stop-computer|restart-computer)\b/i,
+  /\bshutdown\b[^|&;]*\s\/[srfp]\b/i,
+];
+
 // Commands whose output is inspection-only and safe to auto-approve in normal
 // mode. Interpreters and package-runners (node, python, npx, npm run, …) are
 // deliberately NOT here: whitelisting an interpreter is equivalent to
@@ -71,15 +134,33 @@ export const SAFE_SHELL_COMMANDS = [
 ];
 
 /**
- * Default fallback model chain tried in order when the primary model
- * exhausts its retries.  Overridden by --fallback flags or AURA_FALLBACK_MODEL.
+ * Inspection-only commands on cmd.exe and PowerShell.
+ *
+ * Without these the safe list matched nothing a Windows shell runs, so every
+ * `dir` and every `type` raised a confirmation. That is not merely annoying:
+ * a prompt on each harmless listing trains the user to approve without
+ * reading, which is precisely the habit that makes the prompt on a genuinely
+ * destructive command worthless.
+ *
+ * Read-only by construction. Nothing here writes, deletes, or evaluates a
+ * string — no powershell/cmd/wmic, for the same reason node and python are
+ * absent from the POSIX list above.
  */
-export const FALLBACK_CHAIN: readonly string[] = [
-  'mimo-v2.5-pro',
-  'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
-  'openrouter/deepseek/deepseek-chat',
-  'openrouter/minimax/minimax-m2.5',
+export const WINDOWS_SAFE_SHELL_COMMANDS = [
+  'dir', 'type', 'findstr', 'where', 'whoami', 'hostname', 'ver', 'tree', 'fc',
+  // PowerShell verbs, all Get-* or otherwise non-mutating.
+  'get-childitem', 'get-content', 'get-location', 'get-command', 'get-item',
+  'get-date', 'get-host', 'select-string', 'measure-object', 'test-path',
+  'compare-object', 'resolve-path',
 ];
+
+/**
+ * Fallback model chain tried in order when the primary model exhausts its
+ * retries. Empty by default — hardcoding vendor models here silently sent
+ * traffic to providers the user never configured (and has no keys for).
+ * Set via --fallback flags, AURA_FALLBACK_MODEL, or "fallbacks" in .aura.json.
+ */
+export const FALLBACK_CHAIN: readonly string[] = [];
 
 export const IGNORE_PATTERNS = [
   'node_modules', '.git', 'dist', 'build', '__pycache__',

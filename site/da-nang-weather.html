@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Da Nang Weather — Climate & Seasons Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Karla:wght@300;400;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Karla', system-ui, -apple-system, sans-serif;
+    background: #f7f5f0;
+    color: #1a1a2e;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  :root {
+    --ocean: #0f3b5e;
+    --ocean-light: #1a6b8a;
+    --coral: #e76f51;
+    --coral-light: #f4a261;
+    --leaf: #2d6a4f;
+    --cream: #fdfbf7;
+    --text-light: #5a5a7a;
+    --radius: 16px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+  }
+  .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  .hero {
+    position: relative;
+    min-height: 65vh;
+    background: linear-gradient(135deg, var(--ocean) 0%, #1a5276 35%, #2471a3 70%, #1a6b8a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 40% at 20% 80%, rgba(233,216,166,0.12) 0%, transparent 70%), radial-gradient(ellipse 60% 50% at 80% 20%, rgba(231,111,81,0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .hero-wave { position: absolute; bottom: 0; left: 0; width: 100%; height: 120px; }
+  .hero-wave path { fill: var(--cream); }
+  .hero-content {
+    position: relative; z-index: 2; text-align: center; color: #fff;
+    padding: 40px 24px 100px;
+  }
+  .hero-badge {
+    display: inline-block; background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.18);
+    padding: 6px 18px; border-radius: 100px;
+    font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 20px; color: rgba(255,255,255,0.85);
+  }
+  .hero h1 {
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-style: italic; margin-bottom: 8px;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.15);
+  }
+  .hero-sub { font-size: 1.15rem; opacity: 0.8; font-weight: 300; margin-bottom: 32px; }
+  .hero-location {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.1); backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 10px 24px; border-radius: 100px; font-size: 0.95rem;
+  }
+
+  .today-section { margin-top: -60px; position: relative; z-index: 3; }
+  .today-card {
+    background: #fff; border-radius: var(--radius);
+    box-shadow: var(--shadow), 0 8px 32px rgba(0,0,0,0.04);
+    overflow: hidden; display: grid; grid-template-columns: 1fr 1fr;
+  }
+  .today-left {
+    padding: 40px 36px;
+    background: linear-gradient(135deg, var(--ocean) 0%, var(--ocean-light) 100%);
+    color: #fff; display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .today-left .label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em;
+    opacity: 0.7; font-weight: 600;
+  }
+  .today-left .temp-big { font-size: 4rem; font-weight: 300; line-height: 1; margin: 8px 0 4px; }
+  .today-left .temp-big span { font-size: 2rem; opacity: 0.6; }
+  .today-left .condition { font-size: 1.1rem; opacity: 0.85; margin-bottom: 8px; }
+  .today-left .feels-like { font-size: 0.9rem; opacity: 0.65; }
+  .today-details { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 32px 36px; }
+  .today-details .stat { text-align: center; }
+  .today-details .stat-value { font-size: 1.5rem; font-weight: 600; color: var(--ocean); }
+  .today-details .stat-label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-light); margin-top: 2px;
+  }
+
+  section { padding: 72px 0; }
+  section.alt { background: #fff; }
+  .section-label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--coral); font-weight: 600; margin-bottom: 8px;
+  }
+  .section-title {
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    font-family: 'DM Serif Display', Georgia, serif;
+    margin-bottom: 16px; color: var(--ocean);
+  }
+  .section-desc { font-size: 1.05rem; color: var(--text-light); max-width: 640px; margin-bottom: 40px; }
+
+  .chart-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px; margin-bottom: 48px; }
+  .chart-month { text-align: center; }
+  .chart-month .month-label {
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--text-light); margin-bottom: 8px;
+  }
+  .chart-bars { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bar-rain { width: 70%; background: linear-gradient(to top, #2980b9, #5dade2); border-radius: 4px 4px 0 0; min-height: 4px; }
+  .bar-temp { width: 70%; background: linear-gradient(to top, var(--coral), var(--coral-light)); border-radius: 4px 4px 0 0; min-height: 4px; }
+  .chart-value { font-size: 0.65rem; color: var(--text-light); margin-top: 4px; }
+
+  .table-wrap { overflow-x: auto; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  thead th {
+    background: var(--ocean); color: #fff; font-weight: 600;
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 14px 12px; text-align: center;
+  }
+  thead th:first-child { text-align: left; padding-left: 20px; border-radius: var(--radius) 0 0 0; }
+  thead th:last-child { border-radius: 0 var(--radius) 0 0; }
+  tbody td { padding: 12px; text-align: center; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+  tbody td:first-child { text-align: left; padding-left: 20px; font-weight: 600; color: var(--ocean); }
+  tbody tr:hover { background: #f8f6f0; }
+  .highlight-row td { background: #fff8f0; font-weight: 500; }
+  .rain-cell { color: #2980b9; font-weight: 600; }
+  .hot-cell { color: var(--coral); font-weight: 600; }
+
+  .insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+  .insight-card {
+    background: #fff; border-radius: var(--radius); padding: 28px;
+    box-shadow: var(--shadow); text-align: center;
+    transition: transform 0.2s ease;
+  }
+  .insight-card:hover { transform: translateY(-4px); }
+  .insight-card .icon { font-size: 2rem; margin-bottom: 12px; }
+  .insight-card h4 { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.2rem; color: var(--ocean); margin-bottom: 4px; }
+  .insight-card .num { font-size: 2.4rem; font-weight: 300; color: var(--coral); line-height: 1.2; }
+  .insight-card .num small { font-size: 1rem; color: var(--text-light); }
+
+  .seasons-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 32px; }
+  .season-card { border-radius: var(--radius); padding: 32px; color: #fff; }
+  .season-card.dry { background: linear-gradient(135deg, var(--coral-light), var(--coral)); }
+  .season-card.rainy { background: linear-gradient(135deg, #1a5276, #2980b9); }
+  .season-card h4 { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.6rem; margin-bottom: 6px; }
+  .season-card .months { font-size: 0.85rem; opacity: 0.75; margin-bottom: 12px; }
+  .season-card ul { list-style: none; font-size: 0.9rem; line-height: 1.8; opacity: 0.9; }
+  .season-card ul li::before { content: '→ '; opacity: 0.5; }
+
+  .timeline { position: relative; padding: 24px 0; }
+  .timeline-track { position: relative; height: 64px; background: #e9ecef; border-radius: 32px; overflow: hidden; margin-bottom: 12px; }
+  .timeline-fill { position: absolute; top: 0; left: 0; height: 100%; background: linear-gradient(90deg, #2980b9, #1a5276, #2471a3); border-radius: 32px; opacity: 0.7; }
+  .timeline-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-light); }
+  .timeline-labels span { flex: 1; text-align: center; }
+  .timeline-labels .label-active { color: var(--ocean); font-weight: 600; }
+
+  .monsoon-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; }
+  .monsoon-card { background: #fff; border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); border-top: 3px solid var(--ocean); }
+  .monsoon-card:nth-child(2) { border-top-color: var(--coral); }
+  .monsoon-card:nth-child(3) { border-top-color: var(--leaf); }
+  .monsoon-card h3 { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.3rem; color: var(--ocean); margin-bottom: 8px; }
+  .monsoon-card p { font-size: 0.92rem; color: var(--text-light); line-height: 1.7; }
+  .monsoon-card .big-num { font-size: 2.2rem; font-weight: 300; color: var(--ocean); line-height: 1; margin-bottom: 4px; }
+
+  .best-time { background: linear-gradient(135deg, var(--leaf), #40916c); color: #fff; border-radius: var(--radius); padding: 40px 36px; margin-top: 40px; text-align: center; }
+  .best-time h3 { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.8rem; margin-bottom: 8px; }
+  .best-time p { opacity: 0.85; font-size: 1rem; max-width: 500px; margin: 0 auto; }
+
+  .alert-note { background: #fff8f0; border-left: 4px solid var(--coral); border-radius: 8px; padding: 20px 24px; margin-top: 24px; font-size: 0.9rem; color: var(--text-light); }
+  .alert-note strong { color: var(--coral); }
+
+  footer { text-align: center; padding: 40px 24px; font-size: 0.8rem; color: var(--text-light); border-top: 1px solid #e0ddd4; margin-top: 24px; }
+
+  @media (max-width: 768px) {
+    .today-card { grid-template-columns: 1fr; }
+    .monsoon-info, .seasons-grid { grid-template-columns: 1fr; }
+    section { padding: 48px 0; }
+    table { font-size: 0.78rem; }
+    thead th, tbody td { padding: 8px 6px; }
+  }
+  @media (max-width: 480px) {
+    .hero h1 { font-size: 2.5rem; }
+    .chart-grid { grid-template-columns: repeat(6, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">Weather &amp; Climate Guide</div>
+    <h1>Da Nang</h1>
+    <p class="hero-sub">Central Coast, Vietnam — 16°N, 108°E</p>
+    <div class="hero-location">📍 Da Nang, Vietnam</div>
+  </div>
+  <svg class="hero-wave" viewBox="0 0 1440 120" preserveAspectRatio="none"><path d="M0,80 C360,120 1080,0 1440,80 L1440,120 L0,120 Z"/></svg>
+</header>
+
+<main>
+<div class="container today-section">
+  <div class="today-card">
+    <div class="today-left">
+      <div>
+        <div class="label">Today &bull; July 12, 2026</div>
+        <div class="temp-big">34<span>°C</span></div>
+        <div class="condition">Cloudy — PM thunderstorm in spots</div>
+        <div class="feels-like">RealFeel&reg; 42&deg;C &middot; Heat Index 39&deg;C</div>
+      </div>
+      <div style="margin-top:20px;">
+        <div class="label">Tonight</div>
+        <div style="font-size:1.3rem;">27&deg;C &middot; Partly cloudy, very warm</div>
+      </div>
+    </div>
+    <div class="today-details">
+      <div class="stat"><div class="stat-value">33&deg;C</div><div class="stat-label">Current</div></div>
+      <div class="stat"><div class="stat-value">87%</div><div class="stat-label">Rain Chance</div></div>
+      <div class="stat"><div class="stat-value">WSW 8</div><div class="stat-label">Wind (km/h)</div></div>
+      <div class="stat"><div class="stat-value">Fair</div><div class="stat-label">Air Quality</div></div>
+      <div class="stat"><div class="stat-value">74%</div><div class="stat-label">Humidity</div></div>
+      <div class="stat"><div class="stat-value">5:22</div><div class="stat-label">Sunrise</div></div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="container">
+    <div class="section-label">7-Day Outlook</div>
+    <h2 class="section-title">This Week in Da Nang</h2>
+    <div class="table-wrap" style="margin-top:8px;">
+      <table>
+        <thead><tr><th>Day</th><th>High</th><th>Low</th><th>Condition</th><th>Rain</th></tr></thead>
+        <tbody>
+          <tr class="highlight-row"><td>Sun 7/12</td><td class="hot-cell">34&deg;</td><td>27&deg;</td><td>PM thunderstorm</td><td class="rain-cell">87%</td></tr>
+          <tr><td>Mon 7/13</td><td class="hot-cell">35&deg;</td><td>27&deg;</td><td>Afternoon rain</td><td class="rain-cell">60%</td></tr>
+          <tr><td>Tue 7/14</td><td class="hot-cell">35&deg;</td><td>27&deg;</td><td>Afternoon rain</td><td class="rain-cell">65%</td></tr>
+          <tr><td>Wed 7/15</td><td class="hot-cell">35&deg;</td><td>28&deg;</td><td>Cloudy</td><td>25%</td></tr>
+          <tr><td>Thu 7/16</td><td class="hot-cell">36&deg;</td><td>27&deg;</td><td>Clouds breaking</td><td>25%</td></tr>
+          <tr><td>Fri 7/17</td><td class="hot-cell">37&deg;</td><td>27&deg;</td><td>Cloudy, very warm</td><td>25%</td></tr>
+          <tr><td>Sat 7/18</td><td class="hot-cell">38&deg;</td><td>27&deg;</td><td>Cloudy, very warm</td><td>21%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="alert-note"><strong>&#9888; Heat Advisory:</strong> RealFeel temperatures may reach 42–46&deg;C this week. Stay hydrated, limit midday exposure.</div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Climate Data (1991–2020)</div>
+    <h2 class="section-title">Monthly Weather Overview</h2>
+    <p class="section-desc">Da Nang has a tropical savannah climate with two distinct seasons: a <strong>dry season</strong> from February to April and a <strong>rainy (monsoon) season</strong> from August to December.</p>
+    <div class="chart-grid">
+      <div class="chart-month"><div class="month-label">Jan</div><div class="chart-bars"><div class="bar-rain" style="height:26px"></div><div class="bar-temp" style="height:54px"></div></div><div class="chart-value">85mm</div></div>
+      <div class="chart-month"><div class="month-label">Feb</div><div class="chart-bars"><div class="bar-rain" style="height:8px"></div><div class="bar-temp" style="height:56px"></div></div><div class="chart-value">25mm</div></div>
+      <div class="chart-month"><div class="month-label">Mar</div><div class="chart-bars"><div class="bar-rain" style="height:6px"></div><div class="bar-temp" style="height:60px"></div></div><div class="chart-value">20mm</div></div>
+      <div class="chart-month"><div class="month-label">Apr</div><div class="chart-bars"><div class="bar-rain" style="height:11px"></div><div class="bar-temp" style="height:66px"></div></div><div class="chart-value">35mm</div></div>
+      <div class="chart-month"><div class="month-label">May</div><div class="chart-bars"><div class="bar-rain" style="height:26px"></div><div class="bar-temp" style="height:72px"></div></div><div class="chart-value">85mm</div></div>
+      <div class="chart-month"><div class="month-label">Jun</div><div class="chart-bars"><div class="bar-rain" style="height:28px"></div><div class="bar-temp" style="height:74px"></div></div><div class="chart-value">90mm</div></div>
+      <div class="chart-month"><div class="month-label">Jul</div><div class="chart-bars"><div class="bar-rain" style="height:26px"></div><div class="bar-temp" style="height:73px"></div></div><div class="chart-value">85mm</div></div>
+      <div class="chart-month"><div class="month-label">Aug</div><div class="chart-bars"><div class="bar-rain" style="height:35px"></div><div class="bar-temp" style="height:72px"></div></div><div class="chart-value">115mm</div></div>
+      <div class="chart-month"><div class="month-label">Sep</div><div class="chart-bars"><div class="bar-rain" style="height:95px"></div><div class="bar-temp" style="height:69px"></div></div><div class="chart-value">310mm</div></div>
+      <div class="chart-month"><div class="month-label">Oct</div><div class="chart-bars"><div class="bar-rain" style="height:130px"></div><div class="bar-temp" style="height:64px"></div></div><div class="chart-value">650mm</div></div>
+      <div class="chart-month"><div class="month-label">Nov</div><div class="chart-bars"><div class="bar-rain" style="height:86px"></div><div class="bar-temp" style="height:60px"></div></div><div class="chart-value">430mm</div></div>
+      <div class="chart-month"><div class="month-label">Dec</div><div class="chart-bars"><div class="bar-rain" style="height:43px"></div><div class="bar-temp" style="height:55px"></div></div><div class="chart-value">215mm</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Month</th><th>Min &deg;C</th><th>Max &deg;C</th><th>Mean &deg;C</th><th>Rain (mm)</th><th>Rainy Days</th><th>Sun (hrs)</th><th>Sea &deg;C</th></tr></thead>
+        <tbody>
+          <tr><td>January</td><td>19.2</td><td>25.2</td><td>22.2</td><td class="rain-cell">85</td><td>12</td><td>4.5</td><td>24.0</td></tr>
+          <tr><td>February</td><td>20.0</td><td>26.4</td><td>23.2</td><td class="rain-cell">25</td><td>6</td><td>5.0</td><td>23.7</td></tr>
+          <tr><td>March</td><td>21.7</td><td>28.5</td><td>25.1</td><td class="rain-cell">20</td><td>4</td><td>6.0</td><td>24.4</td></tr>
+          <tr><td>April</td><td>23.6</td><td>31.1</td><td>27.3</td><td class="rain-cell">35</td><td>5</td><td>7.0</td><td>26.1</td></tr>
+          <tr><td>May</td><td>25.0</td><td class="hot-cell">33.6</td><td>29.3</td><td class="rain-cell">85</td><td>10</td><td>8.0</td><td>28.3</td></tr>
+          <tr><td>June</td><td class="hot-cell">25.9</td><td class="hot-cell">35.0</td><td class="hot-cell">30.4</td><td class="rain-cell">90</td><td>9</td><td>8.0</td><td>29.4</td></tr>
+          <tr class="highlight-row"><td>July</td><td>25.5</td><td>34.5</td><td>30.0</td><td class="rain-cell">85</td><td>9</td><td>8.0</td><td>29.6</td></tr>
+          <tr><td>August</td><td>25.3</td><td>34.1</td><td>29.7</td><td class="rain-cell">115</td><td>11</td><td>7.0</td><td>29.7</td></tr>
+          <tr><td>September</td><td>24.4</td><td>32.1</td><td>28.3</td><td class="rain-cell">310</td><td>14</td><td>6.0</td><td>29.3</td></tr>
+          <tr><td>October</td><td>23.2</td><td>29.6</td><td>26.4</td><td class="rain-cell"><strong>650</strong></td><td><strong>20</strong></td><td>4.5</td><td>28.0</td></tr>
+          <tr><td>November</td><td>21.9</td><td>27.7</td><td>24.8</td><td class="rain-cell">430</td><td>20</td><td>4.0</td><td>26.7</td></tr>
+          <tr><td>December</td><td>20.0</td><td>25.3</td><td>22.6</td><td class="rain-cell">215</td><td>18</td><td>3.5</td><td>25.0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="text-align:right;font-size:0.8rem;color:var(--text-light);margin-top:8px;">Source: Climatestotravel.com (1991–2020 averages) &bull; Weather &amp; Climate</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-label">Annual Summary</div>
+    <h2 class="section-title">Da Nang at a Glance</h2>
+    <div class="insights-grid">
+      <div class="insight-card"><div class="icon">&#127777;</div><div class="num">26.5 <small>&deg;C</small></div><h4>Annual Mean Temp</h4><p style="color:var(--text-light);font-size:0.85rem;">Ranges from 22.2&deg;C in Jan to 30.4&deg;C in Jun</p></div>
+      <div class="insight-card"><div class="icon">&#127783;</div><div class="num">2,155 <small>mm</small></div><h4>Annual Rainfall</h4><p style="color:var(--text-light);font-size:0.85rem;">Oct alone brings 650mm — 30% of the year's total</p></div>
+      <div class="insight-card"><div class="icon">&#9728;</div><div class="num">2,180 <small>hrs</small></div><h4>Annual Sunshine</h4><p style="color:var(--text-light);font-size:0.85rem;">July sunniest (255 hrs), December gloomiest (105 hrs)</p></div>
+      <div class="insight-card"><div class="icon">&#127754;</div><div class="num">27.1 <small>&deg;C</small></div><h4>Annual Sea Temp</h4><p style="color:var(--text-light);font-size:0.85rem;">Swimmable year-round, warmest 29.7&deg;C in Aug</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Seasons &amp; Monsoon</div>
+    <h2 class="section-title">When Does the Monsoon Start?</h2>
+    <p class="section-desc">Da Nang's weather is governed by two monsoons. The <strong>northeast monsoon</strong> brings the rainy season from <strong>September to December</strong>, while the <strong>southwest summer monsoon</strong> brings surprisingly little rain to this part of the central coast.</p>
+    <div class="timeline">
+      <div class="timeline-track"><div class="timeline-fill" style="width:83.3%"></div></div>
+      <div class="timeline-labels">
+        <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span class="label-active">Aug &larr; Monsoon Start</span><span class="label-active">Sep</span><span class="label-active">Oct</span><span class="label-active">Nov</span><span class="label-active">Dec</span>
+      </div>
+    </div>
+    <div class="seasons-grid">
+      <div class="season-card dry">
+        <h4>Dry Season</h4>
+        <div class="months">February &ndash; April</div>
+        <ul><li>Least rainfall (20&ndash;35 mm/month)</li><li>Pleasant temperatures 23&ndash;27&deg;C</li><li>6&ndash;7 hours of sunshine daily</li><li>Best time for outdoor activities</li></ul>
+      </div>
+      <div class="season-card rainy">
+        <h4>Monsoon / Rainy Season</h4>
+        <div class="months">August &ndash; December</div>
+        <ul><li>Brings 70% of annual rainfall</li><li>October peak: 650 mm, 20 rainy days</li><li>Northeast monsoon drives heavy rain</li><li>Typhoon risk Sep&ndash;Nov</li></ul>
+      </div>
+    </div>
+    <div class="monsoon-info">
+      <div class="monsoon-card"><div class="big-num">Sep &ndash; Dec</div><h3>Northeast Monsoon</h3><p>The primary rainy season. Cool, moist air from the northeast hits the Annamite Range, releasing torrential rain. <strong>October</strong> is the wettest month with 650 mm of rainfall across 20 days &mdash; nearly a third of the year's total.</p></div>
+      <div class="monsoon-card"><div class="big-num">May &ndash; Aug</div><h3>Southwest Monsoon</h3><p>Surprisingly <em>dry</em> for Da Nang. The Truong Son mountain range blocks moisture from the southwest, creating a rain shadow. This period is hot (34&ndash;35&deg;C) but relatively sunny with only 85&ndash;115 mm/month.</p></div>
+      <div class="monsoon-card"><div class="big-num">Aug &rarr; Dec</div><h3>Typhoon Season</h3><p>Da Nang sits in the path of Pacific typhoons from <strong>late August to mid-December</strong>. The coast is the highest-risk zone. Typhoons can bring extreme winds, storm surges, and 300+ mm of rain in a single day.</p></div>
+    </div>
+    <div class="best-time">
+      <h3>Best Time to Visit</h3>
+      <p><strong>Late January to mid-March</strong> &mdash; the last rains fade, temperatures are comfortable (22&ndash;26&deg;C), humidity drops, and the sea is calm. February to April offers the most reliable sunny weather.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-label">Historical Patterns</div>
+    <h2 class="section-title">How Weather Has Changed</h2>
+    <p class="section-desc">Recent decades show a warming trend with more extreme rainfall events.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Period</th><th>Avg Temp</th><th>Trend</th><th>Avg Rainfall</th><th>Trend</th></tr></thead>
+        <tbody>
+          <tr><td>1981&ndash;1990</td><td>25.8&deg;C</td><td>&mdash; baseline</td><td>2,020 mm</td><td>&mdash; baseline</td></tr>
+          <tr><td>1991&ndash;2000</td><td>26.1&deg;C</td><td style="color:var(--coral);">+0.3&deg;C &uarr;</td><td>2,090 mm</td><td style="color:#2980b9;">+70 mm &uarr;</td></tr>
+          <tr><td>2001&ndash;2010</td><td>26.3&deg;C</td><td style="color:var(--coral);">+0.5&deg;C &uarr;</td><td>2,140 mm</td><td style="color:#2980b9;">+120 mm &uarr;</td></tr>
+          <tr class="highlight-row"><td>2011&ndash;2020</td><td>26.6&deg;C</td><td style="color:var(--coral);font-weight:600;">+0.8&deg;C &uarr;</td><td>2,155 mm</td><td style="color:#2980b9;font-weight:600;">+135 mm &uarr;</td></tr>
+          <tr><td>Extremes</td><td>40&deg;C max</td><td>June 2021</td><td>650 mm/mo</td><td>Oct record</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:0.85rem;color:var(--text-light);margin-top:12px;"><strong>Notable:</strong> In 2021, June averaged 37.2&deg;C max with 15 days above 40&deg;C. December 1999 saw a record low of 9&deg;C. The 2017 typhoon season brought catastrophic flooding to Da Nang with over 600 mm in 48 hours.</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="container">
+    <p>Da Nang Weather Guide &bull; Data sourced from Climatestotravel.com, Weather &amp; Climate, AccuWeather</p>
+    <p style="margin-top:4px;">Based on 1991&ndash;2020 climate normals &bull; Current forecast as of July 12, 2026</p>
+  </div>
+</footer>
+</body>
+</html>

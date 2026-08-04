@@ -6,6 +6,7 @@ import * as path from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { IGNORE_PATTERNS } from '../config/defaults.js';
 import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
+import { rtkWrap } from '../util/rtk.js';
 
 export interface ListDirInput { path: string; recursive: boolean; depth: number }
 
@@ -90,11 +91,11 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
 
   let cmd: string;
   const flagsRg: string[] = ['-n', '--no-heading', `--max-count=1`];
-  const flagsGrep: string[] = ['-rn', '--include'];
+  const flagsGrep: string[] = ['-rn'];
 
   if (!input.case_sensitive) hasRg ? flagsRg.push('-i') : flagsGrep.push('-i');
   if (input.literal) hasRg ? flagsRg.push('-F') : flagsGrep.push('-F');
-  if (input.file_glob) hasRg ? flagsRg.push(`--glob=${input.file_glob}`) : flagsGrep.push(`"${input.file_glob}"`);
+  if (input.file_glob) hasRg ? flagsRg.push(`--glob=${input.file_glob}`) : flagsGrep.push(`--include=${JSON.stringify(input.file_glob)}`);
 
   try {
     if (hasRg) {
@@ -106,8 +107,15 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
     const allLines = result.trim().split('\n').filter(Boolean);
     const lines = allLines.slice(0, input.max_results);
     if (lines.length === 0) return `No results for "${input.pattern}"`;
-    // Make paths relative
-    const relative = lines.map(l => l.replace(searchDir + '/', '').replace(searchDir + path.sep, ''));
+    // Make paths relative. Clip each matched line: a match inside a minified
+    // file (one 1.2 MB line in graphify-out/dashboard.html) once dumped ~340k
+    // tokens into history in a single tool result and poisoned the context
+    // for the rest of the session.
+    const MAX_LINE_CHARS = 500;
+    const relative = lines.map(l => {
+      const rel = l.replace(searchDir + '/', '').replace(searchDir + path.sep, '');
+      return rel.length > MAX_LINE_CHARS ? rel.slice(0, MAX_LINE_CHARS) + ' …[line clipped]' : rel;
+    });
     const truncated = allLines.length > lines.length ? ` (showing first ${lines.length} of ${allLines.length})` : '';
     return `Found ${allLines.length} result${allLines.length > 1 ? 's' : ''} for "${input.pattern}"${truncated}:\n\n${relative.join('\n')}`;
   } catch (e: unknown) {
@@ -125,6 +133,15 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
 
 export interface RunShellInput { command: string; cwd?: string; timeout?: number }
 
+function truncateOutput(output: string, isError: boolean): string {
+  const MAX_LEN = isError ? 4000 : 2000;
+  if (!output || output.length <= MAX_LEN) return output;
+  const head = 500;
+  const tail = isError ? 3000 : 1000;
+  const truncated = output.length - head - tail;
+  return `${output.slice(0, head)}\n\n... [ TRUNCATED ${truncated} BYTES ] ...\n\n${output.slice(-tail)}`;
+}
+
 export function runShell(input: RunShellInput, projectCwd: string): string {
   let workDir: string;
   try { workDir = input.cwd ? resolveInRoot(projectCwd, input.cwd) : projectCwd; }
@@ -132,20 +149,24 @@ export function runShell(input: RunShellInput, projectCwd: string): string {
   const timeout = input.timeout ?? 30_000;
 
   try {
-    const result = execSync(input.command, {
+    // Through RTK when it's installed — its compressed output is what keeps a
+    // long session's context from filling with raw terminal noise.
+    const result = execSync(rtkWrap(input.command), {
       cwd: workDir,
       encoding: 'utf8',
       timeout,
       maxBuffer: 2 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return result.trim() || '(command completed with no output)';
+    const output = result.trim() || '(command completed with no output)';
+    return truncateOutput(output, false);
   } catch (e: unknown) {
     const err = e as { stdout?: string; stderr?: string; message: string; killed?: boolean; signal?: string };
-    // Timeout shows up as either killed=true (with kill) or a SIGTERM/ETIMEDOUT message
     if (err.killed) return `Error: Command timed out after ${timeout}ms`;
     if (/ETIMEDOUT|timeout|timed out/i.test(err.message)) return `Error: Command timed out after ${timeout}ms`;
-    const out = [err.stdout?.trim(), err.stderr?.trim()].filter(Boolean).join('\n');
+    const outStdout = truncateOutput(err.stdout?.trim() || '', true);
+    const outStderr = truncateOutput(err.stderr?.trim() || '', true);
+    const out = [outStdout, outStderr].filter(Boolean).join('\n');
     return out || `Error: ${err.message}`;
   }
 }
@@ -191,9 +212,9 @@ function detectTestCommand(cwd: string, fileOrPattern?: string): string {
 
 export function gitStatus(cwd: string): string {
   try {
-    const status = execSync('git status --short', { cwd, encoding: 'utf8' }).trim();
-    const log    = execSync('git log --oneline -5', { cwd, encoding: 'utf8' }).trim();
-    const branch = execSync('git branch --show-current', { cwd, encoding: 'utf8' }).trim();
+    const status = execSync(rtkWrap('git status --short'), { cwd, encoding: 'utf8' }).trim();
+    const log    = execSync(rtkWrap('git log --oneline -5'), { cwd, encoding: 'utf8' }).trim();
+    const branch = execSync(rtkWrap('git branch --show-current'), { cwd, encoding: 'utf8' }).trim();
     return [
       `Branch: ${branch}`,
       '',
@@ -210,7 +231,7 @@ export function gitDiff(input: GitDiffInput, cwd: string): string {
   try {
     const staged = input.staged ? '--staged ' : '';
     const file   = input.path ? `-- ${JSON.stringify(input.path)}` : '';
-    const diff   = execSync(`git diff ${staged}${file}`, { cwd, encoding: 'utf8' });
+    const diff   = execSync(rtkWrap(`git diff ${staged}${file}`), { cwd, encoding: 'utf8' });
     return diff.trim() || `No ${input.staged ? 'staged ' : ''}changes${input.path ? ` in ${input.path}` : ''}`;
   } catch (e) { return `Git error: ${String(e)}`; }
 }

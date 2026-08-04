@@ -141,6 +141,13 @@ export async function extractPerception(projectRoot: string): Promise<ProjectPer
       description: recentLines.join('\n').slice(0, 500),
       metadata: { source: 'CHANGELOG.md' },
     });
+    nodes.push({
+      id: 'constraint:changes',
+      type: 'constraint',
+      label: 'Recent changes context',
+      description: 'New work should be consistent with the direction of recent changelog entries.',
+      metadata: { source: 'CHANGELOG.md' },
+    });
     edges.push(buildEdge(changelogNodeId, 'constraint:changes', 'aligns_with', 0.5));
   }
 
@@ -159,9 +166,9 @@ export async function extractPerception(projectRoot: string): Promise<ProjectPer
     strictRules.push(...mustLines);
   }
 
-  const rubyConfig = readRubyConfig(root);
-  const readOnly: string[] = rubyConfig.readOnly ?? [];
-  if (rubyConfig.strictRules) strictRules.push(...rubyConfig.strictRules);
+  const auraConfig = readAuraConfig(root);
+  const readOnly: string[] = auraConfig.readOnly ?? [];
+  if (auraConfig.strictRules) strictRules.push(...auraConfig.strictRules);
 
   const pkgJson = readPackageJson(root);
   if (pkgJson) {
@@ -407,12 +414,12 @@ function parseMustConstraints(content: string): string[] {
   return results;
 }
 
-interface RubyConfigData {
+interface AuraConfigData {
   readOnly?: string[];
   strictRules?: string[];
 }
 
-function readRubyConfig(root: string): RubyConfigData {
+function readAuraConfig(root: string): AuraConfigData {
   const raw = readFile(root, '.aura.json');
   if (!raw) return {};
   try {

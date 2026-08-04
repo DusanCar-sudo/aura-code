@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.agents
+videos
+*video*
+hyperframes
+*.mp4
+*.mkv
+*.jpg
+*.png

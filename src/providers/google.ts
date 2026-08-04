@@ -34,11 +34,7 @@ export class GoogleProvider implements LLMProvider {
     });
 
     const { contents } = toGoogleHistory(history);
-    const chat = genModel.startChat({ history: contents.slice(0, -1) });
-    const lastMsg = contents.at(-1);
-    const result = await chat.sendMessage(
-      lastMsg?.parts ?? [{ text: '' }],
-    );
+    const result = await genModel.generateContent({ contents });
 
     return fromGoogleResponse(result.response);
   }
@@ -56,16 +52,15 @@ export class GoogleProvider implements LLMProvider {
     });
 
     const { contents } = toGoogleHistory(history);
-    const chat = genModel.startChat({ history: contents.slice(0, -1) });
-    const lastMsg = contents.at(-1);
-
-    const result = await chat.sendMessageStream(lastMsg?.parts ?? [{ text: '' }]);
+    const result = await genModel.generateContentStream({ contents });
 
     let textBuffer = '';
     const toolCalls: ToolCall[] = [];
+    const rawParts: Part[] = [];
 
     for await (const chunk of result.stream) {
       for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+        rawParts.push(part);
         if (part.text) {
           textBuffer += part.text;
           yield { type: 'text', text: part.text };
@@ -84,8 +79,18 @@ export class GoogleProvider implements LLMProvider {
       }
     }
 
+    const finalResponse = await result.response.catch(() => null);
+    const meta = finalResponse?.usageMetadata;
+    const usage = meta ? {
+      inputTokens: meta.promptTokenCount ?? 0,
+      outputTokens: meta.candidatesTokenCount ?? 0,
+    } : undefined;
+
     const stopReason = toolCalls.length > 0 ? 'tools' : 'done';
-    yield { type: 'done', response: { text: textBuffer, toolCalls, stopReason } };
+    yield {
+      type: 'done',
+      response: { text: textBuffer, toolCalls, googleParts: rawParts, stopReason, usage } as LLMResponse,
+    };
   }
 }
 
@@ -109,9 +114,13 @@ function toGoogleHistory(history: HistoryMessage[]): { contents: GoogleContent[]
       contents.push({ role: 'user', parts: [{ text: msg.content }] });
     } else if (msg.role === 'assistant') {
       const parts: Part[] = [];
-      if (msg.content) parts.push({ text: msg.content });
-      for (const tc of msg.toolCalls ?? []) {
-        parts.push({ functionCall: { name: tc.name, args: tc.input } });
+      if ((msg as any).googleParts && (msg as any).googleParts.length > 0) {
+        parts.push(...(msg as any).googleParts);
+      } else {
+        if (msg.content) parts.push({ text: msg.content });
+        for (const tc of msg.toolCalls ?? []) {
+          parts.push({ functionCall: { name: tc.name, args: tc.input } });
+        }
       }
       contents.push({ role: 'model', parts });
     } else if (msg.role === 'tool_result') {
@@ -128,7 +137,7 @@ function toGoogleHistory(history: HistoryMessage[]): { contents: GoogleContent[]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fromGoogleResponse(response: any): LLMResponse {
+function fromGoogleResponse(response: any): LLMResponse & { googleParts?: Part[] } {
   const candidates = response?.candidates ?? [];
   const parts: Part[] = candidates[0]?.content?.parts ?? [];
 
@@ -150,6 +159,7 @@ function fromGoogleResponse(response: any): LLMResponse {
   return {
     text,
     toolCalls,
+    googleParts: parts,
     stopReason: toolCalls.length > 0 ? 'tools' : 'done',
     usage: meta ? {
       inputTokens: meta.promptTokenCount ?? 0,

@@ -42,7 +42,7 @@ export interface ToolResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type HistoryMessage =
-  | { role: 'user';       content: string }
+  | { role: 'user';       content: string; images?: string[] }
   | { role: 'assistant';  content: string; toolCalls?: ToolCall[] }
   | { role: 'tool_result'; results: ToolResult[] };
 
@@ -54,7 +54,7 @@ export interface LLMResponse {
   text: string;                  // Any prose the model wrote (may be empty)
   toolCalls: ToolCall[];         // Tool invocations (may be empty)
   stopReason: 'done' | 'tools' | 'limit';
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number; cacheCreationTokens?: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,4 +107,6 @@ export interface ProviderConfig {
   baseUrl?: string;     // For custom endpoints (Ollama, LM Studio, proxies)
   maxTokens?: number;
   temperature?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
 }

@@ -1,5 +1,6 @@
 /**
- * Task classification for turn-budget sizing.
+ * Task classification — used only to gate --moa (see cli/index.ts). Turn
+ * budgeting itself does NOT depend on shape; see getLoopProfile below.
  *
  * Cheap heuristics only — no LLM call. Spending a model turn to decide
  * how many turns to allow defeats the purpose. This is pattern matching
@@ -10,16 +11,8 @@ export type TaskShape = 'single-file' | 'multi-file' | 'exploratory';
 
 export interface LoopProfile {
   maxTurns: number;
-  shape: TaskShape;
   /** How many identical consecutive turn-signatures count as a stall. */
   stallThreshold: number;
-  /**
-   * One-time budget upgrade: if the run hits maxTurns while still making
-   * progress (not stalled), widen once to this ceiling instead of ending
-   * with a resume hint. Absent for shapes already at the top tier and
-   * whenever the user passed an explicit --max-turns (a hard ceiling).
-   */
-  widenTo?: number;
 }
 
 const MULTI_FILE_SIGNALS = [
@@ -48,31 +41,53 @@ export function classifyTask(task: string): TaskShape {
   return 'single-file';
 }
 
-const PROFILES: Record<TaskShape, Omit<LoopProfile, 'shape'>> = {
-  'single-file':  { maxTurns: 30,  stallThreshold: 3, widenTo: 80 },
-  'multi-file':   { maxTurns: 150, stallThreshold: 4 },
-  'exploratory':  { maxTurns: 80,  stallThreshold: 4 },
-};
+/**
+ * Default hard ceiling when neither --max-turns nor .aura.json set one.
+ *
+ * 50, down from 150. The motivating session ran 85 turns of genuine,
+ * non-repetitive work (105 distinct tool calls, nothing a stall detector
+ * would catch) with a linearly growing resend — 7.2k input tokens on turn 1,
+ * 57.1k on turn 85. 150 sat so far above where real sessions land that it
+ * never bound anything; that run ended on its own.
+ *
+ * It was briefly 30. That was set against a cost signal of $2.25 for the
+ * session, which turned out to be a logging artifact: the provider was
+ * caching ~90% of the prompt, but the client only read DeepSeek's cache
+ * fields and recorded zero hits for Zhipu, so costFor billed every token at
+ * the uncached rate. Real cost was roughly a third of that. 30 would have
+ * truncated legitimate work to solve a problem that wasn't there.
+ *
+ * 50 is the middle ground: still well below where a runaway lands, still
+ * above the ~30 turns a substantial task actually needs. Note this is a
+ * *ceiling*, not a saving — it stops runaways, it does not make a long
+ * legitimate task cheaper. The real cost lever is per-turn resend size
+ * (context-policy.ts) and prompt-cache hit rate. Cumulative token spend is
+ * guarded separately and more meaningfully by SessionBudget.
+ */
+export const DEFAULT_MAX_TURNS = 50;
+
+/** Default stall-detection sensitivity — same for every task, no ladder. */
+export const DEFAULT_STALL_THRESHOLD = 3;
 
 /**
- * Get the loop profile for a task.
+ * Get the loop profile for a run.
  *
- * @param task     The task prompt.
- * @param override Explicit maxTurns from CLI flag or config — always wins,
- *                 and is a hard ceiling (no adaptive widening past it).
+ * Modeled on pi's agent loop (github.com/badlogic/pi-mono,
+ * packages/agent/src/agent-loop.ts): that loop has no turn-budget concept
+ * at all — it runs until the model stops producing tool calls, full stop.
+ * We keep a single flat ceiling as a safety net (unlike pi), but drop the
+ * shape-based ladder + adaptive widening this used to have: sizing the cap
+ * off task-shape guesses made the *default* look like an explicit
+ * `--max-turns`, which silently disabled itself as a ceiling once the
+ * config layer's fallback value flowed through the same field. One flat
+ * number, checked once per turn, is simpler and cannot collide that way.
+ *
+ * @param override Explicit maxTurns from CLI flag or .aura.json.
  */
-export function getLoopProfile(task: string, override?: number): LoopProfile {
-  const shape = classifyTask(task);
-  const base = PROFILES[shape];
-
-  if (override !== undefined) {
-    return { shape, maxTurns: override, stallThreshold: base.stallThreshold };
-  }
+export function getLoopProfile(override?: number): LoopProfile {
   return {
-    shape,
-    maxTurns: base.maxTurns,
-    stallThreshold: base.stallThreshold,
-    widenTo: base.widenTo,
+    maxTurns: override ?? DEFAULT_MAX_TURNS,
+    stallThreshold: DEFAULT_STALL_THRESHOLD,
   };
 }
 

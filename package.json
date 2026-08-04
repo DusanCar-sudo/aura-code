@@ -1,28 +1,39 @@
 {
   "name": "aura-code",
-  "version": "0.8.0",
+  "version": "0.14.0",
   "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
   "bin": {
     "aura": "dist/cli/index.js",
     "dic": "dist/cli/dic.js"
   },
   "main": "./dist/cli/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "prepublishOnly": "npm run clean && npm run build",
     "build": "tsc",
+    "postbuild": "node scripts/fix-bin-perms.js",
     "dev": "ts-node src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "repair-anchors": "npm run build && node dist/machina/repair.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
+    "@vercel/connect": "^0.4.3",
     "chalk": "^4.1.2",
     "express": "^5.2.1",
     "glob": "^10.4.5",
+    "gpt-tokenizer": "^3.4.0",
     "jsonrepair": "^3.15.0",
+    "marked": "^18.0.5",
     "minimist": "^1.2.8",
     "openai": "^4.68.4",
     "pptxgenjs": "^4.0.1",
@@ -42,6 +53,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "homepage": "https://aurawebsite-eta.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DusanCar-sudo/aura-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DusanCar-sudo/aura-code/issues"
+  },
   "keywords": [
     "ai",
     "agent",
@@ -55,7 +74,7 @@
   "directories": {
     "test": "tests"
   },
-  "author": "",
+  "author": "Dušan Milosavljević",
   "type": "commonjs",
   "types": "./dist/cli/index.d.ts"
 }

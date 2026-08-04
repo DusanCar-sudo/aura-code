@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Aura Memory Pipeline</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  body, html { margin:0; padding:0; background:#0d0d0d; overflow:hidden; width:1080px; height:1920px; font-family:'Georgia',serif; }
+  #main-comp { position:relative; width:1080px; height:1920px; background:#0d0d0d; overflow:hidden; }
+  #bg-layer { position:absolute; inset:0; z-index:1; background:radial-gradient(ellipse at 50% 40%, rgba(204,92,60,.12) 0%, transparent 60%), radial-gradient(ellipse at 50% 70%, rgba(90,158,110,.08) 0%, transparent 50%); }
+  #overlays-comp { position:absolute; top:0; left:0; width:1080px; height:1920px; pointer-events:none; z-index:10; }
+</style>
+</head>
+<body>
+<audio src="assets/narration.mp3" autoplay></audio>
+<audio src="assets/music.mp3" autoplay loop></audio>
+
+<div data-hf-id="hf-main" id="main-comp" data-composition-id="main-comp" data-width="1080" data-height="1920" data-start="0" data-duration="93">
+  <div data-hf-id="hf-bg" id="bg-layer"></div>
+  <div data-hf-id="hf-ov" id="overlays-comp" data-composition-id="overlays" data-composition-src="compositions/overlays.html" data-start="0" data-duration="93" data-track-index="2"></div>
+  <script>
+    window.__timelines = window.__timelines || {};
+    window.__timelines["main-comp"] = gsap.timeline({ paused: true });
+  </script>
+</div>
+</body>
+</html>

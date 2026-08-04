@@ -1,8 +1,38 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Give the fake model a tiny context window so compaction triggers with
+// test-sized histories; every other model resolves as usual.
+//
+// createProvider is stubbed too: the tiered-context summary path
+// (tiered-context.ts's getSummaryProvider) calls the real createProvider with
+// whatever AURA_CONTEXT_SUMMARY_MODEL/DeepSeek/AURA_FALLBACK_MODEL resolves
+// to. Without this stub, these tests' behavior depends on ambient shell env
+// (DEEPSEEK_API_KEY, AURA_CONTEXT_STRATEGY) — a real key routes to a live
+// network call (slow, non-hermetic, times out with no egress); no key 401s
+// against the OpenAI-compatible default. Stubbing it makes the summary path
+// fast and deterministic regardless of what's exported in the shell.
+vi.mock('../src/providers/factory.js', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../src/providers/factory.js')>();
+  return {
+    ...mod,
+    getContextWindow: (m: string) => (m === 'fake-model' ? 10_000 : mod.getContextWindow(m)),
+    createProvider: () => ({
+      name: 'stub-summary-provider',
+      model: 'stub',
+      supportsTools: false,
+      complete: async () => ({ text: '- stub fact', toolCalls: [], stopReason: 'done' as const }),
+      async *stream(): AsyncGenerator<StreamChunk> {
+        yield { type: 'done', response: { text: '', toolCalls: [], stopReason: 'done' } };
+      },
+    }),
+  };
+});
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { runAgentLoop, type TokenUsage } from '../src/agent/loop.js';
+import { DEFAULT_MAX_TURNS } from '../src/agent/loop-profile.js';
+import { SessionBudget } from '../src/agent/session-budget.js';
 import { PermissionSystem } from '../src/safety/permissions.js';
 import { loadProjectContext } from '../src/agent/context.js';
 import type {
@@ -25,19 +55,38 @@ const noopDisplay: Display = {
   summary: () => {},
 };
 
+/**
+ * Bulk model prose of roughly `chars` characters, for the tests that need a
+ * turn fat enough to trigger compaction. Deliberately varied: these fixtures
+ * used `'y'.repeat(10_000)`, which the repetition guard now (correctly) reads as
+ * a collapsed reply and cuts off — a model emitting ten thousand identical
+ * characters is the exact failure that guard exists for. Only the volume
+ * mattered here, and the token count is unchanged.
+ */
+function bulkProse(chars: number): string {
+  let out = '';
+  for (let i = 0; out.length < chars; i++) {
+    out += `Turn ${i}: inspected module ${i % 7} and adjusted the ${i % 5} handler accordingly. `;
+  }
+  return out.slice(0, chars);
+}
+
 class FakeProvider implements LLMProvider {
   name = 'Fake';
   model = 'fake-model';
   supportsTools = true;
   responses: LLMResponse[];
   calls: HistoryMessage[] = [];
+  /** Text returned by complete() — used by the loop's own retry path AND by
+   *  generational-flush's distillText, which calls complete() directly
+   *  rather than stream(). Kept off the stream() queue so a mid-run flush
+   *  doesn't consume a response meant for the next stream() turn. */
+  completeText = '- distilled fact';
 
   constructor(responses: LLMResponse[]) { this.responses = responses; }
 
   async complete(): Promise<LLMResponse> {
-    const next = this.responses.shift();
-    if (!next) throw new Error('No more responses queued');
-    return next;
+    return { text: this.completeText, toolCalls: [], stopReason: 'done' };
   }
 
   async *stream(_system: string, history: HistoryMessage[]): AsyncGenerator<StreamChunk> {
@@ -56,10 +105,18 @@ class FakeProvider implements LLMProvider {
 describe('runAgentLoop', () => {
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-loop-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-loop-'));
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+    // These tests assert on the default compactor's recap/flush markers —
+    // pin the strategy so an ambient AURA_CONTEXT_STRATEGY=tiered in the
+    // shell can't silently redirect compaction to the tiered fact-log path
+    // and break those assertions.
+    vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
   });
-  afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+    vi.unstubAllEnvs();
+  });
 
   it('returns success when model emits text only', async () => {
     const provider = new FakeProvider([
@@ -158,10 +215,14 @@ describe('runAgentLoop', () => {
     expect(result.summary).toMatch(/cycling/);
   });
 
-  it('widens the single-file budget once instead of dying at the ceiling', async () => {
-    // 33 productive (non-repeating) tool turns, then done. A single-file
-    // profile caps at 30, so without widening this would fail at turn 30.
-    const responses: LLMResponse[] = Array.from({ length: 33 }, (_, i) => ({
+  it('stops at the flat default ceiling on a productive but overlong run', async () => {
+    // More productive (non-repeating) tool turns than the cap allows —
+    // nothing a stall detector would catch, since every call has a distinct
+    // signature. The only thing that bounds this run is DEFAULT_MAX_TURNS,
+    // which is the point: the 85-turn healthcheck session looked exactly like
+    // this (105 distinct calls, max 2 consecutive repeats) and ran unbounded
+    // under the old 150.
+    const responses: LLMResponse[] = Array.from({ length: DEFAULT_MAX_TURNS + 5 }, (_, i) => ({
       text: '',
       toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
       stopReason: 'tools' as const,
@@ -173,9 +234,102 @@ describe('runAgentLoop', () => {
       provider, task: 'hi', context: ctx,
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
+    expect(result.turns).toBe(DEFAULT_MAX_TURNS);
+    expect(result.summary).toMatch(/turns/);
+  });
+
+  it('honours an explicit maxTurns above the default', async () => {
+    const responses: LLMResponse[] = Array.from({ length: 33 }, (_, i) => ({
+      text: '',
+      toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx, maxTurns: 50,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
     expect(result.success).toBe(true);
     expect(result.summary).toBe('made it');
     expect(result.turns).toBe(34);
+  });
+
+  it('compacts history mid-run and keeps the executive digest + full toolCallLog', async () => {
+    // ~2,900 tokens of prose per turn (3.5 chars/token fallback) against a
+    // 10k window (mocked above): the 75% trigger fires after ~3 turns.
+    const fat = bulkProse(10_000);
+    const responses: LLMResponse[] = Array.from({ length: 5 }, (_, i) => ({
+      text: fat,
+      toolCalls: [{ id: `c${i}`, name: 'write_file', input: { path: `f${i}.ts`, content: 'x' } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+
+    expect(result.success).toBe(true);
+    // Compaction happened: some later provider call saw the recap message,
+    // carrying the executive digest of already-executed mutations.
+    const recaps = provider.calls.filter(
+      m => m.role === 'assistant' && m.content.includes('[Earlier conversation compacted'),
+    );
+    expect(recaps.length).toBeGreaterThan(0);
+    expect(recaps.some(m => (m as { content: string }).content.includes('do not repeat'))).toBe(true);
+    expect(recaps.some(m => (m as { content: string }).content.includes('write_file f0.ts'))).toBe(true);
+    // The verify-layer contract holds: toolCallLog still has every call.
+    expect(result.toolCallLog.filter(c => c.name === 'write_file').length).toBe(5);
+  });
+
+  it('rolls over to a fresh context window after enough recap generations, flushing to the dream store', async () => {
+    // Ladder is [0.55, 0.70, 0.85] against the mocked 10k window; each fat
+    // turn (~2,900 tokens) pushes the estimate well past whichever rung is
+    // current, so this should compact repeatedly, escalate generations, and
+    // eventually roll over (ROLLOVER_AT_GENERATION = 3) rather than produce
+    // a 4th lossy in-place recap.
+    const fat = bulkProse(10_000);
+    const responses: LLMResponse[] = Array.from({ length: 14 }, (_, i) => ({
+      text: fat,
+      toolCalls: [{ id: `c${i}`, name: 'write_file', input: { path: `f${i}.ts`, content: 'x' } }],
+      stopReason: 'tools' as const,
+    }));
+    responses.push({ text: 'made it', toolCalls: [], stopReason: 'done' });
+    const provider = new FakeProvider(responses);
+    provider.completeText = '- distilled: refactored the parser across many files';
+    const ctx = await loadProjectContext(tmpDir);
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+    });
+
+    expect(result.success).toBe(true);
+
+    // A rollover happened: some later stream() call saw a flush pointer
+    // instead of an ever-growing recap, and the flush file actually landed
+    // in the project's dream store (same mechanism runDream/:dream use).
+    const flushPointers = provider.calls.filter(
+      m => m.role === 'assistant' && m.content.includes('flushed to memory'),
+    );
+    expect(flushPointers.length).toBeGreaterThan(0);
+
+    const dreamsDir = path.join(tmpDir, 'dreams');
+    expect(fs.existsSync(dreamsDir)).toBe(true);
+    const flushFiles = fs.readdirSync(dreamsDir).filter(f => f.includes('-flush-'));
+    expect(flushFiles.length).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(dreamsDir, flushFiles[0]), 'utf8')).toContain('refactored the parser');
+
+    // No stale recap text from before the flush survives in-context —
+    // the pointer replaced it, not a further recompaction of it.
+    const laterCalls = provider.calls.slice(-20);
+    expect(laterCalls.some(m => m.role === 'assistant' && m.content.startsWith('[Earlier conversation compacted (gen 4)'))).toBe(false);
+
+    // Verify layer contract holds: every write_file call is still logged.
+    expect(result.toolCallLog.filter(c => c.name === 'write_file').length).toBe(14);
   });
 
   it('never widens past an explicit maxTurns override', async () => {
@@ -192,5 +346,193 @@ describe('runAgentLoop', () => {
     });
     expect(result.success).toBe(false);
     expect(result.turns).toBe(5);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session budget enforcement — the ceiling `aura serve` now applies too.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('runAgentLoop — session budget', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-budget-'));
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+    vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+    vi.unstubAllEnvs();
+  });
+
+  it('refuses to start a turn when the budget is already exhausted', async () => {
+    const provider = new FakeProvider([
+      { text: 'should never be reached', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 100 });
+    budget.recordCall(500, 0); // 500 billed against a 100 ceiling
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.summary).toContain('token budget exhausted');
+    expect(result.turns).toBe(0);          // no turn was started
+    expect(provider.responses).toHaveLength(1); // no response was consumed
+  });
+
+  it('runs normally while the budget has room', async () => {
+    const provider = new FakeProvider([
+      { text: 'all done', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 1_000_000 });
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.turns).toBe(1);
+  });
+
+  it('reports the budget stop, not the turn cap, as the reason', async () => {
+    const provider = new FakeProvider([
+      { text: 'a', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 10 });
+    budget.recordCall(11, 0);
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget, maxTurns: 50,
+    });
+
+    expect(result.summary).toContain('token budget exhausted');
+    expect(result.summary).not.toContain('cap: 50');
+  });
+
+  it('cache hits do not count against the ceiling', async () => {
+    const budget = new SessionBudget({ maxInputTokens: 100_000 });
+    budget.recordCall(500_000, 450_000); // 50k billed, not 500k
+    expect(budget.inputTokensUsed).toBe(50_000);
+    expect(budget.exhausted()).toBeNull();
+  });
+});
+
+describe('runAgentLoop — predictive budget check', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-predict-'));
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+    vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+    vi.unstubAllEnvs();
+  });
+
+  it('stops BEFORE the call when the next turn would exceed the ceiling', async () => {
+    const provider = new FakeProvider([
+      { text: 'must never be sent', toolCalls: [], stopReason: 'done' },
+    ]);
+    // Headroom exists (0 of 200 used) so exhausted() passes, but the system
+    // prompt + context alone is far larger than 200 tokens, so the predictive
+    // check must catch it.
+    const budget = new SessionBudget({ maxInputTokens: 200 });
+    const ctx = await loadProjectContext(tmpDir);
+
+    expect(budget.exhausted()).toBeNull(); // not yet over — the old check would proceed
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(false);
+    // Worded as a projection, not as spend — nothing was billed.
+    expect(result.summary).toContain('token budget reached');
+    expect(result.summary).toContain('was not sent');
+    // Zero overshoot: the provider was never called, so nothing was billed.
+    expect(provider.responses).toHaveLength(1);
+    expect(budget.inputTokensUsed).toBe(0);
+    expect(result.turns).toBe(0);
+  });
+
+  it('does not fire when the next turn fits', async () => {
+    const provider = new FakeProvider([
+      { text: 'all done', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: 1_000_000 });
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.turns).toBe(1);
+  });
+
+  it('an unlimited budget is never blocked by the predictive check', async () => {
+    const provider = new FakeProvider([
+      { text: 'all done', toolCalls: [], stopReason: 'done' },
+    ]);
+    const budget = new SessionBudget({ maxInputTokens: Infinity });
+    const ctx = await loadProjectContext(tmpDir);
+
+    const result = await runAgentLoop({
+      provider, task: 'hi', context: ctx,
+      permissions: new PermissionSystem('auto'), display: noopDisplay,
+      budget,
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('SessionBudget.wouldExceed', () => {
+  it('projects the next call against the ceiling', () => {
+    const b = new SessionBudget({ maxInputTokens: 1000 });
+    b.recordCall(900, 0);
+    expect(b.wouldExceed(50)).toBeNull();          // 950 ≤ 1000
+    expect(b.wouldExceed(200)).not.toBeNull();     // 1100 > 1000
+  });
+
+  it('reports the projected total, not the spent total', () => {
+    const b = new SessionBudget({ maxInputTokens: 1000 });
+    b.recordCall(900, 0);
+    expect(b.wouldExceed(500)).toEqual({ kind: 'tokens', used: 1400, limit: 1000, projected: true });
+  });
+
+  it('never fires for an unlimited ceiling', () => {
+    const b = new SessionBudget({ maxInputTokens: Infinity });
+    expect(b.wouldExceed(Number.MAX_SAFE_INTEGER)).toBeNull();
+  });
+
+  it('treats a negative estimate as zero', () => {
+    const b = new SessionBudget({ maxInputTokens: 1000 });
+    b.recordCall(500, 0);
+    expect(b.wouldExceed(-100)).toBeNull();
+  });
+
+  it('unrecordTurn undoes a turn and never goes negative', () => {
+    const b = new SessionBudget({ maxTurns: 5 });
+    b.recordTurn();
+    expect(b.turnsUsed).toBe(1);
+    b.unrecordTurn();
+    expect(b.turnsUsed).toBe(0);
+    b.unrecordTurn();
+    expect(b.turnsUsed).toBe(0);
   });
 });

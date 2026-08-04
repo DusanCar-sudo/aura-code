@@ -1,0 +1,14 @@
+[Unit]
+Description=Aura AI coding agent web server
+Documentation=https://github.com/DusanCar-sudo/aura-code
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/aura serve --no-open
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+
+[Install]
+WantedBy=default.target

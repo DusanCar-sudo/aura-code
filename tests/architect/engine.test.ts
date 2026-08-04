@@ -44,7 +44,7 @@ function makeDataModel(overrides: Partial<BlueprintDataModel> = {}): BlueprintDa
 let homeTmp: string;
 
 beforeEach(() => {
-  homeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-blueprints-'));
+  homeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-blueprints-'));
   vi.stubEnv('HOME', homeTmp);
 });
 

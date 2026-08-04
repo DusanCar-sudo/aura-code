@@ -27,7 +27,12 @@ const FIXTURES_DIR = join(__dirname, 'fixtures');
 const RESULTS_DIR = join(__dirname, 'results');
 // Local disk, not system /tmp — tmpfs is RAM-backed and can run out of
 // quota under memory pressure, which looks like a harness bug but isn't.
-const SCRATCH_DIR = join(__dirname, '.bench-tmp');
+// MUST live OUTSIDE the repo tree: a workdir inside the repo means git
+// discovery walks up to the repo's .git, so an agent's `git`/shell calls in
+// a benchmark run operate on the real repo — one such run "fixed" the
+// planted bug inside task-001's before/ fixture in place. The repo's parent
+// directory keeps the same-filesystem property without that exposure.
+const SCRATCH_DIR = join(resolve(__dirname, '..', '..'), '.aura-bench-tmp');
 mkdirSync(SCRATCH_DIR, { recursive: true });
 const AURA_TIMEOUT_MS = 5 * 60 * 1000; // 5 min ceiling per task
 
@@ -70,6 +75,12 @@ function runOneTask(taskName) {
 
   try {
     execSync(`cp -r "${beforeDir}/." "${workDir}/"`, { stdio: 'pipe' });
+    // Belt and braces: give the workdir its own .git so git-root discovery
+    // stops here no matter where the scratch dir lives — the agent's git
+    // tools see a tiny isolated repo, never the aura-code checkout.
+    execSync('git init -q && git add -A && git -c user.email=bench@aura -c user.name=bench commit -qm fixture', {
+      cwd: workDir, stdio: 'pipe',
+    });
 
     if (dryRun) {
       return { taskName, dryRun: true, workDir, prompt: task.prompt };

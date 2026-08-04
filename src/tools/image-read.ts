@@ -1,7 +1,25 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import type { ToolDefinition } from '../providers/types.js';
+
+/**
+ * Normalize a user-supplied image location into an absolute filesystem path.
+ * Accepts plain paths and `file://` URLs (including percent-encoded ones and
+ * `file://localhost/...`), which is how editors/terminals hand off screenshots.
+ */
+function normalizeImagePath(raw: string): string {
+  let p = raw.trim().replace(/^["']|["']$/g, '');  // strip surrounding quotes
+  if (p.startsWith('file://')) {
+    try {
+      p = fileURLToPath(p);                          // handles %20 etc. + localhost host
+    } catch {
+      p = decodeURIComponent(p.replace(/^file:\/\/(localhost)?/, ''));
+    }
+  }
+  return path.resolve(p);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Image Read — read image metadata and extract text (OCR)
@@ -97,10 +115,10 @@ function doBase64(filePath: string): string {
 }
 
 export async function imageRead(input: ImageReadInput): Promise<string> {
-  const filePath = path.resolve(input.path);
+  const filePath = normalizeImagePath(input.path);
 
   if (!fs.existsSync(filePath)) {
-    return `Error: File not found: ${input.path}`;
+    return `Error: File not found: ${input.path} (resolved to ${filePath})`;
   }
 
   const ext = path.extname(filePath).toLowerCase();

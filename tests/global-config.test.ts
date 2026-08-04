@@ -10,7 +10,7 @@ describe('global-config', () => {
   let origHome: string | undefined;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rubycode-test-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
     origXdg = process.env.XDG_CONFIG_HOME;
     origHome = process.env.HOME;
     process.env.XDG_CONFIG_HOME = tmpHome;

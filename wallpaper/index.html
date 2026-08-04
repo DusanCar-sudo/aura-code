@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HTML Wallpaper</title>
+  <style>
+    :root {
+      --c1: #0f2027;
+      --c2: #203a43;
+      --c3: #2c5364;
+      --accent: #7ad7f0;
+    }
+
+    /* Reset so background fills the whole desktop without scrollbars. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f2027;
+      color: #e8f3f7;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Slow shifting gradient. Uses transform on a 150% sized background
+       so the GPU compositor handles the motion smoothly. */
+    body {
+      background:
+        radial-gradient(1200px 800px at 20% 30%, rgba(122, 215, 240, 0.18), transparent 60%),
+        radial-gradient(900px 700px at 80% 70%, rgba(180, 120, 255, 0.14), transparent 60%),
+        linear-gradient(135deg, var(--c1), var(--c2) 45%, var(--c3));
+      background-size: 150% 150%;
+      animation: drift 24s ease-in-out infinite;
+    }
+
+    @keyframes drift {
+      0%   { background-position:   0%   0%; }
+      50%  { background-position: 100% 100%; }
+      100% { background-position:   0%   0%; }
+    }
+
+    /* Floating "orb" layer — pure CSS, no JS so it stays seek-safe
+       inside Hidamari / Komorebi. */
+    .orbs {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      filter: blur(40px);
+      opacity: 0.55;
+    }
+    .orb {
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      mix-blend-mode: screen;
+      will-change: transform;
+    }
+    .orb.a { background: #7ad7f0; top:  10%; left:  8%; animation: float 18s ease-in-out infinite; }
+    .orb.b { background: #b478ff; top:  55%; left:  70%; animation: float 22s ease-in-out -6s infinite reverse; }
+    .orb.c { background: #ff8fb1; top:  70%; left:  20%; animation: float 26s ease-in-out -3s infinite; }
+
+    @keyframes float {
+      0%   { transform: translate3d(0,    0,   0) scale(1); }
+      50%  { transform: translate3d(40px, -30px, 0) scale(1.1); }
+      100% { transform: translate3d(0,    0,   0) scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="orbs" aria-hidden="true">
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+    <div class="orb c"></div>
+  </div>
+</body>
+</html>

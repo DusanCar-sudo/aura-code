@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
 import OpenAI from 'openai';
+import * as https from 'https';
 
 const SAMPLE_RATE = 16000;
 const MIMO_BASE = 'https://api.xiaomimimo.com/v1';
@@ -59,7 +60,7 @@ function listProviders(): ApiProvider[] {
 }
 
 function buildClient(api: { key: string; baseURL: string }): OpenAI {
-  return new OpenAI({
+  const opts: import('openai').ClientOptions = {
     apiKey: api.key,
     baseURL: api.baseURL,
     // Bounded so a hung provider eventually falls through, but generous enough
@@ -69,7 +70,13 @@ function buildClient(api: { key: string; baseURL: string }): OpenAI {
     // api.z.ai silently drops requests that arrive without a User-Agent
     // (see the zai-edge memory) — always send one.
     defaultHeaders: { 'User-Agent': 'aura-dic/1.0' },
-  });
+    // OpenAI SDK v4 uses agentkeepalive by default, which hangs on some
+    // endpoints (e.g. Xiaomi MiMo Token Plan). A plain https.Agent with
+    // keepAlive: false avoids the issue.
+    httpAgent: new https.Agent({ keepAlive: false }),
+  };
+
+  return new OpenAI(opts);
 }
 
 function cleanup(tmpDir: string): void {
@@ -755,7 +762,19 @@ export async function synthesizeSpeech(text: string, voice?: string): Promise<Bu
   });
   const audioData: string | undefined = (response.choices[0]?.message as any)?.audio?.data;
   if (!audioData) throw new Error('No audio data in TTS response');
-  return Buffer.from(audioData, 'base64');
+  return stripWavPrefix(Buffer.from(audioData, 'base64'));
+}
+
+/**
+ * Strip a stray CRLF (0x0D 0x0A) prefix that the MiMo TTS API occasionally
+ * prepends before the WAV RIFF header, which corrupts the file. Only strips
+ * the exact \r\n signature to stay safe if the API ever fixes this upstream.
+ */
+export function stripWavPrefix(buf: Buffer): Buffer {
+  if (buf.length >= 2 && buf[0] === 0x0D && buf[1] === 0x0A) {
+    return buf.subarray(2);
+  }
+  return buf;
 }
 
 /**
