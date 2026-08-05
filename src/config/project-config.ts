@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ArchimedesBackend } from '../archimedes/types.js';
+import { parseEffort, type EffortLevel } from '../providers/effort.js';
 
 /**
  * Definition of a custom provider in .aura.json.
@@ -24,6 +25,8 @@ export interface ProviderDef {
 export interface ProjectConfig {
   model?: string;
   baseUrl?: string;
+  /** Reasoning effort rung — see providers/effort.ts for the ladder. */
+  effort?: EffortLevel;
   mode?: 'normal' | 'read-only' | 'auto';
   maxTurns?: number;
   ignore?: string[];
@@ -109,6 +112,10 @@ function normalise(raw: unknown): ProjectConfig {
   const out: ProjectConfig = {};
   if (typeof r.model === 'string') out.model = r.model;
   if (typeof r.baseUrl === 'string') out.baseUrl = r.baseUrl;
+  // An unparseable rung is dropped rather than forwarded — sending it would
+  // 400 every request in the project instead of failing one command.
+  const effort = parseEffort(r.effort);
+  if (effort) out.effort = effort;
   if (r.mode === 'normal' || r.mode === 'read-only' || r.mode === 'auto') out.mode = r.mode;
   if (typeof r.maxTurns === 'number' && r.maxTurns > 0) out.maxTurns = r.maxTurns;
   if (typeof r.systemPromptSuffix === 'string') out.systemPromptSuffix = r.systemPromptSuffix;
@@ -187,6 +194,8 @@ export interface ResolvedConfig {
   /** Model id; undefined when the user hasn't picked one yet (the wizard handles this). */
   model?: string;
   baseUrl?: string;
+  /** Reasoning effort; undefined leaves the provider's own default. */
+  effort?: EffortLevel;
   mode: 'normal' | 'read-only' | 'auto';
   maxTurns?: number;
   ignore: string[];
@@ -202,7 +211,8 @@ export interface ResolvedConfig {
 export function resolveConfig(
   file: ProjectConfig,
   cli: {
-    model?: string; baseUrl?: string; auto?: boolean; readonly?: boolean;
+    model?: string; baseUrl?: string; effort?: EffortLevel;
+    auto?: boolean; readonly?: boolean;
     maxTurns?: number; ignore?: string[];
     rateLimitRpm?: number; rateLimitTpm?: number; maxRetries?: number;
     fallbacks?: string[];
@@ -217,6 +227,7 @@ export function resolveConfig(
   return {
     model: cli.model ?? file.model ?? defaults.model,
     baseUrl: cli.baseUrl ?? file.baseUrl,
+    effort: cli.effort ?? file.effort,
     mode,
     maxTurns: cli.maxTurns ?? file.maxTurns ?? defaults.maxTurns,
     ignore: [...defaults.ignore, ...(file.ignore ?? []), ...(cli.ignore ?? [])],

@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { getApiKey } from '../util/env.js';
 import { safeParseToolArgs } from '../util/json-repair.js';
 import { ThinkTagStripper, readReasoningField, resolveAnswer } from './reasoning.js';
+import { clampEffort, parseEffort } from './effort.js';
 import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
@@ -26,7 +27,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // internal reasoning BEFORE emitting visible content. A small cap suffocates
     // them: budget exhausted mid-think -> finish_reason "length" -> zero output.
     this.maxTokens = config.maxTokens ?? 16384;
-    this.reasoningEffort = deriveProviderName(config) === 'Zhipu' ? 'high' : undefined;
+    // An explicit effort (--effort / :effort / .aura.json) wins, folded to a
+    // rung this endpoint actually accepts — an unknown variant is a 400, not a
+    // silent clamp. With nothing set, GLM keeps its long-standing "high"
+    // default (see below) and everyone else keeps the provider's own.
+    const requested = parseEffort(config.reasoningEffort);
+    this.reasoningEffort = requested
+      ? clampEffort(requested, { model: config.model, baseUrl: config.baseUrl })
+      : deriveProviderName(config) === 'Zhipu' ? 'high' : undefined;
     this.temperature = config.temperature ?? 0.2;
     // Nonzero penalties discourage degenerate repetition loops (observed live
     // with DeepSeek); 0.3 is conservative enough not to hurt code generation.

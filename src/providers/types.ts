@@ -109,4 +109,10 @@ export interface ProviderConfig {
   temperature?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  /**
+   * How much chain-of-thought the model should spend before answering — one of
+   * the rungs in providers/effort.ts. Undefined leaves the provider's own
+   * default in place (DeepSeek thinks at "high" unless told otherwise).
+   */
+  reasoningEffort?: string;
 }
