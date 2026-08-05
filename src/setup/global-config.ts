@@ -21,6 +21,11 @@ export interface GlobalConfig {
   defaultModel: string;
   /** Optional custom base URL (Xiaomi, OpenRouter, Ollama, etc.) */
   baseUrl?: string;
+  /**
+   * Default reasoning-effort rung (see providers/effort.ts). Optional: absent
+   * means "whatever the provider does by default".
+   */
+  effort?: string;
   /** When the user first set this up (ISO timestamp) */
   createdAt: string;
   /** Last updated (ISO timestamp) */
@@ -63,7 +68,12 @@ export function saveGlobalConfig(cfg: Omit<GlobalConfig, 'createdAt' | 'updatedA
     ...cfg,
     createdAt: cfg.createdAt ?? existing?.createdAt ?? now,
     updatedAt: now,
+    // Effort outlives the model it was set on: the callers that rewrite this
+    // file on a `:model` switch don't carry it, so without this a single model
+    // change would silently reset the user back to the provider default.
+    effort: cfg.effort ?? existing?.effort,
   };
+  if (full.effort === undefined) delete full.effort;
   fs.mkdirSync(configDir(), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(full, null, 2) + '\n', { mode: 0o600 });
   // Also export the API key env var for this process so the rest of the run works.

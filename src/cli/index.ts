@@ -23,6 +23,7 @@ import chalk from 'chalk';
 
 import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily, normalizeModelId } from '../providers/factory.js';
 import { refreshLiveModels } from '../providers/live-models.js';
+import { EFFORT_LEVELS, parseEffort, clampEffort, wasClamped, type EffortLevel } from '../providers/effort.js';
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
 process.on('unhandledRejection', (reason) => {
@@ -118,7 +119,7 @@ function makeStdinTunerIO(): TunerIO {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const argv = minimist(process.argv.slice(2), {
-  string:  ['model', 'm', 'api-key', 'base-url', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
+  string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
   boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
@@ -141,6 +142,15 @@ const cliVerify          = argv.verify === true;
 // toggled at runtime in the REPL with :speak. Mutable so :speak can flip it.
 let speakEnabled         = argv.speak === true || process.env.AURA_SPEAK === '1';
 const cliProfile         = typeof argv.profile === 'string' ? argv.profile : undefined;
+// Reasoning effort: --effort > AURA_EFFORT > .aura.json > saved global config.
+// A typo'd rung is refused loudly here rather than 400'ing on the first API
+// call, when the user is already several seconds into a task.
+const rawEffort          = typeof argv.effort === 'string' ? argv.effort : process.env.AURA_EFFORT;
+const cliEffort          = parseEffort(rawEffort);
+if (rawEffort && !cliEffort) {
+  console.error(`Unknown --effort "${rawEffort}". Expected one of: ${EFFORT_LEVELS.join(', ')}`);
+  process.exit(1);
+}
 const cliTestCommand     = typeof argv['test-command'] === 'string' ? argv['test-command'] : undefined;
 const cliRpm             = num(argv['rate-limit-rpm']) ?? num(process.env.AURA_API_RPM);
 const cliTpm             = num(argv['rate-limit-tpm']) ?? num(process.env.AURA_API_TPM);
@@ -481,11 +491,17 @@ const effectiveBaseUrl =
     ?? (globalBaseUrlApplies ? globalCfg!.baseUrl : undefined)
     ?? (savedProviderApplies ? savedProvider!.baseUrl : undefined);
 
+// Same shape as the model chain above: the saved rung is the floor, a project
+// .aura.json overrides it, and --effort / AURA_EFFORT (applied as the CLI layer
+// inside resolveConfig) overrides both.
+const effectiveEffort = fileConfig.effort ?? parseEffort(globalCfg?.effort);
+
 const resolved = resolveConfig(
-  { ...fileConfig, model: effectiveModel, baseUrl: effectiveBaseUrl },
+  { ...fileConfig, model: effectiveModel, baseUrl: effectiveBaseUrl, effort: effectiveEffort },
   {
     model: cliModel,
     baseUrl: cliBaseUrl,
+    effort: cliEffort,
     auto: argv.auto === true,
     readonly: argv.readonly === true,
     maxTurns: cliMaxTurns,
@@ -520,6 +536,9 @@ const runtimeConfig = {
   apiKey: typeof argv['api-key'] === 'string'
     ? argv['api-key']
     : (savedProviderApplies ? savedProvider!.apiKey : undefined),
+  // Mutable so :effort takes hold on the next provider build, the same way
+  // :model does — the provider reads it at construction, not per request.
+  effort: resolved.effort as EffortLevel | undefined,
 };
 
 // ── Profile: local → Ollama defaults ─────────────────────────────────────────
@@ -549,6 +568,7 @@ function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMPr
       model,
       apiKey:  runtimeConfig.apiKey,
       baseUrl: runtimeConfig.baseUrl ?? undefined,
+      reasoningEffort: runtimeConfig.effort,
     },
     {
       rpm: resolved.rateLimitRpm,
@@ -1785,7 +1805,7 @@ interface ReplCtx {
   rl: readline.Interface | null;
   ctx: Awaited<ReturnType<typeof loadProjectContext>>;
   display: ReturnType<typeof createTerminalDisplay>;
-  providerConfig: { model: string; apiKey?: string; baseUrl?: string };
+  providerConfig: { model: string; apiKey?: string; baseUrl?: string; reasoningEffort?: string };
   permissions: PermissionSystem;
   cumulative: { turns: number; toolCalls: number; inputTokens: number; outputTokens: number; costUsd: number };
   chatState: ChatState;
@@ -1850,7 +1870,13 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
     // model, otherwise the factory's per-provider default applies.
     try {
       saveGlobalConfig({
-        provider: globalCfg?.provider ?? test.name,
+        // The display name has to follow the model across a provider change,
+        // or the saved label goes stale: switching away from DeepSeek kept
+        // `provider: "DeepSeek"` on disk next to a foreign model/apiKeyEnv,
+        // and the next startup banner announced the wrong provider. Within a
+        // provider, keep the wizard's more specific label (e.g. "Zhipu Coding
+        // Plan (Z.ai)" rather than the factory's generic name).
+        provider: crossing ? test.name : (globalCfg?.provider ?? test.name),
         // loadGlobalConfig treats an empty apiKeyEnv as "not configured", so
         // resolve from the NEW model's provider — never inherit the old
         // provider's env name across a provider change (a silently wrong
@@ -2708,6 +2734,64 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
+  if (input === ':effort' || input === '/effort'
+      || input.startsWith(':effort ') || input.startsWith('/effort ')) {
+    const arg = input.replace(/^[:/]effort\s*/, '').trim();
+    const model = resolved.model ?? runtimeConfig.model ?? '';
+    const target = { model, baseUrl: runtimeConfig.baseUrl ?? resolved.baseUrl };
+
+    if (!arg) {
+      const cur = runtimeConfig.effort;
+      const sent = cur ? clampEffort(cur, target) : undefined;
+      console.log(chalk.hex(TEXT_DIM_HEX)(
+        `  effort: ${cur ?? 'provider default'}`
+        + (cur && sent !== cur ? chalk.hex('#d4903a')(`  (sent as "${sent}" — ${model} tops out there)`) : '')
+        + `\n  ladder: ${EFFORT_LEVELS.join(' · ')}`
+        + `\n  usage:  :effort <level>`));
+      return { handled: true };
+    }
+
+    const level = parseEffort(arg);
+    if (!level) {
+      console.log(chalk.hex('#b15439')(
+        `  ✗ Unknown effort "${arg}". Expected one of: ${EFFORT_LEVELS.join(', ')}`));
+      return { handled: true };
+    }
+
+    runtimeConfig.effort = level;
+    c.providerConfig.reasoningEffort = level;
+    // Each turn builds its own provider from runtimeConfig, so the new rung is
+    // already live for the next one. Build once here anyway — same validation
+    // trySetModel does, so a rung the factory chokes on surfaces now rather
+    // than on the user's next task.
+    try {
+      buildProvider(c.display);
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ Could not apply effort: ${String(e)}`));
+      return { handled: true };
+    }
+    console.log(chalk.hex('#5a9e6e')(`  ✓ Effort: ${level}`)
+      + (wasClamped(level, target)
+        ? chalk.hex('#d4903a')(` — sent as "${clampEffort(level, target)}", the ceiling for ${model}`)
+        : ''));
+    if (level === 'none') {
+      console.log(chalk.hex(TEXT_DIM_HEX)('  Thinking disabled — the model answers without a chain of thought.'));
+    }
+    // Persist alongside the model so it survives the next start.
+    try {
+      if (globalCfg) {
+        saveGlobalConfig({
+          provider: globalCfg.provider,
+          apiKeyEnv: globalCfg.apiKeyEnv,
+          defaultModel: globalCfg.defaultModel,
+          baseUrl: globalCfg.baseUrl,
+          effort: level,
+        });
+      }
+    } catch { /* persistence is best-effort; the switch itself succeeded */ }
+    return { handled: true };
+  }
+
   if (input.startsWith(':apikey ') || input.startsWith('/apikey ')) {
     const sep = input.startsWith(':apikey ') ? ':apikey ' : '/apikey ';
     const newKey = input.slice(sep.length).trim();
@@ -3226,6 +3310,9 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --model, -m <id>         Model to use (default: from ~/.config/aura-code/config.json)
     --api-key <key>          API key (overrides env var)
     --base-url <url>         Custom API endpoint (for Ollama, proxies, etc.)
+    --effort <level>         Reasoning effort: none, minimal, low, medium, high,
+                             xhigh, max (env: AURA_EFFORT; :effort in the REPL).
+                             Folded to the target's ceiling; "none" stops thinking.
     --auto                   Auto-approve all tool calls (no confirmation)
     --readonly               Read-only mode (no file writes or shell commands)
     --gazelle                Lean conversational mode: no tools, no project context

@@ -49,6 +49,27 @@ describe('global-config', () => {
     expect(second.updatedAt >= first.updatedAt).toBe(true);
   });
 
+  it('keeps the effort rung across a model switch that does not carry it', () => {
+    // trySetModel rewrites this file without an effort field; dropping it there
+    // would silently reset the user to the provider default on every switch.
+    saveGlobalConfig({
+      provider: 'DeepSeek', apiKeyEnv: 'DEEPSEEK_API_KEY',
+      defaultModel: 'deepseek/deepseek-v4-flash', effort: 'max',
+    });
+    const afterSwitch = saveGlobalConfig({
+      provider: 'DeepSeek', apiKeyEnv: 'DEEPSEEK_API_KEY',
+      defaultModel: 'deepseek/deepseek-v4-pro',
+    });
+    expect(afterSwitch.effort).toBe('max');
+    expect(loadGlobalConfig()?.effort).toBe('max');
+  });
+
+  it('omits effort entirely when it was never set', () => {
+    saveGlobalConfig({ provider: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: 'gpt-4o' });
+    const raw = JSON.parse(fs.readFileSync(globalConfigPath(), 'utf8'));
+    expect('effort' in raw).toBe(false);
+  });
+
   it('rejects malformed config (missing required fields)', () => {
     fs.mkdirSync(path.dirname(globalConfigPath()), { recursive: true });
     fs.writeFileSync(globalConfigPath(), JSON.stringify({ provider: 'openai' }));
