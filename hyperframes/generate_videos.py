@@ -282,7 +282,7 @@ def video_6():
             el_text("AI-powered desktop IDE with autonomous agents, agent mesh, system monitoring"),
             el_big("agentmesh"),
             el_text("Multi-agent orchestration framework"),
-            el_emoji("&#9670;", "https://aurawebsite-self.vercel.app/"),
+            el_emoji("&#9670;", "https://dusancar-sudo.github.io/aura-website/"),
             el_emoji("&#9670;", "github.com/milodule3-debug"),
             el_quote("Made with love by Aura  -  2025  -  v1.0"),
         ])

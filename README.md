@@ -4,14 +4,14 @@
 
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
-[![Website](https://img.shields.io/badge/website-aurawebsite--eta.vercel.app-6ed0ea?style=flat-square)](https://aurawebsite-eta.vercel.app)
+[![Website](https://img.shields.io/badge/website-aura--website-6ed0ea?style=flat-square)](https://dusancar-sudo.github.io/aura-website/)
 [![Version](https://img.shields.io/badge/version-v0.14.0-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
 [![Providers](https://img.shields.io/badge/providers-17-purple?style=flat-square)](#providers)
 
-**→ [aurawebsite-eta.vercel.app](https://aurawebsite-eta.vercel.app)** · [Windows manual](https://aurawebsite-eta.vercel.app/aura-windows-manual)
+**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows manual](https://dusancar-sudo.github.io/aura-website/aura-windows-manual)
 
 *Architecture and design by [Dušan Milosavljević](https://github.com/DusanCar-sudo) — Da Nang, Vietnam*
 
@@ -490,4 +490,4 @@ We are building persistent memory across projects, space, and time — searching
 
 MIT © [Dušan Milosavljević](https://github.com/DusanCar-sudo)
 
-Website: **[aurawebsite-eta.vercel.app](https://aurawebsite-eta.vercel.app)**
+Website: **[dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)**

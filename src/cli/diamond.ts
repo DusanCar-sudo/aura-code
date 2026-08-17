@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 
-// Ruby palette — matches https://aurawebsite-self.vercel.app/
+// Ruby palette — matches https://dusancar-sudo.github.io/aura-website/
 // (#e63956 bright ruby, #9b1b30 primary, #4a0d1a deep wine)
 const ruby = chalk.hex('#9b1b30');
 

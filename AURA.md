@@ -12,7 +12,7 @@ bugs, not treated as style preferences.
 
 ## Surfaces
 This repo publishes to three separate places: the website (`site/`,
-served at aurawebsite-eta.vercel.app), the repo page (`README.md`),
+served at dusancar-sudo.github.io/aura-website), the repo page (`README.md`),
 and the npm package (`src/`, the `aura` binary). A change to one
 does not change the others.
 
