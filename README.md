@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
 [![Providers](https://img.shields.io/badge/providers-17-purple?style=flat-square)](#providers)
 
-**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows manual](https://dusancar-sudo.github.io/aura-website/aura-windows-manual)
+**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows manual](https://aurawebsite-eta.vercel.app/aura-windows-manual.html)
 
 *Architecture and design by [Dušan Milosavljević](https://github.com/DusanCar-sudo) — Da Nang, Vietnam*
 
@@ -24,8 +24,6 @@ Built with modern coding tools — Claude Code among them — used throughout.
 Aura is a model-agnostic autonomous coding agent. Give it a task in natural language — it reads your codebase, plans, executes, verifies, and reports back.
 
 Built around **persistent memory** — it remembers decisions, lessons, and context across sessions. Runs locally, talks to you via Telegram, works with any LLM provider.
-
-![Aura in action](assets/aura_in_action.png)
 
 ---
 
