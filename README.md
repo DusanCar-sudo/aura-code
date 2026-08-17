@@ -5,11 +5,11 @@
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Website](https://img.shields.io/badge/website-aurawebsite--eta.vercel.app-6ed0ea?style=flat-square)](https://aurawebsite-eta.vercel.app)
-[![Version](https://img.shields.io/badge/version-v0.13.5-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.14.0-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
-[![Providers](https://img.shields.io/badge/providers-16%2B-purple?style=flat-square)](#providers)
+[![Providers](https://img.shields.io/badge/providers-17-purple?style=flat-square)](#providers)
 
 **→ [aurawebsite-eta.vercel.app](https://aurawebsite-eta.vercel.app)** · [Windows manual](https://aurawebsite-eta.vercel.app/aura-windows-manual)
 
@@ -52,7 +52,7 @@ run the bare command exactly as before. `AURA_RTK=0` opts out.
 - **Full TUI** — terminal UI with command palette, diff view, markdown rendering, vim-style input
 - **Persistent memory** — identity, lessons, and project context survive across sessions
 - **Telegram bot** — voice notes, PC control, file transfer, webcam snapshots
-- **16+ providers** — DeepSeek, Claude, GPT, Gemini, GLM, MiMo, Ollama, OpenRouter and more
+- **17 providers** — DeepSeek, Claude, GPT, Gemini, GLM, MiMo, Ollama, OpenRouter and more
 - **Token efficiency** — tiered context strategy, prompt caching, tool relevance gating
 - **MCP support** — Model Context Protocol for external tool connections
 
@@ -139,6 +139,14 @@ word away.
 | Ollama | any local model |
 | OpenRouter | 100+ models |
 | Groq | llama, mixtral |
+| xAI (Grok) | grok-2, grok-2-mini, grok-beta |
+| BytePlus ModelArk | ark-code-latest, dola-seed-2.0-pro/lite/code (`byteplus/`) |
+| OpenCode Go | MiniMax M3/M2.7, Kimi K3 and more (`go-anthropic/`) |
+| OpenCode Zen | free tier — DeepSeek V4 Flash, Ling 3.0, MiMo V2.5 (`zen/`) |
+| NVIDIA NIM | any NIM-hosted model (`nvidia/`) |
+| Hugging Face | Inference Providers router (`huggingface/`) |
+| Kimi (Moonshot) | any Moonshot model (`kimi/`) |
+| Qwen (DashScope) | any DashScope model (`qwen/`) |
 
 ---
 
