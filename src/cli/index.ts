@@ -21,6 +21,16 @@ import * as fs from 'fs';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
+// Then the XDG/Hermes env files. bootstrapAuraEnv has existed in util/load-env.ts
+// since it was written but was never called from anywhere — so keys parked in
+// ~/.config/aura-code/.env (which is where the setup wizard's own docs point) were
+// silently invisible to the whole process. A TAVILY_API_KEY sitting in that file
+// while web_search reported "no search backend configured" is how this surfaced.
+// Runs after the agents.env block above and never overwrites an existing value,
+// so precedence is: real env > ~/.secrets/agents.env > ~/.config/aura-code/.env.
+import { bootstrapAuraEnv } from '../util/load-env.js';
+bootstrapAuraEnv(process.cwd());
+
 import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily, normalizeModelId } from '../providers/factory.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 import { EFFORT_LEVELS, parseEffort, clampEffort, wasClamped, type EffortLevel } from '../providers/effort.js';
