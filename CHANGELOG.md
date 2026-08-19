@@ -4,6 +4,34 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-08-19
+
+### Added — search backend enablement
+- **Real search backends.** `web-search.ts` rewritten to back the `search` tool
+  with Tavily and Brave (API-backed) plus DuckDuckGo (HTML extraction with
+  challenge detection) and a liveness probe; the `bootstrapAuraEnv` step now
+  activates these backends at startup. Includes `tests/web-search.test.ts`
+  (backend selection, DDG extraction, availability probing).
+
+### Added — designx
+- **`designx` design commission command.** A 14-direction style lexicon with
+  per-target `risk 1–5` and `fits`/`cues`, risk-banded routing
+  (classic 1–2, balanced 1–4, wild 3–5, feral 4–5), seeded deterministic routing
+  (`mulberry32` + FNV-1a `seedFrom`), and artefact-based success. Run via
+  `:designx [web|deck|pdf] <brief> [--wild|--classic|--style <id>] [--seed <n>]`,
+  with `:designx styles` listing the lexicon.
+- **`AURA_MAX_TOKENS` budget fix.** `openai-compatible.ts` now resolves
+  `maxTokens` from the environment (new `envMaxTokens()`) before falling back to
+  the 16k default — fixing `finish_reason: "length"` truncation behind
+  `designx designs but never builds the page` when a provider's token ceiling
+  was larger than the hardcoded budget.
+
+### Notes
+- **`src/util/rtk.ts` remains uncommitted** (`+53`) together with
+  `tests/rtk-wrap.test.ts` (`+79`), out of scope for this release pending a
+  separate review. The `rtkWrap` rewrite touches every model-authored command the
+  Telegram bot executes, so it is deliberately excluded here.
+
 ## [0.14.1] — 2026-08-19
 
 ### Fixed
@@ -35,33 +63,6 @@ All notable changes to Aura Code are documented here.
   `find -exec`, `sed -i`, and git/systemctl subcommands. Replaced with a token
   scan against `MUTATING_GIT`/`MUTATING_SYSTEMCTL` sets that rejects
   substitution, command chaining, and every known bypass form.
-
-## [0.15.0] — 2026-08-19
-
-### Added — search backend enablement
-- **Real search backends.** `web-search.ts` rewritten to back the `search` tool
-  with Tavily and Brave (API-backed) plus DuckDuckGo (HTML extraction with
-  challenge detection) and a liveness probe; the `bootstrapAuraEnv` step now
-  activates these backends at startup. Includes `tests/web-search.test.ts`
-  (backend selection, DDG extraction, availability probing).
-
-### Added — designx
-- **`designx` design commission command.** A 14-direction style lexicon with
-  per-target `risk 1–5` and `fits`/`cues`, risk-banded routing
-  (classic 1–2, balanced 1–4, wild 3–5, feral 4–5), seeded deterministic routing
-  (`mulberry32` + FNV-1a `seedFrom`), and artefact-based success. Run via
-  `aura designx <brief> [--target] [--style]`.
-- **`AURA_MAX_TOKENS` budget fix.** `openai-compatible.ts` now resolves
-  `maxTokens` from the environment (new `envMaxTokens()`) before falling back to
-  the 16k default — fixing `finish_reason: "length"` truncation behind
-  `designx designs but never builds the page` when a provider's token ceiling
-  was larger than the hardcoded budget.
-
-### Notes
-- **`src/util/rtk.ts` remains uncommitted** (`+53`) together with
-  `tests/rtk-wrap.test.ts` (`+79`), out of scope for this release pending a
-  separate review. The `rtkWrap` rewrite touches every model-authored command the
-  Telegram bot executes, so it is deliberately excluded here.
 
 ## [0.14.0] — 2026-08-02
 
