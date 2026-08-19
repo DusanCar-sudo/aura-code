@@ -2,6 +2,17 @@ import OpenAI from 'openai';
 import { getApiKey } from '../util/env.js';
 import { safeParseToolArgs } from '../util/json-repair.js';
 import { ThinkTagStripper, readReasoningField, resolveAnswer } from './reasoning.js';
+import { getEnv } from '../util/env.js';
+
+/** `AURA_MAX_TOKENS` as a positive integer, or undefined when unset/garbage.
+ *  Invalid values are ignored rather than throwing: a typo in an env var should
+ *  not stop the CLI from starting. */
+export function envMaxTokens(): number | undefined {
+  const raw = getEnv('AURA_MAX_TOKENS');
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
+}
 import { clampEffort, parseEffort } from './effort.js';
 import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
 import type {
@@ -26,7 +37,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // Reasoning models (GLM-5.x, MiMo, DeepSeek-R, o-series) spend tokens on
     // internal reasoning BEFORE emitting visible content. A small cap suffocates
     // them: budget exhausted mid-think -> finish_reason "length" -> zero output.
-    this.maxTokens = config.maxTokens ?? 16384;
+    // …and 16384 is itself not always enough. Measured on glm-5.2 via OpenCode Go
+    // at effort "max": a request to emit a long stylesheet returned
+    // outputTokens=16384, finish_reason "length", and an EMPTY content field —
+    // the whole budget went to reasoning and the artefact was never written.
+    // That is the failure behind ":designx designs but never builds the page":
+    // the short prose (DESIGN.md) fits, the 20 KB document does not, and the
+    // agent falls back to assembling the file in fragments. AURA_MAX_TOKENS
+    // lifts the ceiling without a code change on models that allow more.
+    this.maxTokens = config.maxTokens ?? envMaxTokens() ?? 16384;
     // An explicit effort (--effort / :effort / .aura.json) wins, folded to a
     // rung this endpoint actually accepts — an unknown variant is a 400, not a
     // silent clamp. With nothing set, GLM keeps its long-standing "high"

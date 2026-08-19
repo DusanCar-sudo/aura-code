@@ -40,6 +40,7 @@ process.on('unhandledRejection', (reason) => {
   console.error(chalk.hex('#b15439')('  \u2717 Unhandled rejection: ' + String(reason)));
 });
 import { createResilientProvider } from '../providers/resilient-factory.js';
+import { envMaxTokens } from '../providers/openai-compatible.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, openDashboard } from '../viz/index.js';
 import { runAgentLoop, costFor } from '../agent/loop.js';
@@ -570,7 +571,15 @@ if (cliProfile === 'remote-coder') {
   }
 }
 
-function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMProvider {
+function buildProvider(
+  display: ReturnType<typeof createTerminalDisplay>,
+  /** Per-command overrides. Used by :designx, whose job is emitting one large
+   *  artefact in a single call — a workload the session defaults are wrong for:
+   *  a reasoning model at high effort spends the whole output budget thinking
+   *  and returns finish_reason "length" with empty content, so the document is
+   *  never written and the agent falls back to assembling it in fragments. */
+  overrides?: { maxTokens?: number; reasoningEffort?: string },
+): LLMProvider {
   // Caller guarantees resolved.model is set (guarded in main()).
   const model = resolved.model!;
   return createResilientProvider(
@@ -578,7 +587,8 @@ function buildProvider(display: ReturnType<typeof createTerminalDisplay>): LLMPr
       model,
       apiKey:  runtimeConfig.apiKey,
       baseUrl: runtimeConfig.baseUrl ?? undefined,
-      reasoningEffort: runtimeConfig.effort,
+      reasoningEffort: overrides?.reasoningEffort ?? runtimeConfig.effort,
+      ...(overrides?.maxTokens ? { maxTokens: overrides.maxTokens } : {}),
     },
     {
       rpm: resolved.rateLimitRpm,
@@ -2260,6 +2270,79 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       });
       console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
       console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
+    } catch (e) {
+      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+    }
+    return { handled: true };
+  }
+
+  // ── :designx — design commission (routes a style direction, scrapes real
+  // references, then builds the artefact). See src/design/ for the lexicon and
+  // the reasoning behind routing before generating.
+  if (input === ':designx' || input.startsWith(':designx ')) {
+    const { parseDesignXArgs } = await import('../design/parse.js');
+    const dxArgs = parseDesignXArgs(input.slice(':designx'.length));
+
+    if (dxArgs.listStyles) {
+      const { DESIGN_STYLES } = await import('../design/styles.js');
+      console.log(chalk.hex('#cc785c').bold(`\n  Design lexicon — ${DESIGN_STYLES.length} directions\n`));
+      for (const s of DESIGN_STYLES) {
+        console.log(`  ${chalk.hex(TEXT_HEX).bold(s.name)} ${chalk.hex(FAINT_HEX)(`(${s.id})`)}`);
+        console.log(chalk.hex(TEXT_DIM_HEX)(`    risk ${s.risk}/5 · ${s.fits.join(', ')} · ${s.lineage}`));
+      }
+      console.log(chalk.hex(FAINT_HEX)('\n  Pin one with :designx <brief> --style <id>\n'));
+      return { handled: true };
+    }
+
+    if (!dxArgs.brief) {
+      c.display.warning('Usage: :designx [web|deck|pdf] <brief> [--wild|--feral|--classic] [--style <id>] [--seed <n>] [--no-scrape] [--out <dir>]');
+      c.display.warning('       :designx styles   — list the design lexicon');
+      return { handled: true };
+    }
+
+    const { routeStyles } = await import('../design/styles.js');
+    const previewStyles = routeStyles({
+      brief: dxArgs.brief, target: dxArgs.target, daring: dxArgs.daring,
+      pinned: dxArgs.pinned, seed: dxArgs.seed, count: dxArgs.count,
+    });
+    console.log(chalk.hex('#cc785c').bold(`\n  ✦ designx — ${dxArgs.target}${dxArgs.targetInferred ? chalk.hex(FAINT_HEX)(' (inferred)') : ''} · ${dxArgs.daring}`));
+    for (const s of previewStyles) {
+      console.log(chalk.hex(TEXT_HEX)(`    ▸ ${s.name}`) + chalk.hex(FAINT_HEX)(`  risk ${s.risk}/5`));
+    }
+    console.log(chalk.hex(TEXT_DIM_HEX)(`    ${dxArgs.scrape ? 'Scraping references, then building' : 'No research pass'}…\n`));
+
+    try {
+      const { runDesignX } = await import('../design/designx.js');
+      const dx = await runDesignX({
+        projectRoot: c.ctx.root,
+        args: dxArgs,
+        // Explicit budget for the artefact, so :designx works without the user
+        // having to know about AURA_MAX_TOKENS / --effort. An env-set ceiling
+        // still wins if it is higher.
+        provider: buildProvider(c.display, {
+          maxTokens: Math.max(60_000, envMaxTokens() ?? 0),
+          reasoningEffort: runtimeConfig.effort ?? 'low',
+        }),
+        context: c.ctx,
+        permissions: c.permissions,
+        display: c.display,
+      });
+      if (dx.files.length === 0) {
+        c.display.error('designx produced no files — see the agent output above.');
+      } else if (dx.problems.length > 0) {
+        // Files exist but are not finished — the placeholder-skeleton failure.
+        // Reported as an error rather than a success with a caveat, because the
+        // directory listing alone looks exactly like a completed run.
+        c.display.error(`designx wrote ${dx.files.length} file(s) but they are not finished:`);
+        for (const p of dx.problems) console.log(chalk.hex('#b15439')(`    ${p.file}: ${p.problem}`));
+        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${dx.dir}`));
+        console.log(chalk.hex(FAINT_HEX)('  Re-run to have it rebuild them in a single write.\n'));
+      } else {
+        console.log(chalk.hex('#5a9e6e')(`\n  ✓ ${dx.dir}`));
+        for (const f of dx.files) console.log(chalk.hex(TEXT_DIM_HEX)(`    ${f}`));
+        console.log(chalk.hex(FAINT_HEX)(`  ${dx.turns} turn(s) · ${dx.toolCalls} tool call(s) · led with ${dx.styles[0]?.name ?? 'no direction'}`));
+        console.log(chalk.hex(FAINT_HEX)(`  Re-roll: :designx ${dxArgs.brief} --seed ${(dxArgs.seed ?? 0) + 1}\n`));
+      }
     } catch (e) {
       console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
     }
