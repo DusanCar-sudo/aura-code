@@ -4,6 +4,65 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-08-19
+
+### Fixed
+- **Telegram bot — native tool calling.** The prompt/parser dialect mismatch
+  (P0-1): the agent emitted hand-rolled `<tool_run>`/DSML action tags while the
+  parser and approval gate matched a different `<function=...>` dialect. Switched
+  the pipeline to OpenAI-native `tools`/`tool_calls` with four declared tool
+  schemas (`run`/`send`/`cam`/`search`); the legacy dialect parser is retained
+  only as a fallback for older session transcripts.
+- **Telegram bot — truncated tool calls never execute.** (P0-2) The model can
+  hit its output token budget mid-tool-call (`finish_reason: "length"`), leaving
+  a truncated command that previously ran anyway. Tool calls now require matching
+  closing tags, truncation is detected via `stopReason === 'limit'`, the result is
+  reported as `{action|truncated|none}`, and the agent is retried once (then told
+  the call was dropped) instead of executing the cut-off command.
+- **Telegram bot — single-instance lock.** (P0-3) Two pollers competing over
+  `getUpdates` produced a second-process offset race (stale locks, dedupe bypass).
+  An exclusive lockfile with PID-liveness recovery now guarantees one active
+  instance; in-memory FIFO-capped dedupe plus a persisted offset watermark
+  (lowest in-flight `update_id`) make crash replay safe.
+- **Telegram bot — DeepSeek residue token stripping.** (P1-4) The residue regex
+  now catches DeepSeek's fullwidth special tokens (`＜tool_call＞` etc.) that
+  previously leaked into message text and corrupted command parsing.
+- **Telegram bot — stderr no longer discarded.** (P1-5) `execShell` used
+  `stdout || stderr`, silently dropping error output when stdout was empty.
+  Execution results now include both streams.
+- **Telegram bot — approval-gate hardening.** (P1-6) The mutating-command
+  classifier was regex-based and bypassable via `$()`/backticks/`&`/newlines,
+  `find -exec`, `sed -i`, and git/systemctl subcommands. Replaced with a token
+  scan against `MUTATING_GIT`/`MUTATING_SYSTEMCTL` sets that rejects
+  substitution, command chaining, and every known bypass form.
+
+## [0.15.0] — 2026-08-19
+
+### Added — search backend enablement
+- **Real search backends.** `web-search.ts` rewritten to back the `search` tool
+  with Tavily and Brave (API-backed) plus DuckDuckGo (HTML extraction with
+  challenge detection) and a liveness probe; the `bootstrapAuraEnv` step now
+  activates these backends at startup. Includes `tests/web-search.test.ts`
+  (backend selection, DDG extraction, availability probing).
+
+### Added — designx
+- **`designx` design commission command.** A 14-direction style lexicon with
+  per-target `risk 1–5` and `fits`/`cues`, risk-banded routing
+  (classic 1–2, balanced 1–4, wild 3–5, feral 4–5), seeded deterministic routing
+  (`mulberry32` + FNV-1a `seedFrom`), and artefact-based success. Run via
+  `aura designx <brief> [--target] [--style]`.
+- **`AURA_MAX_TOKENS` budget fix.** `openai-compatible.ts` now resolves
+  `maxTokens` from the environment (new `envMaxTokens()`) before falling back to
+  the 16k default — fixing `finish_reason: "length"` truncation behind
+  `designx designs but never builds the page` when a provider's token ceiling
+  was larger than the hardcoded budget.
+
+### Notes
+- **`src/util/rtk.ts` remains uncommitted** (`+53`) together with
+  `tests/rtk-wrap.test.ts` (`+79`), out of scope for this release pending a
+  separate review. The `rtkWrap` rewrite touches every model-authored command the
+  Telegram bot executes, so it is deliberately excluded here.
+
 ## [0.14.0] — 2026-08-02
 
 ### Added
