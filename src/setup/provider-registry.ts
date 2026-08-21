@@ -134,6 +134,53 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    name: 'BytePlus ModelArk',
+    // Coding Plan subscription endpoint (OpenAI-compatible wire format).
+    // The plain https://ark.ap-southeast.bytepluses.com/api/v3 endpoint is
+    // pay-as-you-go and does NOT consume Coding Plan quota.
+    baseUrl: 'https://ark.ap-southeast.bytepluses.com/api/coding/v3',
+    envKey: 'ARK_API_KEY',
+    signupUrl: 'https://www.byteplus.com/en/activity/codingplan',
+    models: [
+      { id: 'ark-code-latest',     label: 'Ark Code (auto-select)', speed: 'Coding Plan · flagship', contextWindow: 200_000 },
+      { id: 'dola-seed-2.0-pro',   label: 'Dola Seed 2.0 Pro',      speed: 'Coding Plan · powerful', contextWindow: 200_000 },
+      { id: 'dola-seed-2.0-lite',  label: 'Dola Seed 2.0 Lite',     speed: 'Coding Plan · fast', contextWindow: 200_000 },
+      { id: 'dola-seed-2.0-code',  label: 'Dola Seed 2.0 Code',     speed: 'Coding Plan · code', contextWindow: 200_000 },
+      { id: 'bytedance-seed-code', label: 'ByteDance Seed Code',    speed: 'Coding Plan · code', contextWindow: 200_000 },
+      { id: 'glm-5.2',             label: 'GLM-5.2 (Ark)',          speed: 'Coding Plan · 1M context', contextWindow: 1_000_000 },
+      { id: 'glm-5.1',             label: 'GLM-5.1 (Ark)',          speed: 'Coding Plan · agentic', contextWindow: 200_000 },
+      { id: 'kimi-k2.5',           label: 'Kimi K2.5 (Ark)',        speed: 'Coding Plan · reasoning', contextWindow: 200_000 },
+      { id: 'gpt-oss-120b',        label: 'GPT-OSS 120B (Ark)',     speed: 'Coding Plan · open', contextWindow: 200_000 },
+    ],
+  },
+  {
+    name: 'FPT Cloud AI',
+    baseUrl: 'https://mkp-api.fptcloud.com/v1',
+    envKey: 'FPT_API_KEY',
+    signupUrl: 'https://marketplace.fptcloud.com/en/my-account#my-api-key',
+    models: [
+      { id: 'DeepSeek-V4-Flash',         label: 'DeepSeek V4 Flash',         speed: 'Fast · MoE', contextWindow: 500_000 },
+      { id: 'GLM-5.2',                   label: 'GLM-5.2',                   speed: 'Powerful · 1M context', contextWindow: 1_000_000 },
+      { id: 'Qwen3.8-27B',               label: 'Qwen3.8 27B',               speed: 'Powerful · FP8 262k', contextWindow: 262_144 },
+      { id: 'Qwen3.6-27B',               label: 'Qwen3.6 27B',               speed: 'Balanced · agentic', contextWindow: 262_000 },
+      { id: 'gemma-4-31B-it',            label: 'Gemma 4 31B',               speed: 'Powerful · 256k context', contextWindow: 262_000 },
+      { id: 'gemma-4-26B-A4B-it',        label: 'Gemma 4 26B SMoE',          speed: 'Fast · SMoE', contextWindow: 262_000 },
+      { id: 'gemma-3-27b-it',            label: 'Gemma 3 27B',               speed: 'Multimodal · 27B', contextWindow: 128_000 },
+      { id: 'gpt-oss-120b',              label: 'GPT-OSS 120B',              speed: 'Powerful · open 117B', contextWindow: 200_000 },
+      { id: 'gpt-oss-20b',               label: 'GPT-OSS 20B',               speed: 'Fast · open 21B', contextWindow: 128_000 },
+      { id: 'Llama-3.3-70B-Instruct',    label: 'Llama 3.3 70B',             speed: 'Powerful · 32k', contextWindow: 32_000 },
+      { id: 'Qwen2.5-VL-7B-Instruct',    label: 'Qwen 2.5 VL 7B',            speed: 'Vision · 7B', contextWindow: 33_000 },
+      { id: 'Vietnamese_Embedding',      label: 'Vietnamese Embedding',      speed: 'Embedding · BGE-M3', contextWindow: 8_000 },
+      { id: 'multilingual-e5-large',     label: 'Multilingual E5 Large',     speed: 'Embedding · E5', contextWindow: 8_000 },
+      { id: 'bge-reranker-v2-m3',        label: 'BGE Reranker V2 M3',        speed: 'Reranker', contextWindow: 8_000 },
+      { id: 'FPT.AI-VITs',               label: 'FPT.AI VITs',               speed: 'TTS · Vietnamese', contextWindow: 10_000 },
+      { id: 'FPT.TTS-pro',               label: 'FPT TTS Pro',               speed: 'TTS Pro · Vietnamese', contextWindow: 10_000 },
+      { id: 'FPT.AI-whisper-large-v3-turbo', label: 'FPT Whisper Large V3',  speed: 'STT · Vietnamese', contextWindow: 16_000 },
+      { id: 'FPT.AI-whisper-medium',     label: 'FPT Whisper Medium',        speed: 'STT · Vietnamese', contextWindow: 16_000 },
+      { id: 'whisper-large-v3-turbo',    label: 'Whisper Large V3 Turbo',    speed: 'STT · Multilingual', contextWindow: 16_000 },
+    ],
+  },
+  {
     name: 'Ollama (local, free)',
     baseUrl: 'http://localhost:11434/v1',
     envKey: null, // No API key needed

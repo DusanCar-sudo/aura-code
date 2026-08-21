@@ -217,6 +217,8 @@ function staticModelsForProvider(providerId: string): { id: string; name: string
       case 'vertex': return p === 'google' || id.startsWith('gemini');
       case 'glm': return id.startsWith('glm-') || id.startsWith('zhipu');
       case 'mimo': return id.startsWith('mimo') || id.startsWith('xiaomi/');
+      case 'byteplus': return id.startsWith('byteplus/') || p === 'byteplus modelark';
+      case 'fpt': return id.startsWith('fpt/') || id.startsWith('fptcloud/') || p.includes('fpt');
       case 'opencode-zen': return id.startsWith('opencode/') || id.startsWith('zen/');
       case 'opencode-go': return id.startsWith('go-anthropic/');
       default: return id.startsWith(`${providerId}/`) || p === providerId;
@@ -234,6 +236,11 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
   deepseek: [
     { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat (V3)' },
     { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner (R1)' },
+  ],
+  fpt: [
+    { id: 'fpt/DeepSeek-V4-Flash', name: 'DeepSeek V4 Flash' },
+    { id: 'fpt/GLM-5.2', name: 'GLM-5.2' },
+    { id: 'fpt/Qwen3.8-27B', name: 'Qwen3.8 27B' },
   ],
   kimi: [
     { id: 'kimi/kimi-k2-0905-preview', name: 'Kimi K2' },
@@ -330,6 +337,9 @@ const ROUTE_PREFIX: Record<string, string> = {
   gmi: 'gmi/',
   kilocode: 'kilocode/',
   alibaba: 'alibaba/',
+  byteplus: 'byteplus/',
+  fpt: 'fpt/',
+  fptcloud: 'fptcloud/',
 };
 
 /** Prefix a bare model id with its provider's routing prefix when missing. */
@@ -337,7 +347,7 @@ function applyRoutePrefix(providerId: string, id: string): string {
   const prefix = ROUTE_PREFIX[providerId];
   if (!prefix || id.startsWith(prefix)) return id;
   // Already carries some other known routing prefix (user typed it fully) — leave alone.
-  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//.test(id)) return id;
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|fptcloud)\//.test(id)) return id;
   return prefix + id;
 }
 

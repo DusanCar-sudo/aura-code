@@ -57,3 +57,48 @@ describe('getAllModels', () => {
     expect(all.length).toBe(KNOWN_MODELS.length);
   });
 });
+
+/**
+ * Gemini 3.7 Flash is listed explicitly in the offline registry rather than
+ * left to the live fetch. The selector can only offer what it can list, and it
+ * has to be offerable *before* a Google key exists — otherwise a user with no
+ * key can never reach the prompt that asks for one. No key is bundled: the
+ * model is registered, and availability stays gated on the env var.
+ */
+describe('gemini-3.7-flash registration', () => {
+  const saved = { g: process.env.GOOGLE_API_KEY, gm: process.env.GEMINI_API_KEY };
+  afterEach(() => {
+    if (saved.g === undefined) delete process.env.GOOGLE_API_KEY; else process.env.GOOGLE_API_KEY = saved.g;
+    if (saved.gm === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = saved.gm;
+  });
+
+  it('is listed, and listed without needing a key present', async () => {
+    const { KNOWN_MODELS } = await import('../src/providers/factory.js');
+    const entry = KNOWN_MODELS.find(m => m.id === 'gemini-3.7-flash');
+    expect(entry).toBeDefined();
+    expect(entry!.provider).toBe('Google');
+    expect(entry!.name).toBe('Gemini 3.7 Flash');
+  });
+
+  it('routes to the Google key env var', async () => {
+    const { apiKeyEnvVarForModel, modelProviderFamily } = await import('../src/providers/factory.js');
+    expect(apiKeyEnvVarForModel('gemini-3.7-flash')).toBe('GOOGLE_API_KEY');
+    expect(modelProviderFamily('gemini-3.7-flash')).toBe('google');
+  });
+
+  it('is not usable until a key is supplied — nothing is shipped with it', async () => {
+    const { isModelConfigured } = await import('../src/providers/factory.js');
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    expect(isModelConfigured('gemini-3.7-flash')).toBe(false);
+    process.env.GOOGLE_API_KEY = 'supplied-by-the-user';
+    expect(isModelConfigured('gemini-3.7-flash')).toBe(true);
+  });
+
+  it('constructs the Google provider for the exact upstream model id', async () => {
+    const { createProvider } = await import('../src/providers/factory.js');
+    const p = createProvider({ model: 'gemini-3.7-flash', apiKey: 'k' });
+    expect(p.name).toBe('Google');
+    expect(p.model).toBe('gemini-3.7-flash');   // sent verbatim to the API
+  });
+});

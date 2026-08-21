@@ -73,10 +73,10 @@ describe('resolveAnswer', () => {
     expect(resolveAnswer('36', 'Thinking Process: ... 0.15 x 240 = 36')).toBe('36');
   });
 
-  it('falls back to reasoning when the thinking phase consumed the budget', () => {
-    // Measured: 271 reasoning chunks, zero content chunks. Returning '' here
-    // is what rendered the empty answers.
-    expect(resolveAnswer('', 'Thinking Process: 1. Identify the goal')).toBe('Thinking Process: 1. Identify the goal');
+  it('returns a System Error when the thinking phase consumed the budget', () => {
+    // Measured: 271 reasoning chunks, zero content chunks. Returning raw reasoning
+    // causes runaway generation loops. We now return an explicit error string.
+    expect(resolveAnswer('', 'Thinking Process: 1. Identify the goal')).toBe('[System Error: Model exhausted token budget during reasoning phase. No final answer was provided.]');
   });
 
   it('stays empty when there is genuinely nothing', () => {

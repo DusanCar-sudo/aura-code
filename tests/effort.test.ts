@@ -76,3 +76,39 @@ describe('config precedence', () => {
     expect(resolveConfig({}, {}, defaults).effort).toBeUndefined();
   });
 });
+
+/**
+ * AURA_MAX_TOKENS. Measured on glm-5.2 via OpenCode Go at effort "max": a
+ * long-output request came back outputTokens=16384, finish_reason "length",
+ * content EMPTY — the entire budget spent reasoning, artefact never emitted.
+ * The ceiling has to be liftable without a code change.
+ */
+describe('envMaxTokens', () => {
+  const saved = process.env.AURA_MAX_TOKENS;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.AURA_MAX_TOKENS;
+    else process.env.AURA_MAX_TOKENS = saved;
+  });
+
+  it('reads a positive integer', async () => {
+    const { envMaxTokens } = await import('../src/providers/openai-compatible.js');
+    process.env.AURA_MAX_TOKENS = '32768';
+    expect(envMaxTokens()).toBe(32768);
+  });
+
+  it('ignores unset, zero, negative and non-numeric values rather than throwing', async () => {
+    const { envMaxTokens } = await import('../src/providers/openai-compatible.js');
+    delete process.env.AURA_MAX_TOKENS;
+    expect(envMaxTokens()).toBeUndefined();
+    for (const bad of ['', '0', '-5', 'lots', 'NaN']) {
+      process.env.AURA_MAX_TOKENS = bad;
+      expect(envMaxTokens()).toBeUndefined();
+    }
+  });
+
+  it('floors a fractional value', async () => {
+    const { envMaxTokens } = await import('../src/providers/openai-compatible.js');
+    process.env.AURA_MAX_TOKENS = '20000.7';
+    expect(envMaxTokens()).toBe(20000);
+  });
+});

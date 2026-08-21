@@ -62,6 +62,10 @@ function stripModelPrefix(model: string): string {
   if (model.startsWith('xai/')) return model.replace('xai/', '');
   // xiaomi/model, mimo/model (factory accepts both prefixes)
   if (/^(xiaomi|mimo)\//.test(model)) return model.replace(/^(xiaomi|mimo)\//, '');
+  // byteplus/model (ModelArk Coding Plan alias)
+  if (model.startsWith('byteplus/')) return model.replace('byteplus/', '');
+  // fpt/model or fptcloud/model (FPT Cloud AI Marketplace)
+  if (/^(fpt|fptcloud)\//.test(model)) return model.replace(/^(fpt|fptcloud)\//, '');
   return model;
 }
 

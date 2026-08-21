@@ -64,11 +64,60 @@ export function resetRtkProbe(): void {
 }
 
 /**
- * `command` routed through RTK when it is installed, unchanged when it isn't.
+ * The rtk subcommands that proxy a native tool of the same name.
+ *
+ * This allowlist is the whole fix. `rtk` is a subcommand dispatcher, not a
+ * transparent prefix: `rtk git diff` works because `git` is one of its
+ * subcommands, but `rtk cat f`, `rtk cd /tmp` and `rtk FOO=1 echo hi` are all
+ * "unknown subcommand" and die with `No such file or directory (os error 2)`,
+ * exit 127. Prefixing unconditionally therefore broke every run_shell call
+ * whose command was not coincidentally an rtk subcommand — observed in the
+ * wild as an agent trying to write a file with `cat > page.html <<EOF`, failing
+ * three times identically, and being killed by the stall guard having written
+ * nothing.
+ *
+ * Deliberately excluded even though rtk accepts them: its own meta commands
+ * (gain, discover, config, init, telemetry, learn, hook, rewrite, proxy, run,
+ * pipe, trust, verify, session) — those are for a human at a terminal, and a
+ * command starting with one of those words is far more likely to be an
+ * unrelated binary than an intentional rtk invocation.
+ */
+const RTK_PROXIED: ReadonlySet<string> = new Set([
+  'ls', 'tree', 'find', 'grep', 'rg', 'diff', 'wc', 'wget', 'curl',
+  'git', 'gh', 'glab', 'gt',
+  'npm', 'npx', 'pnpm', 'cargo', 'go', 'pip', 'dotnet', 'mvn', 'gradlew',
+  'docker', 'kubectl', 'oc', 'aws', 'psql',
+  'jest', 'vitest', 'pytest', 'rspec', 'rake', 'playwright',
+  'tsc', 'next', 'prisma', 'prettier', 'ruff', 'rubocop', 'mypy', 'golangci-lint',
+]);
+
+/** The command's first word, ignoring leading whitespace and newlines. Returns
+ *  '' for an empty or whitespace-only command — which is itself a reason not to
+ *  wrap: `rtk` with no subcommand prints its help and exits 0, turning a no-op
+ *  into a reported success. */
+export function firstToken(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return '';
+  const match = trimmed.match(/^[^\s;|&<>()'"`]+/);
+  return match ? match[0] : '';
+}
+
+/**
+ * `command` routed through RTK when it is installed AND rtk actually has a
+ * proxy for it. Anything else is returned unchanged — an unwrapped command
+ * costs tokens, a wrongly wrapped one does not run at all.
+ *
  * Already-prefixed commands are left alone so wrapping stays idempotent.
  */
 export function rtkWrap(command: string): string {
   if (!command) return command;
   if (/^\s*rtk\s/.test(command)) return command;
-  return rtkAvailable() ? `rtk ${command}` : command;
+  if (!rtkAvailable()) return command;
+
+  const head = firstToken(command);
+  if (!RTK_PROXIED.has(head)) return command;
+
+  // Preserve any leading whitespace the caller had, so line-oriented callers
+  // that indent their commands keep their formatting.
+  return command.replace(/^(\s*)/, '$1rtk ');
 }

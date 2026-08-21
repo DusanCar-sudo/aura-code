@@ -2,6 +2,14 @@
 
 Context/instructions for this codebase: what Aura Code is, how it's structured, how it runs.
 
+> **Two docs, two jobs.** This file (`AGENTS.md`, formerly `CLAUDE.md`) describes
+> *what the project is*. `AURA.md` holds the standing rules for *how to work in
+> it* — project isolation, the three publishing surfaces, branch and secrets.
+> Aura loads them into separate system-prompt fields with separate size budgets
+> (`ctx.agentNotes` and `ctx.auraRules`, see `src/agent/context.ts`), so don't
+> merge them: one shared truncation point would push the standing rules out of
+> the prompt. `CLAUDE.md` still resolves as a fallback for un-renamed repos.
+
 ---
 
 ## What this app is
@@ -110,6 +118,26 @@ permission-gated like `run_shell`).
 - Global config via first-run wizard (`src/setup/`)
 - `AURA_MODEL`, `AURA_FALLBACK_MODEL`, `AURA_MAX_RETRIES`, `AURA_API_RPM/TPM`
   environment overrides
+
+---
+
+## Skills
+
+Two separate sources, injected two different ways:
+
+| Source | Loader | What reaches the prompt |
+|--------|--------|-------------------------|
+| `.agents/skills/<name>/SKILL.md` (and `.claude/skills/`) — installed by `npx skills add` | `src/plugins/project-skills.ts` | **Catalog only**: name + description + path. The agent `read_file`s a SKILL.md when a task matches. |
+| `~/.aura/plugins/<name>/skills/<name>/SKILL.md` — installed plugins | `src/plugins/loader.ts` | Full bodies, gated on a web-keyword regex in `system-prompt.ts`. |
+
+The split is about scale: a `skills add` catalog runs to hundreds of KB of
+bodies, so pasting them is impossible and routing has to be the model's
+decision against a list of descriptions. Plugin skills are a handful of KB and
+predate this.
+
+`:skills` in the REPL prints the parsed catalog — if a skill is not in that
+list, the agent cannot see it (a skill with no frontmatter `description:` is
+dropped as unroutable, and still passes `aura doctor`).
 
 ---
 

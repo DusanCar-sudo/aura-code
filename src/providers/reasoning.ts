@@ -120,5 +120,12 @@ export class ThinkTagStripper {
  * when present, so this never leaks the trace into an answer that exists.
  */
 export function resolveAnswer(content: string, reasoning: string): string {
-  return content.trim() ? content : (reasoning.trim() ? reasoning : content);
+  if (content.trim()) return content;
+  if (!reasoning.trim()) return content;
+  
+  // A truncated thinking phase (empty content) means the model exhausted its token
+  // budget during reasoning. Returning the raw reasoning trace here poisons the 
+  // conversation context for future turns and causes runaway generation loops.
+  // Instead, we return a clear indicator so the model knows to try again.
+  return "[System Error: Model exhausted token budget during reasoning phase. No final answer was provided.]";
 }

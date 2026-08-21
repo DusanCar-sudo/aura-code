@@ -44,6 +44,9 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':council', label: 'Council', description: 'Parallel read-only specialists', category: 'Workflows' },
   { id: ':q add', label: 'Queue task', description: 'Enqueue a task', category: 'Workflows' },
   { id: ':q list', label: 'Queue list', description: 'List queued tasks', category: 'Workflows' },
+  // Design
+  { id: ':designx', label: 'Design commission', description: 'Route a style, scrape references, build the artefact', category: 'Design' },
+  { id: ':designx styles', label: 'Design lexicon', description: 'List the style directions :designx routes from', category: 'Design' },
   // Memory
   { id: ':dream', label: 'Dream', description: 'Consolidate episodes', category: 'Memory' },
   { id: ':rem', label: 'Show memory', description: 'Reconciled memory', category: 'Memory' },

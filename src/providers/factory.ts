@@ -3,8 +3,10 @@ import { AnthropicProvider } from './anthropic.js';
 import { OpenAICompatibleProvider } from './openai-compatible.js';
 import { GoogleProvider } from './google.js';
 import { getApiKey, getEnv } from '../util/env.js';
-import type { ProviderDef } from '../config/project-config.js';
-import { getLiveModels } from './live-models.js';
+import { getCustomProviders } from './custom-registry.js';
+// Value import as well as the re-export below: normalizeModelId consults the
+// catalog to resolve a bare model id to its provider prefix.
+import { KNOWN_MODELS } from './known-models.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
 import { defaultXiaomiBaseUrl } from '../setup/xiaomi.js';
 // Circular with provider-wizard (it imports the ZHIPU_* consts below) — safe
@@ -21,28 +23,23 @@ import * as http from 'http';
 export const ZHIPU_GENERAL_BASE_URL = 'https://api.z.ai/api/paas/v4';
 /** Zhipu (Z.ai) Coding Plan endpoint — GLM Coding Plan subscription quota. */
 export const ZHIPU_CODING_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
+/** BytePlus ModelArk Coding Plan endpoint (OpenAI wire format). The plain
+ * https://ark.ap-southeast.bytepluses.com/api/v3 endpoint is pay-as-you-go
+ * and does NOT consume Coding Plan quota. */
+export const BYTEPLUS_CODING_BASE_URL = 'https://ark.ap-southeast.bytepluses.com/api/coding/v3';
+/** FPT Cloud AI Marketplace endpoint (OpenAI wire format). */
+export const FPT_BASE_URL = 'https://mkp-api.fptcloud.com/v1';
 
-let customProviders: ProviderDef[] = [];
-
-/**
- * Register custom providers from .aura.json or any other source.
- * These are checked before built-in routing in createProvider().
- */
-export function registerCustomProviders(providers: ProviderDef[]): void {
-  customProviders = providers;
-}
-
-/** Get currently registered custom providers. */
-export function getCustomProviders(): ProviderDef[] {
-  return customProviders;
-}
+// The registry itself lives in custom-registry.ts so known-models.ts can read
+// it without importing this module. Re-exported for existing callers.
+export { registerCustomProviders, getCustomProviders } from './custom-registry.js';
 
 /**
  * Strip Aura's internal routing prefixes from a model id so it can be looked
  * up against registry entries (which store unprefixed ids).
  */
 function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
+  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|fptcloud)\//, '');
 }
 
 /**
@@ -71,7 +68,7 @@ export function getContextWindow(model: string): number | undefined {
  */
 export function apiKeyEnvVarForModel(model: string): string | undefined {
   const m = model.toLowerCase();
-  for (const p of customProviders) {
+  for (const p of getCustomProviders()) {
     if (p.apiKeyEnv && (p.prefixes ?? []).some(pre => m.startsWith(pre.toLowerCase()))) {
       return p.apiKeyEnv;
     }
@@ -100,6 +97,8 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   if (m.startsWith('gmi/')) return 'GMI_API_KEY';
   if (m.startsWith('kilocode/')) return 'KILOCODE_API_KEY';
   if (m.startsWith('alibaba/')) return 'ALIBABA_API_KEY';
+  if (m.startsWith('byteplus/')) return 'ARK_API_KEY';
+  if (m.startsWith('fpt/') || m.startsWith('fptcloud/')) return 'FPT_API_KEY';
   return undefined;
 }
 
@@ -141,6 +140,8 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('gmi/')) return 'gmi';
   if (m.startsWith('kilocode/')) return 'kilocode';
   if (m.startsWith('alibaba/')) return 'alibaba';
+  if (m.startsWith('byteplus/')) return 'byteplus';
+  if (m.startsWith('fpt/') || m.startsWith('fptcloud/')) return 'fpt';
   return 'openai-compatible';
 }
 
@@ -167,6 +168,8 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   gmi: 'GMI_API_KEY',
   kilocode: 'KILOCODE_API_KEY',
   alibaba: 'ALIBABA_API_KEY',
+  byteplus: 'ARK_API_KEY',
+  fpt: 'FPT_API_KEY',
   'openai-compatible': 'OPENAI_API_KEY',
 };
 
@@ -217,6 +220,9 @@ const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://openrouter.ai/api/v1': 'openrouter',
   'https://api.x.ai/v1': 'xai',
   'https://opencode.ai/zen/v1': 'opencode',
+  [BYTEPLUS_CODING_BASE_URL]: 'byteplus',
+  'https://mkp-api.fptcloud.com/v1': 'fpt',
+  'https://mkp-api.fptcloud.com': 'fpt',
 };
 
 /**
@@ -342,22 +348,28 @@ export function resolveTaskModelBaseUrl(opts: {
 export function createProvider(config: ProviderConfig): LLMProvider {
   const model = config.model.toLowerCase();
 
-  // ── OpenCode Go (Zen endpoint — OpenAI-compatible /chat/completions) ────
+  // ── OpenCode Go (subscription endpoint — OpenAI-compatible) ─────────────
   // The Zen API speaks the OpenAI wire format; routing these through the
   // Anthropic provider sent /v1/messages-shaped requests to a
   // /chat/completions endpoint.
+  //
+  // `/zen/go/v1` is the Go subscription tier; `/zen/v1` is pay-as-you-go and
+  // bills credits. Pointing Go at `/zen/v1` made every paid model answer
+  // "401 Insufficient balance" on an account whose subscription was active and
+  // whose key was fine — the request was simply being billed against the wrong
+  // tier. The two tiers also serve different model lists (25 vs 61).
   if (model.startsWith('go-anthropic/')) {
     const goModel = model.replace('go-anthropic/', '');
     return new OpenAICompatibleProvider({
       ...config,
       model: goModel,
-      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/v1',
+      baseUrl: config.baseUrl ?? getEnv('OPENCODE_GO_BASE_URL') ?? 'https://opencode.ai/zen/go/v1',
       apiKey: config.apiKey ?? getApiKey('OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY'),
     }, 'OpenCode Go');
   }
 
   // ── Custom providers (from .aura.json) ─────────────────────────────────
-  for (const def of customProviders) {
+  for (const def of getCustomProviders()) {
     const matched = def.prefixes.some(p => model.startsWith(p.toLowerCase()));
     if (matched) {
       // Only strip vendor/ style prefixes (e.g. deepseek/). Bare prefixes like mimo- are
@@ -487,6 +499,29 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     }, 'OpenRouter');
   }
 
+  // ── BytePlus ModelArk Coding Plan ─────────────────────────────────────────
+  // Subscription endpoint, OpenAI-compatible wire format. Model ids are the
+  // Coding Plan aliases (ark-code-latest, dola-seed-2.0-*, bytedance-seed-code,
+  // ...) — see the ModelArk "Integrate with AI programming tools" docs.
+  if (model.startsWith('byteplus/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: model.replace('byteplus/', ''),
+      baseUrl: config.baseUrl ?? getEnv('BYTEPLUS_BASE_URL') ?? BYTEPLUS_CODING_BASE_URL,
+      apiKey: config.apiKey ?? getApiKey('ARK_API_KEY'),
+    }, 'BytePlus ModelArk');
+  }
+
+  // ── FPT Cloud AI (AI Marketplace) ──────────────────────────────────────────
+  if (model.startsWith('fpt/') || model.startsWith('fptcloud/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: config.model.replace(/^(fpt|fptcloud)\//i, ''),
+      baseUrl: config.baseUrl ?? getEnv('FPT_BASE_URL') ?? FPT_BASE_URL,
+      apiKey: config.apiKey ?? getApiKey('FPT_API_KEY', 'FPTCLOUD_API_KEY'),
+    }, 'FPT Cloud AI');
+  }
+
   // ── Xiaomi MiMo ────────────────────────────────────────────────────────────
   if (model.startsWith('mimo-') || model.startsWith('xiaomi/') || model.startsWith('mimo/')) {
     const mimoModel = model.replace(/^(xiaomi|mimo)\//, '');
@@ -580,183 +615,76 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   }
 
   // ── OpenAI (default OpenAI-compatible fallback) ───────────────────────────
-  // Guard the silent 401 path: an unrecognized model with no baseUrl and no
-  // OpenAI key would be sent to api.openai.com and fail — tell the user what
-  // routing prefix is missing instead. Ollama tags are the common culprit
-  // (their `name:tag` shape never appears in cloud model ids).
-  const looksOpenAI = /^(gpt-|o[134]|chatgpt)/.test(model);
-  if (!looksOpenAI && !config.baseUrl && !config.apiKey && !getApiKey('OPENAI_API_KEY')) {
-    const hint = model.includes(':')
-      ? ` Did you mean "ollama/${config.model}" (local Ollama model)?`
-      : ' Use a provider-prefixed id (e.g. deepseek/..., ollama/...) or set --base-url.';
+  // Guard the silent-misroute path. An unrecognized bare id used to be sent to
+  // api.openai.com whenever an OPENAI_API_KEY happened to be set, and came back
+  // as "404 The model `kimi-k3` does not exist or you do not have access to
+  // it." — an OpenCode model id rejected by OpenAI, which reads like a billing
+  // or account problem rather than like an id that lost its routing prefix.
+  // Only OpenAI-shaped ids (or an explicit --base-url) reach OpenAI now.
+  const looksOpenAI = /^(gpt-|o[134]|chatgpt|ft:|codex-|davinci|babbage|text-)/.test(model);
+  if (!looksOpenAI && !config.baseUrl) {
+    const candidates = prefixedCandidates(model);
+    const hint = candidates.length
+      ? ` Did you mean ${candidates.map(c => `"${c}"`).join(' or ')}?`
+      : model.includes(':')
+        ? ` Did you mean "ollama/${config.model}" (local Ollama model)?`
+        : ' Use a provider-prefixed id (e.g. go-anthropic/..., deepseek/..., ollama/...) or set --base-url.';
     throw new Error(`Model "${config.model}" matches no known provider and no base URL is configured.${hint}`);
   }
   return new OpenAICompatibleProvider(config);
 }
 
 /**
+ * Catalog entries whose bare (unprefixed) id is `bare` — e.g. "kimi-k2.5" →
+ * ["byteplus/kimi-k2.5", "go-anthropic/kimi-k2.5"]. Only single-prefix ids
+ * take part: OpenRouter's `openrouter/vendor/model` form names a vendor, not
+ * a routing alias, so its trailing segment must not claim a bare id.
+ */
+function prefixedCandidates(bare: string): string[] {
+  const needle = bare.toLowerCase();
+  const out: string[] = [];
+  for (const entry of KNOWN_MODELS) {
+    const parts = entry.id.split('/');
+    if (parts.length === 2 && parts[1].toLowerCase() === needle) out.push(entry.id);
+  }
+  return out;
+}
+
+/**
  * Best-effort repair for bare model ids that would otherwise fall through to
  * the OpenAI-compatible default. Ollama tags carry a `name:tag` suffix
  * (granite4.1:3b) that no cloud model id uses — those get the ollama/ prefix.
- * Ids already recognized by modelProviderFamily pass through untouched.
+ * A bare id that exactly one catalog entry claims (minimax-m3 →
+ * go-anthropic/minimax-m3) gets that entry's prefix; an id claimed by two
+ * providers is left alone so createProvider can name both candidates instead
+ * of guessing. Ids already recognized by modelProviderFamily pass through.
  */
 export function normalizeModelId(model: string): string {
   const m = model.toLowerCase();
+  // OpenCode's free tier marks its ids with a `-free` suffix that no vendor
+  // uses on its own API, so the catalog outranks the family prefixes here:
+  // `deepseek-v4-flash-free` starts with `deepseek-` and was being sent to
+  // DeepSeek's own API, which answers "the supported API model names are
+  // deepseek-v4-pro or deepseek-v4-flash".
+  if (!m.includes('/') && m.endsWith('-free')) {
+    const free = prefixedCandidates(m);
+    if (free.length === 1) return free[0];
+  }
   if (modelProviderFamily(m) !== 'openai-compatible') return model;
   if (/^(gpt-|o[134])/.test(m)) return model; // genuinely OpenAI
   if (m.includes(':') && !m.includes('/')) return `ollama/${model}`;
+  if (!m.includes('/')) {
+    const candidates = prefixedCandidates(m);
+    if (candidates.length === 1) return candidates[0];
+  }
   return model;
 }
 
-/**
- * List of well-known model shortcuts for quick selection.
- * Used by the `:provider`/`:model` selectors and by `--models` on the CLI.
- *
- * NOTE: Anthropic, OpenAI, Google, and OpenRouter entries here are a
- * fallback only — getAllModels() prefers live-fetched lists for these
- * four providers when available (see live-models.ts), since this static
- * list goes stale fast. As of Feb 2026, OpenAI retired gpt-4o, gpt-4.1,
- * gpt-4.1-mini, and o4-mini from the API. The Anthropic list below is
- * also behind the current lineup — Claude Sonnet 5, Claude Opus 4.8, and
- * Claude Fable 5 are the current generation as of this writing and are
- * not listed statically; live fetch is what surfaces them.
- */
-export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: string }[] = [
-  // ── Anthropic Claude ─────────────────────────────────────────────────────
-  { id: 'claude-opus-4-5-20251001',   name: 'Claude Opus 4.5',   provider: 'Anthropic', speed: 'Powerful · strongest' },
-  { id: 'claude-sonnet-4-5-20251001', name: 'Claude Sonnet 4.5', provider: 'Anthropic', speed: 'Fast · balanced' },
-  { id: 'claude-haiku-4-5-20251001',  name: 'Claude Haiku 4.5',  provider: 'Anthropic', speed: 'Fastest · cheap' },
-  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', speed: 'Fast · legacy' },
-  { id: 'claude-3-5-haiku-20241022',  name: 'Claude 3.5 Haiku',  provider: 'Anthropic', speed: 'Fastest · legacy' },
-  { id: 'claude-3-opus-20240229',     name: 'Claude 3 Opus',     provider: 'Anthropic', speed: 'Powerful · legacy' },
-
-  // ── OpenAI (offline fallback — prefer live fetch, see note above) ───────
-  { id: 'gpt-4o',          name: 'GPT-4o',          provider: 'OpenAI', speed: 'Powerful · multimodal' },
-  { id: 'gpt-4o-mini',     name: 'GPT-4o mini',     provider: 'OpenAI', speed: 'Fast · cheap' },
-  { id: 'gpt-4-turbo',     name: 'GPT-4 Turbo',     provider: 'OpenAI', speed: 'Powerful · legacy' },
-  { id: 'gpt-3.5-turbo',   name: 'GPT-3.5 Turbo',   provider: 'OpenAI', speed: 'Fastest · legacy' },
-  { id: 'o1',              name: 'o1',              provider: 'OpenAI', speed: 'Reasoning · flagship' },
-  { id: 'o1-mini',         name: 'o1-mini',         provider: 'OpenAI', speed: 'Reasoning · cheap' },
-  { id: 'o1-preview',      name: 'o1-preview',      provider: 'OpenAI', speed: 'Reasoning · legacy' },
-  { id: 'o3',              name: 'o3',              provider: 'OpenAI', speed: 'Reasoning · new flagship' },
-  { id: 'o3-mini',         name: 'o3-mini',         provider: 'OpenAI', speed: 'Reasoning · fast' },
-  { id: 'o4-mini',         name: 'o4-mini',         provider: 'OpenAI', speed: 'Reasoning · fastest' },
-
-  // ── Google Gemini (offline fallback — prefer live fetch, see note above) ─
-  { id: 'gemini-2.5-pro',            name: 'Gemini 2.5 Pro',     provider: 'Google', speed: 'Powerful · long context' },
-  { id: 'gemini-2.5-flash',          name: 'Gemini 2.5 Flash',   provider: 'Google', speed: 'Fast · cheap' },
-  { id: 'gemini-2.0-pro',            name: 'Gemini 2.0 Pro',     provider: 'Google', speed: 'Powerful' },
-  { id: 'gemini-2.0-flash',          name: 'Gemini 2.0 Flash',   provider: 'Google', speed: 'Fast' },
-  { id: 'gemini-1.5-pro',            name: 'Gemini 1.5 Pro',     provider: 'Google', speed: 'Long context · legacy' },
-  { id: 'gemini-1.5-flash',          name: 'Gemini 1.5 Flash',   provider: 'Google', speed: 'Fast · legacy' },
-  { id: 'gemini-1.5-flash-8b',       name: 'Gemini 1.5 Flash-8B', provider: 'Google', speed: 'Fastest · tiny' },
-
-  // ── Xiaomi MiMo ─────────────────────────────────────────────────────────
-  { id: 'mimo-v2.5-pro',   name: 'MiMo V2.5 Pro',   provider: 'Xiaomi MiMo', speed: 'Powerful · 1T params' },
-  { id: 'mimo-v2.5',       name: 'MiMo V2.5',       provider: 'Xiaomi MiMo', speed: 'Fast · 310B' },
-  { id: 'mimo-v2-flash',   name: 'MiMo V2 Flash',   provider: 'Xiaomi MiMo', speed: 'Fastest · pay-as-you-go (sk-) keys only' },
-  { id: 'mimo-v1',         name: 'MiMo V1',         provider: 'Xiaomi MiMo', speed: 'Legacy · pay-as-you-go (sk-) keys only' },
-
-  // ── Zhipu (Z.ai GLM) — use zhipu-coding/<id> to route via the Coding Plan ─
-  { id: 'glm-5.2',         name: 'GLM-5.2',         provider: 'Zhipu', speed: 'Powerful · 1M context' },
-  { id: 'glm-5.1',         name: 'GLM-5.1',         provider: 'Zhipu', speed: 'Powerful · agentic' },
-  { id: 'glm-5',           name: 'GLM-5',           provider: 'Zhipu', speed: 'Powerful · 744B MoE' },
-
-  // ── xAI Grok ────────────────────────────────────────────────────────────
-  { id: 'grok-2',            name: 'Grok 2',            provider: 'xAI', speed: 'Powerful' },
-  { id: 'grok-2-mini',       name: 'Grok 2 mini',       provider: 'xAI', speed: 'Fast · cheap' },
-  { id: 'grok-beta',         name: 'Grok Beta',         provider: 'xAI', speed: 'Fast' },
-  { id: 'grok-vision-beta',  name: 'Grok Vision Beta',  provider: 'xAI', speed: 'Multimodal' },
-
-  // ── OpenCode Go (Anthropic-style models — use go-anthropic/ prefix) ──────
-  { id: 'go-anthropic/minimax-m3',   name: 'MiniMax M3 (Go)',    provider: 'OpenCode Go', speed: 'Anthropic API · agentic' },
-  { id: 'go-anthropic/minimax-m2.7', name: 'MiniMax M2.7 (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · fast' },
-  { id: 'go-anthropic/minimax-m2.5', name: 'MiniMax M2.5 (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · budget' },
-  { id: 'go-anthropic/qwen3.7-max',  name: 'Qwen3.7 Max (Go)',   provider: 'OpenCode Go', speed: 'Anthropic API · powerful' },
-  { id: 'go-anthropic/qwen3.7-plus', name: 'Qwen3.7 Plus (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
-  { id: 'go-anthropic/qwen3.6-plus', name: 'Qwen3.6 Plus (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
-
-  // ── OpenRouter (offline fallback — prefer live fetch, see note above) ────
-  { id: 'openrouter/anthropic/claude-3.5-sonnet',            name: 'Claude 3.5 Sonnet (OR)',   provider: 'OpenRouter', speed: 'Fast' },
-  { id: 'openrouter/anthropic/claude-3-opus',                name: 'Claude 3 Opus (OR)',       provider: 'OpenRouter', speed: 'Powerful' },
-  { id: 'openrouter/openai/gpt-4o',                           name: 'GPT-4o (OR)',              provider: 'OpenRouter', speed: 'Powerful' },
-  { id: 'openrouter/openai/o1',                               name: 'o1 (OR)',                  provider: 'OpenRouter', speed: 'Reasoning' },
-  { id: 'openrouter/google/gemini-2.0-flash-exp',             name: 'Gemini 2.0 Flash (OR)',    provider: 'OpenRouter', speed: 'Fast' },
-  { id: 'openrouter/meta-llama/llama-3.1-405b-instruct',      name: 'Llama 3.1 405B (OR)',      provider: 'OpenRouter', speed: 'Open · powerful' },
-  { id: 'openrouter/meta-llama/llama-3.1-70b-instruct',       name: 'Llama 3.1 70B (OR)',       provider: 'OpenRouter', speed: 'Open · fast' },
-  { id: 'openrouter/meta-llama/llama-3.1-8b-instruct',        name: 'Llama 3.1 8B (OR)',        provider: 'OpenRouter', speed: 'Open · cheap' },
-  { id: 'openrouter/mistralai/mistral-large-latest',          name: 'Mistral Large (OR)',       provider: 'OpenRouter', speed: 'Powerful' },
-  { id: 'openrouter/mistralai/mixtral-8x7b-instruct',         name: 'Mixtral 8x7B (OR)',        provider: 'OpenRouter', speed: 'Open · fast' },
-  { id: 'openrouter/qwen/qwen-2.5-72b-instruct',              name: 'Qwen 2.5 72B (OR)',        provider: 'OpenRouter', speed: 'Open · strong' },
-  { id: 'openrouter/qwen/qwen-2.5-coder-32b-instruct',        name: 'Qwen 2.5 Coder 32B (OR)',  provider: 'OpenRouter', speed: 'Open · code' },
-  { id: 'openrouter/deepseek/deepseek-chat',                  name: 'DeepSeek V3 (OR)',         provider: 'OpenRouter', speed: 'Open · strong' },
-  { id: 'openrouter/deepseek/deepseek-r1',                    name: 'DeepSeek R1 (OR)',         provider: 'OpenRouter', speed: 'Reasoning · open' },
-  { id: 'openrouter/deepseek/deepseek-v4-pro',                name: 'DeepSeek V4 Pro (OR)',     provider: 'OpenRouter', speed: 'Powerful · open' },
-  { id: 'openrouter/google/gemma-2-27b-it',                   name: 'Gemma 2 27B (OR)',         provider: 'OpenRouter', speed: 'Open · fast' },
-
-  // ── Ollama (local) ──────────────────────────────────────────────────────
-  { id: 'ollama/llama3.2',           name: 'Llama 3.2 (local)',     provider: 'Ollama', speed: 'Local · small' },
-  { id: 'ollama/llama3.1',           name: 'Llama 3.1 (local)',     provider: 'Ollama', speed: 'Local · 8B-70B' },
-  { id: 'ollama/llama3.3',           name: 'Llama 3.3 (local)',     provider: 'Ollama', speed: 'Local · 70B' },
-  { id: 'ollama/qwen2.5',            name: 'Qwen 2.5 (local)',      provider: 'Ollama', speed: 'Local · multilingual' },
-  { id: 'ollama/qwen2.5-coder',      name: 'Qwen 2.5 Coder (local)', provider: 'Ollama', speed: 'Local · code' },
-  { id: 'ollama/codellama',          name: 'Code Llama (local)',   provider: 'Ollama', speed: 'Local · code' },
-  { id: 'ollama/mistral',            name: 'Mistral (local)',      provider: 'Ollama', speed: 'Local · 7B' },
-  { id: 'ollama/mistral-nemo',       name: 'Mistral Nemo (local)', provider: 'Ollama', speed: 'Local · 12B' },
-  { id: 'ollama/mixtral',            name: 'Mixtral (local)',      provider: 'Ollama', speed: 'Local · MoE' },
-  { id: 'ollama/phi3',               name: 'Phi-3 (local)',        provider: 'Ollama', speed: 'Local · tiny' },
-  { id: 'ollama/gemma2',             name: 'Gemma 2 (local)',      provider: 'Ollama', speed: 'Local · Google' },
-  { id: 'ollama/deepseek-coder-v2',  name: 'DeepSeek Coder V2 (local)', provider: 'Ollama', speed: 'Local · code' },
-  { id: 'ollama/command-r',          name: 'Command-R (local)',    provider: 'Ollama', speed: 'Local · Cohere' },
-
-  // ── LM Studio / local OpenAI-compatible ────────────────────────────────
-  { id: 'local/qwen2.5-coder-32b-instruct',  name: 'Qwen 2.5 Coder 32B (local)', provider: 'Local', speed: 'Local · code' },
-  { id: 'local/llama-3.3-70b-instruct',      name: 'Llama 3.3 70B (local)',      provider: 'Local', speed: 'Local · strong' },
-  { id: 'local/mistral-large',               name: 'Mistral Large (local)',      provider: 'Local', speed: 'Local · powerful' },
-];
-
-const LIVE_PREFERRED_PROVIDERS = new Set(['Anthropic', 'OpenAI', 'Google', 'OpenRouter']);
-
-/**
- * Get all available models — live-fetched (OpenAI/Google/OpenRouter, when
- * an API key is configured and refreshLiveModels() has run) + static
- * KNOWN_MODELS fallback + custom providers from .aura.json.
- *
- * When a live list exists for a provider, its static KNOWN_MODELS entries
- * are dropped entirely rather than merged — the static list can contain
- * retired model IDs (see the note on KNOWN_MODELS above), and a partial
- * merge would leave dead entries mixed in with real ones with no way to
- * tell them apart in the picker.
- */
-export function getAllModels(): { id: string; name: string; provider: string; speed: string }[] {
-  const live = getLiveModels();
-  const liveProviders = new Set(live.map((m) => m.provider));
-
-  const staticFallback = KNOWN_MODELS.filter((m) => {
-    if (LIVE_PREFERRED_PROVIDERS.has(m.provider) && liveProviders.has(m.provider)) {
-      return false;
-    }
-    return true;
-  });
-
-  const all = [...staticFallback, ...live];
-  for (const def of customProviders) {
-    if (def.models) {
-      for (const m of def.models) {
-        // Avoid duplicates
-        if (!all.some(x => x.id === m.id)) {
-          all.push({
-            id: m.id,
-            name: m.name ?? m.id,
-            provider: def.name,
-            speed: m.speed ?? 'Custom',
-          });
-        }
-      }
-    }
-  }
-  return all;
-}
+// The static model catalog and getAllModels() live in known-models.ts — the
+// list churns every time a vendor ships or retires a model, and that churn
+// should not touch the routing code here. Re-exported so callers that import
+// them from this module keep working.
+export { KNOWN_MODELS, getAllModels, type ModelCatalogEntry } from './known-models.js';
 
 /**
  * Check if Ollama is reachable at the given base URL.
@@ -786,7 +714,7 @@ export function isModelConfigured(modelId: string): boolean {
   const model = modelId.toLowerCase();
   const savedCfg = loadProviderConfig();
 
-  for (const def of customProviders) {
+  for (const def of getCustomProviders()) {
     const matched = def.prefixes.some(p => model.startsWith(p.toLowerCase()));
     if (matched) {
       if (def.apiKey?.trim()) return true;
@@ -806,6 +734,8 @@ export function isModelConfigured(modelId: string): boolean {
     return hasApiKey('XIAOMI_API_KEY')
       || !!(savedCfg?.apiKey && savedCfg.model === modelId);
   }
+  if (model.startsWith('byteplus/')) return hasApiKey('ARK_API_KEY');
+  if (model.startsWith('fpt/') || model.startsWith('fptcloud/')) return hasApiKey('FPT_API_KEY', 'FPTCLOUD_API_KEY');
   if (model.startsWith('grok-') || model.includes('grok')) return hasApiKey('XAI_API_KEY');
   if (model.startsWith('go-anthropic/')) return hasApiKey('OPENCODE_GO_API_KEY');
   if (model.startsWith('opencode/') || model.startsWith('zen/')) return hasApiKey('OPENCODE_API_KEY');

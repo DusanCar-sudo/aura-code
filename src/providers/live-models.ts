@@ -177,13 +177,35 @@ const OPENAI_COMPAT_MODELS: Record<string, { base: string; envKey: string; prefi
   openai:         { base: 'https://api.openai.com/v1',      envKey: 'OPENAI_API_KEY',   prefix: '', exclude: OPENAI_EXCLUDE },
   glm:            { base: 'https://api.z.ai/api/paas/v4',   envKey: 'ZHIPU_API_KEY',    prefix: '' },
   'opencode-zen': { base: 'https://opencode.ai/zen/v1',     envKey: 'OPENCODE_API_KEY', prefix: 'zen/' },
+  // The Go subscription tier lives at its own `/zen/go/v1` root and serves a
+  // narrower list than pay-as-you-go Zen (25 vs 61) — listing Zen's models
+  // here would offer models the subscription cannot run. Without this entry
+  // the Go picker fell back to a hand-written list that had drifted from the
+  // endpoint, so real ids (kimi-k3, minimax-m3) were missing and dead ones
+  // (qwen3.7-max) were offered.
+  'opencode-go':  { base: 'https://opencode.ai/zen/go/v1',  envKey: 'OPENCODE_GO_API_KEY', prefix: 'go-anthropic/' },
   fireworks:      { base: 'https://api.fireworks.ai/inference/v1', envKey: 'FIREWORKS_API_KEY', prefix: 'fireworks/' },
+  fpt:            { base: 'https://mkp-api.fptcloud.com/v1', envKey: 'FPT_API_KEY', prefix: 'fpt/' },
 };
+
+/**
+ * Strip a completion endpoint off a configured base URL. `*_BASE_URL` is meant
+ * to hold the API root, but the value people paste out of a provider's docs is
+ * the full endpoint — `.../v1/chat/completions` — and appending `/models` to
+ * that 404s, which shows up as a silently empty model picker rather than as an
+ * error. Trailing slashes go too, so `.../v1/` and `.../v1` behave alike.
+ */
+function apiRoot(url: string): string {
+  return url.trim()
+    .replace(/\/+$/, '')
+    .replace(/\/(chat\/completions|completions|responses|messages)$/, '');
+}
 
 async function fetchOpenAICompatModels(cfg: { base: string; envKey: string; prefix: string; exclude?: RegExp }): Promise<LiveModel[]> {
   const key = getApiKey(cfg.envKey);
   if (!key) return [];
-  const base = process.env[cfg.envKey.replace(/_API_KEY$/, '_BASE_URL')] ?? cfg.base;
+  const override = process.env[cfg.envKey.replace(/_API_KEY$/, '_BASE_URL')];
+  const base = override?.trim() ? apiRoot(override) : cfg.base;
   const r = await fetch(`${base}/models`, {
     headers: { Authorization: `Bearer ${key}` },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -215,6 +237,24 @@ function localApiRoot(envValue: string | undefined, fallback: string): string {
 
 export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> {
   try {
+    switch (providerId) {
+
+      case 'fpt': {
+        const key = getApiKey('FPT_API_KEY', 'FPTCLOUD_API_KEY');
+        const override = process.env.FPT_BASE_URL;
+        const base = override?.trim() ? apiRoot(override) : 'https://mkp-api.fptcloud.com/v1';
+        const headers: Record<string, string> = {};
+        if (key) headers['Authorization'] = `Bearer ${key}`;
+        const r = await fetch(`${base}/models`, {
+          headers,
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `fpt/${m.id}`, name: m.id }));
+      }
+    }
+
     const compat = OPENAI_COMPAT_MODELS[providerId];
     if (compat) return await fetchOpenAICompatModels(compat);
 
@@ -353,7 +393,7 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'anthropic',    name: 'Anthropic',                 desc: 'Claude models via API key',                     envKey: 'ANTHROPIC_API_KEY',   liveFetch: true },
   { id: 'openai',       name: 'OpenAI',                    desc: 'GPT models direct API',                         envKey: 'OPENAI_API_KEY',      liveFetch: true },
   { id: 'opencode-zen', name: 'OpenCode Zen',              desc: 'Pay-as-you-go endpoint',                        envKey: 'OPENCODE_API_KEY',    liveFetch: true },
-  { id: 'opencode-go',  name: 'OpenCode Go',               desc: '$10/month subscription',                        envKey: 'OPENCODE_GO_API_KEY' },
+  { id: 'opencode-go',  name: 'OpenCode Go',               desc: '$10/month subscription',                        envKey: 'OPENCODE_GO_API_KEY', liveFetch: true },
   { id: 'lmstudio',     name: 'LM Studio',                 desc: 'Local desktop app with built-in model server',  liveFetch: true },
   { id: 'huggingface',  name: 'Hugging Face',              desc: 'Inference Providers',                           envKey: 'HUGGINGFACE_API_KEY', liveFetch: true },
   { id: 'vertex',       name: 'Google Vertex AI',          desc: 'Gemini via GCP; OAuth2 or ADC',                 envKey: 'GOOGLE_API_KEY' },
@@ -371,5 +411,7 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'github',       name: 'GitHub Copilot',            desc: 'GitHub token API or copilot --acp process',     envKey: 'GITHUB_TOKEN' },
   { id: 'upstage',      name: 'Upstage',                   desc: 'Solar API',                                     envKey: 'UPSTAGE_API_KEY' },
   { id: 'alibaba',      name: 'Alibaba Cloud Coding Plan', desc: 'Dedicated coding tier',                         envKey: 'ALIBABA_API_KEY' },
+  { id: 'byteplus',     name: 'BytePlus ModelArk',         desc: 'Coding Plan subscription — ark-code & dola-seed', envKey: 'ARK_API_KEY' },
+  { id: 'fpt',          name: 'FPT Cloud AI',              desc: 'FPT AI Marketplace — DeepSeek, Qwen, GLM, Gemma, GPT-OSS, Embeddings', envKey: 'FPT_API_KEY', liveFetch: true },
   { id: 'custom',       name: 'Custom endpoint',           desc: 'Enter URL manually' },
 ];
