@@ -1,5 +1,5 @@
 import type { LLMProvider, LLMResponse, StreamChunk, HistoryMessage, ToolDefinition } from '../providers/types.js';
-import { ApiError } from '../util/errors.js';
+import { normaliseError } from '../util/errors.js';
 
 /**
  * Chains N providers and auto-failover: if the primary exhausts retries /
@@ -35,8 +35,12 @@ export class FallbackChainProvider implements LLMProvider {
         lastErr = e;
         const next = this.providers[i + 1];
         if (!next) break;
-        // Only failover on retriable errors. Permanent errors (4xx) propagate immediately.
-        if (e instanceof ApiError && !e.retriable) throw e;
+        // Only failover on retriable errors; permanent ones (4xx) propagate.
+        // Normalise first: providers throw their SDK's own error class, so an
+        // `instanceof ApiError` test alone silently answered "not permanent"
+        // for a raw 400 and "permanent" for anything a caller had already
+        // mislabelled. Deciding on the parsed HTTP status is the point.
+        if (!normaliseError(e, p.name).retriable) throw e;
         this.onFailover?.({ from: p.name, to: next.name, reason: e instanceof Error ? e.message : String(e) });
       }
     }
@@ -57,7 +61,7 @@ export class FallbackChainProvider implements LLMProvider {
         lastErr = e;
         const next = this.providers[i + 1];
         if (!next) break;
-        if (e instanceof ApiError && !e.retriable) throw e;
+        if (!normaliseError(e, p.name).retriable) throw e;
         this.onFailover?.({ from: p.name, to: next.name, reason: e instanceof Error ? e.message : String(e) });
       }
     }

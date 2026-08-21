@@ -1,4 +1,4 @@
-import { ApiError } from './errors.js';
+import { ApiError, normaliseError } from './errors.js';
 
 export interface RetryOptions {
   /** Maximum number of attempts (not retries — total tries including the first). Default 5. */
@@ -17,12 +17,15 @@ export interface RetryOptions {
   signal?: AbortSignal;
   /** Sleep function for testing. Default global setTimeout. */
   sleep?: (ms: number) => Promise<void>;
+  /** Provider name recorded on errors normalised here. Default 'unknown'. */
+  provider?: string;
 }
 
 /**
  * Wrap an async function with exponential backoff and jitter.
  * - Honours the error's `retryAfterMs` if set (e.g. parsed from Retry-After header).
- * - Only retries ApiError instances where `retriable === true`.
+ * - Normalises whatever the provider SDK threw, then retries when the result
+ *   is `retriable` — 429, 408, 529, 5xx and network errors (see defaultRetriable).
  * - Re-throws the last error if all attempts fail.
  */
 export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
@@ -39,9 +42,16 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}
     try {
       return await fn();
     } catch (e) {
-      const err = e instanceof ApiError ? e : new ApiError({
-        message: String(e), provider: 'unknown', retriable: false, cause: e,
-      });
+      // Normalise rather than assuming permanence. Provider SDKs throw their
+      // own error classes (OpenAI's APIError, Anthropic's, Google's), and none
+      // of the providers convert before throwing — so treating a non-ApiError
+      // as non-retriable meant every 429 and 5xx from every OpenAI-compatible
+      // endpoint skipped retry entirely. Worse, the mislabelled error then told
+      // FallbackChainProvider the failure was permanent, so it refused to fail
+      // over either: one wrong default silently disabled both layers of
+      // resilience, and the symptom was a run dying on a rate limit that a
+      // two-second backoff would have cleared.
+      const err = normaliseError(e, opts.provider ?? 'unknown');
       lastErr = err;
       if (!err.retriable || attempt === maxAttempts) throw err;
 
