@@ -15,7 +15,7 @@
   "scripts": {
     "prepublishOnly": "npm run clean && npm run build",
     "build": "tsc",
-    "postbuild": "node scripts/fix-bin-perms.js",
+    "postbuild": "node scripts/fix-bin-perms.js && node scripts/copy-assets.js",
     "dev": "ts-node src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "clean": "rm -rf dist",
