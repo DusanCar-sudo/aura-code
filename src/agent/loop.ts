@@ -19,7 +19,7 @@ import { MUTATING_TOOLS, ExecutiveQueue } from './executive-queue.js';
 import { compactHistory, estimateContextTokens, getRecapGeneration, ROLLOVER_AT_GENERATION } from './compactor.js';
 import { maybeRollover } from './generational-flush.js';
 import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.js';
-import { elideToolCallArgs, elideGoogleParts } from './tool-elision.js';
+import { elideToolCallArgs, elideGoogleParts, pruneToolResultImages } from './tool-elision.js';
 import { detectFrustration } from './affect.js';
 import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
@@ -747,6 +747,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
       let result: string;
       let isError = false;
+      /** Images the tool produced, kept out of `result` so the truncation and
+       *  caching below never see them. */
+      let resultImages: string[] | undefined;
       try {
         const perm = permissions.check(call.name, call.input);
         if (!perm.allowed) {
@@ -857,7 +860,16 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
             display.toolResult(call.name, result, 0);
           } else {
             const startMs = Date.now();
-            result = await executeTool(call.name, call.input, opts.context.root);
+            const out = await executeTool(call.name, call.input, opts.context.root);
+            // Split the visual part off immediately: everything downstream —
+            // truncation, the read cache, isError, elision — reasons about the
+            // text, and images must not be truncated or cached as text.
+            if (typeof out === 'string') {
+              result = out;
+            } else {
+              result = out.text;
+              if (out.images?.length) resultImages = out.images;
+            }
             const elapsed = Date.now() - startMs;
             display.toolResult(call.name, result, elapsed);
           }
@@ -916,12 +928,18 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         result = result.slice(0, MAX_TOOL_RESULT_CHARS)
           + `\n[result truncated: ${result.length.toLocaleString()} chars total — narrow the query or read the file in ranges]`;
       }
-      toolResults.push({ id: call.id, name: call.name, content: result, isError });
+      toolResults.push({
+        id: call.id, name: call.name, content: result, isError,
+        ...(resultImages?.length ? { images: resultImages } : {}),
+      });
     }
 
     health.incrementToolCalls(responseToolCalls.length);
 
     history.push({ role: 'tool_result', results: toolResults });
+    // Keep only the newest screenshots: every image in history is re-sent on
+    // every later turn, so an unpruned run pays for all of them, repeatedly.
+    pruneToolResultImages(history);
 
     if (stall) {
       display.warning(stall === 'repeat'

@@ -329,11 +329,16 @@ export function selectToolsWithEviction(
 // Tool executor — dispatches to the right implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** What a tool hands back. Plain string for the ~30 text tools; the object
+ *  form exists for tools whose result is partly visual (screenshots), so they
+ *  do not have to smuggle base64 through the text channel. */
+export type ToolOutput = string | { text: string; images?: string[] };
+
 export async function executeTool(
   name: string,
   input: Record<string, unknown>,
   cwd: string,
-): Promise<string> {
+): Promise<ToolOutput> {
   try {
     switch (name) {
       case 'read_file':    return readFile({ path: input.path as string, start_line: input.start_line as number | undefined, end_line: input.end_line as number | undefined }, cwd);

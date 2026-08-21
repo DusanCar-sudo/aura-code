@@ -77,3 +77,58 @@ export function elideGoogleParts(parts: unknown): unknown {
     return part;
   });
 }
+
+/**
+ * How many tool-result images stay in history. Screenshots are re-sent on
+ * every subsequent turn, so an agent taking one per step pays for all of them
+ * on every later call: at ~1.1 MP each that is roughly 1.5k tokens per image
+ * per turn, and a 30-step run becomes unaffordable long before it becomes
+ * unhelpful. Two is enough for "what changed since my last action", which is
+ * the only thing an older screenshot is still good for.
+ */
+export const KEEP_LAST_IMAGES = 2;
+
+/**
+ * Drop all but the most recent `keepLast` tool-result images from history,
+ * leaving a stub on the text so the model knows a picture used to be there
+ * rather than silently forgetting it looked.
+ *
+ * Mutates history in place, like the assistant-message elision above, and for
+ * the same reason: applied consistently at push time, the history bytes stay
+ * stable across calls, so a provider prompt-cache breakpoint after the message
+ * is not thrashed by it. The stub text is fixed for that reason — a counter or
+ * a timestamp in it would rewrite the prefix on every turn.
+ */
+export function pruneToolResultImages(
+  history: { role: string; results?: ToolResultLike[] }[],
+  keepLast: number = KEEP_LAST_IMAGES,
+): void {
+  let kept = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.role !== 'tool_result' || !msg.results) continue;
+    for (let j = msg.results.length - 1; j >= 0; j--) {
+      const r = msg.results[j];
+      if (!r.images || r.images.length === 0) continue;
+      if (kept < keepLast) {
+        kept += r.images.length;
+        continue;
+      }
+      delete r.images;
+      if (!r.content.endsWith(IMAGE_DROPPED_NOTE)) {
+        r.content = `${r.content}${r.content ? '\n' : ''}${IMAGE_DROPPED_NOTE}`;
+      }
+    }
+  }
+}
+
+/** Fixed text — see the cache-stability note on pruneToolResultImages. */
+export const IMAGE_DROPPED_NOTE =
+  '[earlier image dropped from context — take a new screenshot if you need to see the current state]';
+
+/** The shape pruneToolResultImages needs. Declared structurally so this module
+ *  keeps depending only on ToolCall from the provider types. */
+interface ToolResultLike {
+  content: string;
+  images?: string[];
+}
