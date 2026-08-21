@@ -172,8 +172,12 @@ describe('REPL session budget', () => {
     expect(budget.exhausted()).toBeNull();
   });
 
-  it('leaves the per-invocation maxTurns guard intact', async () => {
-    // The guard that actually catches a runaway loop within one message.
+  it('extends the per-invocation maxTurns guard while the budget has room', async () => {
+    // maxTurns used to end the message here. It no longer does: a default
+    // SessionBudget is finite, so it — not the turn count — is what decides
+    // when the message stops. The turn cap stays as the ceiling for runs given
+    // no bounded budget (see loop-persistence.test.ts), and every turn is still
+    // counted against the session either way.
     const budget = new SessionBudget({});
     const ctx = await loadProjectContext(tmpDir);
     const provider = new FakeProvider(
@@ -188,8 +192,10 @@ describe('REPL session budget', () => {
       permissions: new PermissionSystem('auto'), display: noopDisplay,
       budget, maxTurns: 3,
     });
-    expect(r.turns).toBe(3);                       // capped within the message
-    expect(budget.turnsUsed).toBe(3);              // and counted toward the session
+    // The queue holds 10 responses; the run consumes them rather than stopping
+    // at 3, and every turn is still recorded against the shared budget.
+    expect(r.turns).toBeGreaterThan(3);
+    expect(budget.turnsUsed).toBe(r.turns);
   });
 });
 
