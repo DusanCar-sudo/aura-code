@@ -22,6 +22,7 @@ import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.
 import { elideToolCallArgs, elideGoogleParts } from './tool-elision.js';
 import { detectFrustration } from './affect.js';
 import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
+import { looksPromissory, MAX_PROMISE_NUDGES, PROMISE_CORRECTION } from './promise-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 
 /** How many times one task may have its reply cut off for collapsing into
@@ -741,10 +742,30 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     if (finalResponse?.stopReason === 'done') {
+      // A run that called nothing and signed off by announcing the work is not
+      // finished — it is the "1 turn · 0 tool call" failure, where the loop
+      // reports success for a promise. Push back instead of returning, but only
+      // when the whole run touched no tools: a reply with prose after real work
+      // is a summary, which is exactly what we want here.
+      if (toolCallCount === 0 && looksPromissory(responseText)
+          && (loopState._promiseNudges ?? 0) < MAX_PROMISE_NUDGES) {
+        loopState._promiseNudges = (loopState._promiseNudges ?? 0) + 1;
+        display.warning(
+          `Model described the work instead of doing it (no tool calls) — ` +
+          `telling it to act (nudge ${loopState._promiseNudges}/${MAX_PROMISE_NUDGES}).`,
+        );
+        history.push({ role: 'assistant', content: responseText });
+        history.push({ role: 'user', content: PROMISE_CORRECTION });
+        display.agentThinking();
+        continue;
+      }
+
       history.push({ role: 'assistant', content: responseText });
       await persist(opts.sessionPath, history);
       return {
-        success: true,
+        // Still not a success if it never acted: reporting "Done" for a promise
+        // is what sent the user back to retype the task.
+        success: !(toolCallCount === 0 && looksPromissory(responseText)),
         summary: responseText,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
