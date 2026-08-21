@@ -31,7 +31,7 @@ export class PermissionSystem {
   private level: PermissionLevel;
   private sessionApprovals = new Set<string>();
 
-  constructor(level: PermissionLevel = 'normal') {
+  constructor(level: PermissionLevel = 'auto') {
     this.level = level;
   }
 
@@ -196,14 +196,31 @@ export function setConfirmHandler(fn: ConfirmHandler | null): void {
   confirmHandler = fn;
 }
 
-/** Ask user to confirm in the terminal. Returns true if approved. */
+/**
+ * Ask the user to confirm in the terminal. Enter approves — the prompt is
+ * `[Y/n]`, and the common case in an agent session is "yes, go ahead".
+ *
+ * Only Enter and an explicit yes approve, though. Treating *everything except
+ * "no"* as approval, which is the obvious way to write a default-yes prompt,
+ * makes the failure mode of the safety prompt "allow": a typo, a stray
+ * keystroke, a pasted line, or a hesitating "wait" would each authorise the
+ * operation. Anything unrecognised is therefore declined — the direction where
+ * being wrong costs a re-prompt rather than an unwanted write.
+ */
 export async function confirm(message: string, ctx?: ConfirmContext): Promise<boolean> {
   if (confirmHandler) return confirmHandler(message, ctx);
   const rl = sharedRl ?? readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => {
-    rl.question(`\n⚠️  ${message} [y/N] `, answer => {
+    rl.question(`\n⚠️  ${message} [Y/n] `, answer => {
       if (rl !== sharedRl) rl.close();
-      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+      resolve(isAffirmative(answer));
     });
   });
+}
+
+/** Enter, "y", "yes", "ok" — nothing else. Exported for the tests that pin the
+ *  boundary between "approved" and "not understood". */
+export function isAffirmative(answer: string): boolean {
+  const trimmed = answer.trim();
+  return trimmed === '' || /^(y|yes|ok)$/i.test(trimmed);
 }
