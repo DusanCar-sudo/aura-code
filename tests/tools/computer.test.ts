@@ -54,6 +54,18 @@ describe('the gate stands in front of everything', () => {
 describe('the coordinate contract', () => {
   beforeEach(() => { vi.stubEnv(COMPUTER_USE_ENV, '1'); setComputerUseEnabled(true); acknowledge(); });
 
+  it('refuses fast, without starting the sidecar', async () => {
+    // Regression: validation used to happen after the sidecar was spawned, so
+    // a malformed call paid for a portal handshake and a udev settle before
+    // being rejected — and created a real virtual input device to do it. This
+    // asserts the refusal is cheap, which is the observable proxy for "no
+    // hardware was touched".
+    const started = Date.now();
+    await computerTool({ action: 'click', x: 10, y: 10 });
+    await computerTool({ action: 'nonsense' });
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it('refuses a click before any screenshot exists', async () => {
     // x/y are relative to an image the model was shown. With no capture there
     // is nothing to convert against, and guessing would click the wrong place.

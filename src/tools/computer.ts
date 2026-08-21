@@ -88,6 +88,21 @@ export async function computerTool(input: ComputerInput): Promise<ToolOutput> {
 
   const action = String(input.action ?? '').toLowerCase();
 
+  // Validate before touching the sidecar. Starting it means a portal handshake
+  // and a ~1.2s udev settle for a virtual input device, so doing that only to
+  // reject a malformed call is slow, and it creates real system state for an
+  // action that was never going to run. Everything below is pure.
+  const complaint = validate(action, input);
+  if (complaint) return `Error: ${complaint}`;
+
+  // `remember` writes to the lessons store and touches no hardware at all.
+  if (action === 'remember') {
+    const geo = lastCapture ? geometryKey(lastCapture) : undefined;
+    return recordLesson(input.key_id!, input.note!, geo)
+      ? `Remembered for next time: ${input.note}`
+      : `Already known (${input.key_id}) — not stored again.`;
+  }
+
   try {
     if (!sidecar) {
       sidecar = new ScreenSidecar();
@@ -155,17 +170,6 @@ export async function computerTool(input: ComputerInput): Promise<ToolOutput> {
         return `Scrolled dy=${dy} dx=${dx}.`;
       }
 
-      case 'remember': {
-        if (!input.note || !input.key_id) {
-          return 'Error: remember needs key_id and note.';
-        }
-        const geo = lastCapture ? geometryKey(lastCapture) : undefined;
-        const fresh = recordLesson(input.key_id, input.note, geo);
-        return fresh
-          ? `Remembered for next time: ${input.note}`
-          : `Already known (${input.key_id}) — not stored again.`;
-      }
-
       default:
         return `Error: unknown computer action "${input.action}". `
           + 'Use screenshot, click, double_click, right_click, move, drag, type, key, scroll or remember.';
@@ -199,6 +203,53 @@ async function screenshot(sc: ScreenSidecar): Promise<ToolOutput> {
       + lessons,
     images: [`data:image/png;base64,${b64}`],
   };
+}
+
+/**
+ * Everything that can be decided without hardware. Returns a complaint, or null
+ * when the call is well-formed. Kept separate so the expensive, physical part of
+ * the tool is unreachable until the arguments and the coordinate contract both
+ * hold — which is also what makes these paths testable without a real screen.
+ */
+function validate(action: string, input: ComputerInput): string | null {
+  const POSITIONAL = ['click', 'double_click', 'right_click', 'move'];
+  const KNOWN = [...POSITIONAL, 'screenshot', 'drag', 'type', 'key', 'scroll', 'remember'];
+
+  if (!KNOWN.includes(action)) {
+    return `unknown computer action "${input.action}". `
+      + 'Use screenshot, click, double_click, right_click, move, drag, type, key, scroll or remember.';
+  }
+  if (POSITIONAL.includes(action)) {
+    if (!num(input.x) || !num(input.y)) return 'this action needs x and y in screenshot coordinates.';
+    const g = capture(); if (typeof g === 'string') return g;
+    if (!isInsideImage(input.x!, input.y!, g)) {
+      return `(${input.x}, ${input.y}) is outside the ${g.width}x${g.height} screenshot. `
+        + 'Take a fresh screenshot and read the coordinates off it.';
+    }
+  }
+  if (action === 'drag') {
+    if (!num(input.x) || !num(input.y) || !num(input.to_x) || !num(input.to_y)) {
+      return 'drag needs x, y, to_x and to_y in screenshot coordinates.';
+    }
+    const g = capture(); if (typeof g === 'string') return g;
+  }
+  if (action === 'type' && (typeof input.text !== 'string' || input.text === '')) {
+    return 'type needs non-empty text.';
+  }
+  if (action === 'key' && !input.combo) return 'key needs a combo, e.g. "ctrl+t".';
+  if (action === 'scroll' && !Number(input.dy ?? 0) && !Number(input.dx ?? 0)) {
+    return 'scroll needs dy and/or dx (wheel clicks).';
+  }
+  if (action === 'remember' && (!input.note || !input.key_id)) {
+    return 'remember needs key_id and note.';
+  }
+  return null;
+}
+
+/** The last capture, or the complaint explaining why there isn't one. */
+function capture(): CaptureGeometry | string {
+  return lastCapture ?? 'no screenshot yet — take one first. Coordinates are relative to the '
+    + 'screenshot you were shown, so there is nothing to convert against.';
 }
 
 /** Convert a model-supplied point, refusing rather than guessing when there is
