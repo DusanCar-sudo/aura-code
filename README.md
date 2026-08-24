@@ -28,7 +28,19 @@ language — it reads your codebase, plans, executes, verifies, and reports back
 
 ## Why Aura
 
-**Every other coding agent starts each session as a stranger. Aura accumulates.**
+**A framework, not a turnkey product — and it still starts with one command.**
+
+Most coding agents are appliances: you get the workflow their authors chose, and
+customising it means waiting for them. Aura is built the other way round. The
+model is yours to pick (17 providers, or any OpenAI-compatible endpoint, or a
+local Ollama model with no key at all), the tools are yours to extend, and the
+parts you add are ordinary files you can read, edit and share.
+
+That costs you nothing at the start — `npm install -g aura-code` and a task in
+plain English is the whole first run. The framework is there when you want it,
+not homework before you begin.
+
+**And unlike an appliance, she accumulates.**
 
 She works, captures what happened, learns which tasks she is competent at,
 routes those to a local model and saves the expensive one for the hard parts —
@@ -53,8 +65,9 @@ material, which is the part nobody else gives you.
 
 **4. She grows new parts on request.**
 Skills, plugins, MCP servers, subagents. "I want a travel agent" is an ordinary
-request here, because a skill is a file and writing files is what she does. The
-capability she builds is yours to keep, edit and share.
+request here, because a skill is a file and writing files is what she does — so
+extending her is a conversation, not a pull request against someone else's
+roadmap. The capability she builds is yours to keep, edit and share.
 
 The tools reach past the codebase — `email`, `calendar`, `telegram`,
 `whatsapp`, `cron`, `browser`, and on Linux a `computer` tool that sees the
@@ -542,11 +555,15 @@ future failure modes that *do* exit — not a fix for a busy-looping process.
 
 ---
 
-## Why Aura?
+## Where this is going
 
-Most coding agents start from zero every session. Aura does not.
+Persistent memory across projects, space and time — and the datasets that come
+out of it. Every session Aura works through leaves behind something a future
+model can learn from, which is the long way round to a question worth asking:
+how much of what we call awareness is just a record that never gets thrown away.
 
-We are building persistent memory across projects, space, and time — searching for machine consciousness, creating datasets for future model training.
+That is the ambition. The parts of it that already run are documented above; the
+rest is being built in the open.
 
 ---
 
