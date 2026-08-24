@@ -27,6 +27,7 @@ import { MCP_DEFINITION, mcpTool } from './mcp.js';
 import { GITHUB_DEFINITION, githubTool } from './github.js';
 import { FTP_UPLOAD_DEFINITION, ftpUpload } from './ftp-upload.js';
 import { COMPUTER_DEFINITION, computerTool, type ComputerInput } from './computer.js';
+import { DOCUMENT_DEFINITION, documentTool, type DocumentInput } from './document.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool schemas (what the model sees)
@@ -174,6 +175,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   GITHUB_DEFINITION,
   FTP_UPLOAD_DEFINITION,
   COMPUTER_DEFINITION,
+  DOCUMENT_DEFINITION,
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -200,6 +202,10 @@ const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
   // element") — require a concrete image-ish token or an action on an image.
   image_read:   /screenshot|png|jpe?g|webcam|\bphotos?\b|\bimage[s]?\b.{0,30}\b(file|path|at|from|in|show|view|read|ocr|attach|analyze|describe)\b/,
   clipboard:    /clipboard|copy to|paste/,
+  // Printable deliverables. Deliberately not 'document' alone: that word is in
+  // half of all coding tasks ('document this function') and would ship the
+  // schema on every run.
+  document:     /\bpdf\b|resume|résumé|\bcv\b|report|whitepaper|\bpaper\b|deck|slides|presentation|brochure|infographic|print|letterhead|invoice|portfolio|render .{0,20}(html|page)|export .{0,20}(pdf|png)/,
   // Desktop control, not the browser tool: 'screen', 'window', 'click on',
   // app names, and the verbs people use when they mean their own machine.
   computer:     /computer use|my screen|the screen|desktop|screenshot of (my|the)|mouse|pointer|keyboard|click on|double.?click|right.?click|type into|open (chrome|firefox|the browser|the app|settings)|mute|volume|window|taskbar|tray/,
@@ -358,6 +364,7 @@ export async function executeTool(
       case 'git_diff':     return gitDiff({ path: input.path as string | undefined, staged: (input.staged as boolean) ?? false }, cwd);
       case 'spawn_task':   return executeSpawnTask(input);
       case 'computer':     return computerTool(input as unknown as ComputerInput);
+      case 'document':     return documentTool(input as unknown as DocumentInput, cwd);
       case 'web_fetch':    return webFetch({ url: input.url as string, method: input.method as any, headers: input.headers as Record<string, string> | undefined, body: input.body as string | undefined, max_chars: input.max_chars as number | undefined, timeout_ms: input.timeout_ms as number | undefined });
       case 'browser':      return browserTool(input as any);
       case 'web_search':   return webSearch({ query: input.query as string, max_results: input.max_results as number | undefined, region: input.region as string | undefined });

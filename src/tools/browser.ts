@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../providers/types.js';
+import { findChrome } from '../util/chrome.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Browser — headless Chrome automation via Puppeteer
@@ -83,29 +84,6 @@ async function ensurePage(): Promise<import('puppeteer-core').Page> {
   page = await b.newPage();
   page.setDefaultTimeout(30_000);
   return page;
-}
-
-function findChrome(): string | null {
-  const { execSync } = require('child_process');
-  const candidates = [
-    'google-chrome',
-    'google-chrome-stable',
-    'chromium-browser',
-    'chromium',
-  ];
-  for (const cmd of candidates) {
-    try {
-      const resolved = execSync(`which ${cmd}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-      if (resolved) {
-        // Resolve symlinks to get the real executable path (Puppeteer needs it)
-        const real = execSync(`readlink -f "${resolved}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-        return real || resolved;
-      }
-    } catch {
-      // not found, try next
-    }
-  }
-  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

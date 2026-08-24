@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as path from 'path';
+import { findChrome, CHROME_MISSING_MESSAGE } from '../util/chrome.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import { execSync, spawn } from 'child_process';
@@ -23,29 +24,7 @@ export interface RenderOptions {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Chrome detection
-// ─────────────────────────────────────────────────────────────────────────────
 
-function findChrome(): string {
-  const candidates = [
-    'google-chrome-stable', 'google-chrome', 'chromium-browser', 'chromium',
-  ];
-  for (const cmd of candidates) {
-    try {
-      const result = execSync(`which ${cmd}`, { stdio: 'pipe' });
-      return result.toString().trim();
-    } catch {}
-  }
-  // Direct paths as fallback
-  const directPaths = [
-    '/usr/bin/google-chrome-stable', '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser', '/snap/bin/chromium',
-  ];
-  for (const p of directPaths) {
-    if (fs.existsSync(p)) return p;
-  }
-  throw new Error('Chrome/Chromium not found.');
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main render function
@@ -71,7 +50,7 @@ export async function renderVideo(options: RenderOptions): Promise<string> {
   // Puppeteer
   const puppeteer = await import('puppeteer-core');
   const browser = await puppeteer.launch({
-    executablePath: findChrome(),
+    executablePath: requireChrome(),
     headless: true,
     args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
   });
@@ -170,4 +149,12 @@ export async function renderVideo(options: RenderOptions): Promise<string> {
 
   if (!keepFrames) fs.rmSync(tmpDir, { recursive: true, force: true });
   return absOutput;
+}
+
+/** video-render cannot proceed without Chrome, so it converts absence into the
+ *  shared actionable message rather than letting puppeteer throw ENOENT. */
+function requireChrome(): string {
+  const p = findChrome();
+  if (!p) throw new Error(CHROME_MISSING_MESSAGE);
+  return p;
 }
