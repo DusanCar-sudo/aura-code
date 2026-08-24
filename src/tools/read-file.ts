@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import { BINARY_EXTENSIONS } from '../config/defaults.js';
 import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
 
@@ -19,6 +20,13 @@ export function readFile(input: ReadFileInput, cwd: string): string {
   }
 
   const ext = path.extname(filePath).toLowerCase();
+
+  // PDFs read as their text, not as "Binary file: 254.7 KB". A CV, an invoice
+  // or a spec handed to the agent is a document, and reporting its size is a
+  // refusal dressed as an answer — the model's only recourse was to know that
+  // pdftotext exists and shell out to it, which it mostly does not.
+  if (ext === '.pdf') return readPdf(filePath, input);
+
   if (BINARY_EXTENSIONS.includes(ext)) {
     const stat = fs.statSync(filePath);
     return `Binary file: ${input.path} (${(stat.size / 1024).toFixed(1)} KB, type: ${ext})`;
@@ -54,4 +62,51 @@ export function readFile(input: ReadFileInput, cwd: string): string {
 
   const numbered = lines.map((l, i) => `${i + 1}: ${l}`).join('\n');
   return `${input.path} (${total} lines):\n\n${numbered}`;
+}
+
+/**
+ * Extract a PDF's text via poppler's pdftotext.
+ *
+ * `-layout` rather than raw order: the flag preserves columns, and without it
+ * a two-column CV interleaves the sidebar into the body line by line, which
+ * reads as corrupted text rather than as a document. Verified on a real
+ * two-column resume — with -layout both columns come out cleanly separated.
+ *
+ * No fallback parser and no new dependency: poppler-utils is present on
+ * essentially every Linux install and is a one-line apt on the rest, so the
+ * honest failure is a message naming the package.
+ */
+function readPdf(filePath: string, input: ReadFileInput): string {
+  let text: string;
+  try {
+    text = execFileSync('pdftotext', ['-layout', filePath, '-'], {
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: 60_000,
+    });
+  } catch (e) {
+    const err = e as { code?: string };
+    if (err.code === 'ENOENT') {
+      return `Error: reading PDFs needs pdftotext, which is not installed. `
+        + `Install poppler-utils (apt install poppler-utils / brew install poppler).`;
+    }
+    return `Error extracting PDF text: ${String(e).slice(0, 200)}`;
+  }
+
+  if (!text.trim()) {
+    // A scanned PDF has no text layer at all. Say so, and point at the tool
+    // that can actually help, rather than returning a convincing empty string.
+    return `PDF has no extractable text (likely scanned images): ${input.path}\n`
+      + `Render a page to an image and OCR it: pdftoppm -png -r 150 "${input.path}" /tmp/page `
+      + `then use image_read with action=ocr.`;
+  }
+
+  const lines = text.split('\n');
+  if (input.start_line !== undefined || input.end_line !== undefined) {
+    const start = Math.max(1, input.start_line ?? 1) - 1;
+    const end = Math.min(lines.length, input.end_line ?? lines.length);
+    return lines.slice(start, end).map((l, i) => `${start + i + 1}\t${l}`).join('\n');
+  }
+  return `PDF text (${lines.length} lines, via pdftotext -layout):\n`
+    + lines.map((l, i) => `${i + 1}\t${l}`).join('\n');
 }

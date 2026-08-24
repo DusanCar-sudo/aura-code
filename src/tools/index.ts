@@ -35,7 +35,7 @@ import { COMPUTER_DEFINITION, computerTool, type ComputerInput } from './compute
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'read_file',
-    description: 'Read file contents with line numbers. Use start_line/end_line for ranges.',
+    description: 'Read file contents with line numbers. Use start_line/end_line for ranges. PDFs are extracted to text automatically.',
     parameters: {
       type: 'object',
       properties: {
