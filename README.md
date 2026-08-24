@@ -443,10 +443,15 @@ Persistent memory across sessions — identity, lessons from past failures, sess
 
 ## Running as a service
 
-Unit files live in the repo root: `aura.service` (CLI in a tmux session),
-`aura-telegram.service` (Telegram bot), `rclone-gdrive.service`. They carry
-absolute paths for this machine — adjust `User`, `WorkingDirectory`, and the
-`ExecStart` path before reusing them.
+`aura setup telegram` generates a ready-to-use unit at
+`~/.config/systemd/user/aura-telegram.service`, which is the supported route —
+it fills in the paths for your machine rather than leaving you to edit them.
+
+Hand-written reference units (`aura.service` for the CLI in a tmux session,
+`aura-telegram.service`, `rclone-gdrive.service`) are kept outside this
+repository, since they carry absolute paths for one specific machine and are
+deployment glue rather than part of the package. Adjust `User`,
+`WorkingDirectory` and `ExecStart` before reusing any of them.
 
 ```bash
 cp aura-telegram.service ~/.config/systemd/user/

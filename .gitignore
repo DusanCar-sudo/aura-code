@@ -88,3 +88,16 @@ aura-analysis-video/
 aura-token-video/renders/
 design/
 *.html.backup
+
+# Agent output directories. The agent writes these into whatever project it is
+# run in — including this one — so they are ignored rather than committed.
+# The historical contents live in ../projects/aura-agent-output/.
+research/
+council/
+dreams/
+
+# Video and media projects, moved to ../projects/. Ignored so a stray render
+# here does not end up tracked again.
+aura-analysis-video/
+aura-token-video/
+hyperframes/
