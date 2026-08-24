@@ -591,4 +591,127 @@ export const ALL_CHECKS: Array<{ category: Category; run: (root: string, offline
   { category: 'memory', run: (r) => checkMemory(r) },
   { category: 'hygiene', run: (r) => checkHygiene(r) },
   { category: 'archimedes', run: (r) => checkArchimedes(r) },
+  { category: 'computer', run: (r) => checkComputerUse(r) },
 ];
+
+// ── 13. Computer use ─────────────────────────────────────────────────────────
+
+/**
+ * Preflight for the computer-use sidecar.
+ *
+ * Every one of these is present on a developer machine that has been using the
+ * feature and absent on a fresh one, so without this check the first symptom a
+ * user gets is a task dying mid-run with a Python traceback — after the model
+ * has already spent turns planning around a tool that could never work.
+ *
+ * Reported as 'warn', never 'error': computer use is opt-in, and a machine that
+ * will never enable it is not broken for lacking evdev. The messages name the
+ * package to install rather than the symptom, because "No module named evdev"
+ * is not something a user can act on.
+ */
+export function checkComputerUse(root: string): Finding[] {
+  const out: Finding[] = [];
+  const add = (name: string, ok: boolean, okMsg: string, badMsg: string) =>
+    out.push({
+      category: 'computer', name,
+      severity: ok ? 'ok' : 'warn',
+      message: ok ? okMsg : badMsg,
+      fixable: false,
+    });
+
+  // The sidecar itself. Missing from dist/ means the build's asset copy did not
+  // run — a packaging fault, and the one failure here that is not the user's.
+  const script = path.join(root, 'dist', 'tools', 'screen', 'aura_screen.py');
+  const srcScript = path.join(root, 'src', 'tools', 'screen', 'aura_screen.py');
+  if (exists(script)) {
+    out.push({ category: 'computer', name: 'sidecar', severity: 'ok', message: 'Screen sidecar present in dist/.', fixable: false });
+  } else if (exists(srcScript)) {
+    out.push({
+      category: 'computer', name: 'sidecar', severity: 'warn',
+      message: 'dist/tools/screen/aura_screen.py is missing — run npm run build (postbuild copies it).',
+      fixable: false,
+    });
+  } else {
+    out.push({
+      category: 'computer', name: 'sidecar', severity: 'warn',
+      message: 'Screen sidecar not found in dist/ or src/ — computer use cannot start.',
+      fixable: false,
+    });
+  }
+
+  if (process.platform !== 'linux') {
+    out.push({
+      category: 'computer', name: 'platform', severity: 'warn',
+      message: `Computer use currently supports Linux only (this is ${process.platform}).`,
+      fixable: false,
+    });
+    return out;
+  }
+
+  const python = process.env.AURA_PYTHON ?? 'python3';
+  const py = (code: string) => {
+    try {
+      execSync(`${python} -c ${JSON.stringify(code)}`, { stdio: 'pipe', timeout: 10_000 });
+      return true;
+    } catch { return false; }
+  };
+  const haveBin = (bin: string) => {
+    try { execSync(`command -v ${bin}`, { stdio: 'pipe', timeout: 5_000 }); return true; }
+    catch { return false; }
+  };
+
+  const hasPython = haveBin(python);
+  add('python3', hasPython,
+    `${python} found.`,
+    `${python} not found — the screen sidecar cannot run. Set AURA_PYTHON if it is elsewhere.`);
+  if (!hasPython) return out;
+
+  add('python gi/GLib', py('import gi; gi.require_version("Gst","1.0")'),
+    'python3-gi with GStreamer bindings available.',
+    'Missing python3-gi / GStreamer bindings — install python3-gi and gir1.2-gstreamer-1.0.');
+
+  add('python evdev', py('import evdev'),
+    'python3-evdev available (uinput input).',
+    'Missing python3-evdev — install python3-evdev. Without it the agent cannot move the pointer.');
+
+  add('pipewiresrc', py(
+    'import gi; gi.require_version("Gst","1.0"); from gi.repository import Gst; Gst.init(None);'
+    + ' raise SystemExit(0 if Gst.ElementFactory.find("pipewiresrc") else 1)'),
+    'GStreamer pipewiresrc present (screen capture).',
+    'GStreamer pipewiresrc missing — install gstreamer1.0-pipewire. Screen capture will fail.');
+
+  add('ImageMagick', haveBin('convert'),
+    'ImageMagick convert present (screenshot encoding).',
+    'ImageMagick `convert` not found — install imagemagick. Screenshots cannot be encoded.');
+
+  // /dev/uinput is the one that fails with a bare EACCES at the worst moment.
+  let uinput = false;
+  let uinputWhy = '/dev/uinput is missing — load the uinput kernel module.';
+  try {
+    fs.accessSync('/dev/uinput', fs.constants.W_OK);
+    uinput = true;
+  } catch {
+    if (exists('/dev/uinput')) {
+      uinputWhy = '/dev/uinput exists but is not writable — add your user to the `input` group '
+        + '(then log out and back in), or set a udev rule.';
+    }
+  }
+  add('/dev/uinput', uinput, '/dev/uinput is writable (virtual input device).', uinputWhy);
+
+  const session = (process.env.XDG_SESSION_TYPE ?? '').toLowerCase();
+  if (session === 'wayland' || session === 'x11') {
+    out.push({
+      category: 'computer', name: 'session', severity: 'ok',
+      message: `Session type ${session} — uinput input works on both.`, fixable: false,
+    });
+  } else {
+    out.push({
+      category: 'computer', name: 'session', severity: 'warn',
+      message: `XDG_SESSION_TYPE is "${session || 'unset'}" — expected wayland or x11. `
+        + 'Capture needs a desktop session with an xdg-desktop-portal backend.',
+      fixable: false,
+    });
+  }
+
+  return out;
+}

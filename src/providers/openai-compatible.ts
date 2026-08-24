@@ -275,7 +275,10 @@ function toOpenAITool(t: ToolDefinition): OpenAI.ChatCompletionTool {
   };
 }
 
-function toOpenAIMessages(
+/** Exported for tests: the tool_result → wire mapping carries a constraint
+ *  (images cannot live in a `role: "tool"` message) that is invisible from the
+ *  outside and easy to "simplify" back into a broken state. */
+export function toOpenAIMessages(
   system: string,
   history: HistoryMessage[],
 ): OpenAI.ChatCompletionMessageParam[] {
@@ -314,8 +317,27 @@ function toOpenAIMessages(
         out.push({ role: 'assistant', content: msg.content });
       }
     } else if (msg.role === 'tool_result') {
+      // Images cannot ride in the tool message itself: OpenAI's `role: "tool"`
+      // content is text-only, and an image_url part there is rejected. The
+      // portable shape every OpenAI-compatible endpoint accepts is the text
+      // result followed by a user message carrying the image, so the picture
+      // still lands immediately after the call that produced it.
+      const pending: OpenAI.ChatCompletionContentPart[] = [];
       for (const r of msg.results) {
         out.push({ role: 'tool', tool_call_id: r.id, content: r.content });
+        for (const img of r.images ?? []) {
+          pending.push({ type: 'image_url', image_url: { url: img } });
+        }
+      }
+      if (pending.length > 0) {
+        const names = msg.results.filter(r => r.images?.length).map(r => r.name).join(', ');
+        out.push({
+          role: 'user',
+          content: [
+            ...pending,
+            { type: 'text', text: `[image output from ${names}]` },
+          ],
+        });
       }
     }
   }

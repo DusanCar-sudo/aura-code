@@ -96,7 +96,7 @@ describe('selectToolsWithEviction', () => {
 
   it('with everything triggered and nothing stale, matches full TOOL_DEFINITIONS order', () => {
     const s = freshState();
-    const everything = 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr clone fork repo branch ftp upload';
+    const everything = 'telegram whatsapp email calendar cron browser http api screenshot clipboard notify image mcp connect spawn delegate web_search fetch memory remember url github pr clone fork repo branch ftp upload mouse my screen resume pdf';
     const sent = names(selectToolsWithEviction(everything, [], s.included, s.lastUsedTurn, 1, 3, s.evicted));
     expect(sent).toEqual(TOOL_DEFINITIONS.map(t => t.name));
   });

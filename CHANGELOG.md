@@ -4,14 +4,74 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
-## [0.15.0] — 2026-08-19
+## [0.15.5] — 2026-08-24
+
+Computer use, on Linux. The agent can see the screen and drive the real pointer
+and keyboard — and the same release closes four instances of one recurring
+defect: an operation that reports success while doing nothing. Windows and
+macOS follow in 0.16.0 and 0.16.5.
+
+This section also carries the work tagged as 0.15.0 on 2026-08-19, which never
+reached GitHub or npm; folding it in here rather than shipping a version nobody
+could install.
+
+### Added — computer use (Linux)
+- **The `computer` tool.** Actions: `screenshot`, `click`, `double_click`,
+  `right_click`, `move`, `drag`, `type`, `key`, `scroll`, `remember`. The model
+  always speaks the coordinates of the image it was shown; captures are
+  downscaled before sending, and conversion happens once on the way to the input
+  device. Asking the model to scale its own coordinates is asking it to do
+  arithmetic it cannot check, and being wrong looks like a misgrounded click.
+  There is no automatic screenshot after each action — it would double the token
+  cost of a run, and most sequences (type, key, key) need no visual
+  confirmation; the replies tell the model to verify instead.
+- **A Python sidecar for capture and input** (`src/tools/screen/aura_screen.py`),
+  one long-lived process per run. Both halves hold state a one-shot call cannot:
+  the ScreenCast portal session dies with its D-Bus connection, and the uinput
+  device disappears when its descriptor closes. On KDE Plasma 6 Wayland this is
+  the only stack that works — `xdotool` cannot see Wayland, `ydotool` 1.0.4
+  creates a relative-only device, and the RemoteDesktop portal's absolute
+  pointer motion is ignored. All three accept the call and silently do nothing.
+- **Disclosure and a two-key opt-in gate.** Both `--computer` and
+  `AURA_COMPUTER_USE=1` are required, deliberately independent of the permission
+  level: `auto` approves everything but `run_shell`, and its blocklist is regex
+  over shell strings — it cannot inspect a click at (x, y) even in principle.
+  The disclosure states plainly that a screenshot is the whole desktop, not the
+  project, and that a misgrounded click lands on whatever is really there.
+  Acknowledgement is stored beside the global config, so a wizard rewrite cannot
+  clear a consent decision.
+- **A `computer` section in `doctor`.** Every dependency the sidecar needs is
+  present on a machine already using the feature and absent on a fresh one, so
+  without a preflight the first symptom is a task dying mid-run with a Python
+  traceback, after the model has spent turns planning around a tool that could
+  never work. Reported as warn, never error — a machine that will never enable
+  computer use is not broken for lacking evdev.
+- **Images in tool results**, which is what lets a screenshot reach the model at
+  all.
+
+### Added — publishing: HTML to PDF and PNG
+- **`design/render.ts` and the `document` tool.** Aura could already write
+  strong HTML, but everything downstream of it was missing or pretended: PDF
+  generation existed only as a sentence in a prompt, and `page.pdf()` was called
+  nowhere. HTML is the authoring format; PDF and PNG are render targets.
+  Built around the two failures that produce a file which looks fine and is
+  wrong — a webfont whose file arrived but was never applied (a document
+  perfectly set in Times), and a page that threw yet still printed, as empty
+  pages a page count cannot distinguish from a real document. Both are now
+  reported unprompted.
+- **Print-first templates** (`design/templates/`) as stylesheets rather than
+  string substitution, so design routing stays meaningful. They cover the
+  defects invisible until someone prints: dropped backgrounds, stranded
+  headings, split table rows, and the trailing blank page decks leave behind.
+- **`util/chrome.ts`**, ending a duplication that had already diverged with each
+  copy holding half the answer — one resolved symlinks but had no direct-path
+  fallback, the other had fallbacks but returned the unresolved path.
 
 ### Added — search backend enablement
 - **Real search backends.** `web-search.ts` rewritten to back the `search` tool
   with Tavily and Brave (API-backed) plus DuckDuckGo (HTML extraction with
   challenge detection) and a liveness probe; the `bootstrapAuraEnv` step now
-  activates these backends at startup. Includes `tests/web-search.test.ts`
-  (backend selection, DDG extraction, availability probing).
+  activates these backends at startup. Includes `tests/web-search.test.ts`.
 
 ### Added — designx
 - **`designx` design commission command.** A 14-direction style lexicon with
@@ -20,17 +80,48 @@ All notable changes to Aura Code are documented here.
   (`mulberry32` + FNV-1a `seedFrom`), and artefact-based success. Run via
   `:designx [web|deck|pdf] <brief> [--wild|--classic|--style <id>] [--seed <n>]`,
   with `:designx styles` listing the lexicon.
+
+### Added — providers
+- **`fpt/` routes to the FPT Cloud AI marketplace.** README and
+  `agents.env.example` documented the prefix before any code implemented it, so
+  `-m fpt/DeepSeek-V3` fell through to the generic OpenAI-compatible branch and
+  sent an FPT model id to OpenAI with an OpenAI key. `FPT_BASE_URL` is honoured
+  for per-account endpoints, and the model id keeps its case because marketplace
+  ids are mixed case and the gateway matches them exactly.
+
+### Fixed — operations that reported success while doing nothing
+- **`read_file` extracts PDF text.** A résumé came back as
+  `Binary file: DM_Resume.pdf (254.7 KB)` because `.pdf` sat in
+  `BINARY_EXTENSIONS` beside `.zip` and `.exe`. At the byte level a PDF is
+  binary, which is why it reads naturally in that list — but `.zip` is opaque
+  bytes and a PDF is a container with a text layer. Nobody noticed because it
+  never threw: a refusal wearing the costume of a result, so the model worked
+  around it, and sharper models found `pdftotext` on their own. Uses `-layout`,
+  verified against a two-column CV where raw extraction order interleaves the
+  sidebar into the body. A scanned PDF with no text layer says so and points at
+  OCR rather than returning a convincing empty string.
 - **`AURA_MAX_TOKENS` budget fix.** `openai-compatible.ts` now resolves
-  `maxTokens` from the environment (new `envMaxTokens()`) before falling back to
-  the 16k default — fixing `finish_reason: "length"` truncation behind
-  `designx designs but never builds the page` when a provider's token ceiling
-  was larger than the hardcoded budget.
+  `maxTokens` from the environment before falling back to the 16k default,
+  fixing `finish_reason: "length"` truncation when a provider's ceiling was
+  larger than the hardcoded budget.
+- **`.gitignore`: `.env!.example`** was a typo for `!.env.example`, so the
+  negation never applied.
+
+### Documentation
+- `.env.example` names Brave and Tavily as search backends that actually work,
+  since DuckDuckGo bot-checks many IPs, and documents the two ceilings that
+  truncate long single-file output with symptoms that point nowhere near their
+  cause: `AURA_MAX_TOKENS` (reasoning models spend the output budget on internal
+  thinking before emitting anything) and `AURA_STREAM_IDLE_MS` (the same models
+  pause longer than the 60s idle timeout between thinking and emitting).
+- README documents `:designx` and the FPT provider.
 
 ### Notes
-- **`src/util/rtk.ts` remains uncommitted** (`+53`) together with
-  `tests/rtk-wrap.test.ts` (`+79`), out of scope for this release pending a
-  separate review. The `rtkWrap` rewrite touches every model-authored command the
-  Telegram bot executes, so it is deliberately excluded here.
+- Computer use is **Linux only** in this release.
+- **`src/util/rtk.ts` remains uncommitted** (`+53`) with
+  `tests/rtk-wrap.test.ts` (`+79`), still out of scope pending separate review.
+  The `rtkWrap` rewrite touches every model-authored command the Telegram bot
+  executes.
 
 ## [0.14.1] — 2026-08-19
 

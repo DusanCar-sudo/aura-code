@@ -35,6 +35,16 @@ export interface ToolResult {
   name: string;
   content: string;
   isError?: boolean;
+  /** Images produced by the tool, as data URIs. A screenshot is the result of
+   *  a tool call, so without this a vision-driven tool has no way to return
+   *  what it saw: the base64 would have to go into `content`, where the model
+   *  receives a megabyte of characters instead of a picture.
+   *
+   *  How these reach the provider differs by wire format. Anthropic accepts
+   *  image blocks inside tool_result. OpenAI's `role: "tool"` messages are
+   *  text-only, so the openai-compatible adapter emits the text result and
+   *  then a following user message carrying the image. */
+  images?: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

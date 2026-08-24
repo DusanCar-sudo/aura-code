@@ -295,6 +295,23 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
         return (d.data ?? []).map(m => ({ id: `nvidia/${m.id}`, name: m.id }));
       }
 
+      // FPT Cloud's marketplace catalogue changes without notice, so the ids
+      // are always fetched rather than pinned. FPT_BASE_URL mirrors the
+      // per-account endpoint honoured in factory.ts.
+      case 'fpt': {
+        const key = getApiKey('FPT_API_KEY');
+        if (!key) return [];
+        const base = process.env.FPT_BASE_URL?.trim().replace(/\/+$/, '')
+          ?? 'https://mkp-api.fptcloud.com/v1';
+        const r = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `fpt/${m.id}`, name: m.id }));
+      }
+
       case 'gemini': {
         const key = getApiKey('GOOGLE_API_KEY');
         if (!key) return [];
@@ -350,6 +367,7 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'mimo',         name: 'Xiaomi MiMo',               desc: 'MiMo-V2.5 and V2 models',                      envKey: 'XIAOMI_API_KEY',      liveFetch: true },
   { id: 'groq',         name: 'Groq',                      desc: 'Very fast inference',                           envKey: 'GROQ_API_KEY',        liveFetch: true },
   { id: 'nvidia',       name: 'NVIDIA NIM',                desc: 'Nemotron models via build.nvidia.com',          envKey: 'NVIDIA_API_KEY',      liveFetch: true },
+  { id: 'fpt',          name: 'FPT Cloud AI',              desc: 'Marketplace: DeepSeek, GLM, Qwen, Gemma, GPT-OSS',  envKey: 'FPT_API_KEY',         liveFetch: true },
   { id: 'anthropic',    name: 'Anthropic',                 desc: 'Claude models via API key',                     envKey: 'ANTHROPIC_API_KEY',   liveFetch: true },
   { id: 'openai',       name: 'OpenAI',                    desc: 'GPT models direct API',                         envKey: 'OPENAI_API_KEY',      liveFetch: true },
   { id: 'opencode-zen', name: 'OpenCode Zen',              desc: 'Pay-as-you-go endpoint',                        envKey: 'OPENCODE_API_KEY',    liveFetch: true },

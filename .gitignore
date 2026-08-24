@@ -52,7 +52,7 @@ google-cloud-cli-*.tar.gz
 .env
 .env.local
 .env.*.local
-.env!.example
+!.env.example
 .aura.json
 graphify-out/
 graphify-out/
@@ -74,3 +74,17 @@ Empty File
 
 # Installer build output (packaging/)
 build/
+agents.env
+!agents.env.example
+
+# Generated media and design output — large, reproducible, and not source.
+# Rendered promo/teaser videos and their intermediates (~26M as of writing),
+# the image sets they are built from, and whatever :designx last wrote.
+graphics/
+aura-promo-video/
+aura-android-video/
+aura-droid-video/
+aura-analysis-video/
+aura-token-video/renders/
+design/
+*.html.backup

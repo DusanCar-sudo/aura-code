@@ -32,6 +32,7 @@ import { bootstrapAuraEnv } from '../util/load-env.js';
 bootstrapAuraEnv(process.cwd());
 
 import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily, normalizeModelId } from '../providers/factory.js';
+import { setComputerUseEnabled, closeComputer } from '../tools/computer.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 import { EFFORT_LEVELS, parseEffort, clampEffort, wasClamped, type EffortLevel } from '../providers/effort.js';
 
@@ -131,7 +132,7 @@ function makeStdinTunerIO(): TunerIO {
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -730,6 +731,24 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
   }
 }
 
+/**
+ * Computer use is off unless BOTH --computer and AURA_COMPUTER_USE=1 are set
+ * (see tools/screen/disclosure.ts for why either alone is not enough). This
+ * only reports the flag; the gate itself lives with the tool.
+ *
+ * The exit hook matters more than it looks: the sidecar holds an open
+ * /dev/uinput device and a portal session, and neither is released by the
+ * process simply ending if the child outlives it.
+ */
+function wireComputerUse(enabled: boolean): void {
+  setComputerUseEnabled(enabled);
+  if (!enabled) return;
+  const release = () => { void closeComputer(); };
+  process.once('exit', release);
+  process.once('SIGINT', release);
+  process.once('SIGTERM', release);
+}
+
 async function main() {
   const display = createTerminalDisplay();
 
@@ -741,6 +760,10 @@ async function main() {
   if (platWarn) {
     console.warn(chalk.hex('#b15439')('\n  ⚠ ' + platWarn.split('\n').join('\n  ') + '\n'));
   }
+
+  // Before any mode branches: the flag has to be recorded even for a run that
+  // never reaches the coder loop, or `--computer` silently does nothing.
+  wireComputerUse(argv.computer === true);
 
   // ── Gazelle: lean conversational mode ──────────────────────────────────────
   // Radically smaller path than the coding agent: no ProjectContext, no tools,
@@ -3408,6 +3431,10 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
                              Folded to the target's ceiling; "none" stops thinking.
     --auto                   Auto-approve all tool calls (no confirmation)
     --readonly               Read-only mode (no file writes or shell commands)
+    --computer               Enable computer use: screenshots + real mouse/keyboard.
+                             Also needs AURA_COMPUTER_USE=1, and a one-time
+                             disclosure you must accept. Run aura --doctor to
+                             check the runtime deps. Linux only for now.
     --gazelle                Lean conversational mode: no tools, no project context
     --mode gazelle           Same as --gazelle (env: AURA_MODE=gazelle)
     --cwd <path>             Working directory (default: current)

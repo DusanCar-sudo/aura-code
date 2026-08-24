@@ -5,7 +5,7 @@
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Website](https://img.shields.io/badge/website-aura--website-6ed0ea?style=flat-square)](https://dusancar-sudo.github.io/aura-website/)
-[![Version](https://img.shields.io/badge/version-v0.14.0-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.15.5-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
@@ -139,6 +139,7 @@ word away.
 | Groq | llama, mixtral |
 | xAI (Grok) | grok-2, grok-2-mini, grok-beta |
 | BytePlus ModelArk | ark-code-latest, dola-seed-2.0-pro/lite/code (`byteplus/`) |
+| FPT Cloud AI | DeepSeek V4, GLM-5.2, Qwen3.8, Gemma 4, GPT-OSS, Embeddings (`fpt/`) |
 | OpenCode Go | MiniMax M3/M2.7, Kimi K3 and more (`go-anthropic/`) |
 | OpenCode Zen | free tier — DeepSeek V4 Flash, Ling 3.0, MiMo V2.5 (`zen/`) |
 | NVIDIA NIM | any NIM-hosted model (`nvidia/`) |
@@ -319,6 +320,28 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 | `:research <topic>` | Multi-step research pass, saved to `research/*.md` |
 | `:confess` / `:confessions` | Auto-detect & list anomalous-episode confessions |
 | `:btw <question>` | Quick side question (read-only, no history pollution) |
+
+### Design
+
+`:designx` treats a design ask as a commission rather than a coding ticket: it routes 2–3 named
+directions out of a hand-written style lexicon (Swiss International, Risograph Misprint, Cassette
+Futurism, Blueprint, …), sends the agent to scrape real references for those specific directions,
+then builds a self-contained artefact into `design/`. The lexicon exists to stop the run converging
+on the default AI page — centred hero, gradient headline, three rounded cards.
+
+| Command | Description |
+|---------|-------------|
+| `:designx <brief>` | Route a direction, scrape references, build the artefact |
+| `:designx web\|deck\|pdf <brief>` | Force the artefact type (otherwise inferred from the brief) |
+| `--classic` / `--wild` / `--feral` | How far past convention to push (default: balanced) |
+| `--style <id>` | Pin a direction from the lexicon (repeatable, comma-separated) |
+| `--seed <n>` / `--count <n>` | Re-roll reproducibly / how many directions to route |
+| `--no-scrape` / `--out <dir>` | Skip the reference pass / choose the output directory |
+| `:designx styles` | List the lexicon |
+
+Output is one self-contained file per target — `index.html` (web), `deck.html` (arrow-key slides,
+one slide per printed page), `document.html` (A4 paged media, rendered to PDF via headless Chrome
+when one is installed) — plus a `DESIGN.md` recording which direction it led with and why.
 
 ### Archimedes
 

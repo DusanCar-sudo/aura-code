@@ -20,7 +20,8 @@ export type Category =
   | 'version'  // up-to-date check
   | 'memory'   // episodes, dreams
   | 'hygiene'  // stray non-aura files/dirs in the repo root
-  | 'archimedes'; // small-model alternator: gate status, epsilon probe rate
+  | 'archimedes' // small-model alternator: gate status, epsilon probe rate
+  | 'computer';  // computer use: sidecar runtime deps, uinput access, capture path
 
 export interface Finding {
   category: Category;

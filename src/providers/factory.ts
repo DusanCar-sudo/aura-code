@@ -42,7 +42,7 @@ export function getCustomProviders(): ProviderDef[] {
  * up against registry entries (which store unprefixed ids).
  */
 function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
+  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|fpt|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
 }
 
 /**
@@ -88,6 +88,7 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
   if (m.startsWith('groq/')) return 'GROQ_API_KEY';
   if (m.startsWith('nvidia/')) return 'NVIDIA_API_KEY';
+  if (m.startsWith('fpt/')) return 'FPT_API_KEY';
   if (m.startsWith('huggingface/')) return 'HUGGINGFACE_API_KEY';
   if (m.startsWith('kimi/')) return 'MOONSHOT_API_KEY';
   if (m.startsWith('qwen/')) return 'DASHSCOPE_API_KEY';
@@ -128,6 +129,7 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('ollama/')) return 'ollama';
   if (m.startsWith('groq/')) return 'groq';
   if (m.startsWith('nvidia/')) return 'nvidia';
+  if (m.startsWith('fpt/')) return 'fpt';
   if (m.startsWith('huggingface/')) return 'huggingface';
   if (m.startsWith('kimi/')) return 'kimi';
   if (m.startsWith('qwen/')) return 'qwen';
@@ -155,6 +157,7 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   opencode: 'OPENCODE_API_KEY',
   groq: 'GROQ_API_KEY',
   nvidia: 'NVIDIA_API_KEY',
+  fpt: 'FPT_API_KEY',
   huggingface: 'HUGGINGFACE_API_KEY',
   kimi: 'MOONSHOT_API_KEY',
   qwen: 'DASHSCOPE_API_KEY',
@@ -217,6 +220,7 @@ const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://openrouter.ai/api/v1': 'openrouter',
   'https://api.x.ai/v1': 'xai',
   'https://opencode.ai/zen/v1': 'opencode',
+  'https://mkp-api.fptcloud.com/v1': 'fpt',
 };
 
 /**
@@ -420,6 +424,25 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       baseUrl: config.baseUrl ?? 'https://integrate.api.nvidia.com/v1',
       apiKey: config.apiKey ?? getApiKey('NVIDIA_API_KEY'),
     }, 'NVIDIA NIM');
+  }
+
+  // ── FPT Cloud AI Marketplace ───────────────────────────────────────────────
+  // FPT_BASE_URL is honoured because the marketplace documents a per-account
+  // endpoint, and agents.env.example tells users to set it — read here, or a
+  // non-default endpoint would list its models and then send every request to
+  // the shared one.
+  if (model.startsWith('fpt/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      // config.model, not the lower-cased `model` this function dispatches on:
+      // marketplace ids are mixed case (DeepSeek-V3, GPT-OSS-120B) and the
+      // gateway matches them exactly.
+      model: config.model.replace(/^fpt\//i, ''),
+      baseUrl: config.baseUrl
+        ?? process.env.FPT_BASE_URL?.trim().replace(/\/+$/, '')
+        ?? 'https://mkp-api.fptcloud.com/v1',
+      apiKey: config.apiKey ?? getApiKey('FPT_API_KEY'),
+    }, 'FPT Cloud AI');
   }
 
   // ── Hugging Face Inference Providers ──────────────────────────────────────
