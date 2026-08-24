@@ -321,6 +321,28 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 | `:confess` / `:confessions` | Auto-detect & list anomalous-episode confessions |
 | `:btw <question>` | Quick side question (read-only, no history pollution) |
 
+### Design
+
+`:designx` treats a design ask as a commission rather than a coding ticket: it routes 2–3 named
+directions out of a hand-written style lexicon (Swiss International, Risograph Misprint, Cassette
+Futurism, Blueprint, …), sends the agent to scrape real references for those specific directions,
+then builds a self-contained artefact into `design/`. The lexicon exists to stop the run converging
+on the default AI page — centred hero, gradient headline, three rounded cards.
+
+| Command | Description |
+|---------|-------------|
+| `:designx <brief>` | Route a direction, scrape references, build the artefact |
+| `:designx web\|deck\|pdf <brief>` | Force the artefact type (otherwise inferred from the brief) |
+| `--classic` / `--wild` / `--feral` | How far past convention to push (default: balanced) |
+| `--style <id>` | Pin a direction from the lexicon (repeatable, comma-separated) |
+| `--seed <n>` / `--count <n>` | Re-roll reproducibly / how many directions to route |
+| `--no-scrape` / `--out <dir>` | Skip the reference pass / choose the output directory |
+| `:designx styles` | List the lexicon |
+
+Output is one self-contained file per target — `index.html` (web), `deck.html` (arrow-key slides,
+one slide per printed page), `document.html` (A4 paged media, rendered to PDF via headless Chrome
+when one is installed) — plus a `DESIGN.md` recording which direction it led with and why.
+
 ### Archimedes
 
 | Command | Description |
