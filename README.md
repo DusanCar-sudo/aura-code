@@ -21,9 +21,47 @@ Built with modern coding tools — Claude Code among them — used throughout.
 
 ## What is Aura?
 
-Aura is a model-agnostic autonomous coding agent. Give it a task in natural language — it reads your codebase, plans, executes, verifies, and reports back.
+Aura is a model-agnostic autonomous coding agent. Give it a task in natural
+language — it reads your codebase, plans, executes, verifies, and reports back.
 
-Built around **persistent memory** — it remembers decisions, lessons, and context across sessions. Runs locally, talks to you via Telegram, works with any LLM provider.
+---
+
+## Why Aura
+
+**Every other coding agent starts each session as a stranger. Aura accumulates.**
+
+She works, captures what happened, learns which tasks she is competent at,
+routes those to a local model and saves the expensive one for the hard parts —
+and turns the whole record into a dataset that belongs to you.
+
+**1. She remembers — lessons, not chat history.**
+What broke last time, what your build actually needs, what you told her once and
+should not have to repeat. Stored in `~/.aura/memory/` on your machine. It never
+leaves it.
+
+**2. She learns what she can handle alone.**
+The Archimedes layer scores her competence per project and per task category,
+then alternates: a local model for what she has proven she can do, a frontier
+model for what she has not. Cost falls as she improves, instead of staying flat
+forever.
+
+**3. She builds you a dataset you own.**
+`:mine` turns your sessions into structured training examples in
+`training-data/`, and competence tracking tells you when you have enough to
+fine-tune. The training run itself is yours to make — Aura assembles the raw
+material, which is the part nobody else gives you.
+
+**4. She grows new parts on request.**
+Skills, plugins, MCP servers, subagents. "I want a travel agent" is an ordinary
+request here, because a skill is a file and writing files is what she does. The
+capability she builds is yours to keep, edit and share.
+
+The tools reach past the codebase — `email`, `calendar`, `telegram`,
+`whatsapp`, `cron`, `browser`, and on Linux a `computer` tool that sees the
+screen and drives the pointer. Same memory, same agent, so what she learns
+working on your code is there when she is handling the rest of your day.
+
+Most agents are something you use. Aura is something that compounds.
 
 ---
 
