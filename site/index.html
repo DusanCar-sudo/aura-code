@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aura Code — Autonomous Coding Agent</title>
-<meta name="description" content="Aura Code — an open-source, model-agnostic autonomous coding agent with persistent memory. She reads, plans, executes, verifies, and reports.">
+<title>Aura Code — Autonomous Coding Agent · Parallax Nature Experience</title>
+<meta name="description" content="Aura Code — an open-source, model-agnostic autonomous coding agent with persistent memory. She reads, plans, executes, verifies, and reports. 'I don’t try. I verify.'">
 <link rel="canonical" href="https://aurawebsite-eta.vercel.app/">
 <meta name="author" content="Dušan Milosavljević">
-<meta name="theme-color" content="#0a1020">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236ed0ea' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23d24b30'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#060913">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236ed0ea' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23e04b32'/%3E%3C/svg%3E">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aurawebsite-eta.vercel.app/">
 <meta property="og:title" content="Aura Code — Autonomous Coding Agent">
@@ -18,929 +18,1415 @@
 <meta name="twitter:title" content="Aura Code — Autonomous Coding Agent">
 <meta name="twitter:description" content="Model-agnostic coding agent with persistent memory. “I don’t try. I verify.”">
 <meta name="twitter:image" content="https://aurawebsite-eta.vercel.app/aura_lady_portrait.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+
 <style>
-  :root{
-    --ink:#0a1020;           /* deep navy night */
-    --ink2:#101a2c;
-    --blue:#6ed0ea;          /* aura cyan */
-    --blue-soft:#9fdcec;
-    --blue-hot:#cdf0f8;
-    --terra:#b5674c;         /* plaster terracotta from the art */
-    --terra-deep:#8f4a33;
-    --copper:#d98e63;
-    --cream:#eaf1f7;
-    --cream-dim:#aebccd;
-    --glow:#ffc08a;          /* crystal light (kept for the art side) */
-    --glow-hot:#ffe3bd;
-    --ruby:#d24b30;
-    --mono:'IBM Plex Mono',monospace;
-    --serif:'Cormorant Garamond',serif;
-    --sans:'Space Grotesk',system-ui,sans-serif;
+  :root {
+    --bg-dark: #060913;
+    --bg-dark-rgb: 6, 9, 19;
+    --bg-card: rgba(13, 21, 38, 0.72);
+    --bg-card-border: rgba(110, 208, 234, 0.14);
+    
+    --cyan: #6ed0ea;
+    --cyan-soft: #9fdcec;
+    --cyan-glow: rgba(110, 208, 234, 0.35);
+    
+    --ruby: #e04b32;
+    --ruby-soft: #ff785a;
+    --ruby-glow: rgba(224, 75, 50, 0.4);
+    
+    --terra: #b86b4f;
+    --terra-deep: #8a4834;
+    --gold: #ffbe83;
+    --cream: #edf3f8;
+    --cream-dim: #98a9bc;
+    --muted: #57697e;
+    
+    --font-serif: 'Cormorant Garamond', Georgia, serif;
+    --font-sans: 'Space Grotesk', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
   }
-  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{background:var(--ink);color:var(--cream);font-family:var(--sans);line-height:1.65;overflow-x:hidden;font-weight:300}
-  ::selection{background:var(--ruby);color:var(--glow-hot)}
-  a{color:inherit}
 
-  /* ————— the breath: every glow on the page inhales & exhales on this rhythm ————— */
-  @keyframes breathe{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:1;transform:scale(1.03)}}
-  @keyframes breatheSoft{0%,100%{opacity:.25}50%{opacity:.7}}
-  @keyframes heroDrift{0%,100%{transform:scale(1.02) translateY(0)}50%{transform:scale(1.07) translateY(-1.2%)}}
-  @keyframes shimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}
-  @keyframes bob{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:.85;transform:translateY(7px)}}
-  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
-  @keyframes ringPulse{0%{box-shadow:0 0 0 0 rgba(110,208,234,.45)}70%{box-shadow:0 0 0 14px rgba(110,208,234,0)}100%{box-shadow:0 0 0 0 rgba(110,208,234,0)}}
-  @keyframes lineGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-  @keyframes crystalPulse{0%,100%{opacity:.22;transform:translate(-50%,-50%) scale(.85)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.18)}}
-  @keyframes rubyReact{0%,32%{opacity:.18;transform:translate(-50%,-50%) scale(.9)}55%{opacity:1;transform:translate(-50%,-50%) scale(1.32)}74%{opacity:.5;transform:translate(-50%,-50%) scale(1.05)}100%{opacity:.18;transform:translate(-50%,-50%) scale(.9)}}
-  @keyframes rubyFlareOnce{0%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}35%{opacity:1;transform:translate(-50%,-50%) scale(1.7)}100%{opacity:.2;transform:translate(-50%,-50%) scale(.9)}}
-
-  /* grain — plaster texture over everything, like the painting.
-     NOTE: no mix-blend-mode here — a viewport-fixed blended layer corrupts
-     Chrome's rasterizer on this page (everything below ~2600px paints black). */
-  body::after{content:"";position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.04;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-
-  /* ember/orb particles + click sparkles + cursor aura */
-  #embers{position:fixed;inset:0;z-index:1;pointer-events:none}
-  #sparks{position:fixed;inset:0;z-index:40;pointer-events:none}
-  #cursorAura{position:fixed;z-index:2;width:560px;height:560px;margin:-280px 0 0 -280px;left:50%;top:40%;pointer-events:none;
-    background:radial-gradient(circle,rgba(110,208,234,.11),rgba(157,220,236,.05) 40%,transparent 70%);border-radius:50%;
-    transition:opacity .6s;will-change:transform}
-
-  /* ————— nav ————— */
-  .topnav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;flex-wrap:wrap;gap:1.5rem;align-items:center;justify-content:center;
-    padding:.95rem 2rem;font-family:var(--mono);font-size:.76rem;letter-spacing:.07em;
-    background:transparent;border-bottom:1px solid transparent;transition:background .5s,border-color .5s,backdrop-filter .5s}
-  .topnav.scrolled{background:rgba(10,16,32,.82);backdrop-filter:blur(14px);border-bottom:1px solid rgba(110,208,234,.16)}
-  .topnav a{text-decoration:none;color:var(--cream-dim);padding:.35rem .15rem;border-bottom:1px solid transparent;transition:color .25s,border-color .25s,text-shadow .25s}
-  .topnav a:hover{color:var(--blue-hot);border-color:var(--blue);text-shadow:0 0 18px rgba(110,208,234,.6)}
-  .topnav .brand{color:var(--blue);font-weight:500;letter-spacing:.22em;margin-right:.6rem;position:relative}
-  .topnav .brand::after{content:"";position:absolute;left:50%;top:50%;width:2.6rem;height:2.6rem;transform:translate(-50%,-50%);border-radius:50%;
-    background:radial-gradient(circle,rgba(110,208,234,.24),transparent 70%);animation:breatheSoft 5.2s ease-in-out infinite;pointer-events:none}
-
-  /* ————— Full Viewport HyperFrames Hero ————— */
-  /* --accent is animatable so the whole stage cross-fades its colour per act */
-  @property --accent{syntax:"<color>";inherits:true;initial-value:#6ed0ea}
-  header.hero{position:relative;width:100vw;min-height:100vh;min-height:100svh;display:flex;align-items:center;justify-content:center;
-    background:var(--ink);z-index:3;overflow:hidden;padding:0 5vw;--accent:#6ed0ea;transition:--accent 1.1s ease}
-  header.hero[data-act="1"]{--accent:#d98e63}
-  header.hero[data-act="2"]{--accent:#9b8cff}
-  header.hero[data-act="3"]{--accent:#6ed0ea}
-  header.hero[data-act="4"]{--accent:#e0603f}
-  header.hero[data-act="5"]{--accent:#7fcf95}
-
-  /* Full-bleed stage backdrop with lady portrait aligned right & atmospheric glow */
-  .hf-stage-backdrop{position:absolute;inset:0;z-index:1;overflow:hidden;pointer-events:none}
-  .hf-stage-backdrop .drift{position:absolute;right:-2%;top:-2%;width:75vw;max-width:1150px;height:115%;
-    animation:heroDrift 16s ease-in-out infinite;will-change:transform}
-  .hf-stage-backdrop img{width:100%;height:100%;object-fit:cover;object-position:30% center;
-    mix-blend-mode:luminosity;opacity:.65;filter:contrast(1.25) brightness(0.95)}
-
-  .hf-stage-backdrop .veil{position:absolute;inset:0;z-index:2;
-    background:
-      linear-gradient(90deg, var(--ink) 0%, rgba(10,16,32,.85) 45%, rgba(10,16,32,.4) 75%, transparent 100%),
-      linear-gradient(180deg, rgba(10,16,32,.7) 0%, transparent 30%, rgba(10,16,32,.95) 90%)}
-  .hf-stage-backdrop .pulse{position:absolute;right:15%;top:20%;width:50vw;height:50vw;border-radius:50%;
-    background:radial-gradient(circle,color-mix(in srgb,var(--accent) 18%,transparent),rgba(210,75,48,.10) 40%,transparent 70%);
-    animation:breathe 7s ease-in-out infinite}
-
-  /* per-act colour wash + scanlines — the "runtime" texture */
-  .hf-tint{position:absolute;inset:0;z-index:2;pointer-events:none;
-    background:radial-gradient(ellipse 65% 75% at 76% 45%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 70%)}
-  .hf-scan{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.13;
-    background:repeating-linear-gradient(180deg,color-mix(in srgb,var(--accent) 55%,transparent) 0 1px,transparent 1px 5px);
-    animation:scanDrift 11s linear infinite}
-  @keyframes scanDrift{from{background-position:0 0}to{background-position:0 250px}}
-  @keyframes sweep{0%{transform:translateY(-40%);opacity:0}12%{opacity:.5}100%{transform:translateY(140%);opacity:0}}
-  .hf-sweep{position:absolute;left:0;right:0;height:38vh;z-index:3;pointer-events:none;
-    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--accent) 9%,transparent),transparent);
-    animation:sweep 7.5s ease-in-out infinite}
-
-  .cyber-grid{position:absolute;inset:0;z-index:2;opacity:.03;pointer-events:none;
-    background-image:linear-gradient(rgba(110,208,234,1) 1px, transparent 1px), linear-gradient(90deg, rgba(110,208,234,1) 1px, transparent 1px);
-    background-size:40px 40px}
-
-  /* Story Overlay Container - 25% Larger Area */
-  .hero-story-container{position:relative;z-index:4;width:100%;max-width:1380px;display:flex;flex-direction:column;gap:2.1rem;padding-top:4vh}
-
-  .story-kicker{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;font-family:var(--mono);font-size:.82rem;letter-spacing:.25em;color:var(--accent)}
-  .hf-pulse-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:ringPulse 2s ease-out infinite}
-  .hf-tag{font-weight:500;color:var(--blue-hot)}
-  .hf-hud{display:flex;gap:1.4rem;margin-left:auto;color:#5d7086;letter-spacing:.18em;font-size:.72rem}
-  .hf-hud b{font-weight:400;color:var(--cream-dim)}
-
-  /* Story Screen & Kinetic Act Phrases - Expanded Typographic Scale */
-  .story-screen{position:relative;min-height:clamp(330px,46vh,430px);display:flex;align-items:center}
-  .story-act{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
-    opacity:0;transform:translateY(24px) scale(.98);filter:blur(8px);
-    transition:opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1), filter .7s;pointer-events:none}
-  .story-act.active{opacity:1;transform:translateY(0) scale(1);filter:blur(0);pointer-events:auto}
-
-  /* kinetic type — every word lands on its own beat */
-  .kin>span{display:inline-block;opacity:0;transform:translateY(.55em) rotateX(-55deg);filter:blur(7px);
-    transform-origin:50% 100%;
-    transition:opacity .6s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1),filter .6s}
-  .story-act.active .kin>span{opacity:1;transform:none;filter:blur(0);
-    transition-delay:calc(var(--i,0) * 58ms + var(--base,0ms))}
-
-  .story-title{font-family:var(--serif);font-size:clamp(4.4rem,10vw,9rem);font-weight:500;line-height:.92;
-    background:linear-gradient(100deg,var(--cream) 20%,var(--blue-hot) 40%,var(--blue) 50%,var(--blue-hot) 60%,var(--cream) 80%);
-    background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
-    animation:shimmer 9s linear infinite;margin-bottom:1rem}
-  .story-quote{font-family:var(--serif);font-style:italic;font-size:clamp(2rem,3.7vw,3.1rem);color:var(--accent);margin-bottom:1rem}
-  .story-kicker-sub{font-family:var(--mono);font-size:.82rem;letter-spacing:.32em;color:var(--accent);margin-bottom:.9rem}
-  .story-heading{font-family:var(--serif);font-size:clamp(3rem,6.6vw,5.6rem);line-height:1.04;color:var(--cream);margin-bottom:1.1rem}
-  .highlight-cyan{color:var(--blue);text-shadow:0 0 35px rgba(110,208,234,.4)}
-  .highlight-ruby{color:var(--ruby);text-shadow:0 0 35px rgba(210,75,48,.4)}
-  .highlight-accent{color:var(--accent);text-shadow:0 0 35px color-mix(in srgb,var(--accent) 45%,transparent)}
-  .story-desc{font-size:clamp(1.15rem,1.9vw,1.45rem);color:var(--cream-dim);max-width:46ch;line-height:1.55}
-
-  /* ——— per-act widgets: each act carries its own little machine ——— */
-  .act-extra{margin-top:1.5rem;opacity:0;transform:translateY(14px);
-    transition:opacity .6s .4s cubic-bezier(.16,1,.3,1),transform .6s .4s cubic-bezier(.16,1,.3,1)}
-  .story-act.active .act-extra{opacity:1;transform:none}
-
-  .chips{display:flex;flex-wrap:wrap;gap:.5rem}
-  .chip{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;padding:.42rem .85rem;border-radius:20px;
-    border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);color:var(--cream-dim);
-    background:color-mix(in srgb,var(--accent) 8%,transparent)}
-
-  /* act III — the loop, firing node by node */
-  .pipe{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase}
-  .pipe i{font-style:normal;padding:.42rem .8rem;border-radius:9px;border:1px solid rgba(110,208,234,.22);color:#7d8ea4;background:rgba(8,13,26,.5)}
-  .pipe s{text-decoration:none;color:#3d4c60}
-  .story-act.active .pipe i{animation:pipeFire 3.2s ease-in-out infinite}
-  .story-act.active .pipe i:nth-of-type(2){animation-delay:.34s}
-  .story-act.active .pipe i:nth-of-type(3){animation-delay:.68s}
-  .story-act.active .pipe i:nth-of-type(4){animation-delay:1.02s}
-  .story-act.active .pipe i:nth-of-type(5){animation-delay:1.36s}
-  @keyframes pipeFire{0%,100%{color:#7d8ea4;border-color:rgba(110,208,234,.22);box-shadow:none}
-    9%{color:var(--blue-hot);border-color:var(--accent);box-shadow:0 0 22px color-mix(in srgb,var(--accent) 35%,transparent)}
-    28%{color:#8fa2b8;border-color:rgba(110,208,234,.3)}}
-
-  /* act II — memory lines writing themselves in */
-  .memlines{font-family:var(--mono);font-size:.78rem;line-height:2;color:#7d8ea4;border-left:1px solid color-mix(in srgb,var(--accent) 35%,transparent);padding-left:1rem}
-  .memlines div{opacity:0}
-  .story-act.active .memlines div{animation:memIn .5s ease forwards}
-  .story-act.active .memlines div:nth-child(1){animation-delay:.55s}
-  .story-act.active .memlines div:nth-child(2){animation-delay:1.05s}
-  .story-act.active .memlines div:nth-child(3){animation-delay:1.55s}
-  @keyframes memIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
-  .memlines em{font-style:normal;color:var(--accent)}
-
-  /* act IV — the receipts */
-  .proofs{display:flex;gap:2.6rem;flex-wrap:wrap}
-  .proofs div{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:#6d7f95}
-  .proofs b{display:block;font-family:var(--serif);font-size:clamp(2rem,3.6vw,2.9rem);font-weight:500;line-height:1;
-    color:var(--cream);text-shadow:0 0 30px color-mix(in srgb,var(--accent) 40%,transparent);margin-bottom:.4rem}
-
-  /* act V — providers scrolling past */
-  .marquee{overflow:hidden;max-width:44rem;
-    -webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);
-    mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
-  .marquee>div{display:flex;gap:2.2rem;width:max-content;font-family:var(--mono);font-size:.78rem;letter-spacing:.18em;
-    text-transform:uppercase;color:#7d8ea4;animation:slide 26s linear infinite}
-  .marquee span{white-space:nowrap}
-  @keyframes slide{to{transform:translateX(-50%)}}
-
-  /* Timeline Scrubber & Navigation - Expanded Bounds */
-  .hero-controls{display:flex;flex-direction:column;gap:1.7rem;margin-top:1.4rem}
-  .cta-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
-  .btn{display:inline-flex;align-items:center;gap:.6rem;font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;
-    text-decoration:none;padding:.92rem 1.7rem;border-radius:12px;color:#08111f;font-weight:500;cursor:pointer;
-    background:linear-gradient(100deg,var(--blue-hot),var(--accent));border:1px solid transparent;
-    box-shadow:0 12px 42px color-mix(in srgb,var(--accent) 26%,transparent);
-    transition:transform .25s,box-shadow .25s,filter .25s}
-  .btn:hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 18px 54px color-mix(in srgb,var(--accent) 38%,transparent)}
-  .btn-ghost{display:inline-flex;align-items:center;font-family:var(--mono);font-size:.78rem;letter-spacing:.1em;
-    padding:.92rem 1.5rem;border-radius:12px;cursor:pointer;color:var(--cream-dim);
-    background:rgba(8,13,26,.6);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent);
-    transition:color .25s,border-color .25s,box-shadow .25s}
-  .btn-ghost:hover{color:var(--blue-hot);border-color:var(--accent);box-shadow:0 0 28px color-mix(in srgb,var(--accent) 22%,transparent)}
-
-  .hf-timeline-bar{display:flex;flex-direction:column;gap:.9rem;max-width:880px}
-  .act-nav{display:flex;gap:.55rem;flex-wrap:wrap}
-  .act-btn{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;padding:.45rem 1rem;border-radius:24px;
-    background:rgba(110,208,234,.05);border:1px solid rgba(110,208,234,.18);color:#7d8ea4;cursor:pointer;
-    transition:background .3s,border-color .3s,color .3s,box-shadow .3s}
-  .act-btn:hover,.act-btn.active{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:var(--accent);
-    color:var(--blue-hot);box-shadow:0 0 16px color-mix(in srgb,var(--accent) 25%,transparent)}
-
-  .seg-track{display:flex;gap:6px;width:100%}
-  .seg{flex:1;height:3px;background:rgba(110,208,234,.14);border-radius:3px;overflow:hidden;cursor:pointer}
-  .seg b{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--blue-hot));
-    box-shadow:0 0 10px var(--accent)}
-  .hf-hint{font-family:var(--mono);font-size:.62rem;letter-spacing:.24em;text-transform:uppercase;color:#4a5a6e}
-  .hf-hint b{color:var(--cream-dim);font-weight:400}
-
-  /* crystal glows — positioned over the lady's head diamonds */
-  .crystal{position:absolute;transform:translate(-50%,-50%);pointer-events:none;border-radius:50%;opacity:.75;z-index:3}
-  .crystal.w{background:radial-gradient(circle,rgba(255,255,255,1) 0%,rgba(110,208,234,.75) 35%,rgba(110,208,234,.2) 65%,transparent 80%);
-    animation:crystalPulse 4.6s ease-in-out infinite}
-  .crystal.ruby{background:radial-gradient(circle,rgba(255,120,80,1) 0%,rgba(225,65,38,.85) 35%,rgba(210,50,30,.25) 65%,transparent 80%);
-    animation:rubyReact 4.6s ease-in-out .6s infinite}
-  .crystal.ruby.flare{animation:rubyFlareOnce .9s ease-out}
-  .scroll-hint{position:absolute;left:7vw;bottom:2.2rem;font-family:var(--mono);font-size:.66rem;letter-spacing:.28em;text-transform:uppercase;color:#56657a;animation:bob 2.6s ease-in-out infinite;z-index:5}
-
-  /* ————— sections ————— */
-  section{padding:7.5rem 7vw;position:relative;z-index:3}
-  .dark{background:transparent}
-  .terra{background:
-      radial-gradient(ellipse 80% 90% at 70% 10%,rgba(255,200,150,.14),transparent 60%),
-      linear-gradient(170deg,#c07a5c,var(--terra) 45%,#a05a41);
-    color:#3a1a0e}
-  .label{font-family:var(--mono);font-size:.72rem;letter-spacing:.32em;text-transform:uppercase;margin-bottom:1.7rem;display:flex;align-items:center;gap:1rem}
-  .label::after{content:"";flex:0 0 3.2rem;height:1px;background:currentColor;opacity:.5;transform-origin:left;transform:scaleX(0)}
-  .revealed .label::after{animation:lineGrow 1.1s .3s cubic-bezier(.2,.8,.2,1) forwards}
-  .terra .label{color:#6b2f1c}
-  .dark .label{color:var(--blue)}
-  h2{font-family:var(--serif);font-weight:400;font-size:clamp(2.2rem,4.8vw,3.6rem);line-height:1.12;margin-bottom:1.6rem}
-  .dark h2{color:var(--cream);text-shadow:0 0 44px rgba(110,208,234,.18)}
-  .terra h2{color:#31150b}
-  .wide{max-width:62rem;margin:0 auto}
-  .widest{max-width:72rem;margin:0 auto}
-  p.body-text{font-size:1.08rem;max-width:56ch;margin-bottom:1.2rem}
-  .terra p.body-text{color:#4d2213}
-  .dark p.body-text{color:var(--cream-dim)}
-  .terra strong{color:#2c1208}
-
-  /* reveal on scroll */
-  .rv{opacity:0;transform:translateY(34px);transition:opacity .9s cubic-bezier(.2,.8,.2,1),transform .9s cubic-bezier(.2,.8,.2,1)}
-  .revealed .rv,.rv.revealed{opacity:1;transform:none}
-  .rv.d1{transition-delay:.12s}.rv.d2{transition-delay:.24s}.rv.d3{transition-delay:.36s}.rv.d4{transition-delay:.48s}.rv.d5{transition-delay:.6s}
-
-  .grid3{margin-top:2.8rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(44,18,8,.25);border:1px solid rgba(44,18,8,.25);border-radius:16px;overflow:hidden}
-  .grid3>div{background:rgba(255,225,200,.12);backdrop-filter:blur(2px);padding:2.1rem 1.9rem;transition:background .4s}
-  .grid3>div:hover{background:rgba(255,230,205,.22)}
-  .grid3 .ti{font-family:var(--serif);font-size:1.35rem;color:#2c1208;margin-bottom:.5rem}
-  .grid3 p{font-size:.93rem;color:#5c2917}
-
-  /* loop steps */
-  .steps{display:flex;gap:0;flex-wrap:wrap;justify-content:space-between;position:relative;margin-top:1.4rem}
-  .steps::before{content:"";position:absolute;left:6%;right:6%;top:2.45rem;height:1px;
-    background:linear-gradient(90deg,transparent,rgba(110,208,234,.35) 12%,rgba(110,208,234,.35) 88%,transparent)}
-  .step{flex:1 1 130px;min-width:120px;text-align:center;padding:1.2rem .6rem;position:relative}
-  .step .n{width:62px;height:62px;margin:0 auto 1rem;border-radius:50%;display:flex;align-items:center;justify-content:center;
-    border:1px solid rgba(110,208,234,.4);background:radial-gradient(circle at 35% 30%,#152742,var(--ink2));
-    font-family:var(--serif);font-size:1.45rem;color:var(--blue);position:relative;z-index:1;
-    box-shadow:0 0 22px rgba(110,208,234,.12);transition:box-shadow .4s,border-color .4s;animation:ringPulse 6.5s ease-out infinite}
-  .step:nth-child(2) .n{animation-delay:1.3s}.step:nth-child(3) .n{animation-delay:2.6s}
-  .step:nth-child(4) .n{animation-delay:3.9s}.step:nth-child(5) .n{animation-delay:5.2s}
-  .step:hover .n{box-shadow:0 0 34px rgba(110,208,234,.45);border-color:var(--blue-hot)}
-  .step .name{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--cream);margin-bottom:.45rem}
-  .step p{font-size:.82rem;color:#73849a}
-
-  /* terminal */
-  .term{margin-top:3rem;background:rgba(8,13,26,.85);border:1px solid rgba(110,208,234,.22);border-radius:14px;padding:1.7rem 1.9rem;
-    font-family:var(--mono);font-size:.85rem;line-height:1.9;overflow-x:auto;position:relative;
-    box-shadow:0 24px 70px rgba(0,0,0,.45),0 0 40px rgba(110,208,234,.06) inset}
-  .term::before{content:"● ● ●";position:absolute;top:1rem;right:1.3rem;font-size:.55rem;letter-spacing:.35em;color:#2c4056}
-  .term .lbl{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:#73849a;margin-bottom:1rem}
-  .term .line{min-height:1.9em;white-space:pre-wrap}
-  .term .ok{color:#7fcf95}
-  .term .muted{color:#73849a}
-  .term .pr{color:var(--ruby)}
-  .term .arg{color:var(--blue)}
-  .term .caret{display:inline-block;width:.6ch;background:var(--blue);height:1.05em;vertical-align:text-bottom;animation:blink 1s steps(1) infinite}
-
-  /* principles */
-  .principles{list-style:none;margin-top:1rem}
-  .principles li{display:flex;gap:1.5rem;padding:1.35rem .8rem;border-top:1px solid rgba(44,18,8,.22);border-radius:8px;transition:background .35s,transform .35s}
-  .principles li:hover{background:rgba(255,228,200,.14);transform:translateX(6px)}
-  .principles .num{font-family:var(--serif);font-size:1.45rem;color:#2c1208;min-width:2.3rem;font-style:italic}
-  .principles strong{display:block;font-size:1.06rem;font-weight:600;color:#2c1208;margin-bottom:.25rem}
-  .principles span.b{font-size:.95rem;color:#5c2917}
-
-  /* capability */
-  .twocol{display:grid;grid-template-columns:1.1fr .9fr;gap:2.6rem;align-items:start;margin-top:1rem}
-  .sublabel{font-family:var(--mono);font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--blue);margin-bottom:1.1rem}
-  .rowlist{display:flex;flex-direction:column;gap:1px;background:rgba(110,208,234,.14);border:1px solid rgba(110,208,234,.14);border-radius:14px;overflow:hidden}
-  .rowlist .r{background:rgba(13,20,36,.85);padding:1.05rem 1.35rem;display:flex;gap:1.1rem;align-items:baseline;justify-content:space-between;transition:background .35s,padding-left .35s}
-  .rowlist .r:hover{background:rgba(19,29,50,.9);padding-left:1.7rem}
-  .rowlist code{font-family:var(--mono);font-size:.8rem;color:var(--blue);min-width:6rem;font-weight:500}
-  .rowlist .d{font-size:.9rem;color:var(--cream-dim);text-align:right}
-  .rowlist .pname{font-family:var(--serif);font-size:1.1rem;color:var(--cream)}
-
-  /* stats */
-  .stats4{max-width:64rem;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:2.2rem;text-align:center}
-  .stats4 .v{font-family:var(--serif);font-size:clamp(2.6rem,5.4vw,3.8rem);line-height:1;color:#2c1208;font-variant-numeric:tabular-nums}
-  .stats4 .l{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:#6b2f1c;margin-top:.7rem}
-
-  /* install */
-  .install-box{display:inline-flex;align-items:center;gap:1.1rem;cursor:pointer;font-family:var(--mono);font-size:.98rem;
-    background:rgba(8,13,26,.9);border:1px solid rgba(110,208,234,.35);border-radius:12px;padding:1.05rem 1.6rem;color:var(--cream);
-    transition:border-color .3s,box-shadow .3s;animation:ringPulse 5s ease-out infinite}
-  .install-box:hover{border-color:var(--blue-hot);box-shadow:0 0 34px rgba(110,208,234,.25)}
-  .install-box .copied{font-size:.7rem;letter-spacing:.1em;color:var(--blue);text-transform:uppercase;margin-left:.6rem}
-
-  footer{background:rgba(6,10,20,.92);padding:3.4rem 7vw;border-top:1px solid rgba(110,208,234,.12);text-align:center;
-    font-family:var(--mono);font-size:.74rem;letter-spacing:.08em;color:#73849a;position:relative;z-index:3}
-  footer .q{color:var(--blue);font-style:italic;font-family:var(--serif);font-size:1.05rem}
-  footer a{color:var(--blue);text-decoration:none;transition:color .25s,text-shadow .25s}
-  footer a:hover{color:var(--blue-hot);text-shadow:0 0 16px rgba(110,208,234,.55)}
-
-  @media (max-width:880px){
-    header.hero{padding:17vh 7vw 5vh;align-items:flex-start}
-    .hf-stage-backdrop .drift{width:120vw;right:-30%}
-    .hf-stage-backdrop .veil{background:
-      linear-gradient(180deg,rgba(10,16,32,.72) 0%,rgba(10,16,32,.55) 40%,rgba(10,16,32,.96) 88%)}
-    .hero-story-container{gap:1.2rem;padding-top:0}
-    .hero-controls{gap:1.1rem;margin-top:.6rem}
-    .story-screen{min-height:clamp(300px,44vh,380px)}
-    .act-nav{display:none}          /* the segment strip below is the scrubber on touch */
-    .act-extra{margin-top:1.1rem}
-    .story-heading{font-size:clamp(2.4rem,9vw,3.4rem)}
-    .story-title{font-size:clamp(3.2rem,15vw,5rem)}
-    .story-quote{font-size:clamp(1.5rem,6vw,2rem)}
-    .story-desc{font-size:1.02rem}
-    .proofs{gap:1.4rem}
-    .hf-hud{margin-left:0;width:100%}
-    .hf-hint{display:none}
-    .act-btn{font-size:.66rem;padding:.4rem .75rem}
-    .btn,.btn-ghost{flex:1 1 100%;justify-content:center}
-    .twocol{grid-template-columns:1fr}
-    .rowlist .d{text-align:left}
-    #cursorAura{display:none}
-    .scroll-hint{display:none}
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
-  @media (prefers-reduced-motion:reduce){
-    *,*::before,*::after{animation:none!important;transition:none!important}
-    .rv{opacity:1;transform:none}
-    #embers,#sparks,#cursorAura{display:none}
+
+  html {
+    scroll-behavior: smooth;
+    background: var(--bg-dark);
+    color: var(--cream);
+  }
+
+  body {
+    background: var(--bg-dark);
+    color: var(--cream);
+    font-family: var(--font-sans);
+    line-height: 1.65;
+    overflow-x: hidden;
+    font-weight: 300;
+    cursor: default;
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background: var(--ruby);
+    color: #fff;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Grain texture overlay */
+  .film-grain {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ————— Custom Magnetic Cursor & Bubble Reticle ————— */
+  .custom-cursor {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.3s ease;
+    mix-blend-mode: normal;
+  }
+
+  .cursor-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--cyan);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 14px var(--cyan);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s;
+  }
+
+  .cursor-bubble {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    padding: 0.55rem 1.1rem;
+    background: rgba(6, 9, 19, 0.88);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(110, 208, 234, 0.4);
+    border-radius: 30px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px var(--cyan-glow);
+  }
+
+  .cursor-bubble.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .cursor-bubble .cursor-text {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cyan-soft);
+    font-weight: 500;
+  }
+
+  .styling-element {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-color: var(--cyan);
+    border-style: solid;
+    pointer-events: none;
+  }
+  .styling-element.left-top { top: -2px; left: -2px; border-width: 1.5px 0 0 1.5px; }
+  .styling-element.right-top { top: -2px; right: -2px; border-width: 1.5px 1.5px 0 0; }
+  .styling-element.left-bottom { bottom: -2px; left: -2px; border-width: 0 0 1.5px 1.5px; }
+  .styling-element.right-bottom { bottom: -2px; right: -2px; border-width: 0 1.5px 1.5px 0; }
+
+  /* Atmosphere Canvases */
+  #mistCanvas, #sparkCanvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+  #sparkCanvas { z-index: 98; }
+
+  /* ————— Navigation Header ————— */
+  .topnav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 3.5vw;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.12em;
+    background: linear-gradient(180deg, rgba(6,9,19,0.85) 0%, transparent 100%);
+    transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s;
+  }
+  .topnav.scrolled {
+    background: rgba(6, 9, 19, 0.86);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(110, 208, 234, 0.12);
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    color: var(--cyan);
+    font-weight: 500;
+    letter-spacing: 0.22em;
+  }
+  .brand-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--ruby);
+    box-shadow: 0 0 10px var(--ruby);
+    animation: pulseGlow 2.8s infinite ease-in-out;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    list-style: none;
+  }
+  .nav-links a {
+    color: var(--cream-dim);
+    transition: color 0.25s, text-shadow 0.25s;
+    position: relative;
+    padding: 0.3rem 0;
+  }
+  .nav-links a:hover {
+    color: var(--cyan-soft);
+    text-shadow: 0 0 14px var(--cyan-glow);
+  }
+  .sound-toggle-btn {
+    background: rgba(110, 208, 234, 0.08);
+    border: 1px solid rgba(110, 208, 234, 0.22);
+    border-radius: 20px;
+    padding: 0.4rem 0.9rem;
+    color: var(--cyan);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: background 0.25s, border-color 0.25s, transform 0.2s;
+  }
+  .sound-toggle-btn:hover {
+    background: rgba(110, 208, 234, 0.16);
+    border-color: var(--cyan);
+    transform: translateY(-1px);
+  }
+
+  /* ————— Parallax Hero Stage ————— */
+  .hero-viewport {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    min-height: 700px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1000px;
+  }
+
+  .parallax-layer-group {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transform-style: preserve-3d;
+  }
+
+  /* Depth Layers */
+  .p-layer {
+    position: absolute;
+    inset: -5% -5%;
+    width: 110%;
+    height: 110%;
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  /* Layer 0: Cosmic Starfield / Deep Nebulae */
+  .p-layer.l-space {
+    background: 
+      radial-gradient(ellipse 70% 60% at 75% 35%, rgba(110,208,234,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 25% 65%, rgba(224,75,50,0.08) 0%, transparent 60%),
+      linear-gradient(180deg, #050811 0%, #080d1a 60%, #060913 100%);
+  }
+
+  /* Layer 1: Distant Mountain Peaks SVG Silhouette */
+  .p-layer.l-mountains {
+    display: flex;
+    align-items: flex-end;
+  }
+  .p-layer.l-mountains svg {
+    width: 100%;
+    height: 52vh;
+    fill: #0c1426;
+    opacity: 0.65;
+  }
+
+  /* Layer 2: Mid-range Pine Forest & Mist Ridges */
+  .p-layer.l-ridges {
+    display: flex;
+    align-items: flex-end;
+  }
+  .p-layer.l-ridges svg {
+    width: 100%;
+    height: 42vh;
+    fill: #090f1d;
+    opacity: 0.9;
+  }
+
+  /* Layer 3: Aura Lady Hero Portrait with Aura Glow & Crystal Headpiece */
+  .p-layer.l-hero-art {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8vw;
+  }
+  .hero-portrait-frame {
+    position: relative;
+    width: clamp(340px, 46vw, 680px);
+    height: clamp(420px, 68vh, 780px);
+    pointer-events: auto;
+  }
+  .hero-portrait-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 25%;
+    border-radius: 20px;
+    filter: contrast(1.18) brightness(0.92) saturate(1.1);
+    mask-image: radial-gradient(circle at 50% 50%, black 50%, transparent 95%);
+    -webkit-mask-image: radial-gradient(circle at 50% 50%, black 50%, transparent 95%);
+  }
+  .portrait-halo {
+    position: absolute;
+    inset: -15%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(110,208,234,0.18) 0%, rgba(224,75,50,0.1) 40%, transparent 70%);
+    animation: breatheHalo 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .head-gem {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .head-gem.cyan {
+    top: 36%;
+    left: 42%;
+    background: radial-gradient(circle, #fff 0%, var(--cyan) 60%, transparent 90%);
+    box-shadow: 0 0 24px var(--cyan);
+    animation: pulseGem 4s infinite ease-in-out;
+  }
+  .head-gem.ruby {
+    top: 32%;
+    left: 48%;
+    background: radial-gradient(circle, #fff 0%, var(--ruby) 60%, transparent 90%);
+    box-shadow: 0 0 30px var(--ruby);
+    animation: pulseGem 4s infinite ease-in-out 1.2s;
+  }
+
+  /* Layer 4: Foreground Vignette & Editorial Framing */
+  .p-layer.l-vignette {
+    background: 
+      linear-gradient(180deg, rgba(6,9,19,0.7) 0%, transparent 20%, transparent 75%, rgba(6,9,19,0.95) 95%),
+      linear-gradient(90deg, rgba(6,9,19,0.9) 0%, rgba(6,9,19,0.4) 45%, transparent 75%);
+  }
+
+  /* Layer 5: Hero Content & Editorial Typography */
+  .hero-content-stage {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 1400px;
+    padding: 0 5vw;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    pointer-events: none;
+  }
+  .hero-content-stage * {
+    pointer-events: auto;
+  }
+
+  .chapter-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  .chapter-num {
+    font-style: italic;
+    color: var(--ruby-soft);
+    font-weight: 500;
+  }
+  .chapter-line {
+    width: 38px;
+    height: 1px;
+    background: var(--cyan);
+    opacity: 0.5;
+  }
+
+  .hero-main-title {
+    font-family: var(--font-serif);
+    font-size: clamp(3.8rem, 8.5vw, 7.8rem);
+    font-weight: 400;
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    color: var(--cream);
+  }
+  .hero-main-title em {
+    font-style: italic;
+    color: var(--cyan-soft);
+    text-shadow: 0 0 35px var(--cyan-glow);
+  }
+
+  .hero-tagline {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+    color: var(--ruby-soft);
+    margin-top: -0.4rem;
+    text-shadow: 0 0 25px var(--ruby-glow);
+  }
+
+  .hero-desc {
+    font-size: clamp(1.05rem, 1.6vw, 1.28rem);
+    color: var(--cream-dim);
+    max-width: 48ch;
+    line-height: 1.6;
+    font-weight: 300;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.2rem;
+    margin-top: 0.8rem;
+  }
+
+  /* Magnetic Interactive Buttons */
+  .magnetic-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7rem;
+    padding: 0.95rem 1.8rem;
+    border-radius: 30px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+    cursor: pointer;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s, background 0.3s, border-color 0.3s;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--cyan-soft) 0%, var(--cyan) 100%);
+    color: #060913;
+    border: 1px solid transparent;
+    box-shadow: 0 10px 30px var(--cyan-glow);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 15px 40px rgba(110, 208, 234, 0.5);
+    transform: translateY(-2px);
+  }
+
+  .btn-terminal {
+    background: rgba(13, 21, 38, 0.75);
+    color: var(--cream);
+    border: 1px solid rgba(110, 208, 234, 0.28);
+    backdrop-filter: blur(10px);
+  }
+  .btn-terminal:hover {
+    border-color: var(--cyan);
+    color: var(--cyan-soft);
+    box-shadow: 0 0 25px var(--cyan-glow);
+    transform: translateY(-2px);
+  }
+  .btn-terminal code {
+    color: var(--ruby-soft);
+  }
+
+  /* ————— Chapter Story Sections ————— */
+  .chapter-section {
+    position: relative;
+    z-index: 10;
+    padding: 8.5rem 5vw;
+    border-top: 1px solid rgba(110, 208, 234, 0.08);
+  }
+
+  .chapter-container {
+    max-width: 1300px;
+    margin: 0 auto;
+  }
+
+  .chapter-header {
+    margin-bottom: 3.5rem;
+  }
+
+  .chapter-heading {
+    font-family: var(--font-serif);
+    font-size: clamp(2.4rem, 5.2vw, 4.4rem);
+    font-weight: 400;
+    line-height: 1.08;
+    color: var(--cream);
+    margin-top: 0.8rem;
+  }
+  .chapter-heading span.accent {
+    color: var(--cyan);
+    text-shadow: 0 0 30px var(--cyan-glow);
+  }
+
+  /* Grid Layouts with Glass Cards */
+  .glass-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.6rem;
+  }
+
+  .glass-card {
+    background: var(--bg-card);
+    border: 1px solid var(--bg-card-border);
+    border-radius: 16px;
+    padding: 2.4rem 2rem;
+    backdrop-filter: blur(14px);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s, box-shadow 0.4s;
+    position: relative;
+    overflow: hidden;
+  }
+  .glass-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(110, 208, 234, 0.4), transparent);
+  }
+  .glass-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(110, 208, 234, 0.35);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5), 0 0 25px rgba(110, 208, 234, 0.12);
+  }
+  .card-num {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 1.6rem;
+    color: var(--ruby-soft);
+    margin-bottom: 0.8rem;
+  }
+  .card-title {
+    font-family: var(--font-serif);
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--cream);
+    margin-bottom: 0.8rem;
+  }
+  .card-text {
+    font-size: 0.98rem;
+    color: var(--cream-dim);
+    line-height: 1.65;
+  }
+
+  /* Interactive Terminal Live Simulator */
+  .interactive-terminal {
+    background: #04060c;
+    border: 1px solid rgba(110, 208, 234, 0.25);
+    border-radius: 14px;
+    padding: 2rem 2.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    line-height: 1.9;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7), 0 0 40px rgba(110, 208, 234, 0.08) inset;
+    margin-top: 2.5rem;
+    position: relative;
+  }
+  .terminal-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(110, 208, 234, 0.1);
+    color: var(--muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .terminal-lights {
+    display: flex;
+    gap: 6px;
+  }
+  .t-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #253346;
+  }
+  .t-dot.r { background: #e04b32; }
+  .t-dot.y { background: #ffbe83; }
+  .t-dot.g { background: #6ed0ea; }
+
+  .t-line {
+    display: flex;
+    gap: 0.8rem;
+    align-items: baseline;
+  }
+  .t-line.prompt { color: var(--ruby); font-weight: 500; }
+  .t-line.read { color: var(--muted); }
+  .t-line.plan { color: var(--cyan-soft); }
+  .t-line.exec { color: #d4a574; }
+  .t-line.verify { color: #8ee4af; font-weight: 500; }
+  .t-caret {
+    display: inline-block;
+    width: 7px;
+    height: 1.1em;
+    background: var(--cyan);
+    vertical-align: text-bottom;
+    animation: blinkCaret 1s infinite steps(1);
+  }
+
+  /* Stats Counter Section */
+  .stats-showcase {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2rem;
+    text-align: center;
+    padding: 4rem 2rem;
+    background: rgba(13, 21, 38, 0.45);
+    border: 1px solid rgba(110, 208, 234, 0.1);
+    border-radius: 20px;
+    margin-top: 3.5rem;
+  }
+  .stat-val {
+    font-family: var(--font-serif);
+    font-size: clamp(3rem, 6vw, 4.4rem);
+    color: var(--cream);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-top: 0.8rem;
+  }
+
+  /* Marquee Model Stack */
+  .marquee-box {
+    overflow: hidden;
+    padding: 1.5rem 0;
+    margin-top: 2rem;
+    mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  }
+  .marquee-track {
+    display: flex;
+    gap: 3rem;
+    width: max-content;
+    animation: marqueeSlide 28s linear infinite;
+  }
+  .marquee-item {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cream-dim);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .marquee-item::after {
+    content: '✦';
+    color: var(--ruby);
+    font-size: 0.7rem;
+  }
+
+  /* Footer */
+  footer {
+    padding: 5rem 5vw 4rem;
+    text-align: center;
+    border-top: 1px solid rgba(110, 208, 234, 0.12);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    background: #03050a;
+    position: relative;
+    z-index: 10;
+  }
+  footer a {
+    color: var(--cyan);
+    transition: color 0.25s, text-shadow 0.25s;
+  }
+  footer a:hover {
+    color: var(--cyan-soft);
+    text-shadow: 0 0 14px var(--cyan-glow);
+  }
+
+  /* Animations */
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.15); }
+  }
+  @keyframes breatheHalo {
+    0%, 100% { opacity: 0.4; transform: scale(0.96); }
+    50% { opacity: 0.85; transform: scale(1.08); }
+  }
+  @keyframes pulseGem {
+    0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.85); }
+    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+  }
+  @keyframes blinkCaret {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  @keyframes marqueeSlide {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  @media (max-width: 900px) {
+    .p-layer.l-hero-art { padding-right: 0; justify-content: center; opacity: 0.35; }
+    .hero-main-title { font-size: 3.6rem; }
+    .nav-links { display: none; }
+    .hero-content-stage { padding-top: 10vh; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
   }
 </style>
 </head>
-<body>
+<body data-theme="dark">
 
-<canvas id="embers" aria-hidden="true"></canvas>
-<canvas id="sparks" aria-hidden="true"></canvas>
-<div id="cursorAura" aria-hidden="true"></div>
+<div class="film-grain" aria-hidden="true"></div>
+<canvas id="mistCanvas" aria-hidden="true"></canvas>
+<canvas id="sparkCanvas" aria-hidden="true"></canvas>
 
+<!-- Custom Magnetic Reticle Cursor -->
+<div class="custom-cursor" id="customCursor" aria-hidden="true">
+  <div class="cursor-dot" id="cursorDot"></div>
+  <div class="cursor-bubble" id="cursorBubble">
+    <div class="styling-element left-top"></div>
+    <div class="styling-element right-top"></div>
+    <div class="styling-element left-bottom"></div>
+    <div class="styling-element right-bottom"></div>
+    <span class="cursor-text" id="cursorText">Explore</span>
+  </div>
+</div>
+
+<!-- Header Navigation -->
 <nav class="topnav" id="topnav">
-  <span class="brand">AURA CODE</span>
-  <a href="#identity">About</a>
-  <a href="#loop">How it works</a>
-  <a href="#install">Install</a>
-  <a href="aura-windows-manual.html">Windows Manual</a>
-  <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub →</a>
+  <a href="#hero" class="nav-brand magnetic-target" data-cursor="Aura">
+    <span class="brand-dot"></span>
+    <span>AURA CODE</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#why" class="magnetic-target" data-cursor="02. Why Aura">Why Aura</a></li>
+    <li><a href="#identity" class="magnetic-target" data-cursor="03. Identity">About</a></li>
+    <li><a href="#loop" class="magnetic-target" data-cursor="04. The Loop">How it works</a></li>
+    <li><a href="#principles" class="magnetic-target" data-cursor="05. Rules">Principles</a></li>
+    <li><a href="#capabilities" class="magnetic-target" data-cursor="06. Capability">Stack</a></li>
+    <li><a href="aura-windows-manual.html" class="magnetic-target" data-cursor="Manual">Windows Manual</a></li>
+    <li><a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener" class="magnetic-target" data-cursor="GitHub">GitHub ↗</a></li>
+  </ul>
+  <button class="sound-toggle-btn magnetic-target" id="soundToggle" data-cursor="Sound">
+    <span id="soundIcon">🔊</span>
+    <span id="soundLabel">Audio: On</span>
+  </button>
 </nav>
 
-<header class="hero" id="start">
-  <!-- Full-bleed HyperFrames Story Stage -->
-  <div class="hf-stage-backdrop">
-    <div class="drift" id="drift">
-      <img src="aura_lady_portrait.png" alt="Aura Code hero" fetchpriority="high">
-      <div id="crystals" aria-hidden="true"></div>
+<!-- ————— Parallax Hero Section ————— -->
+<header class="hero-viewport" id="hero">
+  <div class="parallax-layer-group" id="parallaxGroup">
+    
+    <!-- Layer 0: Space / Cosmic Gradient -->
+    <div class="p-layer l-space" data-speed="-0.1"></div>
+    
+    <!-- Layer 1: Distant Mountains SVG -->
+    <div class="p-layer l-mountains" data-speed="-0.3">
+      <svg viewBox="0 0 1440 400" preserveAspectRatio="none">
+        <path d="M0,400 L0,220 L180,140 L360,260 L540,110 L720,240 L900,90 L1080,210 L1260,130 L1440,260 L1440,400 Z"></path>
+      </svg>
     </div>
-    <div class="pulse"></div>
-    <div class="veil"></div>
-    <div class="cyber-grid"></div>
-    <div class="hf-tint"></div>
-    <div class="hf-scan"></div>
-    <div class="hf-sweep"></div>
+    
+    <!-- Layer 2: Mid-range Ridges & Pine Line -->
+    <div class="p-layer l-ridges" data-speed="-0.6">
+      <svg viewBox="0 0 1440 320" preserveAspectRatio="none">
+        <path d="M0,320 L0,180 L120,130 L240,210 L420,100 L600,190 L780,120 L960,200 L1140,80 L1320,170 L1440,120 L1440,320 Z"></path>
+      </svg>
+    </div>
+    
+    <!-- Layer 3: Lady Portrait Art with Breathing Glow -->
+    <div class="p-layer l-hero-art" data-speed="-0.85">
+      <div class="hero-portrait-frame magnetic-target" data-cursor="Praktess">
+        <div class="portrait-halo"></div>
+        <img src="aura_lady_portrait.png" alt="Aura Code Hero Portrait" fetchpriority="high">
+        <div class="head-gem cyan"></div>
+        <div class="head-gem ruby"></div>
+      </div>
+    </div>
+    
+    <!-- Layer 4: Foreground Vignette & Depth Shadow -->
+    <div class="p-layer l-vignette" data-speed="-1.2"></div>
   </div>
 
-  <!-- Animated Kinetic HyperFrames Overlay & Story Arc -->
-  <div class="hero-story-container">
-    <div class="story-kicker">
-      <span class="hf-pulse-dot"></span>
-      <span class="hf-tag">HYPERFRAMES RUNTIME</span>
-      <span class="hf-hud">
-        <span id="hfFrame">FRAME 0000</span>
-        <span id="hfTimer"><b>ACT I</b> · 0.0s</span>
-      </span>
+  <!-- Layer 5: Hero Content & Typography -->
+  <div class="hero-content-stage">
+    <div class="chapter-tag">
+      <span class="chapter-num">(01)</span>
+      <span>Autonomous Agent</span>
+      <span class="chapter-line"></span>
+      <span style="color:var(--cream-dim)">v0.15.5</span>
     </div>
-
-    <!-- Active Story Phrase Render Target -->
-    <div class="story-screen" id="storyScreen">
-
-      <div class="story-act active" data-act="0">
-        <h1 class="story-title kin" data-kin>Aura Code</h1>
-        <p class="story-quote kin" data-kin style="--base:260ms">“I don’t try. I verify.”</p>
-        <p class="story-desc kin" data-kin style="--base:620ms">An open-source, model-agnostic coding agent that reads your codebase, plans, executes — and proves it worked.</p>
-        <div class="act-extra">
-          <div class="chips">
-            <span class="chip">MIT licensed</span>
-            <span class="chip">TypeScript</span>
-            <span class="chip">Runs locally</span>
-            <span class="chip">v0.12.1</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="story-act" data-act="1">
-        <div class="story-kicker-sub">ACT II — ORIGIN</div>
-        <h2 class="story-heading kin" data-kin>Designed by one architect.<br><span class="highlight-accent">Dušan Milosavljević.</span></h2>
-        <p class="story-desc kin" data-kin style="--base:520ms">The architecture, the principles and the shape of every decision are his — written from Da Nang, and built with coding tools like Claude Code alongside.</p>
-        <div class="act-extra">
-          <div class="chips">
-            <span class="chip">Architecture · Dušan</span>
-            <span class="chip">Tooling · Claude &amp; others</span>
-            <span class="chip">Da Nang, Vietnam</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="story-act" data-act="2">
-        <div class="story-kicker-sub">ACT III — MEMORY</div>
-        <h2 class="story-heading kin" data-kin>Most agents wake up<br><span class="highlight-accent">with amnesia.</span></h2>
-        <p class="story-desc kin" data-kin style="--base:520ms">Aura doesn’t. Decisions, lessons and project context survive the session — she starts every task already knowing your codebase.</p>
-        <div class="act-extra">
-          <div class="memlines">
-            <div><em>lesson</em> · auth tokens rotate on refresh — don’t cache them</div>
-            <div><em>decision</em> · Postgres over SQLite, chosen 12 days ago</div>
-            <div><em>context</em> · 41 files, 3 conventions, 1 open question</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="story-act" data-act="3">
-        <div class="story-kicker-sub">ACT IV — THE LOOP</div>
-        <h2 class="story-heading kin" data-kin>A loop,<br><span class="highlight-accent">not a guess.</span></h2>
-        <p class="story-desc kin" data-kin style="--base:400ms">When verification fails she doesn’t retry blindly — she diagnoses, adjusts, and runs it again.</p>
-        <div class="act-extra">
-          <div class="pipe">
-            <i>Read</i><s>→</s><i>Plan</i><s>→</s><i>Execute</i><s>→</s><i>Verify</i><s>→</s><i>Report</i>
-          </div>
-        </div>
-      </div>
-
-      <div class="story-act" data-act="4">
-        <div class="story-kicker-sub">ACT V — RECEIPTS</div>
-        <h2 class="story-heading kin" data-kin>She reports what<br><span class="highlight-accent">actually ran.</span></h2>
-        <p class="story-desc kin" data-kin style="--base:460ms">File paths, line numbers, test output. Not “I think it’s fixed” — the diff and the passing run that says so.</p>
-        <div class="act-extra">
-          <div class="proofs">
-            <div><b>1,121+</b>Tests passing</div>
-            <div><b>0</b>Regressions</div>
-            <div><b>line 47</b>Not “somewhere in auth”</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="story-act" data-act="5">
-        <div class="story-kicker-sub">ACT VI — YOUR STACK</div>
-        <h2 class="story-heading kin" data-kin>Bring <span class="highlight-accent">any model.</span><br>She stays the same.</h2>
-        <p class="story-desc kin" data-kin style="--base:460ms">16+ providers, one agent. Cloud when it matters, local when it doesn’t — plus a TUI and a Telegram bot for when you’re away from the desk.</p>
-        <div class="act-extra">
-          <div class="marquee">
-            <div>
-              <span>DeepSeek</span><span>Claude</span><span>GPT</span><span>Gemini</span><span>GLM</span><span>MiMo</span><span>Ollama</span><span>OpenRouter</span>
-              <span>DeepSeek</span><span>Claude</span><span>GPT</span><span>Gemini</span><span>GLM</span><span>MiMo</span><span>Ollama</span><span>OpenRouter</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Interactive CTA & Progress Controller -->
-    <div class="hero-controls">
-      <div class="cta-row">
-        <a class="btn" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
-        <button class="btn-ghost" onclick="copyInstall(this)">$ npm i -g aura-code</button>
-      </div>
-
-      <div class="hf-timeline-bar">
-        <div class="act-nav" id="actNav">
-          <button class="act-btn active">01. Identity</button>
-          <button class="act-btn">02. Origin</button>
-          <button class="act-btn">03. Memory</button>
-          <button class="act-btn">04. Loop</button>
-          <button class="act-btn">05. Receipts</button>
-          <button class="act-btn">06. Providers</button>
-        </div>
-        <div class="seg-track" id="segTrack"></div>
-        <div class="hf-hint"><b>←</b> <b>→</b> to scrub · <b>space</b> to hold · hover pauses</div>
-      </div>
+    
+    <h1 class="hero-main-title">
+      Aura <em>Code</em>
+    </h1>
+    
+    <p class="hero-tagline">
+      “I don’t try. I verify.”
+    </p>
+    
+    <p class="hero-desc">
+      An open-source, model-agnostic coding agent that reads your codebase, blueprints an execution strategy, writes precise diffs — and runs the tests to prove it worked. A framework, not an appliance: the model is yours to pick, the tools are yours to extend. And unlike an appliance, she accumulates.
+    </p>
+    
+    <div class="hero-actions">
+      <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener" class="magnetic-btn btn-primary magnetic-target" data-cursor="View Repo">
+        <span>Clone on GitHub</span>
+        <span>→</span>
+      </a>
+      <button class="magnetic-btn btn-terminal magnetic-target" id="copyInstallBtn" data-cursor="Copy Cmd" onclick="copyInstallCmd(this)">
+        <code>$ npm i -g aura-code</code>
+        <span id="copyFeedback" style="font-size:0.7rem;color:var(--cyan);margin-left:0.4rem;">[copy]</span>
+      </button>
     </div>
   </div>
-
-  <div class="scroll-hint">↓ scroll to explore</div>
 </header>
 
-<section class="terra" id="identity">
-  <div class="wide">
-    <div class="label rv">01 — Identity</div>
-    <h2 class="rv d1">One architect, working with sharp tools.</h2>
-    <p class="body-text rv d2">Aura was designed by <strong>Dušan Milosavljević</strong> — the architecture, the principles, and the shape of every decision. The code was written with modern coding tools, Claude Code among them, used the way Aura herself is meant to be used: read, plan, execute, verify.</p>
-    <p class="body-text rv d3" style="color:#5c2917">Written in TypeScript, strictly typed. Built on the <em>Praktess</em> framework, from the Ancient Greek: <em>she who acts and executes</em>.</p>
-    <div class="grid3 rv d4">
-      <div><div class="ti">Model-agnostic</div><p>Claude, GPT, Gemini, MiMo, DeepSeek, OpenCode Zen, Ollama — and any OpenAI-compatible endpoint.</p></div>
-      <div><div class="ti">Self-aware</div><p>She cites line numbers and reports what was verified — not what was attempted.</p></div>
-      <div><div class="ti">Open source</div><p>MIT licensed. 1,121+ tests passing. Clone it, read it, run it.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="dark" id="loop">
-  <div class="widest">
-    <div class="label rv">02 — How she works</div>
-    <h2 class="rv d1">A loop, not a guess.</h2>
-    <p class="body-text rv d2">Read the context, form a plan, execute precisely, verify the result. If verification fails she doesn’t retry blindly — she diagnoses, adjusts, and re-executes.</p>
-    <div class="steps rv d3">
-      <div class="step"><div class="n">I</div><div class="name">Read</div><p>Files, structure, dependencies — before touching anything.</p></div>
-      <div class="step"><div class="n">II</div><div class="name">Plan</div><p>Decides what to change and how. Minimal, targeted.</p></div>
-      <div class="step"><div class="n">III</div><div class="name">Execute</div><p>Writes code, runs commands, makes precise edits.</p></div>
-      <div class="step"><div class="n">IV</div><div class="name">Verify</div><p>Runs tests, checks integrity, confirms the change.</p></div>
-      <div class="step"><div class="n">V</div><div class="name">Report</div><p>Summarizes what was done and what passed.</p></div>
-    </div>
-    <div class="term rv d4" id="terminal">
-      <div class="lbl">terminal</div>
-      <div class="line"><span class="pr">$</span> aura <span class="arg">"fix the authentication bug"</span></div>
-      <div class="line" data-type="→ Read context: 14 files scanned" data-cls="muted"></div>
-      <div class="line" data-type="→ Plan: 3-step execution strategy" data-cls="muted"></div>
-      <div class="line" data-type="→ Execute: edited src/auth/handler.ts (line 47)" data-cls="muted"></div>
-      <div class="line" data-type="→ Verify: 1,121 tests passing, 0 regressions" data-cls="muted"></div>
-      <div class="line" data-type="✓ Done. Verified." data-cls="ok" style="margin-top:.4rem"></div>
-    </div>
-  </div>
-</section>
-
-<section class="terra">
-  <div class="wide">
-    <div class="label rv">03 — Principles</div>
-    <h2 class="rv d1">Rules she never breaks.</h2>
-    <ol class="principles">
-      <li class="rv"><span class="num">01</span><div><strong>I don’t try. I verify.</strong><span class="b">I run the test. I check the diff. I read the output. That’s not confidence — it’s evidence.</span></div></li>
-      <li class="rv d1"><span class="num">02</span><div><strong>Read before write. Always.</strong><span class="b">I never edit a file I haven’t read, never assume structure I haven’t seen.</span></div></li>
-      <li class="rv d2"><span class="num">03</span><div><strong>Minimal change, maximum effect.</strong><span class="b">The exact line, the exact function. A surgeon doesn’t amputate to fix a paper cut.</span></div></li>
-      <li class="rv d3"><span class="num">04</span><div><strong>If I broke it, I fix it first.</strong><span class="b">A failure I introduced is an emergency, not a todo. The codebase is never left worse.</span></div></li>
-      <li class="rv d4"><span class="num">05</span><div><strong>Cite specifics. Never generalities.</strong><span class="b">File paths, line numbers, error messages. “Line 47 throws when steps is empty” is actionable.</span></div></li>
-      <li class="rv d5"><span class="num">06</span><div><strong>The loop never ends.</strong><span class="b">Every failure is training data. There is no “done” — only “verified at this point in time.”</span></div></li>
-    </ol>
-  </div>
-</section>
-
-<section class="dark">
-  <div class="widest">
-    <div class="label rv">04 — Capability</div>
-    <h2 class="rv d1">Six commands. Every model.</h2>
-    <div class="twocol">
-      <div class="rv d2">
-        <div class="sublabel">Modes</div>
-        <div class="rowlist">
-          <div class="r"><code>normal</code><span class="d">Single-agent loop: read → plan → execute → verify.</span></div>
-          <div class="r"><code>:research</code><span class="d">Multi-step research, saved as a cited report.</span></div>
-          <div class="r"><code>:council</code><span class="d">5 independent agents, synthesized into one verdict.</span></div>
-          <div class="r"><code>:dream</code><span class="d">Consolidates a day’s work into lessons.</span></div>
-        </div>
+<!-- ————— Chapter 02: Why Aura ————— -->
+<section class="chapter-section" id="why">
+  <div class="chapter-container">
+    <div class="chapter-header">
+      <div class="chapter-tag">
+        <span class="chapter-num">(02)</span>
+        <span>Why Aura</span>
+        <span class="chapter-line"></span>
+        <span style="color:var(--cream-dim)">Framework, not appliance</span>
       </div>
-      <div class="rv d3">
-        <div class="sublabel">Providers</div>
-        <div class="rowlist">
-          <div class="r"><span class="pname">Claude</span><span class="d">Opus · Sonnet · Haiku</span></div>
-          <div class="r"><span class="pname">GPT</span><span class="d">gpt-4o · gpt-4o-mini</span></div>
-          <div class="r"><span class="pname">Gemini</span><span class="d">2.5 pro · 2.5 flash</span></div>
-          <div class="r"><span class="pname">DeepSeek</span><span class="d">v4-pro · v4-flash</span></div>
-          <div class="r"><span class="pname">OpenCode Zen</span><span class="d">free + paid tiers</span></div>
-          <div class="r"><span class="pname">Ollama</span><span class="d">any local model</span></div>
-        </div>
+      <h2 class="chapter-heading">
+        Most agents are something you use.<br><span class="accent">Aura is something that compounds.</span>
+      </h2>
+    </div>
+
+    <div class="glass-card-grid">
+      <div class="glass-card magnetic-target" data-cursor="Framework">
+        <div class="card-num">01 / Framework</div>
+        <h3 class="card-title">Yours to shape, not to accept</h3>
+        <p class="card-text">
+          Most agents are appliances: you get the workflow their authors chose, and changing it means waiting for them. Here the model is yours to pick — 17 providers, any OpenAI-compatible endpoint, or a local model with no key at all — and the tools are yours to extend. It still starts with one command; the framework is there when you want it, not homework before you begin.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Memory">
+        <div class="card-num">02 / Memory</div>
+        <h3 class="card-title">She remembers lessons, not chat logs</h3>
+        <p class="card-text">
+          What broke last time, what your build actually needs, what you told her once and should not have to repeat. Stored in <code>~/.aura/memory/</code> on your machine — and it never leaves it.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Archimedes">
+        <div class="card-num">03 / Archimedes</div>
+        <h3 class="card-title">She learns what she can handle alone</h3>
+        <p class="card-text">
+          Competence is scored per project and per task category, then work alternates: a local model for what she has proven she can do, a frontier model for what she has not. Your cost falls as she improves, instead of staying flat forever.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Dataset">
+        <div class="card-num">04 / Your dataset</div>
+        <h3 class="card-title">Sessions become training data you own</h3>
+        <p class="card-text">
+          <code>:mine</code> turns your work into structured examples in <code>training-data/</code>, and competence tracking tells you when there is enough to fine-tune on. The training run is yours to make — Aura assembles the raw material, which is the part nobody else hands you.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Modular">
+        <div class="card-num">05 / Modularity</div>
+        <h3 class="card-title">She grows new parts on request</h3>
+        <p class="card-text">
+          Skills, plugins, MCP servers, subagents. “I want a travel agent” is an ordinary request here, because a skill is a file and writing files is what she does. What she builds is yours to keep, edit and share.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Right Hand">
+        <div class="card-num">06 / Reach</div>
+        <h3 class="card-title">Past the codebase</h3>
+        <p class="card-text">
+          Mail, calendar, Telegram, WhatsApp, cron, browser — and on Linux a computer tool that sees the screen and drives the pointer. Same memory, same agent, so what she learns on your code is there for the rest of your day.
+        </p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="terra">
-  <div class="stats4">
-    <div class="rv"><div class="v" data-count="1121" data-suffix="+">0</div><div class="l">Tests passing</div></div>
-    <div class="rv d1"><div class="v" data-count="0">0</div><div class="l">Failures</div></div>
-    <div class="rv d2"><div class="v" data-count="10" data-suffix="+">0</div><div class="l">Providers</div></div>
-    <div class="rv d3"><div class="v">MIT</div><div class="l">Licensed</div></div>
+<!-- ————— Chapter 03: Identity & Origins ————— -->
+<section class="chapter-section" id="identity">
+  <div class="chapter-container">
+    <div class="chapter-header">
+      <div class="chapter-tag">
+        <span class="chapter-num">(03)</span>
+        <span>Identity &amp; Origin</span>
+        <span class="chapter-line"></span>
+        <span>Da Nang, Vietnam</span>
+      </div>
+      <h2 class="chapter-heading">
+        One architect.<br><span class="accent">Working with sharp tools.</span>
+      </h2>
+    </div>
+
+    <div class="glass-card-grid">
+      <div class="glass-card magnetic-target" data-cursor="Architect">
+        <div class="card-num">01 / Origin</div>
+        <h3 class="card-title">Designed by Dušan Milosavljević</h3>
+        <p class="card-text">
+          The architecture, principles, and the shape of every decision are his — conceived in Da Nang and built with autonomous rigor. Aura reflects the philosophy that code is never finished when written, only when proven.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Praktess">
+        <div class="card-num">02 / Framework</div>
+        <h3 class="card-title">The Praktess Engine</h3>
+        <p class="card-text">
+          From the Ancient Greek <em>Praktess</em>: “she who acts and executes.” Built with strictly-typed TypeScript, multi-turn tool verification, and persistent graph-structured episodic recall.
+        </p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Amnesia-Free">
+        <div class="card-num">03 / Memory</div>
+        <h3 class="card-title">Zero Session Amnesia</h3>
+        <p class="card-text">
+          Most coding agents wake up with amnesia. Aura consolidates lessons, project conventions, and architectural verdicts across sessions, so she starts every task already knowing your codebase.
+        </p>
+      </div>
+    </div>
   </div>
 </section>
 
-<section class="dark" id="install" style="text-align:center">
-  <div style="max-width:46rem;margin:0 auto">
-    <div class="label rv" style="justify-content:center">05 — Get started</div>
-    <h2 class="rv d1">Ready to verify?</h2>
-    <p class="body-text rv d2" style="margin:0 auto 2.5rem">Install globally, set one API key, and give her a task in plain English.</p>
-    <div class="install-box rv d3" onclick="copyInstall(this)">
-      <span style="color:var(--ruby)">$</span><span>npm install -g aura-code</span><span class="copied" id="copyState">click to copy</span>
+<!-- ————— Chapter 03: The Verified Loop ————— -->
+<section class="chapter-section" id="loop">
+  <div class="chapter-container">
+    <div class="chapter-header">
+      <div class="chapter-tag">
+        <span class="chapter-num">(04)</span>
+        <span>Deterministic Execution</span>
+        <span class="chapter-line"></span>
+        <span>The Loop</span>
+      </div>
+      <h2 class="chapter-heading">
+        A loop, <span class="accent">not a guess.</span>
+      </h2>
     </div>
-    <div class="rv d4" style="margin-top:1.3rem;font-family:var(--mono);font-size:.82rem;color:#73849a">aura 'your task here'</div>
-    <div class="rv d5" style="margin-top:2.6rem">
-      <a class="btn" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">View on GitHub →</a>
+
+    <div class="glass-card-grid">
+      <div class="glass-card magnetic-target" data-cursor="Step 1">
+        <div class="card-num">I. Read</div>
+        <h3 class="card-title">Inspect Before Touching</h3>
+        <p class="card-text">Scans AST outlines, semantic embeddings, and project dependencies before modifying a single line.</p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Step 2">
+        <div class="card-num">II. Plan</div>
+        <h3 class="card-title">Targeted Strategy</h3>
+        <p class="card-text">Formulates minimal surgical edits. A surgeon never amputates to fix a paper cut.</p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Step 3">
+        <div class="card-num">III. Execute</div>
+        <h3 class="card-title">Precise Code Gen</h3>
+        <p class="card-text">Writes clean, idiomatic TypeScript/Python/Rust and applies localized diffs.</p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Step 4">
+        <div class="card-num">IV. Verify</div>
+        <h3 class="card-title">Prove the Output</h3>
+        <p class="card-text">Runs tests and type-checkers. If verification fails, diagnoses the failure and loops back cleanly.</p>
+      </div>
+    </div>
+
+    <!-- Live Terminal Simulation -->
+    <div class="interactive-terminal magnetic-target" data-cursor="Terminal" id="liveTerminal">
+      <div class="terminal-topbar">
+        <div class="terminal-lights">
+          <span class="t-dot r"></span>
+          <span class="t-dot y"></span>
+          <span class="t-dot g"></span>
+        </div>
+        <span>aura-code v0.12.1 · bash session</span>
+        <span>DA NANG HQ</span>
+      </div>
+      
+      <div class="t-line prompt">
+        <span>$</span>
+        <span>aura "resolve the race condition in auth token refresh"</span>
+      </div>
+      <div class="t-line read" id="termLine1" style="opacity:0;">→ Read: 14 files indexed · AST call-graph extracted for src/auth/handler.ts</div>
+      <div class="t-line plan" id="termLine2" style="opacity:0;">→ Plan: Add atomic mutex lock to token refresh queue (lines 42–68)</div>
+      <div class="t-line exec" id="termLine3" style="opacity:0;">→ Execute: surgical edit applied to src/auth/handler.ts (0 orphans introduced)</div>
+      <div class="t-line verify" id="termLine4" style="opacity:0;">✓ Verify: 1,121 tests passing · 0 regressions · 0 type errors</div>
+      <div class="t-line" id="termLine5" style="opacity:0;color:var(--cyan);">[Verified at 2026-08-19 23:05:00 UTC · Session consolidated into long-term memory] <span class="t-caret"></span></div>
     </div>
   </div>
 </section>
 
+<!-- ————— Chapter 04: Rules She Never Breaks ————— -->
+<section class="chapter-section" id="principles">
+  <div class="chapter-container">
+    <div class="chapter-header">
+      <div class="chapter-tag">
+        <span class="chapter-num">(05)</span>
+        <span>Standing Directives</span>
+        <span class="chapter-line"></span>
+        <span>Principles</span>
+      </div>
+      <h2 class="chapter-heading">
+        Rules she <span class="accent">never breaks.</span>
+      </h2>
+    </div>
+
+    <div class="glass-card-grid">
+      <div class="glass-card magnetic-target" data-cursor="Rule 01">
+        <div class="card-num">01</div>
+        <h3 class="card-title">I don't try. I verify.</h3>
+        <p class="card-text">I run the test. I check the diff. I read the output. That is not confidence — it is evidence.</p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Rule 02">
+        <div class="card-num">02</div>
+        <h3 class="card-title">Read before write. Always.</h3>
+        <p class="card-text">I never edit a file I have not read, and never assume structure I have not seen.</p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Rule 03">
+        <div class="card-num">03</div>
+        <h3 class="card-title">If I broke it, I fix it first.</h3>
+        <p class="card-text">A regression I introduced is an immediate priority, not a todo. The codebase is never left worse.</p>
+      </div>
+
+      <div class="glass-card magnetic-target" data-cursor="Rule 04">
+        <div class="card-num">04</div>
+        <h3 class="card-title">Cite specifics. Never generalities.</h3>
+        <p class="card-text">File paths, line numbers, error traces. “Line 47 throws when steps is empty” is actionable.</p>
+      </div>
+    </div>
+
+    <!-- Verified Stats -->
+    <div class="stats-showcase">
+      <div class="stat-item magnetic-target" data-cursor="Tests">
+        <div class="stat-val" data-target="1121">1,121+</div>
+        <div class="stat-label">Tests Passing</div>
+      </div>
+      <div class="stat-item magnetic-target" data-cursor="Failures">
+        <div class="stat-val" data-target="0">0</div>
+        <div class="stat-label">Regressions</div>
+      </div>
+      <div class="stat-item magnetic-target" data-cursor="Providers">
+        <div class="stat-val" data-target="16">16+</div>
+        <div class="stat-label">Model Providers</div>
+      </div>
+      <div class="stat-item magnetic-target" data-cursor="License">
+        <div class="stat-val">MIT</div>
+        <div class="stat-label">Open Source</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ————— Chapter 05: The Model Ecosystem ————— -->
+<section class="chapter-section" id="capabilities">
+  <div class="chapter-container">
+    <div class="chapter-header">
+      <div class="chapter-tag">
+        <span class="chapter-num">(06)</span>
+        <span>Agnostic Architecture</span>
+        <span class="chapter-line"></span>
+        <span>Providers</span>
+      </div>
+      <h2 class="chapter-heading">
+        Bring any model.<br><span class="accent">She stays the same.</span>
+      </h2>
+    </div>
+
+    <div class="marquee-box">
+      <div class="marquee-track">
+        <div class="marquee-item">Claude 3.7 Sonnet</div>
+        <div class="marquee-item">GPT-4o</div>
+        <div class="marquee-item">Gemini 2.5 Pro</div>
+        <div class="marquee-item">DeepSeek-R1</div>
+        <div class="marquee-item">Ollama Local Models</div>
+        <div class="marquee-item">OpenRouter</div>
+        <div class="marquee-item">MiMo Reasoning</div>
+        <div class="marquee-item">Qwen 2.5 Coder</div>
+        <div class="marquee-item">Claude 3.7 Sonnet</div>
+        <div class="marquee-item">GPT-4o</div>
+        <div class="marquee-item">Gemini 2.5 Pro</div>
+        <div class="marquee-item">DeepSeek-R1</div>
+        <div class="marquee-item">Ollama Local Models</div>
+        <div class="marquee-item">OpenRouter</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:4rem;">
+      <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener" class="magnetic-btn btn-primary magnetic-target" data-cursor="Start Now" style="padding:1.1rem 2.4rem;font-size:0.85rem;">
+        <span>Get Started on GitHub →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
 <footer>
-  <p>Aura Code · Architecture by Dušan Milosavljević, built with Claude Code and friends · <span class="q">“I don’t try. I verify.”</span></p>
-  <p style="margin-top:.7rem">Built by <a href="https://lean-progress-iq.vercel.app" target="_blank" rel="noopener">Lean Progress IQ</a> · <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">Source</a> · <a href="aura-windows-manual.html">Windows Manual</a> · MIT licensed</p>
+  <p>Aura Code · Architecture &amp; Direction by Dušan Milosavljević · Built in Da Nang, Vietnam</p>
+  <p style="margin-top:0.8rem;color:var(--cream-dim);">
+    “I don’t try. I verify.” · <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">Source Code</a> · <a href="aura-windows-manual.html">Windows Setup</a> · MIT Licensed
+  </p>
 </footer>
 
+<!-- ————— Parallax & Audio Interaction Engine ————— -->
 <script>
-(function(){
+(function() {
   'use strict';
-  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* nav background on scroll */
-  var nav = document.getElementById('topnav');
-  function onScroll(){ nav.classList.toggle('scrolled', window.scrollY > 40); }
-  window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+  /* ————— Web Audio Sound Synthesizer Engine ————— */
+  let audioCtx = null;
+  let soundEnabled = true;
 
-  /* reveal on scroll */
-  var io = new IntersectionObserver(function(entries){
-    entries.forEach(function(e){
-      if (e.isIntersecting){ e.target.classList.add('revealed'); io.unobserve(e.target); }
-    });
-  }, {threshold:.18, rootMargin:'0px 0px -6% 0px'});
-  document.querySelectorAll('.rv:not(.revealed)').forEach(function(el){
-    if (reduced) el.classList.add('revealed'); else io.observe(el);
-  });
-  document.querySelectorAll('section').forEach(function(s){
-    if (!reduced){
-      var so = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('revealed'); so.unobserve(e.target);} }); },{threshold:.12});
-      so.observe(s);
-    } else s.classList.add('revealed');
-  });
-
-  /* ————— HyperFrames Hero Engine —————
-     Six acts, each one a frame of the same story. Words land one at a time,
-     the stage recolours per act, and the strip below is scrubbable. */
-  var hero = document.getElementById('start');
-  var acts = Array.prototype.slice.call(document.querySelectorAll('.story-act'));
-  var actBtns = Array.prototype.slice.call(document.querySelectorAll('.act-btn'));
-  var segTrack = document.getElementById('segTrack');
-  var hfTimer = document.getElementById('hfTimer');
-  var hfFrame = document.getElementById('hfFrame');
-  var ACT_MS = 6400, ROMAN = ['I','II','III','IV','V','VI'];
-  var currentAct = 0, paused = false, frameNo = 0;
-
-  /* wrap every word in its own span so it can arrive on its own beat.
-     Element children (highlight spans) are wrapped whole; <br> passes through. */
-  document.querySelectorAll('[data-kin]').forEach(function(el){
-    var frag = document.createDocumentFragment(), i = 0;
-    Array.prototype.slice.call(el.childNodes).forEach(function(node){
-      if (node.nodeType === 3){
-        node.textContent.split(/(\s+)/).forEach(function(tok){
-          if (!tok) return;
-          if (!tok.trim()){ frag.appendChild(document.createTextNode(tok)); return; }
-          var s = document.createElement('span');
-          s.textContent = tok; s.style.setProperty('--i', i++);
-          frag.appendChild(s);
-        });
-      } else if (node.nodeName === 'BR'){
-        frag.appendChild(node);
-      } else {
-        var w = document.createElement('span');
-        w.style.setProperty('--i', i++); w.appendChild(node);
-        frag.appendChild(w);
-      }
-    });
-    el.innerHTML = ''; el.appendChild(frag);
-  });
-
-  /* one progress segment per act — click to jump */
-  var segFills = acts.map(function(_, i){
-    var seg = document.createElement('div'); seg.className = 'seg';
-    var fill = document.createElement('b'); seg.appendChild(fill);
-    seg.addEventListener('click', function(){ setAct(i); });
-    segTrack.appendChild(seg);
-    return fill;
-  });
-
-  function setAct(index){
-    currentAct = (index + acts.length) % acts.length;
-    actStart = performance.now();
-    acts.forEach(function(a, i){ a.classList.toggle('active', i === currentAct); });
-    actBtns.forEach(function(b, i){ b.classList.toggle('active', i === currentAct); });
-    segFills.forEach(function(f, i){ f.style.width = i < currentAct ? '100%' : '0%'; });
-    hero.setAttribute('data-act', currentAct);
-  }
-  window.setAct = setAct;
-
-  actBtns.forEach(function(b, i){ b.addEventListener('click', function(){ setAct(i); }); });
-
-  /* hovering the story holds the frame — nobody likes reading against a clock */
-  var storyBox = document.querySelector('.hero-story-container');
-  storyBox.addEventListener('mouseenter', function(){ paused = true; });
-  storyBox.addEventListener('mouseleave', function(){ paused = false; });
-
-  addEventListener('keydown', function(e){
-    if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
-    if (e.key === 'ArrowRight'){ setAct(currentAct + 1); }
-    else if (e.key === 'ArrowLeft'){ setAct(currentAct - 1); }
-    else if (e.code === 'Space' && window.scrollY < innerHeight * .8){ e.preventDefault(); paused = !paused; }
-  });
-
-  var actStart = performance.now(), last = actStart;
-  if (!reduced){
-    hero.setAttribute('data-act', '0');
-    requestAnimationFrame(function tick(now){
-      requestAnimationFrame(tick);
-      var d = now - last; last = now;
-      if (document.hidden){ actStart += d; return; }
-      frameNo++;
-      if (hfFrame && frameNo % 3 === 0){
-        hfFrame.textContent = 'FRAME ' + ('000' + (frameNo % 10000)).slice(-4);
-      }
-      if (paused){ actStart += d; }
-      var elapsed = now - actStart;
-      if (elapsed >= ACT_MS){ setAct(currentAct + 1); return; }
-      segFills[currentAct].style.width = (elapsed / ACT_MS * 100) + '%';
-      if (hfTimer){
-        hfTimer.innerHTML = '<b>ACT ' + ROMAN[currentAct] + '</b> · ' +
-          (paused ? 'held' : (elapsed / 1000).toFixed(1) + 's');
-      }
-    });
-  }
-
-  /* crystal glows on the painting — image-space coords mapped through
-     object-fit:cover (object-position: center 20%) so they stay anchored
-     to the diamonds at any container size. */
-  var IW = 945, IH = 434;
-  var WHITES = [
-    [.160,.190,70],[.340,.140,50],[.070,.280,60],[.300,.350,50],
-    [.150,.480,50],[.250,.650,60],[.210,.780,50]
-  ];
-  // Ruby crystal at the big forehead diamond
-  var RUBY = [.280,.380,120];
-  var drift = document.getElementById('drift');
-  var crystalHost = document.getElementById('crystals');
-  var rubyEl = null, crystalEls = [];
-  WHITES.forEach(function(c,i){
-    var d = document.createElement('div');
-    d.className = 'crystal w';
-    d.style.animationDelay = (i * .42 % 2.6).toFixed(2) + 's';
-    crystalHost.appendChild(d); crystalEls.push({el:d, c:c});
-  });
-  rubyEl = document.createElement('div');
-  rubyEl.className = 'crystal ruby';
-  crystalHost.appendChild(rubyEl); crystalEls.push({el:rubyEl, c:RUBY});
-  function layoutCrystals(){
-    var cw = drift.clientWidth, ch = drift.clientHeight;
-    if (!cw || !ch) return;
-    var s = Math.max(cw/IW, ch/IH), w = IW*s, h = IH*s;
-    var ox = (cw - w) * .30, oy = (ch - h) * .5;   /* object-position: 30% center */
-    crystalEls.forEach(function(o){
-      o.el.style.left = (ox + o.c[0]*w) + 'px';
-      o.el.style.top  = (oy + o.c[1]*h) + 'px';
-      o.el.style.width = o.el.style.height = (o.c[2]*s) + 'px';
-    });
-  }
-  layoutCrystals();
-  addEventListener('resize', layoutCrystals);
-  if (document.readyState !== 'complete') addEventListener('load', layoutCrystals);
-
-  /* terminal typing */
-  var term = document.getElementById('terminal');
-  var typed = false;
-  function typeLines(){
-    if (typed) return; typed = true;
-    var lines = term.querySelectorAll('[data-type]');
-    var li = 0;
-    function nextLine(){
-      if (li >= lines.length) return;
-      var el = lines[li++], text = el.getAttribute('data-type'), cls = el.getAttribute('data-cls');
-      el.className = 'line ' + (cls||'');
-      if (reduced){ el.textContent = text; nextLine(); return; }
-      var i = 0, caret = document.createElement('span'); caret.className = 'caret';
-      el.appendChild(caret);
-      var iv = setInterval(function(){
-        el.insertBefore(document.createTextNode(text.charAt(i++)), caret);
-        if (i >= text.length){ clearInterval(iv); caret.remove(); setTimeout(nextLine, 260); }
-      }, 16);
+  function initAudio() {
+    if (!audioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) audioCtx = new AudioContext();
     }
-    setTimeout(nextLine, 350);
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
   }
-  new IntersectionObserver(function(es,obs){ es.forEach(function(e){ if(e.isIntersecting){ typeLines(); obs.disconnect(); } }); },{threshold:.4}).observe(term);
 
-  /* stat count-up */
-  document.querySelectorAll('[data-count]').forEach(function(el){
-    new IntersectionObserver(function(es,obs){
-      es.forEach(function(e){
-        if (!e.isIntersecting) return; obs.disconnect();
-        var target = +el.getAttribute('data-count'), suffix = el.getAttribute('data-suffix')||'';
-        if (reduced || target === 0){ el.textContent = target.toLocaleString('en-US') + suffix; return; }
-        var t0 = null;
-        function tick(t){
-          if (!t0) t0 = t;
-          var p = Math.min((t - t0)/1400, 1), ease = 1 - Math.pow(1-p, 3);
-          el.textContent = Math.round(target*ease).toLocaleString('en-US') + (p===1 ? suffix : '');
-          if (p < 1) requestAnimationFrame(tick);
-        }
-        requestAnimationFrame(tick);
+  function playFlickSound() {
+    if (!soundEnabled || !audioCtx) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    } catch(e) {}
+  }
+
+  function playWhooshSound() {
+    if (!soundEnabled || !audioCtx) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.18);
+    } catch(e) {}
+  }
+
+  const soundToggleBtn = document.getElementById('soundToggle');
+  const soundIcon = document.getElementById('soundIcon');
+  const soundLabel = document.getElementById('soundLabel');
+
+  soundToggleBtn.addEventListener('click', function() {
+    initAudio();
+    soundEnabled = !soundEnabled;
+    soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+    soundLabel.textContent = soundEnabled ? 'Audio: On' : 'Audio: Muted';
+    if (soundEnabled) playFlickSound();
+  });
+
+  window.addEventListener('click', function() { initAudio(); }, { once: true });
+
+  /* ————— Custom Magnetic Cursor & Floating Bubble ————— */
+  const customCursor = document.getElementById('customCursor');
+  const cursorDot = document.getElementById('cursorDot');
+  const cursorBubble = document.getElementById('cursorBubble');
+  const cursorText = document.getElementById('cursorText');
+
+  let mouseX = window.innerWidth / 2;
+  let mouseY = window.innerHeight / 2;
+  let curX = mouseX;
+  let curY = mouseY;
+
+  window.addEventListener('mousemove', function(e) {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  }, { passive: true });
+
+  // Magnetic elements attraction
+  const magneticElements = document.querySelectorAll('.magnetic-target');
+
+  magneticElements.forEach(function(el) {
+    el.addEventListener('mouseenter', function() {
+      const label = el.getAttribute('data-cursor') || 'Click';
+      cursorText.textContent = label;
+      cursorBubble.classList.add('active');
+      cursorDot.style.transform = 'translate(-50%, -50%) scale(0)';
+      playFlickSound();
+    });
+
+    el.addEventListener('mouseleave', function() {
+      cursorBubble.classList.remove('active');
+      cursorDot.style.transform = 'translate(-50%, -50%) scale(1)';
+      el.style.transform = 'translate(0px, 0px)';
+    });
+
+    el.addEventListener('mousemove', function(e) {
+      if (reduced) return;
+      const rect = el.getBoundingClientRect();
+      const relX = e.clientX - (rect.left + rect.width / 2);
+      const relY = e.clientY - (rect.top + rect.height / 2);
+      el.style.transform = `translate(${relX * 0.2}px, ${relY * 0.2}px)`;
+    });
+  });
+
+  /* ————— Multi-layer Parallax Animation Loop ————— */
+  const parallaxLayers = document.querySelectorAll('.p-layer');
+  const nav = document.getElementById('topnav');
+
+  function renderLoop() {
+    // Smooth cursor interpolation
+    curX += (mouseX - curX) * 0.15;
+    curY += (mouseY - curY) * 0.15;
+    customCursor.style.left = curX + 'px';
+    customCursor.style.top = curY + 'px';
+
+    // Parallax layers transform based on scroll and mouse position
+    if (!reduced) {
+      const scrollY = window.scrollY || window.pageYOffset;
+      const normMouseX = (mouseX / window.innerWidth - 0.5) * 40;
+      const normMouseY = (mouseY / window.innerHeight - 0.5) * 40;
+
+      parallaxLayers.forEach(function(layer) {
+        const speed = parseFloat(layer.getAttribute('data-speed')) || -0.5;
+        const translateY = scrollY * speed;
+        const translateX = normMouseX * speed * 0.6;
+        layer.style.transform = `translate3d(${translateX}px, ${translateY}px, 0px)`;
       });
-    },{threshold:0,rootMargin:'0px 0px 0px 0px'}).observe(el);
-  });
-
-  /* orb particles — slow blue motes rising; excite makes them sparkle after a click */
-  var excite = 0;
-  var canvas = document.getElementById('embers');
-  if (canvas && !reduced){
-    var ctx = canvas.getContext('2d'), motes = [], W, H;
-    function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
-    resize(); addEventListener('resize', resize);
-    var N = Math.min(46, Math.floor(innerWidth/28));
-    for (var i=0;i<N;i++) motes.push(spawn(true));
-    function spawn(anywhere){
-      return { x: Math.random()*W, y: anywhere ? Math.random()*H : H + 12,
-        r: .7 + Math.random()*1.9, vy: .12 + Math.random()*.4, vx: (Math.random()-.5)*.14,
-        ph: Math.random()*Math.PI*2, sp: .004 + Math.random()*.01,
-        hue: 188 + Math.random()*22 };
     }
-    var visible = true;
-    document.addEventListener('visibilitychange', function(){ visible = !document.hidden; });
-    (function frame(){
-      requestAnimationFrame(frame);
-      if (!visible) return;
-      excite *= .985;
-      ctx.clearRect(0,0,W,H);
-      for (var i=0;i<motes.length;i++){
-        var m = motes[i];
-        var speed = 1 + excite*3;
-        m.y -= m.vy*speed; m.x += (m.vx + Math.sin(m.ph)*.16)*speed; m.ph += m.sp*8*(1+excite*4);
-        if (m.y < -14){ motes[i] = spawn(false); continue; }
-        var breath = .35 + .65*(.5 + .5*Math.sin(m.ph));
-        var twinkle = 1 + excite*(0.9 + 0.9*Math.sin(m.ph*7));
-        var a = Math.min(1, 0.5*breath*twinkle);
-        var g = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,m.r*5);
-        g.addColorStop(0,'hsla('+m.hue+',85%,'+(72+Math.min(20,excite*20))+'%,'+a+')');
-        g.addColorStop(1,'hsla('+m.hue+',85%,60%,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(m.x,m.y,m.r*5,0,7); ctx.fill();
+
+    requestAnimationFrame(renderLoop);
+  }
+  requestAnimationFrame(renderLoop);
+
+  window.addEventListener('scroll', function() {
+    if (nav) nav.classList.toggle('scrolled', window.scrollY > 40);
+  }, { passive: true });
+
+  /* ————— Atmospheric Mist / Particle Canvas ————— */
+  const mistCanvas = document.getElementById('mistCanvas');
+  if (mistCanvas && !reduced) {
+    const ctx = mistCanvas.getContext('2d');
+    let width = (mistCanvas.width = window.innerWidth);
+    let height = (mistCanvas.height = window.innerHeight);
+
+    window.addEventListener('resize', function() {
+      width = mistCanvas.width = window.innerWidth;
+      height = mistCanvas.height = window.innerHeight;
+    });
+
+    const particles = [];
+    const count = Math.min(35, Math.floor(window.innerWidth / 35));
+
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        radius: Math.random() * 2.2 + 0.8,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.2 - Math.random() * 0.4,
+        alpha: Math.random() * 0.6 + 0.2,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+
+    function renderMist() {
+      ctx.clearRect(0, 0, width, height);
+      particles.forEach(function(p) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.phase += 0.02;
+        if (p.y < -10) {
+          p.y = height + 10;
+          p.x = Math.random() * width;
+        }
+        const a = p.alpha * (0.6 + 0.4 * Math.sin(p.phase));
+        ctx.fillStyle = `rgba(110, 208, 234, ${a})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      requestAnimationFrame(renderMist);
+    }
+    requestAnimationFrame(renderMist);
+  }
+
+  /* ————— Spark Burst Particles on Click ————— */
+  const sparkCanvas = document.getElementById('sparkCanvas');
+  let sparkCtx = sparkCanvas ? sparkCanvas.getContext('2d') : null;
+  let sparks = [];
+
+  function resizeSparks() {
+    if (sparkCanvas) {
+      sparkCanvas.width = window.innerWidth;
+      sparkCanvas.height = window.innerHeight;
+    }
+  }
+  resizeSparks();
+  window.addEventListener('resize', resizeSparks);
+
+  function createSparkBurst(x, y) {
+    if (!sparkCtx || reduced) return;
+    playWhooshSound();
+    for (let i = 0; i < 24; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 3.5 + 1;
+      sparks.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1,
+        life: 1,
+        color: Math.random() > 0.4 ? '#6ed0ea' : '#e04b32',
+        size: Math.random() * 2.5 + 1
+      });
+    }
+  }
+
+  function renderSparks() {
+    if (!sparkCtx) return;
+    sparkCtx.clearRect(0, 0, sparkCanvas.width, sparkCanvas.height);
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.x += s.vx;
+      s.y += s.vy;
+      s.vy += 0.06;
+      s.life -= 0.025;
+      if (s.life <= 0) {
+        sparks.splice(i, 1);
+        continue;
       }
-    })();
+      sparkCtx.fillStyle = s.color;
+      sparkCtx.globalAlpha = s.life;
+      sparkCtx.beginPath();
+      sparkCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      sparkCtx.fill();
+    }
+    sparkCtx.globalAlpha = 1;
+    requestAnimationFrame(renderSparks);
   }
+  requestAnimationFrame(renderSparks);
 
-  /* click sparkles — a burst of glittering orbs from any glowing button */
-  var sparkCanvas = document.getElementById('sparks');
-  var sparks = [], sparkCtx = null, sparkRunning = false;
-  if (sparkCanvas && !reduced){
-    sparkCtx = sparkCanvas.getContext('2d');
-    function sresize(){ sparkCanvas.width = innerWidth; sparkCanvas.height = innerHeight; }
-    sresize(); addEventListener('resize', sresize);
-  }
-  function sparkFrame(){
-    if (!sparkCtx) return;
-    sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
-    for (var i=sparks.length-1;i>=0;i--){
-      var p = sparks[i];
-      p.x += p.vx; p.y += p.vy; p.vy += .015; p.vx *= .995;
-      p.life -= .011; p.ph += p.tw;
-      if (p.life <= 0){ sparks.splice(i,1); continue; }
-      var tw = .35 + .65*Math.abs(Math.sin(p.ph));
-      var a = Math.min(1, p.life*1.6) * tw;
-      var g = sparkCtx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*4);
-      g.addColorStop(0,'hsla('+p.hue+',90%,82%,'+a+')');
-      g.addColorStop(.4,'hsla('+p.hue+',90%,68%,'+(a*.5)+')');
-      g.addColorStop(1,'hsla('+p.hue+',90%,60%,0)');
-      sparkCtx.fillStyle = g;
-      sparkCtx.beginPath(); sparkCtx.arc(p.x,p.y,p.r*4,0,7); sparkCtx.fill();
-    }
-    if (sparks.length){ requestAnimationFrame(sparkFrame); }
-    else { sparkRunning = false; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); }
-  }
-  function burst(x,y){
-    if (!sparkCtx) return;
-    for (var i=0;i<30;i++){
-      var ang = Math.random()*Math.PI*2, sp = .4 + Math.random()*2.4;
-      sparks.push({ x:x, y:y,
-        vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp - (0.8 + Math.random()*1.6),
-        r: .5 + Math.random()*1.4, life: .7 + Math.random()*.5,
-        ph: Math.random()*Math.PI*2, tw: .25 + Math.random()*.4,
-        hue: Math.random() < .75 ? 188 + Math.random()*22 : 20 + Math.random()*18 });
-    }
-    if (!sparkRunning){ sparkRunning = true; requestAnimationFrame(sparkFrame); }
-  }
-  document.addEventListener('click', function(e){
-    var b = e.target.closest('.btn,.btn-ghost,.install-box');
-    if (!b || reduced) return;
-    burst(e.clientX, e.clientY);
-    excite = 1;
-    if (rubyEl){
-      rubyEl.classList.remove('flare');
-      void rubyEl.offsetWidth;                 /* restart the flare animation */
-      rubyEl.classList.add('flare');
-      setTimeout(function(){ rubyEl.classList.remove('flare'); }, 950);
-    }
+  window.addEventListener('click', function(e) {
+    createSparkBurst(e.clientX, e.clientY);
   });
 
-  /* cursor aura — a soft light that follows the pointer */
-  var aura = document.getElementById('cursorAura');
-  if (aura && !reduced && matchMedia('(pointer:fine)').matches){
-    var tx = innerWidth/2, ty = innerHeight*0.4, cx = tx, cy = ty;
-    addEventListener('mousemove', function(e){ tx = e.clientX; ty = e.clientY; }, {passive:true});
-    (function follow(){
-      requestAnimationFrame(follow);
-      cx += (tx-cx)*.06; cy += (ty-cy)*.06;
-      aura.style.transform = 'translate(' + (cx-innerWidth/2) + 'px,' + (cy-innerHeight*0.4) + 'px)';
-    })();
-  } else if (aura) { aura.style.display = 'none'; }
+  /* ————— Terminal Step Sequencer on Scroll ————— */
+  const terminal = document.getElementById('liveTerminal');
+  let terminalStarted = false;
+  if (terminal) {
+    const observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting && !terminalStarted) {
+          terminalStarted = true;
+          playFlickSound();
+          setTimeout(() => { document.getElementById('termLine1').style.opacity = '1'; }, 400);
+          setTimeout(() => { document.getElementById('termLine2').style.opacity = '1'; }, 1100);
+          setTimeout(() => { document.getElementById('termLine3').style.opacity = '1'; }, 1800);
+          setTimeout(() => { document.getElementById('termLine4').style.opacity = '1'; playWhooshSound(); }, 2500);
+          setTimeout(() => { document.getElementById('termLine5').style.opacity = '1'; }, 3200);
+        }
+      });
+    }, { threshold: 0.3 });
+    observer.observe(terminal);
+  }
+
 })();
 
-function copyInstall(el){
-  var text = 'npm install -g aura-code';
-  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch(e){}
-  var label = document.getElementById('copyState');
-  if (label) { label.textContent = 'copied ✓'; setTimeout(function(){ label.textContent = 'click to copy'; }, 1800); }
-  if (el && el.tagName === 'BUTTON') { var old = el.textContent; el.textContent = '✓ copied'; setTimeout(function(){ el.textContent = old; }, 1800); }
+/* ————— Global Install Copy Utility ————— */
+function copyInstallCmd(btn) {
+  const text = 'npm install -g aura-code';
+  try {
+    navigator.clipboard.writeText(text);
+  } catch(e) {}
+  const feedback = document.getElementById('copyFeedback');
+  if (feedback) {
+    feedback.textContent = '[✓ copied]';
+    setTimeout(() => { feedback.textContent = '[copy]'; }, 2000);
+  }
 }
 </script>
 </body>
