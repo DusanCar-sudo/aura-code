@@ -139,6 +139,7 @@ word away.
 | Groq | llama, mixtral |
 | xAI (Grok) | grok-2, grok-2-mini, grok-beta |
 | BytePlus ModelArk | ark-code-latest, dola-seed-2.0-pro/lite/code (`byteplus/`) |
+| FPT Cloud AI | DeepSeek V4, GLM-5.2, Qwen3.8, Gemma 4, GPT-OSS, Embeddings (`fpt/`) |
 | OpenCode Go | MiniMax M3/M2.7, Kimi K3 and more (`go-anthropic/`) |
 | OpenCode Zen | free tier — DeepSeek V4 Flash, Ling 3.0, MiMo V2.5 (`zen/`) |
 | NVIDIA NIM | any NIM-hosted model (`nvidia/`) |
