@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
 [![Providers](https://img.shields.io/badge/providers-17-purple?style=flat-square)](#providers)
 
-**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows guide](docs/WINDOWS.md)
+**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows guide](docs/WINDOWS.md) · [styled version](https://v2-seven-flax.vercel.app/aura-windows-manual)
 
 *Architecture and design by [Dušan Milosavljević](https://github.com/DusanCar-sudo) — Da Nang, Vietnam*
 

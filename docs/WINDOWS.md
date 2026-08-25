@@ -4,9 +4,10 @@ Getting Aura running on Windows 10 or 11, written for someone who has never
 opened a terminal before. If you have Node.js already, skip to
 [Install Aura](#3-install-aura).
 
-There is a styled version of this guide at `site/aura-windows-manual.html` for
-the website. This file is the one that is always current, because it lives with
-the code.
+A styled version is published at
+[v2-seven-flax.vercel.app/aura-windows-manual](https://v2-seven-flax.vercel.app/aura-windows-manual)
+(source: `site/aura-windows-manual.html`). This file is the one that is always
+current, because it lives with the code and is updated in the same commit.
 
 ---
 
