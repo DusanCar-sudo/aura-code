@@ -67,10 +67,40 @@ let sidecar: ScreenSidecar | null = null;
  *  Null until the first screenshot, which is why positional actions demand one. */
 let lastCapture: CaptureGeometry | null = null;
 
-/** Set by the CLI when --computer was passed. Separate from the env var on
- *  purpose; see screen/disclosure.ts for why both are required. */
+/** Set by the CLI when --computer was passed, and by the :compon / :compoff
+ *  toggle. Separate from the env var on purpose; see screen/disclosure.ts for
+ *  why both are required. */
 let flagEnabled = false;
-export function setComputerUseEnabled(on: boolean): void { flagEnabled = on; }
+
+/** Armed the first time computer use is enabled, by whichever path enabled it.
+ *  Arming lives here rather than at the CLI call site so it is not possible to
+ *  turn the tool on without also arranging for its handles to be released —
+ *  the sidecar holds an open /dev/uinput device and a portal session, and
+ *  neither is freed by this process merely ending if the child outlives it. */
+let releaseHooksArmed = false;
+
+export function setComputerUseEnabled(on: boolean): void {
+  flagEnabled = on;
+  if (!on || releaseHooksArmed) return;
+  releaseHooksArmed = true;
+  // Three layers, because each covers a death the others cannot:
+  //   - signals get the graceful close (the child releases uinput and tears
+  //     down the portal session itself, then exits);
+  //   - `exit` gets a synchronous SIGKILL, since nothing async runs there;
+  //   - and the child sets PR_SET_PDEATHSIG at startup (aura_screen.py), which
+  //     is the only one that survives this process being SIGKILLed.
+  process.once('SIGINT', () => { void closeComputer(); });
+  process.once('SIGTERM', () => { void closeComputer(); });
+  process.once('exit', () => { sidecar?.killNow(); sidecar = null; });
+}
+
+/** Whether the flag half of the gate is on. The env half and the machine
+ *  acknowledgement are checked separately — see checkComputerUseGate. */
+export function isComputerUseEnabled(): boolean { return flagEnabled; }
+
+/** Whether a sidecar is actually running right now: the difference between
+ *  "allowed to drive the screen" and "currently holding the input device". */
+export function isComputerSessionLive(): boolean { return sidecar !== null; }
 
 /** Release the child process and its uinput/portal handles. */
 export async function closeComputer(): Promise<void> {

@@ -221,6 +221,19 @@ const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://api.x.ai/v1': 'xai',
   'https://opencode.ai/zen/v1': 'opencode',
   'https://mkp-api.fptcloud.com/v1': 'fpt',
+  'https://dashscope-intl.aliyuncs.com/compatible-mode/v1': 'qwen',
+  'https://dashscope.aliyuncs.com/compatible-mode/v1': 'qwen',
+  'https://api.minimax.io/v1': 'minimax',
+  'https://api.moonshot.ai/v1': 'kimi',
+  'https://api.groq.com/openai/v1': 'groq',
+  'https://integrate.api.nvidia.com/v1': 'nvidia',
+  'https://api.stepfun.com/v1': 'stepfun',
+  'https://api.fireworks.ai/inference/v1': 'fireworks',
+  'https://api.upstage.ai/v1': 'upstage',
+  'https://conductor.arcee.ai/v1': 'arcee',
+  'https://tokenhub.tencentmaas.com/v1': 'tencent',
+  'https://api.gmi-serving.com/v1': 'gmi',
+  'https://api.kilocode.ai/api/openrouter': 'kilocode',
 };
 
 /**
@@ -351,7 +364,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   // Anthropic provider sent /v1/messages-shaped requests to a
   // /chat/completions endpoint.
   if (model.startsWith('go-anthropic/')) {
-    const goModel = model.replace('go-anthropic/', '');
+    const goModel = config.model.replace(/^go-anthropic\//i, '');
     return new OpenAICompatibleProvider({
       ...config,
       model: goModel,
@@ -369,13 +382,13 @@ export function createProvider(config: ProviderConfig): LLMProvider {
       const stripPrefix = def.prefixes.find(
         p => p.endsWith('/') && model.startsWith(p.toLowerCase()),
       );
-      const rawModel = stripPrefix ? model.slice(stripPrefix.length) : model;
+      const rawModel = stripPrefix ? config.model.slice(stripPrefix.length) : config.model;
       const apiKey = config.apiKey
         ?? (def.apiKeyEnv ? getApiKey(def.apiKeyEnv) : undefined)
         ?? (def.apiKey ?? undefined);
       return new OpenAICompatibleProvider({
         ...config,
-        model: rawModel || model,
+        model: rawModel || config.model,
         baseUrl: config.baseUrl ?? def.baseUrl,
         apiKey,
       }, def.name);
@@ -390,7 +403,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   // ── Google ─────────────────────────────────────────────────────────────────
   // Accept both bare gemini-* and the selector's gemini/<id> prefixed form.
   if (model.startsWith('gemini-') || model.startsWith('gemini/')) {
-    return new GoogleProvider({ ...config, model: model.replace(/^gemini\//, '') });
+    return new GoogleProvider({ ...config, model: config.model.replace(/^gemini\//i, '') });
   }
 
   // ── OpenCode Zen ───────────────────────────────────────────────────────────
@@ -400,7 +413,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('zen/') || model.startsWith('opencode/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace(/^(zen|opencode)\//, ''),
+      model: config.model.replace(/^(zen|opencode)\//i, ''),
       baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/v1',
       apiKey: config.apiKey ?? getApiKey('OPENCODE_API_KEY'),
     }, 'OpenCode Zen');
@@ -410,7 +423,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('groq/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('groq/', ''),
+      model: config.model.replace(/^groq\//i, ''),
       baseUrl: config.baseUrl ?? 'https://api.groq.com/openai/v1',
       apiKey: config.apiKey ?? getApiKey('GROQ_API_KEY'),
     }, 'Groq');
@@ -420,7 +433,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('nvidia/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('nvidia/', ''),
+      model: config.model.replace(/^nvidia\//i, ''),
       baseUrl: config.baseUrl ?? 'https://integrate.api.nvidia.com/v1',
       apiKey: config.apiKey ?? getApiKey('NVIDIA_API_KEY'),
     }, 'NVIDIA NIM');
@@ -449,7 +462,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('huggingface/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('huggingface/', ''),
+      model: config.model.replace(/^huggingface\//i, ''),
       baseUrl: config.baseUrl ?? 'https://router.huggingface.co/v1',
       apiKey: config.apiKey ?? getApiKey('HUGGINGFACE_API_KEY', 'HF_TOKEN'),
     }, 'Hugging Face');
@@ -459,9 +472,9 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('kimi/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('kimi/', ''),
+      model: config.model.replace(/^kimi\//i, ''),
       baseUrl: config.baseUrl ?? getEnv('MOONSHOT_BASE_URL') ?? 'https://api.moonshot.ai/v1',
-      apiKey: config.apiKey ?? getApiKey('MOONSHOT_API_KEY'),
+      apiKey: config.apiKey ?? getApiKey('MOONSHOT_API_KEY', 'KIMI_API_KEY'),
     }, 'Kimi');
   }
 
@@ -469,9 +482,9 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('qwen/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('qwen/', ''),
-      baseUrl: config.baseUrl ?? getEnv('DASHSCOPE_BASE_URL') ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-      apiKey: config.apiKey ?? getApiKey('DASHSCOPE_API_KEY'),
+      model: config.model.replace(/^qwen\//i, ''),
+      baseUrl: config.baseUrl ?? getEnv('DASHSCOPE_BASE_URL', 'QWEN_BASE_URL') ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      apiKey: config.apiKey ?? getApiKey('DASHSCOPE_API_KEY', 'QWEN_API_KEY'),
     }, 'Qwen');
   }
 
@@ -493,7 +506,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     if (model.startsWith(prefix)) {
       return new OpenAICompatibleProvider({
         ...config,
-        model: model.slice(prefix.length),
+        model: config.model.slice(prefix.length),
         baseUrl: config.baseUrl ?? getEnv(v.baseUrlEnv) ?? v.baseUrl,
         apiKey: config.apiKey ?? getApiKey(v.keyEnv),
       }, v.name);
@@ -504,7 +517,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('openrouter/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('openrouter/', ''),
+      model: config.model.replace(/^openrouter\//i, ''),
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKey: config.apiKey ?? getApiKey('OPENROUTER_API_KEY'),
     }, 'OpenRouter');
@@ -512,7 +525,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
 
   // ── Xiaomi MiMo ────────────────────────────────────────────────────────────
   if (model.startsWith('mimo-') || model.startsWith('xiaomi/') || model.startsWith('mimo/')) {
-    const mimoModel = model.replace(/^(xiaomi|mimo)\//, '');
+    const mimoModel = config.model.replace(/^(xiaomi|mimo)\//i, '');
     const mimoKey = config.apiKey ?? getApiKey('XIAOMI_API_KEY');
     return new OpenAICompatibleProvider({
       ...config,
@@ -531,7 +544,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   // ZHIPU_BASE_URL overrides either.
   if (model.startsWith('glm-') || model.startsWith('zhipu/') || model.startsWith('zhipu-coding/')) {
     const coding = model.startsWith('zhipu-coding/');
-    const glmModel = model.replace(/^zhipu(-coding)?\//, '');
+    const glmModel = config.model.replace(/^zhipu(-coding)?\//i, '');
     return new OpenAICompatibleProvider({
       ...config,
       model: glmModel,
@@ -546,7 +559,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('grok-') || model.startsWith('xai/')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace('xai/', ''),
+      model: config.model.replace(/^xai\//i, ''),
       baseUrl: 'https://api.x.ai/v1',
       apiKey: config.apiKey ?? getApiKey('XAI_API_KEY'),
     }, 'xAI');
@@ -563,7 +576,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
   if (model.startsWith('deepseek/') || model.startsWith('deepseek-')) {
     return new OpenAICompatibleProvider({
       ...config,
-      model: model.replace(/^deepseek\//, ''),
+      model: config.model.replace(/^deepseek\//i, ''),
       baseUrl: config.baseUrl ?? 'https://api.deepseek.com/v1',
       apiKey: config.apiKey ?? getApiKey('DEEPSEEK_API_KEY'),
     }, 'DeepSeek');
@@ -571,7 +584,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
 
   // ── Ollama (local) ─────────────────────────────────────────────────────────
   if (model.startsWith('ollama/') || model.startsWith('ollama:')) {
-    const ollamaModel = model.replace(/^ollama[/:]/, '');
+    const ollamaModel = config.model.replace(/^ollama[/:]/i, '');
     return new OpenAICompatibleProvider({
       ...config,
       model: ollamaModel,
@@ -582,7 +595,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
 
   // ── LM Studio / local OpenAI-compatible ───────────────────────────────────
   if (model.startsWith('local/') || model.startsWith('lmstudio/')) {
-    const localModel = model.replace(/^(local|lmstudio)\//, '');
+    const localModel = config.model.replace(/^(local|lmstudio)\//i, '');
     return new OpenAICompatibleProvider({
       ...config,
       model: localModel,
@@ -593,7 +606,7 @@ export function createProvider(config: ProviderConfig): LLMProvider {
 
   // ── Local profile (qwen2.5-coder:7b or similar, no API key) ─────────────
   if (model.startsWith('local-profile/')) {
-    const localModel = model.replace('local-profile/', '');
+    const localModel = config.model.replace(/^local-profile\//i, '');
     return new OpenAICompatibleProvider({
       ...config,
       model: localModel,
@@ -674,6 +687,49 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'gemini-1.5-flash',          name: 'Gemini 1.5 Flash',   provider: 'Google', speed: 'Fast · legacy' },
   { id: 'gemini-1.5-flash-8b',       name: 'Gemini 1.5 Flash-8B', provider: 'Google', speed: 'Fastest · tiny' },
 
+  // ── DeepSeek ─────────────────────────────────────────────────────────────
+  { id: 'deepseek/deepseek-chat',     name: 'DeepSeek Chat (V3)', provider: 'DeepSeek', speed: 'Powerful · fast' },
+  { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner (R1)', provider: 'DeepSeek', speed: 'Reasoning · flagship' },
+  { id: 'deepseek-v4-pro',            name: 'DeepSeek V4 Pro',    provider: 'DeepSeek', speed: 'Powerful · 1M context' },
+  { id: 'deepseek-v4-flash',          name: 'DeepSeek V4 Flash',  provider: 'DeepSeek', speed: 'Fast · 1M context' },
+
+  // ── Qwen (DashScope Cloud API) ───────────────────────────────────────────
+  { id: 'qwen/qwen3-coder-plus',           name: 'Qwen3 Coder Plus',   provider: 'Qwen', speed: 'Powerful · code flagship' },
+  { id: 'qwen/qwen3-coder-flash',          name: 'Qwen3 Coder Flash',  provider: 'Qwen', speed: 'Fastest · code' },
+  { id: 'qwen/qwen3-max',                  name: 'Qwen3 Max',          provider: 'Qwen', speed: 'Reasoning · flagship' },
+  { id: 'qwen/qwen3-plus',                 name: 'Qwen3 Plus',         provider: 'Qwen', speed: 'Fast · balanced' },
+  { id: 'qwen/qwen-max',                   name: 'Qwen Max',           provider: 'Qwen', speed: 'Powerful · general' },
+  { id: 'qwen/qwen-plus',                  name: 'Qwen Plus',          provider: 'Qwen', speed: 'Fast · general' },
+  { id: 'qwen/qwen-turbo',                 name: 'Qwen Turbo',         provider: 'Qwen', speed: 'Fastest · cheap' },
+  { id: 'qwen/qwen-long',                  name: 'Qwen Long',          provider: 'Qwen', speed: 'Long context · 1M' },
+  { id: 'qwen/qwen2.5-coder-32b-instruct', name: 'Qwen 2.5 Coder 32B', provider: 'Qwen', speed: 'Powerful · code' },
+  { id: 'qwen/qwen2.5-72b-instruct',       name: 'Qwen 2.5 72B',       provider: 'Qwen', speed: 'Powerful · general' },
+
+  // ── MiniMax ──────────────────────────────────────────────────────────────
+  { id: 'minimax/MiniMax-Text-01',   name: 'MiniMax Text-01',    provider: 'MiniMax', speed: 'Powerful · 4M context' },
+  { id: 'minimax/MiniMax-M2.5',      name: 'MiniMax M2.5',       provider: 'MiniMax', speed: 'Reasoning · flagship' },
+  { id: 'minimax/MiniMax-M2.7',      name: 'MiniMax M2.7',       provider: 'MiniMax', speed: 'Fast · agentic' },
+  { id: 'minimax/MiniMax-M3',        name: 'MiniMax M3',         provider: 'MiniMax', speed: 'Powerful · agentic' },
+  { id: 'minimax/MiniMax-M2',        name: 'MiniMax M2',         provider: 'MiniMax', speed: 'Fast · high speed' },
+  { id: 'minimax/abab6.5s-chat',     name: 'MiniMax Abab 6.5s',  provider: 'MiniMax', speed: 'Fast · chat' },
+
+  // ── Kimi / Moonshot ──────────────────────────────────────────────────────
+  { id: 'kimi/kimi-k2-0905-preview', name: 'Kimi K2',            provider: 'Kimi', speed: 'Powerful · agentic' },
+  { id: 'kimi/moonshot-v1-128k',     name: 'Moonshot V1 128K',   provider: 'Kimi', speed: 'Long context · 128k' },
+  { id: 'kimi/moonshot-v1-32k',      name: 'Moonshot V1 32K',    provider: 'Kimi', speed: 'Balanced · 32k' },
+  { id: 'kimi/moonshot-v1-8k',       name: 'Moonshot V1 8K',     provider: 'Kimi', speed: 'Fast · 8k' },
+
+  // ── Groq ─────────────────────────────────────────────────────────────────
+  { id: 'groq/llama-3.3-70b-versatile',        name: 'Llama 3.3 70B (Groq)',       provider: 'Groq', speed: 'Ultra-fast · 128k' },
+  { id: 'groq/llama-3.1-8b-instant',           name: 'Llama 3.1 8B (Groq)',        provider: 'Groq', speed: 'Instant · 128k' },
+  { id: 'groq/deepseek-r1-distill-llama-70b',  name: 'DeepSeek R1 70B (Groq)',     provider: 'Groq', speed: 'Ultra-fast reasoning' },
+  { id: 'groq/mixtral-8x7b-32768',             name: 'Mixtral 8x7B (Groq)',        provider: 'Groq', speed: 'Fast · MoE' },
+
+  // ── NVIDIA NIM ───────────────────────────────────────────────────────────
+  { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Nemotron 70B (NIM)',     provider: 'NVIDIA', speed: 'Powerful · 131k' },
+  { id: 'nvidia/meta/llama-3.3-70b-instruct',      name: 'Llama 3.3 70B (NIM)',     provider: 'NVIDIA', speed: 'Powerful · 128k' },
+  { id: 'nvidia/deepseek-ai/deepseek-r1',          name: 'DeepSeek R1 (NIM)',       provider: 'NVIDIA', speed: 'Reasoning · flagship' },
+
   // ── Xiaomi MiMo ─────────────────────────────────────────────────────────
   { id: 'mimo-v2.5-pro',   name: 'MiMo V2.5 Pro',   provider: 'Xiaomi MiMo', speed: 'Powerful · 1T params' },
   { id: 'mimo-v2.5',       name: 'MiMo V2.5',       provider: 'Xiaomi MiMo', speed: 'Fast · 310B' },
@@ -690,6 +746,43 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'grok-2-mini',       name: 'Grok 2 mini',       provider: 'xAI', speed: 'Fast · cheap' },
   { id: 'grok-beta',         name: 'Grok Beta',         provider: 'xAI', speed: 'Fast' },
   { id: 'grok-vision-beta',  name: 'Grok Vision Beta',  provider: 'xAI', speed: 'Multimodal' },
+
+  // ── StepFun ──────────────────────────────────────────────────────────────
+  { id: 'stepfun/step-2-16k',   name: 'Step-2 16K',      provider: 'StepFun', speed: 'Powerful · flagship' },
+  { id: 'stepfun/step-1-8k',    name: 'Step-1 8K',       provider: 'StepFun', speed: 'Fast · balanced' },
+  { id: 'stepfun/step-1-flash', name: 'Step-1 Flash',   provider: 'StepFun', speed: 'Fastest · cheap' },
+
+  // ── Fireworks AI ─────────────────────────────────────────────────────────
+  { id: 'fireworks/accounts/fireworks/models/deepseek-r1', name: 'DeepSeek R1 (Fireworks)', provider: 'Fireworks AI', speed: 'Reasoning · fast' },
+  { id: 'fireworks/accounts/fireworks/models/deepseek-v3', name: 'DeepSeek V3 (Fireworks)', provider: 'Fireworks AI', speed: 'Powerful · fast' },
+  { id: 'fireworks/accounts/fireworks/models/llama-v3p3-70b-instruct', name: 'Llama 3.3 70B (Fireworks)', provider: 'Fireworks AI', speed: 'Balanced · 128k' },
+
+  // ── FPT Cloud AI ─────────────────────────────────────────────────────────
+  { id: 'fpt/DeepSeek-R1', name: 'DeepSeek R1 (FPT)', provider: 'FPT Cloud AI', speed: 'Reasoning · marketplace' },
+  { id: 'fpt/DeepSeek-V3', name: 'DeepSeek V3 (FPT)', provider: 'FPT Cloud AI', speed: 'Powerful · marketplace' },
+
+  // ── Upstage ──────────────────────────────────────────────────────────────
+  { id: 'upstage/solar-pro',  name: 'Solar Pro',        provider: 'Upstage', speed: 'Powerful · 64k' },
+  { id: 'upstage/solar-mini', name: 'Solar Mini',       provider: 'Upstage', speed: 'Fast · cheap' },
+
+  // ── Arcee AI ─────────────────────────────────────────────────────────────
+  { id: 'arcee/trinity-large-preview', name: 'Trinity Large Preview', provider: 'Arcee AI', speed: 'Powerful · agentic' },
+  { id: 'arcee/arcee-spark',           name: 'Arcee Spark',           provider: 'Arcee AI', speed: 'Fast · compact' },
+
+  // ── Tencent TokenHub ─────────────────────────────────────────────────────
+  { id: 'tencent/hunyuan-large',    name: 'Hunyuan Large',    provider: 'Tencent TokenHub', speed: 'Powerful · MoE' },
+  { id: 'tencent/hunyuan-standard', name: 'Hunyuan Standard', provider: 'Tencent TokenHub', speed: 'Balanced · 32k' },
+
+  // ── GMI Cloud ────────────────────────────────────────────────────────────
+  { id: 'gmi/deepseek-ai/deepseek-r1', name: 'DeepSeek R1 (GMI)', provider: 'GMI Cloud', speed: 'Reasoning · direct' },
+  { id: 'gmi/deepseek-ai/deepseek-v3', name: 'DeepSeek V3 (GMI)', provider: 'GMI Cloud', speed: 'Powerful · direct' },
+
+  // ── Kilo Code ────────────────────────────────────────────────────────────
+  { id: 'kilocode/auto', name: 'Kilo Auto', provider: 'Kilo Code', speed: 'Auto-routed' },
+
+  // ── Alibaba Cloud Coding Plan ────────────────────────────────────────────
+  { id: 'alibaba/qwen3-coder-plus', name: 'Qwen3 Coder Plus (Alibaba Plan)', provider: 'Alibaba', speed: 'Powerful · Coding Tier' },
+  { id: 'alibaba/qwen-max',          name: 'Qwen Max (Alibaba Plan)',          provider: 'Alibaba', speed: 'Powerful · Coding Tier' },
 
   // ── OpenCode Go (Anthropic-style models — use go-anthropic/ prefix) ──────
   { id: 'go-anthropic/minimax-m3',   name: 'MiniMax M3 (Go)',    provider: 'OpenCode Go', speed: 'Anthropic API · agentic' },
@@ -717,6 +810,11 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'openrouter/deepseek/deepseek-v4-pro',                name: 'DeepSeek V4 Pro (OR)',     provider: 'OpenRouter', speed: 'Powerful · open' },
   { id: 'openrouter/google/gemma-2-27b-it',                   name: 'Gemma 2 27B (OR)',         provider: 'OpenRouter', speed: 'Open · fast' },
 
+  // ── Hugging Face ─────────────────────────────────────────────────────────
+  { id: 'huggingface/meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B (HF)', provider: 'Hugging Face', speed: 'Open · 128k' },
+  { id: 'huggingface/deepseek-ai/DeepSeek-R1',          name: 'DeepSeek R1 (HF)',    provider: 'Hugging Face', speed: 'Reasoning · open' },
+  { id: 'huggingface/Qwen/Qwen2.5-Coder-32B-Instruct',  name: 'Qwen 2.5 Coder 32B (HF)', provider: 'Hugging Face', speed: 'Code · open' },
+
   // ── Ollama (local) ──────────────────────────────────────────────────────
   { id: 'ollama/llama3.2',           name: 'Llama 3.2 (local)',     provider: 'Ollama', speed: 'Local · small' },
   { id: 'ollama/llama3.1',           name: 'Llama 3.1 (local)',     provider: 'Ollama', speed: 'Local · 8B-70B' },
@@ -738,7 +836,12 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'local/mistral-large',               name: 'Mistral Large (local)',      provider: 'Local', speed: 'Local · powerful' },
 ];
 
-const LIVE_PREFERRED_PROVIDERS = new Set(['Anthropic', 'OpenAI', 'Google', 'OpenRouter']);
+const LIVE_PREFERRED_PROVIDERS = new Set([
+  'Anthropic', 'OpenAI', 'Google', 'OpenRouter', 'DeepSeek', 'Qwen', 'MiniMax',
+  'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'Upstage',
+  'Arcee AI', 'Tencent TokenHub', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
+  'Xiaomi MiMo', 'Zhipu',
+]);
 
 /**
  * Get all available models — live-fetched (OpenAI/Google/OpenRouter, when
@@ -818,33 +921,36 @@ export function isModelConfigured(modelId: string): boolean {
     }
   }
 
-  if (model.startsWith('claude-')) return hasApiKey('ANTHROPIC_API_KEY');
-  if (model.startsWith('gemini-')) return hasApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY');
-  if (model.startsWith('openrouter/')) return hasApiKey('OPENROUTER_API_KEY');
-  if (model.startsWith('deepseek/')) return hasApiKey('DEEPSEEK_API_KEY');
-  if (model.startsWith('glm-') || model.startsWith('zhipu/') || model.startsWith('zhipu-coding/')) {
-    return hasApiKey('ZHIPU_API_KEY');
-  }
-  if (model.startsWith('xiaomi/') || model.startsWith('mimo-') || model.startsWith('mimo/')) {
-    return hasApiKey('XIAOMI_API_KEY')
-      || !!(savedCfg?.apiKey && savedCfg.model === modelId);
-  }
-  if (model.startsWith('grok-') || model.includes('grok')) return hasApiKey('XAI_API_KEY');
-  if (model.startsWith('go-anthropic/')) return hasApiKey('OPENCODE_GO_API_KEY');
-  if (model.startsWith('opencode/') || model.startsWith('zen/')) return hasApiKey('OPENCODE_API_KEY');
+  // Saved config exact match
+  if (savedCfg?.apiKey && (savedCfg.model === modelId || savedCfg.model.toLowerCase() === model)) return true;
+
+  // Local models need no key
   if (model.startsWith('ollama/') || model.startsWith('ollama:')) return true;
   if (model.startsWith('local/') || model.startsWith('lmstudio/') || model.startsWith('local-profile/')) return true;
 
+  // Check model-specific API key env var
+  const envVar = apiKeyEnvVarForModel(modelId);
+  if (envVar && hasApiKey(envVar)) return true;
+
+  // Additional aliases / fallbacks
+  if (model.startsWith('gemini-') || model.startsWith('gemini/')) {
+    if (hasApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY')) return true;
+  }
+  if (model.startsWith('qwen/')) {
+    if (hasApiKey('DASHSCOPE_API_KEY', 'QWEN_API_KEY')) return true;
+  }
+  if (model.startsWith('kimi/')) {
+    if (hasApiKey('MOONSHOT_API_KEY', 'KIMI_API_KEY')) return true;
+  }
+  if (model.startsWith('huggingface/')) {
+    if (hasApiKey('HUGGINGFACE_API_KEY', 'HF_TOKEN')) return true;
+  }
+  if (model.startsWith('xiaomi/') || model.startsWith('mimo-') || model.startsWith('mimo/')) {
+    if (hasApiKey('XIAOMI_API_KEY') || (savedCfg?.apiKey && savedCfg.model === modelId)) return true;
+  }
   if (model === 'deepseek-v4-flash' || model.startsWith('deepseek-')) {
-    if (hasApiKey('DEEPSEEK_API_KEY')) return true;
-    if (savedCfg?.apiKey && savedCfg.model === modelId) return true;
+    if (hasApiKey('DEEPSEEK_API_KEY') || (savedCfg?.apiKey && savedCfg.model === modelId)) return true;
   }
-
-  if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')) {
-    return hasApiKey('OPENAI_API_KEY');
-  }
-
-  if (savedCfg?.apiKey && savedCfg.model === modelId) return true;
 
   return false;
 }

@@ -42,4 +42,19 @@ describe('isModelConfigured', () => {
     process.env.TEST_API_KEY = 'k';
     expect(isModelConfigured('test/foo')).toBe(true);
   });
+
+  it('returns true for qwen models when DASHSCOPE_API_KEY or QWEN_API_KEY is set', () => {
+    delete process.env.DASHSCOPE_API_KEY;
+    delete process.env.QWEN_API_KEY;
+    expect(isModelConfigured('qwen/qwen3-coder-plus')).toBe(false);
+    process.env.DASHSCOPE_API_KEY = 'sk-dashscope';
+    expect(isModelConfigured('qwen/qwen3-coder-plus')).toBe(true);
+  });
+
+  it('returns true for minimax models when MINIMAX_API_KEY is set', () => {
+    delete process.env.MINIMAX_API_KEY;
+    expect(isModelConfigured('minimax/MiniMax-Text-01')).toBe(false);
+    process.env.MINIMAX_API_KEY = 'sk-minimax';
+    expect(isModelConfigured('minimax/MiniMax-Text-01')).toBe(true);
+  });
 });

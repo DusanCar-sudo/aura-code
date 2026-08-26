@@ -178,6 +178,18 @@ const OPENAI_COMPAT_MODELS: Record<string, { base: string; envKey: string; prefi
   glm:            { base: 'https://api.z.ai/api/paas/v4',   envKey: 'ZHIPU_API_KEY',    prefix: '' },
   'opencode-zen': { base: 'https://opencode.ai/zen/v1',     envKey: 'OPENCODE_API_KEY', prefix: 'zen/' },
   fireworks:      { base: 'https://api.fireworks.ai/inference/v1', envKey: 'FIREWORKS_API_KEY', prefix: 'fireworks/' },
+  qwen:           { base: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', envKey: 'DASHSCOPE_API_KEY', prefix: 'qwen/' },
+  minimax:        { base: 'https://api.minimax.io/v1',      envKey: 'MINIMAX_API_KEY',   prefix: 'minimax/' },
+  kimi:           { base: 'https://api.moonshot.ai/v1',     envKey: 'MOONSHOT_API_KEY',  prefix: 'kimi/' },
+  groq:           { base: 'https://api.groq.com/openai/v1', envKey: 'GROQ_API_KEY',      prefix: 'groq/' },
+  nvidia:         { base: 'https://integrate.api.nvidia.com/v1', envKey: 'NVIDIA_API_KEY', prefix: 'nvidia/' },
+  stepfun:        { base: 'https://api.stepfun.com/v1',     envKey: 'STEPFUN_API_KEY',   prefix: 'stepfun/' },
+  upstage:        { base: 'https://api.upstage.ai/v1',      envKey: 'UPSTAGE_API_KEY',   prefix: 'upstage/' },
+  arcee:          { base: 'https://conductor.arcee.ai/v1',  envKey: 'ARCEE_API_KEY',     prefix: 'arcee/' },
+  tencent:        { base: 'https://tokenhub.tencentmaas.com/v1', envKey: 'TENCENT_API_KEY', prefix: 'tencent/' },
+  gmi:            { base: 'https://api.gmi-serving.com/v1', envKey: 'GMI_API_KEY',       prefix: 'gmi/' },
+  kilocode:       { base: 'https://api.kilocode.ai/api/openrouter', envKey: 'KILOCODE_API_KEY', prefix: 'kilocode/' },
+  alibaba:        { base: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', envKey: 'ALIBABA_API_KEY', prefix: 'alibaba/' },
 };
 
 async function fetchOpenAICompatModels(cfg: { base: string; envKey: string; prefix: string; exclude?: RegExp }): Promise<LiveModel[]> {
@@ -271,30 +283,6 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
         }));
       }
 
-      case 'groq': {
-        const key = getApiKey('GROQ_API_KEY');
-        if (!key) return [];
-        const r = await fetch('https://api.groq.com/openai/v1/models', {
-          headers: { Authorization: `Bearer ${key}` },
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
-        if (!r.ok) return [];
-        const d = await r.json() as { data?: { id: string }[] };
-        return (d.data ?? []).map(m => ({ id: `groq/${m.id}`, name: m.id }));
-      }
-
-      case 'nvidia': {
-        const key = getApiKey('NVIDIA_API_KEY');
-        if (!key) return [];
-        const r = await fetch('https://integrate.api.nvidia.com/v1/models', {
-          headers: { Authorization: `Bearer ${key}` },
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
-        if (!r.ok) return [];
-        const d = await r.json() as { data?: { id: string }[] };
-        return (d.data ?? []).map(m => ({ id: `nvidia/${m.id}`, name: m.id }));
-      }
-
       // FPT Cloud's marketplace catalogue changes without notice, so the ids
       // are always fetched rather than pinned. FPT_BASE_URL mirrors the
       // per-account endpoint honoured in factory.ts.
@@ -328,7 +316,7 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
       }
 
       case 'huggingface': {
-        const key = getApiKey('HUGGINGFACE_API_KEY');
+        const key = getApiKey('HUGGINGFACE_API_KEY', 'HF_TOKEN');
         if (!key) return [];
         const r = await fetch('https://huggingface.co/api/inference-endpoints', {
           headers: { Authorization: `Bearer ${key}` },
@@ -361,6 +349,9 @@ export interface ProviderEntry {
 export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'deepseek',     name: 'DeepSeek',                  desc: 'V3, R1, coder — direct API',                    envKey: 'DEEPSEEK_API_KEY',    liveFetch: true },
   { id: 'openrouter',   name: 'OpenRouter',                desc: 'Pay-per-use aggregator, free models available',  envKey: 'OPENROUTER_API_KEY',  liveFetch: true },
+  { id: 'qwen',         name: 'Qwen Cloud / DashScope',    desc: 'Qwen + multi-provider',                         envKey: 'DASHSCOPE_API_KEY',   liveFetch: true },
+  { id: 'minimax',      name: 'MiniMax',                   desc: 'Global, OAuth Coding Plan & China',             envKey: 'MINIMAX_API_KEY',     liveFetch: true },
+  { id: 'kimi',         name: 'Kimi / Moonshot',           desc: 'Coding Plan, global & China endpoints',         envKey: 'MOONSHOT_API_KEY',    liveFetch: true },
   { id: 'ollama',       name: 'Ollama (local)',             desc: 'Local models on your GPU — free',               liveFetch: true },
   { id: 'gemini',       name: 'Google AI Studio',          desc: 'Native Gemini API',                             envKey: 'GOOGLE_API_KEY',      liveFetch: true },
   { id: 'glm',          name: 'Z.AI / GLM',                desc: 'Zhipu direct API',                              envKey: 'ZHIPU_API_KEY',       liveFetch: true },
@@ -375,19 +366,16 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'lmstudio',     name: 'LM Studio',                 desc: 'Local desktop app with built-in model server',  liveFetch: true },
   { id: 'huggingface',  name: 'Hugging Face',              desc: 'Inference Providers',                           envKey: 'HUGGINGFACE_API_KEY', liveFetch: true },
   { id: 'vertex',       name: 'Google Vertex AI',          desc: 'Gemini via GCP; OAuth2 or ADC',                 envKey: 'GOOGLE_API_KEY' },
-  { id: 'kimi',         name: 'Kimi / Moonshot',           desc: 'Coding Plan, global & China endpoints',         envKey: 'MOONSHOT_API_KEY' },
-  { id: 'minimax',      name: 'MiniMax',                   desc: 'Global, OAuth Coding Plan & China',             envKey: 'MINIMAX_API_KEY' },
-  { id: 'qwen',         name: 'Qwen Cloud / DashScope',    desc: 'Qwen + multi-provider',                         envKey: 'DASHSCOPE_API_KEY' },
-  { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY' },
-  { id: 'tencent',      name: 'Tencent TokenHub',          desc: 'Hy3 Preview via tokenhub.tencentmaas.com',      envKey: 'TENCENT_API_KEY' },
+  { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY',     liveFetch: true },
+  { id: 'tencent',      name: 'Tencent TokenHub',          desc: 'Hy3 Preview via tokenhub.tencentmaas.com',      envKey: 'TENCENT_API_KEY',     liveFetch: true },
   { id: 'fireworks',    name: 'Fireworks AI',              desc: 'OpenAI-compatible direct model API',            envKey: 'FIREWORKS_API_KEY',   liveFetch: true },
-  { id: 'arcee',        name: 'Arcee AI',                  desc: 'Trinity models, direct API',                    envKey: 'ARCEE_API_KEY' },
-  { id: 'gmi',          name: 'GMI Cloud',                 desc: 'Multi-model direct API',                        envKey: 'GMI_API_KEY' },
-  { id: 'kilocode',     name: 'Kilo Code',                 desc: 'Kilo Gateway API',                              envKey: 'KILOCODE_API_KEY' },
+  { id: 'arcee',        name: 'Arcee AI',                  desc: 'Trinity models, direct API',                    envKey: 'ARCEE_API_KEY',       liveFetch: true },
+  { id: 'gmi',          name: 'GMI Cloud',                 desc: 'Multi-model direct API',                        envKey: 'GMI_API_KEY',         liveFetch: true },
+  { id: 'kilocode',     name: 'Kilo Code',                 desc: 'Kilo Gateway API',                              envKey: 'KILOCODE_API_KEY',    liveFetch: true },
   { id: 'bedrock',      name: 'AWS Bedrock',               desc: 'Claude, Nova, Llama, DeepSeek; IAM or API key', envKey: 'AWS_ACCESS_KEY_ID' },
   { id: 'azure',        name: 'Azure Foundry',             desc: 'OpenAI-style or Anthropic-style endpoint',      envKey: 'AZURE_API_KEY' },
   { id: 'github',       name: 'GitHub Copilot',            desc: 'GitHub token API or copilot --acp process',     envKey: 'GITHUB_TOKEN' },
-  { id: 'upstage',      name: 'Upstage',                   desc: 'Solar API',                                     envKey: 'UPSTAGE_API_KEY' },
-  { id: 'alibaba',      name: 'Alibaba Cloud Coding Plan', desc: 'Dedicated coding tier',                         envKey: 'ALIBABA_API_KEY' },
+  { id: 'upstage',      name: 'Upstage',                   desc: 'Solar API',                                     envKey: 'UPSTAGE_API_KEY',     liveFetch: true },
+  { id: 'alibaba',      name: 'Alibaba Cloud Coding Plan', desc: 'Dedicated coding tier',                         envKey: 'ALIBABA_API_KEY',     liveFetch: true },
   { id: 'custom',       name: 'Custom endpoint',           desc: 'Enter URL manually' },
 ];

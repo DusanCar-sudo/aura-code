@@ -111,6 +111,9 @@ describe('the disclosure text', () => {
   it('says how to stop and how to turn it off', () => {
     expect(COMPUTER_USE_DISCLOSURE).toMatch(/:stop|Ctrl\+C/);
     expect(COMPUTER_USE_DISCLOSURE).toContain(COMPUTER_USE_ENV);
+    // The in-session switch is the one the reader can act on immediately;
+    // naming only the startup env var used to mean the fix was "restart".
+    expect(COMPUTER_USE_DISCLOSURE).toContain(':compoff');
   });
 
   it('does not promise retention behaviour Aura cannot control', () => {

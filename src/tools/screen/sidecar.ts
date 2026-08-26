@@ -31,6 +31,16 @@ export interface SidecarReply {
  *  a slow first frame, so the default is generous. Individual calls override. */
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/** `init` gets longer than the default, and the difference is the point.
+ *
+ *  aura_screen.py gives each portal call its own 120s budget and, when that
+ *  expires, raises "timed out waiting for the portal dialog" — which names the
+ *  actual problem (a consent dialog nobody clicked, possibly behind another
+ *  window). At exactly 120s here, this side's generic "sidecar did not reply"
+ *  raced that message and could win, replacing a diagnosis with a shrug. The
+ *  margin guarantees the sidecar's own explanation is the one that surfaces. */
+const INIT_TIMEOUT_MS = 150_000;
+
 /** Where aura_screen.py lives. Resolved relative to this module so it works
  *  from dist/ and from ts-node, and checked explicitly: the script is copied
  *  into dist/ by a build step, and a missing file must say so rather than
@@ -90,7 +100,7 @@ export class ScreenSidecar {
     proc.on('exit', (code, signal) =>
       this.die(`sidecar exited (${signal ?? `code ${code}`})${this.stderr ? `: ${this.stderr.trim().slice(-500)}` : ''}`));
 
-    const r = await this.send({ cmd: 'init' });
+    const r = await this.send({ cmd: 'init' }, INIT_TIMEOUT_MS);
     if (!r.ok) throw new Error(`screen init failed: ${r.error ?? 'unknown error'}`);
     this.width = Number(r.width) || 0;
     this.height = Number(r.height) || 0;
@@ -129,6 +139,21 @@ export class ScreenSidecar {
       // The child holds /dev/uinput and a portal session; if SIGTERM is ignored
       // those leak for the life of the login session.
       setTimeout(() => { if (proc.exitCode === null) proc.kill('SIGKILL'); }, 2_000).unref?.();
+    }
+  }
+
+  /** Synchronous last resort, for Node's `exit` event.
+   *
+   *  Nothing async runs during `exit` — an awaited graceful `close`, a
+   *  setTimeout escalation, even a promise continuation are all dropped on the
+   *  floor. So the exit path gets its own method that only does things which
+   *  take effect immediately. SIGKILL rather than SIGTERM because there is no
+   *  later tick in which to check whether SIGTERM was honoured. */
+  killNow(): void {
+    const proc = this.proc;
+    this.proc = null;
+    if (proc && proc.exitCode === null) {
+      try { proc.kill('SIGKILL'); } catch { /* already gone */ }
     }
   }
 

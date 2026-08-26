@@ -32,7 +32,7 @@ import { bootstrapAuraEnv } from '../util/load-env.js';
 bootstrapAuraEnv(process.cwd());
 
 import { KNOWN_MODELS, getAllModels, registerCustomProviders, apiKeyEnvVarForModel, modelProviderFamily, normalizeModelId } from '../providers/factory.js';
-import { setComputerUseEnabled, closeComputer } from '../tools/computer.js';
+import { setComputerUseEnabled, closeComputer, isComputerUseEnabled } from '../tools/computer.js';
 import { refreshLiveModels } from '../providers/live-models.js';
 import { EFFORT_LEVELS, parseEffort, clampEffort, wasClamped, type EffortLevel } from '../providers/effort.js';
 
@@ -55,7 +55,7 @@ import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { applyModelOverride } from '../archimedes/endpoint.js';
-import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler } from '../safety/permissions.js';
+import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler, confirm } from '../safety/permissions.js';
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
 import { startServer } from '../server/index.js';
@@ -74,6 +74,10 @@ import {
   type ReplMode,
 } from './repl-session-commands.js';
 import { handleModeCommand } from './repl-mode-commands.js';
+import { handleTurnCommand } from './repl-turn-commands.js';
+import { handleComputerCommand } from './repl-computer-commands.js';
+import { handleLessonCommand } from './repl-lesson-commands.js';
+import { createSteeringInbox, type SteeringInbox } from '../agent/steering.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
@@ -90,7 +94,7 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX } from './diamond.js';
 import { checkBuildFreshness } from './build-freshness.js';
 import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
 import { isAuthError } from '../util/errors.js';
@@ -146,9 +150,19 @@ function num(s: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function parseMaxTurns(s: unknown): number | undefined {
+  if (s === undefined || s === null || s === '') return undefined;
+  if (s === false || s === 'false' || s === 'off' || s === 'none' || s === '0' || s === 0 || s === 'infinity' || s === 'Infinity' || s === -1 || s === '-1') {
+    return Infinity;
+  }
+  const n = Number(s);
+  if (!Number.isFinite(n)) return undefined;
+  return n <= 0 ? Infinity : n;
+}
+
 const cliMaxRetries      = num(argv['max-retries']) ?? num(process.env.AURA_MAX_RETRIES);
 const cliMaxVerifyRetries = num(argv['max-verify-retries']);
-const cliMaxTurns        = num(argv['max-turns']);
+const cliMaxTurns        = parseMaxTurns(argv['max-turns']);
 const cliVerify          = argv.verify === true;
 // Voice output: speak task summaries aloud. Enabled by --speak or AURA_SPEAK=1;
 // toggled at runtime in the REPL with :speak. Mutable so :speak can flip it.
@@ -733,20 +747,13 @@ async function runGazelleOrchestrator(a: GazelleOrchestratorArgs): Promise<void>
 
 /**
  * Computer use is off unless BOTH --computer and AURA_COMPUTER_USE=1 are set
- * (see tools/screen/disclosure.ts for why either alone is not enough). This
- * only reports the flag; the gate itself lives with the tool.
- *
- * The exit hook matters more than it looks: the sidecar holds an open
- * /dev/uinput device and a portal session, and neither is released by the
- * process simply ending if the child outlives it.
+ * (see tools/screen/disclosure.ts for why either alone is not enough), or the
+ * user turns it on in-session with :compon. This only reports the flag; the
+ * gate itself lives with the tool, and so does the release of the sidecar's
+ * handles — setComputerUseEnabled arms that on whichever path enables it.
  */
 function wireComputerUse(enabled: boolean): void {
   setComputerUseEnabled(enabled);
-  if (!enabled) return;
-  const release = () => { void closeComputer(); };
-  process.once('exit', release);
-  process.once('SIGINT', release);
-  process.once('SIGTERM', release);
 }
 
 async function main() {
@@ -893,6 +900,8 @@ async function main() {
   // :small1 — force sessions to START with Archimedes, bypassing the competence
   // gate (verification/escalation still run). Off by default; toggled per session.
   let small1Override = false;
+  // Runtime turn limit override: undefined = default (resolved.maxTurns), Infinity = off, number = custom
+  let turnsOverride: number | undefined = undefined;
 
   if (!noSession) {
     if (argv['new-session']) {
@@ -1416,6 +1425,10 @@ async function main() {
   // Buffer for :btw and :stop typed during the agent loop
   let pendingBtw: string | null = null;
 let abortController: AbortController | null = null;
+  // Live only while a task runs. Anything typed mid-run that isn't a command
+  // goes here and reaches the model at the loop's next turn boundary, instead
+  // of starting a second concurrent loop over the same history.
+  let steeringInbox: SteeringInbox | null = null;
 
   setCallbacks({
     onEnter(line: string) {
@@ -1429,6 +1442,15 @@ let abortController: AbortController | null = null;
         if (cmd.startsWith(':btw ')) {
           pendingBtw = cmd.slice(5).trim();
           writeOutput(chalk.hex(FAINT_HEX)(`  Buffered side question: "${pendingBtw}"`));
+          return;
+        }
+        // Anything else typed mid-run steers the task rather than starting a
+        // rival one. Commands are excluded: a `:` line is REPL machinery, and
+        // most of it (:model, :new, :compact) mutates state the running loop
+        // is holding, so it waits for the run to end the way it always has.
+        if (steeringInbox && !cmd.startsWith(':')) {
+          steeringInbox.post(cmd);
+          writeOutput(chalk.hex(TERRACOTTA_HEX)('  ↳ queued — Aura picks this up on the next turn.'));
           return;
         }
       }
@@ -1477,6 +1499,9 @@ let abortController: AbortController | null = null;
     setStatusLine([
       provider.name, runtimeConfig.model, permissionLevel,
       ...(replMode === 'gazelle' ? ['gazelle'] : []),
+      // Always visible while on. A feature that can move the real pointer
+      // should never be running without a standing reminder that it is.
+      ...(isComputerUseEnabled() ? ['computer'] : []),
     ].filter(Boolean).join(' · '));
   };
 
@@ -1580,6 +1605,8 @@ let abortController: AbortController | null = null;
       archimedesOverride,
       archimedesModelOverride,
       small1Override,
+      turnsOverride,
+      defaultMaxTurns: resolved.maxTurns,
       budget: replBudget,
       mode: replMode,
     };
@@ -1593,6 +1620,8 @@ let abortController: AbortController | null = null;
       if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
       if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
       if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
+      if (cmdResult.newTurnsOverride !== undefined) turnsOverride = cmdResult.newTurnsOverride;
+      if (cmdResult.newComputerUse !== undefined) refreshStatusLine();
       // Must come after newHistory: entering gazelle seeds its chat from the
       // current history, and :resume/:new arrive as a command result too.
       if (cmdResult.newMode !== undefined) {
@@ -1659,10 +1688,13 @@ let abortController: AbortController | null = null;
     let result;
     abortController = createAbortController();
     const abortSignal = abortController.signal;
+    const steering = createSteeringInbox();
+    steeringInbox = steering;
     try {
       const currentProvider = buildProvider(tuiDisplay);
       pendingBtw = null;
 
+      const effectiveMaxTurns = turnsOverride !== undefined ? turnsOverride : resolved.maxTurns;
       const doVerify = argv.verify === true || !!fileConfig.verify;
       if (doVerify) {
         const { runWithVerification } = await import('../verify/index.js');
@@ -1673,9 +1705,10 @@ let abortController: AbortController | null = null;
             provider: currentProvider, task: input,
             context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
-            maxTurns: resolved.maxTurns,
+            maxTurns: effectiveMaxTurns,
             budget: replBudget,
             abortSignal,
+            steering,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
               baseUrl: runtimeConfig.baseUrl ?? undefined,
@@ -1696,7 +1729,7 @@ let abortController: AbortController | null = null;
             provider: currentProvider, task: input,
             context: ctx, permissions, display: tuiDisplay,
             initialHistory: activeChatHistory,
-            maxTurns: resolved.maxTurns,
+            maxTurns: effectiveMaxTurns,
             budget: replBudget,
             spawnConfig: {
               apiKey: runtimeConfig.apiKey,
@@ -1704,6 +1737,7 @@ let abortController: AbortController | null = null;
             },
             sessionPath,
             abortSignal,
+            steering,
             healthTracker,
           });
         } else {
@@ -1718,9 +1752,10 @@ let abortController: AbortController | null = null;
             permissions,
             initialHistory: activeChatHistory,
             abortSignal,
+            steering,
             healthTracker,
             forceArchimedes: small1Override,
-            maxTurns: resolved.maxTurns,
+            maxTurns: effectiveMaxTurns,
           });
           const altResult = await alternator.run(input);
           result = altResult.loopResult;
@@ -1730,7 +1765,7 @@ let abortController: AbortController | null = null;
           provider: currentProvider, task: input,
           context: ctx, permissions, display: tuiDisplay,
           initialHistory: activeChatHistory,
-          maxTurns: resolved.maxTurns,
+          maxTurns: effectiveMaxTurns,
           budget: replBudget,
           spawnConfig: {
             apiKey: runtimeConfig.apiKey,
@@ -1738,6 +1773,7 @@ let abortController: AbortController | null = null;
           },
           sessionPath,
           abortSignal,
+          steering,
           healthTracker,
         });
       }
@@ -1763,6 +1799,10 @@ let abortController: AbortController | null = null;
       clearAbortController();
       abortController = null;
       return;
+    } finally {
+      // The run is over either way: a line typed from here on is a new task,
+      // not steering for a loop that no longer exists.
+      steeringInbox = null;
     }
 
     // Check if task was cancelled by user
@@ -1857,6 +1897,8 @@ interface ReplCtx {
   archimedesOverride: boolean | undefined;
   archimedesModelOverride: string | undefined;
   small1Override: boolean;
+  turnsOverride?: number | undefined;
+  defaultMaxTurns?: number;
   /** The REPL-process budget, so commands that start a conversation over can
    *  clear its totals. See SessionBudget.reset. */
   budget: SessionBudget;
@@ -2626,6 +2668,41 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   if (input === ':help' || input === '/help') {
     console.log(chalk.hex(TEXT_DIM_HEX)(HELP_TEXT.join('\n')));
     return { handled: true };
+  }
+
+  // ── Turn limit commands (:turnsoff, :turnson, :turns [n|off|on]) ─────────
+  {
+    const turnResult = handleTurnCommand(input, {
+      turnsOverride: c.turnsOverride,
+      defaultMaxTurns: c.defaultMaxTurns,
+      display: c.display,
+    });
+    if (turnResult) return turnResult;
+  }
+
+  // ── What Aura has learned (:lessons, :forget) ───────────────────────────
+  // The gap loop writes into the system prompt; these are how a human reads
+  // and corrects it. See repl-lesson-commands.ts.
+  {
+    const lessonResult = handleLessonCommand(input, {
+      display: c.display,
+      write: (text: string) => console.log(text),
+      projectRoot: c.ctx.root,
+    });
+    if (lessonResult) return lessonResult;
+  }
+
+  // ── Computer use (:compon, :compoff, :comp) ─────────────────────────────
+  // Placed with the other toggles and, like them, reachable only from a
+  // keystroke — see repl-computer-commands.ts on why an in-session switch is
+  // a third key of equal strength rather than a way around the two-key gate.
+  {
+    const compResult = await handleComputerCommand(input, {
+      display: c.display,
+      confirm: (message: string) => confirm(message),
+      write: (text: string) => console.log(text),
+    });
+    if (compResult) return compResult;
   }
 
   // ── Modes ────────────────────────────────────────────────────────────────
@@ -3433,8 +3510,10 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --readonly               Read-only mode (no file writes or shell commands)
     --computer               Enable computer use: screenshots + real mouse/keyboard.
                              Also needs AURA_COMPUTER_USE=1, and a one-time
-                             disclosure you must accept. Run aura --doctor to
-                             check the runtime deps. Linux only for now.
+                             disclosure you must accept. Or skip both and type
+                             :compon in the session (:compoff to turn it back
+                             off). Run aura --doctor to check the runtime deps.
+                             Linux only for now.
     --gazelle                Lean conversational mode: no tools, no project context
     --mode gazelle           Same as --gazelle (env: AURA_MODE=gazelle)
     --cwd <path>             Working directory (default: current)

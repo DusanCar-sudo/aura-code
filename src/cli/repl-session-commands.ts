@@ -43,6 +43,10 @@ export interface ReplCommandResult {
   newArchimedesModelOverride?: string;
   newSmall1Override?: boolean;
   newMode?: ReplMode;
+  newTurnsOverride?: number | undefined;
+  /** Computer use was toggled — the REPL redraws its status line so a feature
+   *  that can move the real pointer is never on without being visible. */
+  newComputerUse?: boolean;
 }
 
 /** The slice of ReplCtx these commands touch. Declared structurally rather

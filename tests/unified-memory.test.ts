@@ -12,19 +12,24 @@ vi.mock('os', async () => {
   return { ...(actual as any), homedir: () => TEST_TMP };
 });
 
-import { loadUnifiedMemory, IDENTITY_FILE } from '../src/agent/unified-memory.js';
+import { loadUnifiedMemory, identityFile } from '../src/agent/unified-memory.js';
 
 function writeIdentity(entries: Record<string, { value: string; updated?: string }>) {
-  fs.mkdirSync(path.dirname(IDENTITY_FILE), { recursive: true });
-  fs.writeFileSync(IDENTITY_FILE, JSON.stringify(entries), 'utf8');
+  // Resolved per call now, not at import — see memoryDir() in unified-memory.ts.
+  fs.mkdirSync(path.dirname(identityFile()), { recursive: true });
+  fs.writeFileSync(identityFile(), JSON.stringify(entries), 'utf8');
 }
 
 describe('loadUnifiedMemory — identity ordering under truncation', () => {
   beforeEach(() => {
+    // AURA_HOME now wins over os.homedir(); a developer with it exported would
+    // otherwise read their real memory here instead of the mocked home.
+    vi.stubEnv('AURA_HOME', path.join(TEST_TMP, '.aura'));
     if (fs.existsSync(TEST_TMP)) fs.rmSync(TEST_TMP, { recursive: true, force: true });
     fs.mkdirSync(TEST_TMP, { recursive: true });
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     fs.rmSync(TEST_TMP, { recursive: true, force: true });
   });
 

@@ -1244,6 +1244,14 @@ export function createTuiDisplay(): Display {
       }
     },
 
+    steering(messages: string[]) {
+      // The line was already echoed as "queued" when it was typed; this is the
+      // moment it actually reaches the model, which is the part worth marking.
+      for (const m of messages) {
+        writeOutput(CHROME_DIM('  ↳ steering ') + TEXT_DIM(m));
+      }
+    },
+
     toolStart(name: string) {
       if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
       stopToolSpinner();

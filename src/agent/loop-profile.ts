@@ -85,8 +85,11 @@ export const DEFAULT_STALL_THRESHOLD = 3;
  * @param override Explicit maxTurns from CLI flag or .aura.json.
  */
 export function getLoopProfile(override?: number): LoopProfile {
+  const maxTurns = (override !== undefined && (override <= 0 || override === Infinity))
+    ? Infinity
+    : (override ?? DEFAULT_MAX_TURNS);
   return {
-    maxTurns: override ?? DEFAULT_MAX_TURNS,
+    maxTurns,
     stallThreshold: DEFAULT_STALL_THRESHOLD,
   };
 }

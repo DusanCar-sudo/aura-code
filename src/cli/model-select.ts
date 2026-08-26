@@ -219,7 +219,18 @@ function staticModelsForProvider(providerId: string): { id: string; name: string
       case 'mimo': return id.startsWith('mimo') || id.startsWith('xiaomi/');
       case 'opencode-zen': return id.startsWith('opencode/') || id.startsWith('zen/');
       case 'opencode-go': return id.startsWith('go-anthropic/');
-      default: return id.startsWith(`${providerId}/`) || p === providerId;
+      case 'nvidia': return p === 'nvidia' || id.startsWith('nvidia/');
+      case 'fpt': return p.includes('fpt') || id.startsWith('fpt/');
+      case 'fireworks': return p.includes('fireworks') || id.startsWith('fireworks/');
+      case 'tencent': return p.includes('tencent') || id.startsWith('tencent/');
+      case 'gmi': return p.includes('gmi') || id.startsWith('gmi/');
+      case 'kilocode': return p.includes('kilocode') || id.startsWith('kilocode/');
+      case 'huggingface': return p.includes('hugging') || id.startsWith('huggingface/');
+      case 'stepfun': return p.includes('stepfun') || id.startsWith('stepfun/');
+      case 'upstage': return p.includes('upstage') || id.startsWith('upstage/');
+      case 'arcee': return p.includes('arcee') || id.startsWith('arcee/');
+      case 'alibaba': return p.includes('alibaba') || id.startsWith('alibaba/');
+      default: return id.startsWith(`${providerId}/`) || p === providerId || p.startsWith(providerId);
     }
   };
   const found = getAllModels()
@@ -234,17 +245,82 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
   deepseek: [
     { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat (V3)' },
     { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner (R1)' },
+    { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+    { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
   ],
   kimi: [
     { id: 'kimi/kimi-k2-0905-preview', name: 'Kimi K2' },
+    { id: 'kimi/moonshot-v1-128k', name: 'Moonshot V1 128K' },
+    { id: 'kimi/moonshot-v1-32k', name: 'Moonshot V1 32K' },
+    { id: 'kimi/moonshot-v1-8k', name: 'Moonshot V1 8K' },
   ],
   qwen: [
     { id: 'qwen/qwen3-coder-plus', name: 'Qwen3 Coder Plus' },
+    { id: 'qwen/qwen3-coder-flash', name: 'Qwen3 Coder Flash' },
+    { id: 'qwen/qwen3-max', name: 'Qwen3 Max' },
+    { id: 'qwen/qwen3-plus', name: 'Qwen3 Plus' },
     { id: 'qwen/qwen-max', name: 'Qwen Max' },
+    { id: 'qwen/qwen-plus', name: 'Qwen Plus' },
+    { id: 'qwen/qwen-turbo', name: 'Qwen Turbo' },
+    { id: 'qwen/qwen-long', name: 'Qwen Long' },
+    { id: 'qwen/qwen2.5-coder-32b-instruct', name: 'Qwen 2.5 Coder 32B' },
+    { id: 'qwen/qwen2.5-72b-instruct', name: 'Qwen 2.5 72B' },
   ],
   minimax: [
-    { id: 'minimax/MiniMax-M2', name: 'MiniMax M2' },
     { id: 'minimax/MiniMax-Text-01', name: 'MiniMax Text-01' },
+    { id: 'minimax/MiniMax-M2.5', name: 'MiniMax M2.5' },
+    { id: 'minimax/MiniMax-M2.7', name: 'MiniMax M2.7' },
+    { id: 'minimax/MiniMax-M3', name: 'MiniMax M3' },
+    { id: 'minimax/MiniMax-M2', name: 'MiniMax M2' },
+    { id: 'minimax/abab6.5s-chat', name: 'MiniMax Abab 6.5s' },
+  ],
+  groq: [
+    { id: 'groq/llama-3.3-70b-versatile', name: 'Llama 3.3 70B' },
+    { id: 'groq/llama-3.1-8b-instant', name: 'Llama 3.1 8B' },
+    { id: 'groq/deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B' },
+    { id: 'groq/mixtral-8x7b-32768', name: 'Mixtral 8x7B' },
+  ],
+  nvidia: [
+    { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Nemotron 70B' },
+    { id: 'nvidia/meta/llama-3.3-70b-instruct', name: 'Llama 3.3 70B' },
+    { id: 'nvidia/deepseek-ai/deepseek-r1', name: 'DeepSeek R1' },
+  ],
+  stepfun: [
+    { id: 'stepfun/step-2-16k', name: 'Step-2 16K' },
+    { id: 'stepfun/step-1-8k', name: 'Step-1 8K' },
+    { id: 'stepfun/step-1-flash', name: 'Step-1 Flash' },
+  ],
+  fireworks: [
+    { id: 'fireworks/accounts/fireworks/models/deepseek-r1', name: 'DeepSeek R1' },
+    { id: 'fireworks/accounts/fireworks/models/deepseek-v3', name: 'DeepSeek V3' },
+    { id: 'fireworks/accounts/fireworks/models/llama-v3p3-70b-instruct', name: 'Llama 3.3 70B' },
+  ],
+  upstage: [
+    { id: 'upstage/solar-pro', name: 'Solar Pro' },
+    { id: 'upstage/solar-mini', name: 'Solar Mini' },
+  ],
+  arcee: [
+    { id: 'arcee/trinity-large-preview', name: 'Trinity Large Preview' },
+    { id: 'arcee/arcee-spark', name: 'Arcee Spark' },
+  ],
+  tencent: [
+    { id: 'tencent/hunyuan-large', name: 'Hunyuan Large' },
+    { id: 'tencent/hunyuan-standard', name: 'Hunyuan Standard' },
+  ],
+  gmi: [
+    { id: 'gmi/deepseek-ai/deepseek-r1', name: 'DeepSeek R1' },
+    { id: 'gmi/deepseek-ai/deepseek-v3', name: 'DeepSeek V3' },
+  ],
+  kilocode: [
+    { id: 'kilocode/auto', name: 'Kilo Auto' },
+  ],
+  alibaba: [
+    { id: 'alibaba/qwen3-coder-plus', name: 'Qwen3 Coder Plus (Alibaba Plan)' },
+    { id: 'alibaba/qwen-max', name: 'Qwen Max (Alibaba Plan)' },
+  ],
+  huggingface: [
+    { id: 'huggingface/meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B' },
+    { id: 'huggingface/deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
   ],
 };
 

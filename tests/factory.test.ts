@@ -53,19 +53,19 @@ describe('getAllModels', () => {
 
   it('includes custom provider models', () => {
     registerCustomProviders([{
-      name: 'DeepSeek',
+      name: 'CustomDS',
       baseUrl: 'https://api.deepseek.com/v1',
-      prefixes: ['deepseek/'],
+      prefixes: ['customds/'],
       models: [
-        { id: 'deepseek/chat', name: 'DeepSeek Chat', speed: 'Fast' },
-        { id: 'deepseek/reasoner', name: 'DeepSeek R1', speed: 'Reasoning' },
+        { id: 'customds/chat', name: 'DeepSeek Chat', speed: 'Fast' },
+        { id: 'customds/reasoner', name: 'DeepSeek R1', speed: 'Reasoning' },
       ],
     }]);
     const models = getAllModels();
-    const dsModels = models.filter(m => m.provider === 'DeepSeek');
+    const dsModels = models.filter(m => m.provider === 'CustomDS');
     expect(dsModels).toHaveLength(2);
-    expect(dsModels[0].id).toBe('deepseek/chat');
-    expect(dsModels[1].id).toBe('deepseek/reasoner');
+    expect(dsModels[0].id).toBe('customds/chat');
+    expect(dsModels[1].id).toBe('customds/reasoner');
   });
 
   it('does not duplicate built-in models', () => {
@@ -159,6 +159,20 @@ describe('createProvider with custom providers', () => {
   it('lists the three Zhipu GLM models in getAllModels', () => {
     const ids = getAllModels().filter(m => m.provider === 'Zhipu').map(m => m.id);
     expect(ids).toEqual(['glm-5.2', 'glm-5.1', 'glm-5']);
+  });
+
+  it('routes qwen/* to Qwen with DashScope base URL', () => {
+    const provider = createProvider({ model: 'qwen/qwen3-coder-plus', apiKey: 'test-key' });
+    expect(provider.name).toBe('Qwen');
+    expect(provider.model).toBe('qwen3-coder-plus');
+    expect((provider as any).client.baseURL).toBe('https://dashscope-intl.aliyuncs.com/compatible-mode/v1');
+  });
+
+  it('routes minimax/* to MiniMax with MiniMax base URL', () => {
+    const provider = createProvider({ model: 'minimax/MiniMax-Text-01', apiKey: 'test-key' });
+    expect(provider.name).toBe('MiniMax');
+    expect(provider.model).toBe('MiniMax-Text-01');
+    expect((provider as any).client.baseURL).toBe('https://api.minimax.io/v1');
   });
 
   it('handles model with no prefix remainder', () => {

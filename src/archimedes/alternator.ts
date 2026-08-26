@@ -7,6 +7,7 @@ import { PermissionSystem } from '../safety/permissions.js';
 import type { Display } from '../cli/display.js';
 import type { ContextHealthTracker } from '../cli/context-health.js';
 import type { SessionBudget } from '../agent/session-budget.js';
+import type { SteeringInbox } from '../agent/steering.js';
 import { runCouncil } from '../research/council.js';
 import type {
   AlternationDecision,
@@ -51,6 +52,10 @@ export interface AlternatorOptions {
   abortSignal?: AbortSignal;
   /** Shared context-health tracker (the REPL's) — forwarded to both inner agent loops. */
   healthTracker?: ContextHealthTracker;
+  /** Mid-run steering (the REPL's inbox) — forwarded to both inner agent loops.
+   *  See {@link recordingSteeringProxy} for why the Archimedes attempt reads it
+   *  through a proxy rather than directly. */
+  steering?: SteeringInbox;
   /**
    * Manual override (`:small1`): always start with Archimedes, bypassing the
    * competence gate. Verification and escalation still run afterwards, and the
@@ -331,6 +336,37 @@ function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProv
   );
 }
 
+/**
+ * An Archimedes attempt can be thrown away and escalated to the large model.
+ * A steered message drained into that discarded history would vanish with it —
+ * the user would watch their correction get acknowledged and then silently not
+ * happen. So the attempt reads through a proxy that remembers what it consumed,
+ * and `replay()` puts it back before the escalation loop starts.
+ */
+function recordingSteeringProxy(inbox: SteeringInbox | undefined): {
+  proxy: SteeringInbox | undefined;
+  replay: () => void;
+} {
+  if (!inbox) return { proxy: undefined, replay: () => {} };
+  const consumed: string[] = [];
+  const proxy: SteeringInbox = {
+    post: (text: string) => inbox.post(text),
+    drain: () => {
+      const taken = inbox.drain();
+      consumed.push(...taken);
+      return taken;
+    },
+    get pending() { return inbox.pending; },
+  };
+  return {
+    proxy,
+    replay: () => {
+      for (const m of consumed) inbox.post(m);
+      consumed.length = 0;
+    },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ArchimedesAlternator
 // ─────────────────────────────────────────────────────────────────────────────
@@ -379,6 +415,10 @@ export class ArchimedesAlternator {
     // call isn't blind to what Archimedes already tried. Never fed back into the
     // Episode — only into the large model's task text for this run.
     let archimedesFailureContext: string | undefined;
+
+    // Steering read by the Archimedes attempt is replayed if that attempt is
+    // discarded — see recordingSteeringProxy.
+    const steering = recordingSteeringProxy(this.opts.steering);
 
     try {
       const recent = await episodeStore.loadEpisodes(projectRoot, RECENT_EPISODE_LIMIT);
@@ -443,6 +483,7 @@ export class ArchimedesAlternator {
               confirmFn: this.opts.confirmFn,
               initialHistory: this.opts.initialHistory,
               abortSignal: this.opts.abortSignal,
+              steering: steering.proxy,
               healthTracker: this.opts.healthTracker,
               allowedTools: ARCHIMEDES_TOOLS,
               maxRepetitionsPerTool: 3,
@@ -517,6 +558,9 @@ export class ArchimedesAlternator {
             ].join('\n')
           : task;
         try {
+          // Anything the discarded Archimedes attempt consumed goes back in the
+          // inbox, so the large model reads it on its first turn.
+          steering.replay();
           const loopResult = await runAgentLoop({
             provider: largeModelProvider,
             task: largeModelTask,
@@ -528,6 +572,7 @@ export class ArchimedesAlternator {
             confirmFn: this.opts.confirmFn,
             initialHistory: this.opts.initialHistory,
             abortSignal: this.opts.abortSignal,
+            steering: this.opts.steering,
             healthTracker: this.opts.healthTracker,
           });
           largeModelTokens = loopResult.usage.totalTokens;

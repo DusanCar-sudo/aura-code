@@ -45,9 +45,22 @@ describe('KNOWN_MODELS', () => {
     expect(or.length).toBeGreaterThanOrEqual(10);
   });
 
-  it('has multiple Ollama models for local use', () => {
-    const ollama = KNOWN_MODELS.filter(m => m.id.startsWith('ollama/'));
-    expect(ollama.length).toBeGreaterThanOrEqual(8);
+  it('has multiple Qwen models', () => {
+    const qwen = KNOWN_MODELS.filter(m => m.provider === 'Qwen');
+    expect(qwen.length).toBeGreaterThanOrEqual(5);
+    expect(qwen.some(m => m.id === 'qwen/qwen3-coder-plus')).toBe(true);
+  });
+
+  it('has multiple MiniMax models', () => {
+    const minimax = KNOWN_MODELS.filter(m => m.provider === 'MiniMax');
+    expect(minimax.length).toBeGreaterThanOrEqual(5);
+    expect(minimax.some(m => m.id === 'minimax/MiniMax-Text-01')).toBe(true);
+  });
+
+  it('has multiple DeepSeek models', () => {
+    const deepseek = KNOWN_MODELS.filter(m => m.provider === 'DeepSeek');
+    expect(deepseek.length).toBeGreaterThanOrEqual(3);
+    expect(deepseek.some(m => m.id === 'deepseek/deepseek-chat')).toBe(true);
   });
 });
 

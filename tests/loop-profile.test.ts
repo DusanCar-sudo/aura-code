@@ -32,6 +32,12 @@ describe('getLoopProfile', () => {
     expect(p.maxTurns).toBe(12);
     expect(p.stallThreshold).toBe(DEFAULT_STALL_THRESHOLD);
   });
+
+  it('treats Infinity, 0, and negative numbers as unlimited turns (Infinity)', () => {
+    expect(getLoopProfile(Infinity).maxTurns).toBe(Infinity);
+    expect(getLoopProfile(0).maxTurns).toBe(Infinity);
+    expect(getLoopProfile(-1).maxTurns).toBe(Infinity);
+  });
 });
 
 describe('detectStall', () => {

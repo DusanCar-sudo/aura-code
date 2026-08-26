@@ -49,8 +49,9 @@ export const COMPUTER_USE_DISCLOSURE = [
   '  Captures may be retained by the provider under their data policy, which',
   '  Aura does not control.',
   '',
-  '  Stop a run with :stop or Ctrl+C. Disable this entirely by unsetting',
-  `  ${COMPUTER_USE_ENV}.`,
+  '  Stop a run with :stop or Ctrl+C. Turn this off again with :compoff, which',
+  '  also releases the virtual input device and the screen-capture session.',
+  `  It stays off at startup unless ${COMPUTER_USE_ENV}=1 is set with --computer.`,
   '',
 ].join('\n');
 
@@ -102,25 +103,28 @@ export function checkComputerUseGate(flagEnabled: boolean, env = process.env): G
   const raw = (env[COMPUTER_USE_ENV] ?? '').trim().toLowerCase();
   const envEnabled = raw === '1' || raw === 'true' || raw === 'yes';
 
+  // Every refusal below names :compon. It used to say "restart with that
+  // flag", which was both the slowest fix and a lossy one — the user threw
+  // away the conversation to change a setting. The model is the one reading
+  // this, and it relays it to the user, so the sentence it relays should be
+  // the one that actually works from where they are sitting.
+  const ENABLE_HINT = 'Do not retry. Tell the user to type :compon — that shows the '
+    + 'disclosure, asks them to accept it, and turns computer use on in this session '
+    + `without restarting. (Equivalent at startup: the --computer flag with ${COMPUTER_USE_ENV}=1.)`;
+
   if (!flagEnabled && !envEnabled) {
-    return {
-      allowed: false,
-      reason: 'Computer use is disabled. It requires the --computer flag and '
-        + `${COMPUTER_USE_ENV}=1; neither is set. Do not retry — ask the user to enable it.`,
-    };
+    return { allowed: false, reason: `Computer use is off. ${ENABLE_HINT}` };
   }
   if (!flagEnabled) {
     return {
       allowed: false,
-      reason: `${COMPUTER_USE_ENV} is set but Aura was not started with --computer. `
-        + 'Do not retry — ask the user to restart with that flag.',
+      reason: `${COMPUTER_USE_ENV} is set but computer use is not enabled in this session. ${ENABLE_HINT}`,
     };
   }
   if (!envEnabled) {
     return {
       allowed: false,
-      reason: `Aura was started with --computer but ${COMPUTER_USE_ENV} is not set to 1. `
-        + 'Do not retry — ask the user to set it.',
+      reason: `Computer use was enabled at startup but ${COMPUTER_USE_ENV} is not set to 1. ${ENABLE_HINT}`,
     };
   }
   if (!isAcknowledged()) {
@@ -128,7 +132,7 @@ export function checkComputerUseGate(flagEnabled: boolean, env = process.env): G
       allowed: false,
       needsDisclosure: true,
       reason: 'Computer use has not been acknowledged on this machine yet. '
-        + 'Do not retry — the user must accept the disclosure first.',
+        + 'Do not retry — the user must accept the disclosure first, which :compon prompts for.',
     };
   }
   return { allowed: true };

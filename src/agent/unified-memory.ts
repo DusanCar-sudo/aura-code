@@ -20,12 +20,24 @@ import * as os from 'os';
 // whole block is length-capped so it never bloats a prompt.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MEMORY_DIR = path.join(os.homedir(), '.aura', 'memory');
+/**
+ * Resolved per call, not once at import.
+ *
+ * These were module-level constants pinned to os.homedir(), which had two
+ * consequences. AURA_HOME — honoured everywhere else, including the
+ * computer-use acknowledgement — did nothing here, so pointing Aura at a
+ * different home moved some of its state and not the rest. And a test could
+ * not isolate itself: stubbing the environment after import left the reads
+ * pointing at the developer's real memory, which is how this was found.
+ */
+function memoryDir(): string {
+  return path.join(process.env.AURA_HOME ?? path.join(os.homedir(), '.aura'), 'memory');
+}
 
 /** Canonical global identity store (created by the consolidation migration). */
-export const IDENTITY_FILE = path.join(MEMORY_DIR, 'identity.json');
+export function identityFile(): string { return path.join(memoryDir(), 'identity.json'); }
 /** Global episodic-lessons digest (created by runGlobalReconciliation). */
-export const GLOBAL_LESSONS_FILE = path.join(MEMORY_DIR, 'lessons-global.md');
+export function globalLessonsFile(): string { return path.join(memoryDir(), 'lessons-global.md'); }
 
 type Store = Record<string, { value: string; updated?: string }>;
 
@@ -52,10 +64,10 @@ function readText(file: string): string {
  * (so the surfaces keep working before/after the consolidation migration).
  */
 function identitySection(maxChars: number): string {
-  let store = loadJson(IDENTITY_FILE);
+  let store = loadJson(identityFile());
   if (Object.keys(store).length === 0) {
     // Pre-migration fallback: merge the two namespaces the bot used to read.
-    store = { ...loadJson(path.join(MEMORY_DIR, 'default.json')), ...loadJson(path.join(MEMORY_DIR, 'user.json')) };
+    store = { ...loadJson(path.join(memoryDir(), 'default.json')), ...loadJson(path.join(memoryDir(), 'user.json')) };
   }
   const keys = Object.keys(store);
   if (keys.length === 0) return '';
@@ -90,22 +102,38 @@ function identitySection(maxChars: number): string {
  * The bot passes nothing → the global lessons digest.
  */
 function lessonsSection(projectRoot: string | undefined, maxChars: number): string {
-  let content = '';
+  // Global lessons are read on BOTH paths, not only the bot's.
+  //
+  // This used to be an either/or: with a projectRoot the CLI read the
+  // project's dreams and never touched the global file. The effect was that a
+  // fact true everywhere — a provider's model-id prefix, a library's real
+  // signature — learned while working in one repo was invisible in every other
+  // one, and got re-derived from scratch each time. That defeats the point of
+  // writing it down, so the global digest is now always included and the
+  // project's own lessons are added on top of it.
+  const parts: string[] = [];
+
+  const global = readText(globalLessonsFile()).trim();
+  if (global) parts.push(global);
+
   if (projectRoot) {
-    const reconciled = path.join(projectRoot, 'dreams', '.reconciled.md');
-    content = readText(reconciled);
-    // Fall back to the latest dated dream if reconciliation hasn't run.
-    if (!content) {
+    // The gap loop's project-scoped store (agent/learning.ts), then the older
+    // dream-based lessons, which predate it and still carry real content.
+    const learned = readText(path.join(projectRoot, '.aura', 'lessons.md')).trim();
+    if (learned) parts.push(learned);
+
+    let dreamt = readText(path.join(projectRoot, 'dreams', '.reconciled.md'));
+    if (!dreamt) {
       try {
         const dir = path.join(projectRoot, 'dreams');
         const files = fs.readdirSync(dir).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort();
-        if (files.length) content = readText(path.join(dir, files[files.length - 1]));
+        if (files.length) dreamt = readText(path.join(dir, files[files.length - 1]));
       } catch { /* no dreams yet */ }
     }
-  } else {
-    content = readText(GLOBAL_LESSONS_FILE);
+    if (dreamt.trim()) parts.push(dreamt.trim());
   }
-  content = content.trim();
+
+  let content = parts.join('\n\n').trim();
   if (!content) return '';
   if (content.length > maxChars) content = content.slice(0, maxChars) + '\n… (truncated)';
   return `### Lessons from past sessions\n${content}`;
@@ -149,7 +177,7 @@ export function loadUnifiedMemory(opts: UnifiedMemoryOptions = {}): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Rolling situational summary. Written in Phase 2; may not exist yet. */
-export const CONVERSATIONAL_FILE = path.join(MEMORY_DIR, 'conversational.md');
+export function conversationalFile(): string { return path.join(memoryDir(), 'conversational.md'); }
 
 // Phase 2 raised the total cap from 800 → 1,000: a populated situation summary
 // runs 400–600 chars and identity ~395, which overflowed 800. 1,000 chars is
@@ -199,9 +227,9 @@ function isOperationalFact(key: string, value: string): boolean {
  * consolidation migration too.
  */
 function distillIdentity(maxChars: number): string {
-  let store = loadJson(IDENTITY_FILE);
+  let store = loadJson(identityFile());
   if (Object.keys(store).length === 0) {
-    store = { ...loadJson(path.join(MEMORY_DIR, 'default.json')), ...loadJson(path.join(MEMORY_DIR, 'user.json')) };
+    store = { ...loadJson(path.join(memoryDir(), 'default.json')), ...loadJson(path.join(memoryDir(), 'user.json')) };
   }
 
   // Preferred: a single clean, curated bio entry.
@@ -236,7 +264,7 @@ function distillIdentity(maxChars: number): string {
  * takes its share first, and identity gets whatever budget remains.
  */
 export function loadGazelleMemory(): GazelleMemory {
-  const conversational = clip(readText(CONVERSATIONAL_FILE), GAZELLE_CONV_CAP);
+  const conversational = clip(readText(conversationalFile()), GAZELLE_CONV_CAP);
   const identityBudget = Math.min(GAZELLE_IDENTITY_CAP, GAZELLE_TOTAL_CAP - conversational.length);
   const identity = identityBudget > 0 ? distillIdentity(identityBudget) : '';
   return { identity, conversational };

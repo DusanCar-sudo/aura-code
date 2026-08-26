@@ -50,15 +50,22 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':mine', label: 'Mine patterns', description: 'Mine episodes for patterns', category: 'Memory' },
   { id: ':research', label: 'Research', description: 'Multi-step research pass', category: 'Memory' },
   { id: ':btw', label: 'Side question', description: 'Quick read-only question', category: 'Memory' },
+  { id: ':lessons', label: 'Lessons learned', description: 'What Aura learned and now tells herself', category: 'Memory' },
+  { id: ':forget', label: 'Forget a lesson', description: 'Remove one learned lesson from the prompt', category: 'Memory' },
   // Voice
   { id: ':speak', label: 'Toggle voice', description: 'Read replies aloud', category: 'Voice' },
   // Safety
   { id: ':approve', label: 'Toggle auto-approve', description: 'Skip y/N prompts', category: 'Safety' },
+  { id: ':compon', label: 'Computer use on', description: 'See the screen, drive mouse and keyboard (shows the disclosure)', category: 'Safety' },
+  { id: ':compoff', label: 'Computer use off', description: 'Turn it off and release the input device', category: 'Safety' },
+  { id: ':comp', label: 'Computer use status', description: 'Is it on, and what is holding it there', category: 'Safety' },
   // System
   { id: ':help', label: 'Help', description: 'Show all commands', category: 'System' },
   { id: ':archon', label: 'Archimedes On', description: 'Enable Archimedes Alternator for this session', category: 'System' },
   { id: ':archoff', label: 'Archimedes Off', description: 'Disable Archimedes Alternator for this session', category: 'System' },
   { id: ':archmodel', label: 'Archimedes Model', description: 'Set Archimedes local model for this session  e.g. :archmodel qwen3-vl:4b', category: 'System' },
+  { id: ':turnsoff', label: 'Turns Off', description: 'Disable per-task turn limit (unlimited)', category: 'System' },
+  { id: ':turnson', label: 'Turns On', description: 'Enable per-task turn limit (default: 50)', category: 'System' },
   { id: ':q', label: 'Quit', description: 'Exit Aura', category: 'System' },
   { id: ':context', label: 'Context health', description: 'Token usage dashboard', category: 'System' },
   { id: ':doctor', label: 'Doctor', description: 'Run health checks', category: 'System' },

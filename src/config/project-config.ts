@@ -117,7 +117,11 @@ function normalise(raw: unknown): ProjectConfig {
   const effort = parseEffort(r.effort);
   if (effort) out.effort = effort;
   if (r.mode === 'normal' || r.mode === 'read-only' || r.mode === 'auto') out.mode = r.mode;
-  if (typeof r.maxTurns === 'number' && r.maxTurns > 0) out.maxTurns = r.maxTurns;
+  if (r.maxTurns === 0 || r.maxTurns === false || r.maxTurns === 'off' || r.maxTurns === 'none' || r.maxTurns === Infinity) {
+    out.maxTurns = Infinity;
+  } else if (typeof r.maxTurns === 'number' && r.maxTurns > 0) {
+    out.maxTurns = r.maxTurns;
+  }
   if (typeof r.systemPromptSuffix === 'string') out.systemPromptSuffix = r.systemPromptSuffix;
   if (typeof r.rateLimitRpm === 'number' && r.rateLimitRpm >= 0) out.rateLimitRpm = r.rateLimitRpm;
   if (typeof r.rateLimitTpm === 'number' && r.rateLimitTpm >= 0) out.rateLimitTpm = r.rateLimitTpm;

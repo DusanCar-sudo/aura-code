@@ -23,6 +23,7 @@ import { elideToolCallArgs, elideGoogleParts, pruneToolResultImages } from './to
 import { detectFrustration } from './affect.js';
 import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
+import { formatSteering, type SteeringInbox } from './steering.js';
 
 /** How many times one task may have its reply cut off for collapsing into
  *  repetition before the run gives up on the model. Two, because the first
@@ -77,6 +78,14 @@ export interface LoopOptions {
   hooks?: import('../plugins/types.js').HookEntry[];
   /** Optional abort signal — when aborted the loop stops after the current tool turn. */
   abortSignal?: AbortSignal;
+  /** Suppresses the knowledge-gap pass that would otherwise run when this
+   *  loop is about to give up. Set on the research sub-run and on the resumed
+   *  run so the recovery is depth-1 — see agent/learning.ts. */
+  noGapPass?: boolean;
+  /** Mid-run steering: messages the user typed while this loop was working.
+   *  Drained at each turn boundary and appended to history as a user turn, so
+   *  a mid-run correction lands without cancelling the run. See steering.ts. */
+  steering?: SteeringInbox;
   /** Confirmation prompt override for needs-confirm tool calls. Defaults to the
    *  terminal readline confirm — embedded callers (alternator, bots) supply
    *  their own so confirmation isn't silently impossible off-terminal. */
@@ -457,6 +466,17 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     if (opts.abortSignal?.aborted) {
       display.warning('Task cancelled by user — stopping loop.');
       break;
+    }
+
+    // Mid-run steering. Drained here, at the one point in the turn where the
+    // last tool_use block already has its result and history is a shape every
+    // provider accepts. Appended before the compaction check below so a long
+    // steered message counts toward the payload being measured.
+    const steered = opts.steering?.drain() ?? [];
+    if (steered.length > 0) {
+      history.push({ role: 'user', content: formatSteering(steered) });
+      display.steering?.(steered);
+      await persist(opts.sessionPath, history);
     }
 
     turns++;
@@ -959,11 +979,72 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   await persist(opts.sessionPath, history);
   const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
   const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
+  const capDesc = profile.maxTurns === Infinity ? 'none' : String(profile.maxTurns);
   const reason = primaryArgLoopReason ? primaryArgLoopReason
     : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
     : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
     : budgetStop ? describeBudgetStop(budgetStop)
-    : `ended after ${turns} turns (cap: ${profile.maxTurns})`;
+    : `ended after ${turns} turns (cap: ${capDesc})`;
+  // ── The knowledge-gap pass ────────────────────────────────────────────────
+  //
+  // This is the last moment before the run is thrown away, and it is the one
+  // place where spending more tokens is clearly worth it: the alternative
+  // outcome is nothing at all. Ask what was missing, look it up in what Aura
+  // already knows, research it only on a miss, then resume the task with the
+  // answer in hand and write the lesson down so the next run gets it free.
+  //
+  // Skipped when the user pulled the handbrake — an abort means stop, and
+  // "stop" must not be answered with more work. Skipped for a budget stop for
+  // the same reason: the ceiling that just fired is the one thing a recovery
+  // pass would blow straight through.
+  const gapEligible = !opts.noGapPass
+    && !opts.abortSignal?.aborted
+    && !budgetStop
+    && turns > 0;
+
+  if (gapEligible) {
+    const { runKnowledgeGapPass, formatResumption } = await import('./learning.js');
+    const gap = await runKnowledgeGapPass({
+      provider, system, history, task: opts.task,
+      context: opts.context, display,
+      abortSignal: opts.abortSignal,
+      budget: opts.budget,
+    });
+
+    if (gap.resolved) {
+      display.success(`Resuming with what was missing (via ${gap.via}).`);
+      // A fresh invocation rather than re-entering the while loop: the resumed
+      // run needs its own turn budget, and expressing that as a new call keeps
+      // the recursion depth visible instead of hidden in a mutated counter.
+      // noGapPass makes it terminal — one recovery per run, never a chain.
+      const resumed = await runAgentLoop({
+        ...opts,
+        initialHistory: history,
+        task: formatResumption(gap, opts.task),
+        noGapPass: true,
+        images: undefined,
+      });
+      // Report what the whole recovery cost, not just the resumed leg. This
+      // matters more here than anywhere else in the loop: the gap pass is the
+      // one path that spends tokens the user did not directly ask for, so
+      // under-reporting it would hide exactly the number they need to judge
+      // whether it is worth keeping on.
+      return {
+        ...resumed,
+        turns: turns + resumed.turns,
+        toolCallCount: toolCallCount + resumed.toolCallCount,
+        usage: {
+          inputTokens:  usage.inputTokens  + resumed.usage.inputTokens,
+          outputTokens: usage.outputTokens + resumed.usage.outputTokens,
+          totalTokens:  usage.totalTokens  + resumed.usage.totalTokens,
+          cachedTokens: (usage.cachedTokens ?? 0) + (resumed.usage.cachedTokens ?? 0),
+        },
+        costUsd: (costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens) ?? 0)
+               + (resumed.costUsd ?? 0),
+      };
+    }
+  }
+
   return {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,

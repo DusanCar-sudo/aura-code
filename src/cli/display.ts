@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
 import { formatContextBar as formatContextBarFromHealth, formatContextDashboard } from './context-health.js';
-import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX } from './diamond.js';
 
 // The Display interface — used by the loop, easy to swap (web UI later)
 export interface Display {
@@ -35,6 +35,8 @@ export interface Display {
   contextDashboard?(health: import('./context-health.js').ContextHealth): void;
   /** Compaction event — replaces the current generic warning. */
   compactionEvent?(info: { beforeTokens: number; afterTokens: number; generation: number; threshold: number }): void;
+  /** Mid-run steering was folded into the running task. See agent/steering.ts. */
+  steering?(messages: string[]): void;
   /** Stop the thinking spinner. Called when the loop exits. */
   stopThinking?(): void;
 }
@@ -50,6 +52,12 @@ export function createTerminalDisplay(): Display {
 
     stopThinking() {
       // Terminal display doesn't use a spinner — nothing to clear.
+    },
+
+    steering(messages: string[]) {
+      for (const m of messages) {
+        process.stdout.write('\n' + chalk.hex(TERRACOTTA_HEX)('  ↳ steering: ') + chalk.hex(TEXT_DIM_HEX)(m) + '\n');
+      }
     },
 
     streamText(text: string) {

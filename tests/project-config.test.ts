@@ -44,6 +44,20 @@ describe('loadProjectConfig', () => {
     fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ mode: 'nuclear' }));
     expect(loadProjectConfig(tmpDir).mode).toBeUndefined();
   });
+
+  it('parses maxTurns number and off/0/Infinity values', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ maxTurns: 100 }));
+    expect(loadProjectConfig(tmpDir).maxTurns).toBe(100);
+
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ maxTurns: 0 }));
+    expect(loadProjectConfig(tmpDir).maxTurns).toBe(Infinity);
+
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ maxTurns: 'off' }));
+    expect(loadProjectConfig(tmpDir).maxTurns).toBe(Infinity);
+
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({ maxTurns: false }));
+    expect(loadProjectConfig(tmpDir).maxTurns).toBe(Infinity);
+  });
 });
 
 describe('resolveConfig', () => {

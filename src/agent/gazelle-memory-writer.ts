@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import type { HistoryMessage } from '../providers/types.js';
 import { createProvider } from '../providers/factory.js';
 import { resolveSummaryModel } from './tiered-context.js';
-import { CONVERSATIONAL_FILE } from './unified-memory.js';
+import { conversationalFile } from './unified-memory.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gazelle conversational-memory writer — session-end only, one write.
@@ -62,7 +62,7 @@ export async function writeConversationalMemory(
 
     let previous = 'none yet';
     try {
-      const existing = fs.readFileSync(CONVERSATIONAL_FILE, 'utf8').trim();
+      const existing = fs.readFileSync(conversationalFile(), 'utf8').trim();
       if (existing) previous = existing;
     } catch { /* first session — no file yet */ }
 
@@ -78,7 +78,7 @@ export async function writeConversationalMemory(
     const clipped = next.length > MAX_WRITE_CHARS
       ? next.slice(0, MAX_WRITE_CHARS).replace(/\s+\S*$/, '').trimEnd()
       : next;
-    fs.writeFileSync(CONVERSATIONAL_FILE, clipped + '\n', 'utf8');
+    fs.writeFileSync(conversationalFile(), clipped + '\n', 'utf8');
   } catch (e) {
     // Quiet: memory is a nice-to-have, never a reason to fail session exit.
     if (process.env.AURA_GAZELLE_DEBUG) {

@@ -319,7 +319,37 @@ def encode_png(data, w, h, out_path, max_pixels):
     return tw, th, scale
 
 
+def die_with_parent():
+    """Ask the kernel to SIGTERM us the moment Aura dies, however it dies.
+
+    Without this the sidecar is an orphan whenever the parent does not get to
+    run its cleanup — a SIGKILL, an OOM kill, a crash, or simply Node's `exit`
+    event, which cannot await an async close. Observed in practice: two of
+    these were found still alive hours after their sessions ended, each holding
+    an open /dev/uinput descriptor (a live virtual keyboard and mouse) and a
+    PipeWire screen stream. A leaked capture session is a privacy fault, not
+    just an untidy process table, so the guarantee belongs in the kernel rather
+    than in a handler the parent may never reach.
+
+    Best-effort by design: PR_SET_PDEATHSIG is Linux-only, and this sidecar is
+    already Linux-only. If it is unavailable the explicit close path still
+    works, so a failure here must not stop the process from starting.
+    """
+    try:
+        import ctypes
+        PR_SET_PDEATHSIG = 1
+        SIGTERM = 15
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, SIGTERM, 0, 0, 0)
+        # The parent can die between spawn and this call, in which case the
+        # signal was already missed and we would linger forever anyway.
+        if os.getppid() == 1:
+            os._exit(0)
+    except Exception as exc:                                    # noqa: BLE001
+        print(f"pdeathsig unavailable: {exc}", file=sys.stderr, flush=True)
+
+
 def main():
+    die_with_parent()
     portal = None
     inp = None
     try:
