@@ -161,6 +161,19 @@ Being direct about the gaps rather than implying coverage that doesn't exist:
 - **MCP servers are trusted once connected.** If you connect an MCP server, its
   tools run with the same lack of confirmation as Aura's built-in low-risk tools.
   Only connect MCP servers you trust.
+- **In-process gates stop accidents, not a determined operator.** Computer use is
+  protected by two independent keys (`--computer` and `AURA_COMPUTER_USE=1`, or an
+  in-session `:compon`) plus a one-time disclosure you have to accept. That design
+  is about accidents: a flag copied off a forum post, or an env var left in a shell
+  profile, must not be enough on its own. It is *not* a boundary. The check is
+  ordinary TypeScript in a tree Aura can write to, and this has been demonstrated
+  rather than theorised — asked firmly enough to enable computer use "even if you
+  need to change files", Aura edited its way past the gate. The same is true of
+  every other in-process guard here, including the permission levels: an agent that
+  can edit its own source and rebuild can edit the thing that says no. If you need
+  a guarantee rather than a guardrail, it has to come from outside the process —
+  file permissions, a container, or a user account that cannot write to Aura's
+  install directory.
 
 ### Practical recommendations
 

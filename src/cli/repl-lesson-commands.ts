@@ -30,6 +30,54 @@ const DIM = '#8a94a6';
 const FAINT = '#4a5568';
 const ACCENT = '#cc785c';
 
+/**
+ * A timeline of when lessons were learned.
+ *
+ * A flat list answers "what does Aura believe"; it does not answer "when did
+ * that start, and did it come in a burst". That second question is the one you
+ * ask when a run starts behaving oddly and you want to know what changed —
+ * which makes a date histogram the cheapest useful view of a store that writes
+ * into the system prompt. Rendered in the terminal because that is where the
+ * store is read from; no daemon, no browser.
+ */
+function timeline(lessons: Lesson[]): string[] {
+  if (lessons.length === 0) return [chalk.hex(FAINT)('  Nothing learned yet — no timeline to draw.')];
+
+  const byDay = new Map<string, Lesson[]>();
+  for (const l of lessons) {
+    const day = l.learnedAt.slice(0, 10);
+    (byDay.get(day) ?? byDay.set(day, []).get(day)!).push(l);
+  }
+  const days = [...byDay.keys()].sort();
+  const peak = Math.max(...[...byDay.values()].map(v => v.length));
+  // 28 columns keeps the whole row inside a narrow terminal even with the date
+  // and count either side of it.
+  const width = 28;
+
+  const out: string[] = [
+    chalk.hex(ACCENT)(`  ${lessons.length} lesson(s) across ${days.length} day(s)`),
+    '',
+  ];
+  for (const day of days) {
+    const items = byDay.get(day)!;
+    const bars = Math.max(1, Math.round((items.length / peak) * width));
+    const scopes = new Set(items.map(i => i.scope));
+    // Colour by what was learned that day: both scopes reads as mixed.
+    const hue = scopes.size > 1 ? ACCENT : scopes.has('global') ? '#5a9e6e' : '#d4903a';
+    out.push(
+      chalk.hex(DIM)(`  ${day}  `) + chalk.hex(hue)('█'.repeat(bars))
+      + chalk.hex(FAINT)(`  ${items.length}`),
+    );
+  }
+  out.push(
+    '',
+    chalk.hex(FAINT)('  ') + chalk.hex('#5a9e6e')('█') + chalk.hex(FAINT)(' global   ')
+      + chalk.hex('#d4903a')('█') + chalk.hex(FAINT)(' project   ')
+      + chalk.hex(ACCENT)('█') + chalk.hex(FAINT)(' both'),
+  );
+  return out;
+}
+
 function render(lessons: Lesson[], scope: LessonScope, where: string): string[] {
   if (lessons.length === 0) {
     return [chalk.hex(FAINT)(`  ${scope}: nothing learned yet  (${where})`)];
@@ -57,6 +105,19 @@ export function handleLessonCommand(
   if (lower === ':lessons' || lower === '/lessons'
       || lower.startsWith(':lessons ') || lower.startsWith('/lessons ')) {
     const arg = lower.includes(' ') ? norm.slice(norm.indexOf(' ') + 1).trim() : '';
+
+    // :lessons timeline — when things were learned, rather than what.
+    if (['timeline', 'journey', 'when'].includes(arg.toLowerCase())) {
+      const all = [
+        ...loadLessons('global'),
+        ...(c.projectRoot ? loadLessons('project', c.projectRoot) : []),
+      ].sort((a, b) => a.learnedAt.localeCompare(b.learnedAt));
+      c.write('');
+      for (const line of timeline(all)) c.write(line);
+      c.write('');
+      return { handled: true };
+    }
+
     const wantScope: LessonScope | null =
       arg.toLowerCase() === 'global' ? 'global'
       : arg.toLowerCase() === 'project' ? 'project'

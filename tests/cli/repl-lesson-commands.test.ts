@@ -136,3 +136,46 @@ describe('dispatch', () => {
     expect(handleLessonCommand('/forget x', ctx)).toMatchObject({ handled: true });
   });
 });
+
+describe(':lessons timeline', () => {
+  it('draws a bar per day with a count, so a burst of learning is visible', () => {
+    recordLesson('first thing learned', 'global');
+    recordLesson('second thing learned', 'global');
+    recordLesson('a project thing', 'project', proj);
+
+    expect(handleLessonCommand(':lessons timeline', ctx)).toMatchObject({ handled: true });
+
+    const text = out();
+    expect(text).toMatch(/3 lesson\(s\) across 1 day\(s\)/);
+    expect(text).toMatch(/█/);
+    expect(text).toMatch(new RegExp(new Date().toISOString().slice(0, 10)));
+  });
+
+  it('carries a legend, because the bars are colour-coded by scope', () => {
+    recordLesson('a thing', 'global');
+    handleLessonCommand(':lessons timeline', ctx);
+    expect(out()).toMatch(/global/);
+    expect(out()).toMatch(/project/);
+    expect(out()).toMatch(/both/);
+  });
+
+  it('says so plainly when there is nothing to draw', () => {
+    handleLessonCommand(':lessons timeline', ctx);
+    expect(out()).toMatch(/Nothing learned yet/);
+  });
+
+  it('accepts the aliases', () => {
+    for (const alias of ['timeline', 'journey', 'when']) {
+      written.length = 0;
+      expect(handleLessonCommand(`:lessons ${alias}`, ctx)).toMatchObject({ handled: true });
+      expect(out()).toMatch(/Nothing learned yet|lesson\(s\) across/);
+    }
+  });
+
+  it('is not confused with a search term of the same shape', () => {
+    recordLesson('something about timelines in charts', 'global');
+    handleLessonCommand(':lessons chart', ctx);
+    // A plain search still lists, rather than drawing bars.
+    expect(out()).toMatch(/filtered by "chart"/);
+  });
+});

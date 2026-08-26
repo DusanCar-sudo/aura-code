@@ -57,6 +57,7 @@ export const HELP_TEXT = [
   '  ── What Aura has learned ─────────────────────────',
   '  :lessons                Everything learned, both scopes, with keys',
   '  :lessons global|project Only that scope',
+  '  :lessons timeline       When things were learned, as a per-day chart',
   '  :lessons <text>         Only lessons matching that text',
   '  :forget <key>           Remove one lesson from the prompt for good',
   '',
