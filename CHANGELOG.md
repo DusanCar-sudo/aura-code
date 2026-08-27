@@ -4,6 +4,114 @@ All notable changes to Aura Code are documented here.
 
 ## [Unreleased]
 
+Three loops the codebase already had every piece of, and nothing connecting
+them: a run could not be corrected without being cancelled, computer use could
+not be turned on without being restarted, and a stalled run threw away
+everything it had learned. Plus the bugs each of them exposed on the way.
+
+### Added — mid-run steering
+- **Type while a task runs and it steers rather than restarts.** The TUI never
+  stopped reading stdin during a run, but a line typed mid-task had exactly two
+  destinations: `:stop`, which discards the run, or a fall-through that started
+  a *second* concurrent `runAgentLoop` over the same history. A plain line now
+  parks in an inbox and is drained at the next turn boundary — the one point
+  where the last `tool_use` block already has its result and history is a shape
+  every provider accepts. Injecting mid-turn would leave tool calls without
+  their results.
+- The framing matters as much as the mechanism: without being told to keep
+  going, models routinely read a fresh user message as a restart signal and
+  re-plan from scratch, discarding work already done.
+- Commands are excluded. A `:` line is REPL machinery, and most of it
+  (`:model`, `:new`, `:compact`) mutates state the running loop is holding.
+
+### Added — `:compon` / `:compoff` / `:comp`
+- **Computer use can be turned on and off in-session.** The two-key gate is
+  unchanged and still sound about accidents, but both keys were read only at
+  startup, so a half-configured session could only be fixed by killing it —
+  and the refusals told the model to have the user "restart with that flag",
+  which is advice to throw the conversation away. `:compon` is a third key of
+  equal strength: typed by a human, disclosure shown, consent recorded.
+- **`:compoff` actually releases the hardware** — the virtual input device and
+  the portal capture session — which nothing but process exit could do before.
+- `:comp` reports which of flag, env var and acknowledgement is satisfied. That
+  diagnostic is what was missing when the gate refused and nobody could see why.
+
+### Added — the knowledge-gap loop
+- **A run that would have given up now finds out what it was missing.** Aura
+  could already search the web, write to memory and run `:research`, but
+  nothing connected them, so all three waited on a human noticing the agent was
+  stuck. Once per run, at the moment the run was already lost: name the gap,
+  search stored lessons and episodes (free — no LLM call), research only on a
+  miss (read-only, five turns), resume the original task, write the lesson down.
+- **Memory is searched before anything is spent.** A gap closed from memory
+  costs nothing, which is the entire reason for having written the lesson down
+  the first time.
+- Scope follows the shape of the fact: facts about the world go global, facts
+  about a repo stay with it. The classifier is biased toward project-local —
+  a general fact filed locally costs one re-derivation, while a project quirk
+  filed globally is asserted, confidently and wrongly, in every future session.
+- Skipped on abort and on a budget stop. Stop means stop, and the ceiling that
+  just fired is the one thing a recovery pass would spend straight through.
+- **`:lessons` and `:forget`.** Anything that writes into its own system prompt
+  needs to be readable and correctable; an unauditable store that feeds the
+  prompt is a slow way to accumulate confident wrongness. `:lessons timeline`
+  answers the other question — *when* did this start — as a per-day chart.
+
+### Added — drag to select in the TUI
+- **Press, drag, release copies.** Selecting an answer could not scroll the
+  window, so anything longer than the viewport was uncopyable. Two things
+  prevent the terminal's own drag-to-scroll here, and both are load-bearing:
+  the alternate screen has no scrollback to scroll into, and the DECSTBM region
+  that pins the bottom block stops VTE feeding scrollback at all. So the
+  selection comes from the side that owns the scrollback. Dragging at the first
+  or last content row walks the view a line at a time; the wheel scrolls with
+  or without a selection; Shift+drag still hands events to the terminal.
+- By whole lines: a rendered line has ANSI colour baked in, so a column offset
+  would have to be mapped through those escapes on every redraw — and for
+  taking an answer out of a terminal, a ragged partial first line is worse.
+
+### Fixed
+- **The sidecar could outlive Aura, holding a virtual keyboard and mouse.**
+  `process.once('exit')` called an async close, and nothing async runs during
+  `exit` — the graceful close and the SIGTERM/SIGKILL escalation were both
+  dropped on the floor. A SIGKILLed parent orphaned the child entirely. Now
+  three layers: signals get the graceful close, `exit` gets a synchronous kill,
+  and the sidecar sets `PR_SET_PDEATHSIG` so the kernel reaps it however the
+  parent dies. Confirmed by SIGKILLing a parent and watching the child go.
+- **A portal timeout raced its own error message.** `init` waited exactly as
+  long as the sidecar's portal call (120s both sides), so a generic "no reply"
+  could beat the specific "timed out waiting for the portal dialog". `init` now
+  outlasts it, and `:compon` warns that the first capture raises a
+  screen-sharing dialog which can open behind other windows — missed, it looks
+  like a hang.
+- **Global lessons were invisible to the CLI.** With a project root the lesson
+  block read that project's dreams and *never* the global file, so a fact true
+  everywhere, learned in one repo, was re-derived from scratch in every other.
+- **`AURA_HOME` half-applied.** Honoured by four modules and hardcoded to
+  `~/.aura` by twenty-two others across thirty-three call sites, so setting it
+  moved memory and consent while leaving Telegram config, email, Gmail tokens,
+  sessions, recordings, confessions, episodes, keys, plugins and the queue
+  behind. Everything now resolves through `util/aura-home.ts`, per call rather
+  than at import — eight paths were module-level constants frozen before any
+  test could stub the environment, which is how a memory test came to read a
+  developer's real memory.
+- **An SGR mouse report would have wedged the input parser.** The generic CSI
+  branch cannot match the `<` in `ESC [ < b ; x ; y M`, so an unparsed report
+  would sit at the head of the buffer and swallow every later keystroke. Latent
+  until mouse reporting was enabled; matched first now, and a report split
+  across two reads waits for the rest.
+- **`--max-turns` accepted `off`, `0` and `-1`** as "no cap" rather than
+  silently disabling the smaller ceilings it was meant to raise.
+
+### Changed
+- Computer-use refusals name `:compon` instead of telling the model to have the
+  user restart. The model relays that sentence, so it should be the one that
+  works from where the user is sitting.
+- `SECURITY.md` states plainly that in-process gates stop accidents, not a
+  determined operator: the check is ordinary TypeScript in a tree Aura can
+  write to, and this has been demonstrated rather than theorised. A real
+  guarantee has to come from outside the process.
+
 ## [0.15.5] — 2026-08-24
 
 Computer use, on Linux. The agent can see the screen and drive the real pointer

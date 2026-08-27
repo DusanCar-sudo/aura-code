@@ -96,6 +96,9 @@ run the bare command exactly as before. `AURA_RTK=0` opts out.
 ## Features
 
 - **Autonomous execution** — reads files, edits code, runs shell commands, verifies, retries
+- **Mid-run steering** — type while it works; the note is folded into the next turn, not a restart
+- **Finishes rather than stalling** — on a stall it works out what it was missing, then carries on
+- **Learns durably** — what it worked out is written down and read back in every later session
 - **Gazelle mode** — a lean conversational path for everything that isn't a coding task; 26x less context per turn
 - **The Archimedes Principle** — a small local model attempts tasks first; the cloud model steps in only when needed
 - **Full TUI** — terminal UI with command palette, diff view, markdown rendering, vim-style input
@@ -371,6 +374,26 @@ Inside the interactive TUI (press **Ctrl+P** for a fuzzy-searchable command pale
 | `:research <topic>` | Multi-step research pass, saved to `research/*.md` |
 | `:confess` / `:confessions` | Auto-detect & list anomalous-episode confessions |
 | `:btw <question>` | Quick side question (read-only, no history pollution) |
+| `:lessons` | Everything Aura has learned, both scopes, with keys |
+| `:lessons global` / `:lessons project` | Only that scope |
+| `:lessons timeline` | When lessons were learned, as a per-day chart |
+| `:lessons <text>` | Only lessons matching that text |
+| `:forget <key>` | Remove one lesson from the prompt for good |
+
+### Computer use
+
+| Command | Description |
+|---------|-------------|
+| `:compon` | Turn computer use ON (shows the disclosure first) |
+| `:compoff` | Turn it OFF and release the input device |
+| `:comp` | Show whether it is on, and what is holding it there |
+
+### While a task is running
+
+| Command | Description |
+|---------|-------------|
+| *anything else* | Steers the running task — folded in at the next turn |
+| `:stop` / `:cancel` | Abort the running task |
 
 ### Design
 
@@ -425,6 +448,46 @@ when one is installed) — plus a `DESIGN.md` recording which direction it led w
 | `/clear`, `/reset` | Reset cumulative usage stats — does **not** clear history (use `:clear-history`) |
 | `:help` | Show all commands |
 | `:quit`, `:q`, `/exit` | Exit |
+
+---
+
+## Steering, and finishing
+
+Two behaviours that have no command because they are simply how a run works.
+
+**Steering.** The TUI never stops reading your keyboard while a task runs. Type
+a plain line mid-task and it is parked, then handed to the model at the next
+turn boundary — the run keeps its history, its tool results and its plan, and
+just learns one more thing:
+
+```
+  ↳ queued — Aura picks this up on the next turn.
+  ↳ steering use tabs, not spaces
+```
+
+Commands still wait for the run to end: `:model`, `:new` and `:compact` mutate
+state the running loop is holding. `:stop` still aborts.
+
+**Finishing.** A run that hits its turn cap or stalls used to return "Loop
+stalled" and throw away everything it had learned. Now, once per run, at the
+point where the run was already lost:
+
+```
+turn 22/25 → stall
+  ↳ name what you do not know          one cheap call, no tools
+  ↳ search what Aura already learned    free — no LLM call
+  ↳ …on a miss, research it             read-only, 5 turns
+  ↳ resume the original task
+  ↳ write the lesson down               next time this gap is free
+```
+
+Memory is searched before anything is spent, which is the whole reason lessons
+are written down in the first place. Facts about the world go to
+`~/.aura/memory/lessons-global.md` and apply everywhere; facts about one repo
+stay in its `.aura/lessons.md`. Read them with `:lessons`, drop a wrong one
+with `:forget`. Skipped entirely if you abort, or if a budget ceiling has
+fired — the ceiling that just stopped the run is not something a recovery pass
+should spend through.
 
 ---
 
@@ -488,7 +551,21 @@ the same work, 7.6x cheaper.
 
 ## Memory System
 
-Persistent memory across sessions — identity, lessons from past failures, session summaries. Stored locally at ~/.aura/memory/, never leaves your machine.
+Persistent memory across sessions — identity, lessons from past failures, session summaries. Stored locally, never leaves your machine.
+
+Everything lives under `~/.aura`, or wherever `AURA_HOME` points if you set it:
+
+| Path | What |
+|------|------|
+| `~/.aura/memory/identity.json` | Who you are and settled facts |
+| `~/.aura/memory/lessons-global.md` | Lessons true everywhere — read in every project |
+| `<project>/.aura/lessons.md` | Lessons true only in this repo |
+| `~/.aura/episodes/` | What happened, in the order it happened |
+| `~/.aura/confessions/` | Permanent lessons from high-cost failures |
+
+Read what Aura has learned with `:lessons`; drop a lesson that turned out wrong
+with `:forget <key>`. These are injected into the system prompt, so a wrong one
+left in place gets repeated back to you until it is removed.
 
 ---
 
