@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Email — send and read emails (system mail or configured SMTP)
@@ -37,7 +38,7 @@ export const EMAIL_DEFINITION: ToolDefinition = {
 };
 
 function getConfig(): { smtp_host?: string; smtp_port?: number; smtp_user?: string; smtp_pass?: string; from?: string } | null {
-  const configPath = path.join(os.homedir(), '.aura', 'email.json');
+  const configPath = auraPath('email.json');
   if (!fs.existsSync(configPath)) return null;
   try {
     return JSON.parse(fs.readFileSync(configPath, 'utf8'));

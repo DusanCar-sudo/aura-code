@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WhatsApp — send messages via Twilio WhatsApp API or HTTP gateway
@@ -50,7 +51,7 @@ interface WhatsAppConfig {
 }
 
 function loadConfig(): WhatsAppConfig | null {
-  const p = path.join(os.homedir(), '.aura', 'whatsapp.json');
+  const p = auraPath('whatsapp.json');
   if (!fs.existsSync(p)) return null;
   try {
     return JSON.parse(fs.readFileSync(p, 'utf8'));

@@ -23,6 +23,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { auraHome } from '../../util/aura-home.js';
 
 export interface Lesson {
   /** Stable identity for the thing learned; a repeat of the same key is
@@ -41,7 +42,7 @@ export interface Lesson {
 export const MAX_LESSONS = 60;
 
 export function lessonsPath(): string {
-  const home = process.env.AURA_HOME ?? path.join(os.homedir(), '.aura');
+  const home = auraHome();
   return path.join(home, 'memory', 'computer-use-lessons.json');
 }
 

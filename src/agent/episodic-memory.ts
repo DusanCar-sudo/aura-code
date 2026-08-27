@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { auraPath } from '../util/aura-home.js';
 
 /**
  * Episodic memory — things that happened, in the order they happened.
@@ -24,7 +25,7 @@ import * as crypto from 'crypto';
  * most obviously, but also a service that drops privileges after start.
  */
 function memoryDir(): string {
-  return path.join(os.homedir(), '.aura', 'memory');
+  return auraPath('memory');
 }
 
 export function episodesPath(): string {

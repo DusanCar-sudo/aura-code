@@ -18,8 +18,9 @@ import * as os from 'os';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import type { Episode } from '../dream/episode.js';
 import { listEpisodes } from '../dream/episode.js';
+import { auraPath } from '../util/aura-home.js';
 
-const CONFESSIONS_DIR = path.join(os.homedir(), '.aura', 'confessions');
+function CONFESSIONS_DIR(): string { return auraPath('confessions'); }
 const DEFAULT_THRESHOLD = 500_000; // 500K tokens
 const MAX_HISTORY_MESSAGES = 80; // cap for confession context
 
@@ -115,7 +116,7 @@ function summariseHistory(history: HistoryMessage[]): string {
 function findRecentSessionHistory(projectRoot: string, sinceMs: number): HistoryMessage[] {
   try {
     const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
-    const dir = path.join(os.homedir(), '.aura', 'sessions', safe);
+    const dir = auraPath('sessions', safe);
     if (!fs.existsSync(dir)) return [];
 
     const files = fs.readdirSync(dir)
@@ -187,11 +188,11 @@ export async function runConfession(opts: {
   const lesson = lessonMatch?.[1]?.trim() || '_No lesson extracted._';
 
   // Save
-  fs.mkdirSync(CONFESSIONS_DIR, { recursive: true });
+  fs.mkdirSync(CONFESSIONS_DIR(), { recursive: true });
   const date = new Date().toISOString().slice(0, 10);
   const slug = slugify(ep.task);
   const fileName = `${date}-${slug}.md`;
-  const filePath = path.join(CONFESSIONS_DIR, fileName);
+  const filePath = path.join(CONFESSIONS_DIR(), fileName);
 
   const md = [
     `# Confession: ${ep.task.slice(0, 80)}`,
@@ -223,15 +224,15 @@ export async function runConfession(opts: {
  */
 export function loadConfessionsSection(maxChars = 2000): string {
   try {
-    if (!fs.existsSync(CONFESSIONS_DIR)) return '';
+    if (!fs.existsSync(CONFESSIONS_DIR())) return '';
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     
-    const files = fs.readdirSync(CONFESSIONS_DIR)
+    const files = fs.readdirSync(CONFESSIONS_DIR())
       .filter(f => f.endsWith('.md'))
       .map(f => ({
         name: f,
-        path: path.join(CONFESSIONS_DIR, f),
-        mtime: fs.statSync(path.join(CONFESSIONS_DIR, f)).mtimeMs,
+        path: path.join(CONFESSIONS_DIR(), f),
+        mtime: fs.statSync(path.join(CONFESSIONS_DIR(), f)).mtimeMs,
       }))
       .filter(f => f.mtime > thirtyDaysAgo)
       .sort((a, b) => b.mtime - a.mtime)
@@ -263,11 +264,11 @@ export function loadConfessionsSection(maxChars = 2000): string {
 /** List all confessions for a project */
 export function listConfessions(): { file: string; tokens: number; lesson: string }[] {
   try {
-    if (!fs.existsSync(CONFESSIONS_DIR)) return [];
-    return fs.readdirSync(CONFESSIONS_DIR)
+    if (!fs.existsSync(CONFESSIONS_DIR())) return [];
+    return fs.readdirSync(CONFESSIONS_DIR())
       .filter(f => f.endsWith('.md'))
       .map(f => {
-        const content = fs.readFileSync(path.join(CONFESSIONS_DIR, f), 'utf8');
+        const content = fs.readFileSync(path.join(CONFESSIONS_DIR(), f), 'utf8');
         const tokMatch = content.match(/- \*\*Tokens burned:\*\* ([\d,]+)/);
         const lessonMatch = content.match(/## Permanent lesson\n\n?(.+?)(?:\n|$)/);
         return {

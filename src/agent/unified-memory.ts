@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Unified Memory — one read path shared by the CLI and the Telegram bot.
@@ -31,7 +32,7 @@ import * as os from 'os';
  * pointing at the developer's real memory, which is how this was found.
  */
 function memoryDir(): string {
-  return path.join(process.env.AURA_HOME ?? path.join(os.homedir(), '.aura'), 'memory');
+  return auraPath('memory');
 }
 
 /** Canonical global identity store (created by the consolidation migration). */

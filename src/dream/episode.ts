@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { auraPath } from '../util/aura-home.js';
 
 export interface Episode {
   id: string;
@@ -23,7 +24,7 @@ function projectHash(root: string): string {
 }
 
 function episodesDir(root: string): string {
-  return path.join(os.homedir(), '.aura', 'episodes', projectHash(root));
+  return auraPath('episodes', projectHash(root));
 }
 
 /** Record one episode. Best-effort — never throws into the caller's task flow. */
@@ -63,7 +64,7 @@ export function listEpisodesSince(root: string, sinceMs: number): Episode[] {
 
 /** All episodes across EVERY project (used for the global lessons digest). */
 export function listAllEpisodes(): Episode[] {
-  const base = path.join(os.homedir(), '.aura', 'episodes');
+  const base = auraPath('episodes');
   if (!fs.existsSync(base)) return [];
   const episodes: Episode[] = [];
   for (const proj of fs.readdirSync(base)) {

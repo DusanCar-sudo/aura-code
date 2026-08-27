@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Memory consolidation — one-time (idempotent) migration that merges the 8
@@ -16,7 +17,7 @@ import * as os from 'os';
 // than silently picking a winner (that's where auto-dedupe goes wrong).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MEMORY_DIR = path.join(os.homedir(), '.aura', 'memory');
+function MEMORY_DIR(): string { return auraPath('memory'); }
 
 type Entry = { value: string; updated?: string };
 type Store = Record<string, Entry>;
@@ -61,20 +62,20 @@ export interface ConsolidateResult {
  * Idempotent: if identity.json already exists it does nothing (unless force).
  */
 export function consolidateMemory(opts: { force?: boolean } = {}): ConsolidateResult {
-  const identityFile = path.join(MEMORY_DIR, 'identity.json');
-  const projectFile = path.join(MEMORY_DIR, 'project.json');
+  const identityFile = path.join(MEMORY_DIR(), 'identity.json');
+  const projectFile = path.join(MEMORY_DIR(), 'project.json');
 
   if (!opts.force && fs.existsSync(identityFile)) {
     return { backupDir: '', identityKeys: 0, projectKeys: 0, conflicts: [], alreadyDone: true };
   }
 
-  fs.mkdirSync(MEMORY_DIR, { recursive: true });
+  fs.mkdirSync(MEMORY_DIR(), { recursive: true });
 
   // 1. Back up every source namespace first.
-  const backupDir = path.join(MEMORY_DIR, `.pre-unify-${Date.now()}`);
+  const backupDir = path.join(MEMORY_DIR(), `.pre-unify-${Date.now()}`);
   fs.mkdirSync(backupDir, { recursive: true });
   for (const ns of [...SOURCE_NAMESPACES, 'identity', 'project']) {
-    const f = path.join(MEMORY_DIR, `${ns}.json`);
+    const f = path.join(MEMORY_DIR(), `${ns}.json`);
     if (fs.existsSync(f)) fs.copyFileSync(f, path.join(backupDir, `${ns}.json`));
   }
 
@@ -105,7 +106,7 @@ export function consolidateMemory(opts: { force?: boolean } = {}): ConsolidateRe
   };
 
   for (const ns of SOURCE_NAMESPACES) {
-    const store = loadJson(path.join(MEMORY_DIR, `${ns}.json`));
+    const store = loadJson(path.join(MEMORY_DIR(), `${ns}.json`));
     for (const [key, entry] of Object.entries(store)) {
       const target = PROJECT_STATE_KEYS.has(key) ? project : identity;
       place(target, ns, key, entry);

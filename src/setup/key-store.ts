@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Persistent API-key store — ~/.aura/keys.json
@@ -17,7 +18,7 @@ import * as os from 'os';
 // ─────────────────────────────────────────────────────────────────────────────
 
 function keyStorePath(): string {
-  return path.join(os.homedir(), '.aura', 'keys.json');
+  return auraPath('keys.json');
 }
 
 type KeyMap = Record<string, string>;

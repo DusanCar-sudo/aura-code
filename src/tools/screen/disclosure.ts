@@ -28,6 +28,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { auraPath } from '../../util/aura-home.js';
 
 /** Env var that must be set to 1/true, in addition to the CLI flag. */
 export const COMPUTER_USE_ENV = 'AURA_COMPUTER_USE';
@@ -59,7 +60,7 @@ export const COMPUTER_USE_DISCLOSURE = [
  *  than inside it, so a config rewrite by the setup wizard cannot silently
  *  clear a consent decision. */
 export function acknowledgementPath(): string {
-  return path.join(process.env.AURA_HOME ?? path.join(os.homedir(), '.aura'), 'computer-use-ack.json');
+  return auraPath('computer-use-ack.json');
 }
 
 /** True when this machine has seen and accepted the disclosure. */

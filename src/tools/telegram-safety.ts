@@ -1,12 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safety state management
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SAFETY_STATE_FILE = path.join(os.homedir(), '.aura', 'telegram-safety-state.json');
+function SAFETY_STATE_FILE(): string { return auraPath('telegram-safety-state.json'); }
 
 export interface SafetyState {
   safetyOn: boolean;
@@ -15,8 +16,8 @@ export interface SafetyState {
 /** Load safety state from disk. Defaults to ON if file missing or corrupt. */
 export function loadSafetyState(): SafetyState {
   try {
-    if (fs.existsSync(SAFETY_STATE_FILE)) {
-      const raw = fs.readFileSync(SAFETY_STATE_FILE, 'utf8');
+    if (fs.existsSync(SAFETY_STATE_FILE())) {
+      const raw = fs.readFileSync(SAFETY_STATE_FILE(), 'utf8');
       const parsed = JSON.parse(raw);
       if (typeof parsed.safetyOn === 'boolean') {
         return { safetyOn: parsed.safetyOn };
@@ -30,11 +31,11 @@ export function loadSafetyState(): SafetyState {
 
 /** Persist safety state to disk. */
 export function saveSafetyState(state: SafetyState): void {
-  const dir = path.dirname(SAFETY_STATE_FILE);
+  const dir = path.dirname(SAFETY_STATE_FILE());
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(SAFETY_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  fs.writeFileSync(SAFETY_STATE_FILE(), JSON.stringify(state, null, 2), 'utf8');
 }
 
 /**

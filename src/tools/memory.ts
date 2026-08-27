@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Persistent Memory — cross-session knowledge store
@@ -32,7 +33,7 @@ export const MEMORY_DEFINITION: ToolDefinition = {
 };
 
 function memoryDir(): string {
-  const dir = path.join(os.homedir(), '.aura', 'memory');
+  const dir = auraPath('memory');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

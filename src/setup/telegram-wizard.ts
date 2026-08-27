@@ -33,6 +33,7 @@ import chalk from 'chalk';
 import { getApiKey } from '../util/env.js';
 import { loadProviderConfig } from './provider-wizard.js';
 import { apiKeyEnvVarForModel } from '../providers/factory.js';
+import { auraHome, auraPath } from '../util/aura-home.js';
 
 const execAsync = promisify(exec);
 
@@ -51,7 +52,7 @@ interface ExistingTelegramConfig {
 }
 
 export function telegramConfigPath(): string {
-  return path.join(os.homedir(), '.aura', 'telegram.json');
+  return auraPath('telegram.json');
 }
 
 export function loadExistingTelegramConfig(): ExistingTelegramConfig | null {
@@ -254,7 +255,7 @@ function maskKey(key: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function saveTelegramConfig(botToken: string, allowedUserIds: string[]): void {
-  const dir = path.join(os.homedir(), '.aura');
+  const dir = auraHome();
   fs.mkdirSync(dir, { recursive: true });
   const config: ExistingTelegramConfig = {
     bot_token: botToken,
@@ -333,7 +334,7 @@ async function offerSystemdService(rl: readline.Interface, inputs: SystemdInputs
     return false;
   }
 
-  const logPath = path.join(os.homedir(), '.aura', 'telegram-bot.log');
+  const logPath = auraPath('telegram-bot.log');
   const content = buildSystemdServiceContent(inputs, process.execPath, botScript, projectRoot, logPath);
 
   const serviceDir = path.join(os.homedir(), '.config', 'systemd', 'user');

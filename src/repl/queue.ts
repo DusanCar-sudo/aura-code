@@ -21,6 +21,7 @@ import { runAgentLoop } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
 import { createTerminalDisplay } from '../cli/display.js';
 import { PermissionSystem } from '../safety/permissions.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ export interface QueueItem {
 // ── Storage ─────────────────────────────────────────────────────────────────
 
 function queuePath(): string {
-  return path.join(os.homedir(), '.aura', 'queue.jsonl');
+  return auraPath('queue.jsonl');
 }
 
 export function loadQueue(): QueueItem[] {

@@ -27,6 +27,7 @@ import { getApiKey } from '../util/env.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -49,7 +50,7 @@ interface TelegramConfig {
 }
 
 function loadConfig(): TelegramConfig {
-  const configPath = path.join(os.homedir(), '.aura', 'telegram.json');
+  const configPath = auraPath('telegram.json');
   if (!fs.existsSync(configPath)) {
     console.error('❌ Config not found. Create ~/.aura/telegram.json');
     process.exit(1);
@@ -63,7 +64,7 @@ function loadConfig(): TelegramConfig {
 
 const config = loadConfig();
 const TOKEN = config.bot_token;
-const OFFSET_FILE = path.join(os.homedir(), '.aura', 'telegram.offset');
+function OFFSET_FILE(): string { return auraPath('telegram.offset'); }
 
 // ── Authorization: only allowed users may talk to the bot ────────────────────
 // The bot can run shell commands, send files, and take webcam photos, so an
@@ -107,7 +108,7 @@ const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 1 });
 // advance it, and updates get processed twice or dropped between them. An
 // exclusive lockfile makes the second process refuse to start instead.
 
-const LOCK_FILE = path.join(os.homedir(), '.aura', 'telegram.lock');
+function LOCK_FILE(): string { return auraPath('telegram.lock'); }
 
 /** True when a process with this pid currently exists. */
 function pidAlive(pid: number): boolean {
@@ -125,16 +126,16 @@ let lockHeld = false;
 
 /** Take the exclusive lock, or exit(1) naming the process that holds it. */
 function acquireLock(): void {
-  fs.mkdirSync(path.dirname(LOCK_FILE), { recursive: true });
+  fs.mkdirSync(path.dirname(LOCK_FILE()), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       // 'wx' fails if the file exists — atomic create, no TOCTOU window.
-      fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: 'wx' });
+      fs.writeFileSync(LOCK_FILE(), String(process.pid), { flag: 'wx' });
       lockHeld = true;
       return;
     } catch (e: any) {
       if (e?.code !== 'EEXIST') throw e;
-      const holder = parseInt(fs.readFileSync(LOCK_FILE, 'utf8').trim(), 10);
+      const holder = parseInt(fs.readFileSync(LOCK_FILE(), 'utf8').trim(), 10);
       if (pidAlive(holder)) {
         console.error(
           `[${ts()}] 🚫 Another Aura Telegram bot is already running (pid ${holder}).\n` +
@@ -145,10 +146,10 @@ function acquireLock(): void {
       }
       // Stale lock from a crashed run — reclaim it and retry the create.
       console.error(`[${ts()}]   ⚠️ Stale lock from dead pid ${holder} — reclaiming.`);
-      try { fs.unlinkSync(LOCK_FILE); } catch { /* raced; the retry settles it */ }
+      try { fs.unlinkSync(LOCK_FILE()); } catch { /* raced; the retry settles it */ }
     }
   }
-  console.error(`[${ts()}] 🚫 Could not acquire ${LOCK_FILE}.`);
+  console.error(`[${ts()}] 🚫 Could not acquire ${LOCK_FILE()}.`);
   process.exit(1);
 }
 
@@ -157,8 +158,8 @@ function releaseLock(): void {
   if (!lockHeld) return;
   lockHeld = false;
   try {
-    const holder = parseInt(fs.readFileSync(LOCK_FILE, 'utf8').trim(), 10);
-    if (holder === process.pid) fs.unlinkSync(LOCK_FILE);
+    const holder = parseInt(fs.readFileSync(LOCK_FILE(), 'utf8').trim(), 10);
+    if (holder === process.pid) fs.unlinkSync(LOCK_FILE());
   } catch { /* already gone */ }
 }
 
@@ -202,14 +203,14 @@ let highestSeenUpdateId = 0;
 
 function loadOffset(): number {
   try {
-    return parseInt(fs.readFileSync(OFFSET_FILE, 'utf8').trim(), 10) || 0;
+    return parseInt(fs.readFileSync(OFFSET_FILE(), 'utf8').trim(), 10) || 0;
   } catch {
     return 0;
   }
 }
 
 function saveOffset(offset: number): void {
-  fs.writeFileSync(OFFSET_FILE, String(offset), 'utf8');
+  fs.writeFileSync(OFFSET_FILE(), String(offset), 'utf8');
 }
 
 /**
@@ -531,7 +532,7 @@ function splitMessage(text: string, maxLen: number): string[] {
 
 const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
 const CHAT_HISTORY_MAX = 50; // keep last N messages per chat for context
-const SESSION_DIR = path.join(os.homedir(), '.aura', 'sessions', 'telegram');
+function SESSION_DIR(): string { return auraPath('sessions', 'telegram'); }
 
 // Per-chat provider instances — one Telegram user's /provider switch MUST NOT
 // affect another user's messages. Map<chatId, provider>.
@@ -544,7 +545,7 @@ let _identityBlock = ''; // loaded from memory on startup
 
 function getSessionFile(chatId: string): string {
   // Use chat ID as session ID — same as CLI uses for consistency
-  return path.join(SESSION_DIR, `${chatId}.json`);
+  return path.join(SESSION_DIR(), `${chatId}.json`);
 }
 
 async function loadSession(chatId: string): Promise<ChatSession | null> {
@@ -618,7 +619,7 @@ const chatHistory = new Map<string, HistoryMessage[]>();
 const dirtySessions = new Set<string>();
 
 async function initializeChatHistory(): Promise<void> {
-  const dir = SESSION_DIR;
+  const dir = SESSION_DIR();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
     console.log(`[${ts()}]   Created telegram session directory`);
@@ -1412,7 +1413,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   if (lower.startsWith('/memory')) {
-    const memDir = path.join(os.homedir(), '.aura', 'memory');
+    const memDir = auraPath('memory');
     if (!fs.existsSync(memDir)) return '🧠 Nema memorije.';
     try {
       const files = fs.readdirSync(memDir).filter(f => f.endsWith('.json'));
@@ -1565,7 +1566,7 @@ async function poll(): Promise<void> {
   highestSeenUpdateId = Math.max(0, offset - 1);
 
   console.log(`[${ts()}] 💎 Aura Telegram Bot started`);
-  console.log(`   Lock: ${LOCK_FILE} (pid ${process.pid})`);
+  console.log(`   Lock: ${LOCK_FILE()} (pid ${process.pid})`);
   // Resolve identity from the token instead of hardcoding it — this token has
   // been shared with another bot before, so a banner naming the wrong bot makes
   // "did the right bot start?" unanswerable from the log alone.

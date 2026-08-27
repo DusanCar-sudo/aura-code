@@ -42,6 +42,7 @@ import type { ProjectContext } from './context.js';
 import type { Display } from '../cli/display.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { searchEpisodes } from './episodic-memory.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ── Storage ─────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export interface Lesson {
 export const MAX_LESSONS_PER_SCOPE = 80;
 
 export function globalLessonsPath(): string {
-  return path.join(process.env.AURA_HOME ?? path.join(os.homedir(), '.aura'), 'memory', 'lessons-global.md');
+  return auraPath('memory', 'lessons-global.md');
 }
 
 export function projectLessonsPath(projectRoot: string): string {

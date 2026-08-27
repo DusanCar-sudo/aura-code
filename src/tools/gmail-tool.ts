@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gmail — read and write emails via Google Gmail API (raw HTTP)
@@ -48,8 +49,8 @@ export const GMAIL_DEFINITION: ToolDefinition = {
   },
 };
 
-const TOKEN_PATH = path.join(os.homedir(), '.aura', 'google_token.json');
-const SETUP_STATE_PATH = path.join(os.homedir(), '.aura', '.gmail_setup_state.json');
+function TOKEN_PATH(): string { return auraPath('google_token.json'); }
+function SETUP_STATE_PATH(): string { return auraPath('.gmail_setup_state.json'); }
 const REDIRECT_URI = 'http://localhost:8080/';
 const SETUP_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -69,26 +70,26 @@ interface TokenFile {
 }
 
 function loadToken(): TokenFile {
-  if (!fs.existsSync(TOKEN_PATH)) throw new Error(`Google token not found at ${TOKEN_PATH}`);
-  return JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8')) as TokenFile;
+  if (!fs.existsSync(TOKEN_PATH())) throw new Error(`Google token not found at ${TOKEN_PATH()}`);
+  return JSON.parse(fs.readFileSync(TOKEN_PATH(), 'utf8')) as TokenFile;
 }
 
 function saveToken(token: TokenFile) {
-  fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
+  fs.mkdirSync(path.dirname(TOKEN_PATH()), { recursive: true });
+  fs.writeFileSync(TOKEN_PATH(), JSON.stringify(token, null, 2), { mode: 0o600 });
 }
 
 /**
  * Setup is split into two steps because OAuth requires a human to approve
  * access in a browser between them. The client_id/client_secret given in
  * step 1 are held ONLY in memory between the two tool calls (never written to
- * disk, never echoed back) — they're persisted to TOKEN_PATH only once the
+ * disk, never echoed back) — they're persisted to TOKEN_PATH() only once the
  * full token exchange in setup_finish succeeds. If the user never completes
  * step 2, nothing is left on disk.
  *
  * Critically: at no point does this tool return token, refresh_token,
  * client_secret, or any other credential value as part of its string result.
- * Those values exist only inside this process and inside TOKEN_PATH on disk —
+ * Those values exist only inside this process and inside TOKEN_PATH() on disk —
  * never in the text that flows back into the conversation.
  */
 let pendingSetup: { client_id: string; client_secret: string } | null = null;
@@ -97,15 +98,15 @@ function saveSetupState(s: { client_id: string; client_secret: string }) {
   // Held in-memory primarily; this on-disk copy only survives a process
   // restart between step 1 and step 2 of the SAME setup attempt, and is
   // deleted as soon as setup_finish succeeds or fails terminally.
-  fs.mkdirSync(path.dirname(SETUP_STATE_PATH), { recursive: true });
-  fs.writeFileSync(SETUP_STATE_PATH, JSON.stringify(s), { mode: 0o600 });
+  fs.mkdirSync(path.dirname(SETUP_STATE_PATH()), { recursive: true });
+  fs.writeFileSync(SETUP_STATE_PATH(), JSON.stringify(s), { mode: 0o600 });
 }
 
 function loadSetupState(): { client_id: string; client_secret: string } | null {
   if (pendingSetup) return pendingSetup;
-  if (!fs.existsSync(SETUP_STATE_PATH)) return null;
+  if (!fs.existsSync(SETUP_STATE_PATH())) return null;
   try {
-    return JSON.parse(fs.readFileSync(SETUP_STATE_PATH, 'utf8'));
+    return JSON.parse(fs.readFileSync(SETUP_STATE_PATH(), 'utf8'));
   } catch {
     return null;
   }
@@ -113,7 +114,7 @@ function loadSetupState(): { client_id: string; client_secret: string } | null {
 
 function clearSetupState() {
   pendingSetup = null;
-  try { fs.unlinkSync(SETUP_STATE_PATH); } catch { /* already gone */ }
+  try { fs.unlinkSync(SETUP_STATE_PATH()); } catch { /* already gone */ }
 }
 
 async function refreshAccess(token: TokenFile): Promise<string> {
@@ -223,7 +224,7 @@ export async function gmailTool(input: GmailInput): Promise<string> {
   try {
     switch (input.action) {
       case 'setup_status': {
-        if (!fs.existsSync(TOKEN_PATH)) return 'Not connected. No Gmail token found. Run setup to connect.';
+        if (!fs.existsSync(TOKEN_PATH())) return 'Not connected. No Gmail token found. Run setup to connect.';
         try {
           const t = loadToken();
           const valid = !!t.refresh_token;

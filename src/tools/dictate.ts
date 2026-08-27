@@ -5,6 +5,7 @@ import * as os from 'os';
 import chalk from 'chalk';
 import OpenAI from 'openai';
 import * as https from 'https';
+import { auraPath } from '../util/aura-home.js';
 
 const SAMPLE_RATE = 16000;
 const MIMO_BASE = 'https://api.xiaomimimo.com/v1';
@@ -509,7 +510,7 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
     }
   } else {
     // Save failed recording for debugging
-    const saveDir = path.join(os.homedir(), '.aura', 'recordings');
+    const saveDir = auraPath('recordings');
     const saveName = 'dic_' + new Date().toISOString().replace(/[:.]/g, '-') + '.wav';
     const savePath = path.join(saveDir, saveName);
     try {

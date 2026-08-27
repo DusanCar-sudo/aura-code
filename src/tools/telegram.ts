@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraHome, auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Telegram — send/receive messages via Telegram Bot API
@@ -66,7 +67,7 @@ interface TelegramConfig {
 }
 
 function loadConfig(): TelegramConfig | null {
-  const p = path.join(os.homedir(), '.aura', 'telegram.json');
+  const p = auraPath('telegram.json');
   if (!fs.existsSync(p)) return null;
   try {
     return JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -76,7 +77,7 @@ function loadConfig(): TelegramConfig | null {
 }
 
 function saveConfig(config: TelegramConfig): void {
-  const dir = path.join(os.homedir(), '.aura');
+  const dir = auraHome();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'telegram.json'), JSON.stringify(config, null, 2), 'utf8');
 }

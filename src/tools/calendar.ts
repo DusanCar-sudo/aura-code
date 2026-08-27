@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraHome } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Calendar — simple calendar/reminder system
@@ -47,7 +48,7 @@ interface CalendarEvent {
 }
 
 function calendarPath(): string {
-  const dir = path.join(os.homedir(), '.aura');
+  const dir = auraHome();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, 'calendar.json');
 }

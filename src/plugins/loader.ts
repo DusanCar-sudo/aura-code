@@ -13,15 +13,16 @@ import type {
   HookEntry, HookEvent, LoadedPlugin, PluginAgent, PluginCommand,
   PluginManifest, PluginSkill,
 } from './types.js';
+import { auraPath } from '../util/aura-home.js';
 
 export function pluginsDir(): string {
-  return process.env.AURA_PLUGIN_DIR
-    ?? path.join(process.env.HOME ?? os.homedir(), '.aura', 'plugins');
+  // The per-directory override still wins; the fallback now follows AURA_HOME
+  // like every other piece of Aura state.
+  return process.env.AURA_PLUGIN_DIR ?? auraPath('plugins');
 }
 
 export function marketplacesDir(): string {
-  return process.env.AURA_MARKETPLACE_DIR
-    ?? path.join(process.env.HOME ?? os.homedir(), '.aura', 'marketplaces');
+  return process.env.AURA_MARKETPLACE_DIR ?? auraPath('marketplaces');
 }
 
 /** Load every plugin installed in the plugins dir. Never throws. */

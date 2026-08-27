@@ -11,6 +11,7 @@ import { listAllEpisodes } from './episode.js';
 import { loadEpisodes } from '../archimedes/episode-capture.js';
 import { createProvider, checkOllamaHealth } from '../providers/factory.js';
 import type { Episode } from '../archimedes/types.js';
+import { auraPath } from '../util/aura-home.js';
 
 function dreamsDir(root: string): string {
   return path.join(root, 'dreams');
@@ -365,7 +366,7 @@ export function getReconciledOrLatest(root: string): { content: string; isReconc
  */
 export function runGlobalReconciliation(): string {
   const episodes = listAllEpisodes();
-  const outPath = path.join(os.homedir(), '.aura', 'memory', 'lessons-global.md');
+  const outPath = auraPath('memory', 'lessons-global.md');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   if (episodes.length === 0) {
