@@ -81,6 +81,33 @@ function closeOverlay(): void {
 
 let scrollMode = false;
 let scrollOffset = 0;
+
+/**
+ * Mouse selection.
+ *
+ * Aura has to do this itself, and the reason is worth recording because it
+ * looks like a terminal feature that ought to be free. Two things in this TUI
+ * independently prevent the terminal's own drag-to-scroll selection: the
+ * alternate screen buffer has no scrollback for a drag to scroll into, and the
+ * DECSTBM scroll region that pins the bottom block stops VTE feeding scrolled
+ * lines to scrollback at all. Both are load-bearing — the first keeps the
+ * user's shell history intact, the second is what makes the prompt stay put —
+ * so the selection has to come from the side that actually owns the
+ * scrollback, which is Aura.
+ *
+ * Selection is by whole lines, not by character. A line here is a rendered
+ * string with ANSI colour already baked in, so a column offset would have to
+ * be mapped through those escape sequences on every redraw to highlight or
+ * copy a partial line. Whole lines need none of that, and for the thing people
+ * actually do with this — take an answer out of the terminal — a ragged
+ * partial first line is a worse result anyway.
+ */
+let selecting = false;
+/** Indices into liveScrollLines(); anchor is where the drag began. */
+let selAnchor: number | null = null;
+let selHead: number | null = null;
+/** Cleared on the next keypress, so the confirmation doesn't linger. */
+let selToast: string | null = null;
 let pendingG = false;
 let scrollBuffer: string[] = [];
 const MAX_SCROLLBACK = 5000;
@@ -192,6 +219,15 @@ let pendingResize = false;
 export function enterAltScreen(): void {
   altScreenActive = true;
   rawWrite('\x1b[?1049h');
+  // 1002: report button press, release, and motion *while a button is held* —
+  // not bare motion (1003), which would wake this process on every mouse move
+  // across the window for nothing. 1006: SGR coordinates, so columns past 223
+  // survive; the legacy encoding silently corrupts them on a wide terminal.
+  //
+  // Holding Shift makes the terminal keep the events for its own selection
+  // instead of forwarding them, which is the standard escape hatch and is
+  // advertised in the scroll indicator.
+  rawWrite('\x1b[?1002h\x1b[?1006h');
   // OSC 11: set the terminal's default background to the palette's bluish
   // dark. Restored via OSC 111 on leave — no per-line bg painting needed.
   rawWrite(`\x1b]11;${BG_HEX}\x07`);
@@ -199,6 +235,7 @@ export function enterAltScreen(): void {
 export function leaveAltScreen(): void {
   if (!altScreenActive) return;
   altScreenActive = false;
+  rawWrite('\x1b[?1006l\x1b[?1002l');
   rawWrite('\x1b]111\x07'); // OSC 111: reset background to terminal default
   rawWrite('\x1b[?1049l');
 }
@@ -575,7 +612,21 @@ function renderScrollView(): void {
   if (bannerRowCount > 0) {
     bannerLines.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
   }
-  visible.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
+  const sel = selectionRange();
+  visible.forEach((line, i) => {
+    const idx = start + i;
+    const hit = sel !== null && idx >= sel[0] && idx <= sel[1];
+    // Reverse video for the whole row rather than around the text: padding to
+    // the view width is what makes a multi-line selection read as one block
+    // instead of a ragged column of highlighted words.
+    if (hit) {
+      const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+      rawWrite('\x1b[7m' + truncVisible(plain, width).padEnd(width) + '\x1b[27m');
+    } else {
+      rawWrite(truncVisible(line, width));
+    }
+    rawWrite('\n');
+  });
   for (let i = visible.length; i < vh; i++) rawWrite('\n');
 
   // Bottom block
@@ -587,10 +638,139 @@ function renderScrollView(): void {
 
   const bottom = start + visible.length;
   const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, liveLines.length)) * 100)}%`;
-  const indicator = ACCENT.bold(' -- SCROLL -- ')
-    + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · j/k · ^d/^u · gg/G · i/Enter/Esc insert`);
+  const selCount = sel ? sel[1] - sel[0] + 1 : 0;
+  const indicator = selToast
+    ? ACCENT.bold(' -- COPIED -- ') + TEXT_DIM(selToast + ' · drag to select again · Esc insert')
+    : selCount > 0
+      ? ACCENT.bold(' -- SELECT -- ')
+        + TEXT_DIM(`${selCount} line${selCount === 1 ? '' : 's'} · release to copy · drag past the edge to scroll`)
+      : ACCENT.bold(' -- SCROLL -- ')
+        + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · drag to select · wheel · j/k · gg/G · Shift+drag = terminal select`);
   rawWrite(`\x1b[${sr};1H`);
   rawWrite(truncVisible(indicator, width));
+}
+
+/** Screen row (1-based) of the first content line, below the banner. */
+function contentTopRow(sr = screenRows()): number {
+  return visibleBannerRowCount(sr) + 1;
+}
+
+/** Convert a 1-based screen row to an index into liveScrollLines(), or null
+ *  when the row is banner, bottom block, or past the end of the content. */
+function rowToLineIndex(row: number): number | null {
+  const sr = screenRows();
+  const top = contentTopRow(sr);
+  const vh = viewHeight();
+  if (row < top || row >= top + vh) return null;
+  const lines = liveScrollLines();
+  const start = Math.max(0, lines.length - vh - scrollOffset);
+  const idx = start + (row - top);
+  return idx < lines.length ? idx : null;
+}
+
+/** The selected range as [lo, hi] inclusive, or null when nothing is selected. */
+export function selectionRange(): [number, number] | null {
+  if (selAnchor === null || selHead === null) return null;
+  return selAnchor <= selHead ? [selAnchor, selHead] : [selHead, selAnchor];
+}
+
+function clearSelection(): void {
+  selecting = false;
+  selAnchor = null;
+  selHead = null;
+}
+
+/**
+ * Copy the selected lines, with colour stripped.
+ *
+ * Stripping is not optional: the escape sequences are invisible in the
+ * terminal but land as literal bytes in whatever the text is pasted into.
+ */
+function copySelection(): void {
+  const range = selectionRange();
+  if (!range) return;
+  const [lo, hi] = range;
+  const text = liveScrollLines().slice(lo, hi + 1)
+    .map(l => l.replace(/\x1b\[[0-9;]*m/g, '').replace(/\s+$/, ''))
+    .join('\n');
+  const count = hi - lo + 1;
+
+  void import('../tools/clipboard.js')
+    .then(m => m.clipboardTool({ action: 'copy', text }))
+    .then(res => {
+      selToast = res.startsWith('Error')
+        ? res
+        : `copied ${count} line${count === 1 ? '' : 's'} (${text.length} chars)`;
+      if (scrollMode) renderScrollView();
+    })
+    .catch(() => { /* a failed copy must not take the TUI down */ });
+}
+
+/**
+ * SGR mouse report: ESC [ < b ; x ; y (M=press/drag, m=release).
+ * Returns true when the sequence was consumed.
+ */
+function handleMouse(button: number, _col: number, row: number, pressed: boolean): void {
+  const wheel = button & 64;
+  const motion = button & 32;
+  const btn = button & 3;
+
+  // Wheel scrolls the view whether or not scroll mode was entered explicitly —
+  // reaching for the wheel *is* the request to scroll.
+  if (wheel) {
+    if (!scrollMode) {
+      if (scrollBuffer.length === 0) return;
+      enterScrollMode(0);
+    }
+    scrollOffset = btn === 0
+      ? Math.min(scrollOffset + 3, maxScrollOffset())   // wheel up = back in time
+      : Math.max(0, scrollOffset - 3);
+    renderScrollView();
+    return;
+  }
+
+  if (btn !== 0) return;   // left button only
+
+  if (pressed && !motion) {
+    const idx = rowToLineIndex(row);
+    if (idx === null) return;
+    // Entering scroll mode on press is what makes the drag able to scroll at
+    // all: the live view has no offset to move.
+    if (!scrollMode) {
+      if (scrollBuffer.length === 0) return;
+      enterScrollMode(0);
+    }
+    selecting = true;
+    selAnchor = idx;
+    selHead = idx;
+    selToast = null;
+    renderScrollView();
+    return;
+  }
+
+  if (motion && selecting) {
+    const sr = screenRows();
+    const top = contentTopRow(sr);
+    const vh = viewHeight();
+    // Edge auto-scroll — the whole point of the feature. Dragging at or past
+    // the first/last content row moves the window a line at a time, which is
+    // slow enough to stay controllable and fast enough to cross a long answer.
+    if (row <= top && scrollOffset < maxScrollOffset()) {
+      scrollOffset += 1;
+    } else if (row >= top + vh - 1 && scrollOffset > 0) {
+      scrollOffset -= 1;
+    }
+    const idx = rowToLineIndex(Math.min(Math.max(row, top), top + vh - 1));
+    if (idx !== null) selHead = idx;
+    renderScrollView();
+    return;
+  }
+
+  if (!pressed && selecting) {
+    selecting = false;
+    copySelection();
+    renderScrollView();
+  }
 }
 
 function enterScrollMode(initialOffset: number): void {
@@ -605,6 +785,8 @@ function exitScrollMode(): void {
   scrollMode = false;
   pendingG = false;
   scrollOffset = 0;
+  clearSelection();
+  selToast = null;
   redrawLiveView();
 }
 
@@ -946,6 +1128,7 @@ function handleChar(ch: string): void {
 }
 
 function handleScrollKey(key: string): void {
+  selToast = null;
   const half = Math.floor(viewHeight() / 2);
   const gWasPending = pendingG;
   pendingG = false;
@@ -1054,6 +1237,17 @@ function rawHandler(data: string): void {
       if (stdinBuffer[i] === '\x1b') {
         if (i + 1 >= stdinBuffer.length) break;
         if (stdinBuffer[i + 1] === '[') {
+          // SGR mouse report — matched before the generic CSI branch below,
+          // whose character class excludes '<' and so would return null and
+          // break out of the loop, wedging every later keystroke behind an
+          // escape sequence it could never consume.
+          if (stdinBuffer[i + 2] === '<') {
+            const mm = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])/.exec(stdinBuffer.slice(i));
+            if (!mm) break;   // split across reads; wait for the rest
+            handleMouse(Number(mm[1]), Number(mm[2]), Number(mm[3]), mm[4] === 'M');
+            i += mm[0].length;
+            continue;
+          }
           const m = /^\x1b\[[0-9;]*[A-Za-z~]/.exec(stdinBuffer.slice(i));
           if (!m) break;
           if (m[0] === PASTE_START) {
@@ -1142,6 +1336,11 @@ export function setChatId(id: string): void {
 export function initTui(): void {
   scrollMode = false;
   scrollOffset = 0;
+  // A fresh TUI must not inherit a selection from the previous one: the
+  // indices point into a scrollBuffer that is about to be emptied, so a stale
+  // range would highlight arbitrary lines of the new session.
+  clearSelection();
+  selToast = null;
   pendingG = false;
   scrollBuffer = [];
   streamAccum = '';
