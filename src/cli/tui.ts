@@ -216,18 +216,26 @@ let altScreenActive = false;
 let resizeHandlerAttached = false;
 /** A resize that arrived while an overlay held the screen, replayed on startInput(). */
 let pendingResize = false;
+/**
+ * Mouse reporting, as its own pair so anything that takes stdin away from the
+ * TUI can switch it off.
+ *
+ * 1002: report button press, release, and motion *while a button is held* —
+ * not bare motion (1003), which would wake this process on every mouse move
+ * across the window for nothing. 1006: SGR coordinates, so columns past 223
+ * survive; the legacy encoding silently corrupts them on a wide terminal.
+ *
+ * Holding Shift makes the terminal keep the events for its own selection
+ * instead of forwarding them, which is the standard escape hatch and is
+ * advertised in the scroll indicator.
+ */
+function enableMouse(): void { rawWrite('\x1b[?1002h\x1b[?1006h'); }
+function disableMouse(): void { rawWrite('\x1b[?1006l\x1b[?1002l'); }
+
 export function enterAltScreen(): void {
   altScreenActive = true;
   rawWrite('\x1b[?1049h');
-  // 1002: report button press, release, and motion *while a button is held* —
-  // not bare motion (1003), which would wake this process on every mouse move
-  // across the window for nothing. 1006: SGR coordinates, so columns past 223
-  // survive; the legacy encoding silently corrupts them on a wide terminal.
-  //
-  // Holding Shift makes the terminal keep the events for its own selection
-  // instead of forwarding them, which is the standard escape hatch and is
-  // advertised in the scroll indicator.
-  rawWrite('\x1b[?1002h\x1b[?1006h');
+  enableMouse();
   // OSC 11: set the terminal's default background to the palette's bluish
   // dark. Restored via OSC 111 on leave — no per-line bg painting needed.
   rawWrite(`\x1b]11;${BG_HEX}\x07`);
@@ -235,7 +243,7 @@ export function enterAltScreen(): void {
 export function leaveAltScreen(): void {
   if (!altScreenActive) return;
   altScreenActive = false;
-  rawWrite('\x1b[?1006l\x1b[?1002l');
+  disableMouse();
   rawWrite('\x1b]111\x07'); // OSC 111: reset background to terminal default
   rawWrite('\x1b[?1049l');
 }
@@ -1300,6 +1308,9 @@ export function startInput(): void {
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
   rawWrite('\x1b[?2004h'); // enable bracketed paste
+  // Paired with stopInput's disableMouse: only this handler understands SGR
+  // mouse reports, so reporting is on exactly while it is listening.
+  if (altScreenActive) enableMouse();
   stdinHandler = rawHandler;
   process.stdin.on('data', stdinHandler);
   if (pendingResize) {
@@ -1312,6 +1323,14 @@ export function stopInput(): void {
   if (!inputActive) return;
   inputActive = false;
   rawWrite('\x1b[?2004l'); // disable bracketed paste
+  // Hand the mouse back to the terminal. Whatever takes stdin next — the model
+  // selector, the provider wizard, an API-key prompt — reads bytes without
+  // decoding SGR mouse reports, so every click and drag would arrive there as
+  // a burst of junk keypresses: the highlight jumping on a click, escape
+  // sequences landing inside a filter or a pasted key. Leaving 1002 on also
+  // suppresses the terminal's own text selection, so there is no way to select
+  // and copy what is on screen.
+  disableMouse();
   if (stdinHandler) {
     process.stdin.removeListener('data', stdinHandler);
     stdinHandler = null;
