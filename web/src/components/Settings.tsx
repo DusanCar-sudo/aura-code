@@ -424,6 +424,8 @@ function SkillsTab({ t }: { t: T }) {
         body: JSON.stringify({ spec: value }),
       });
       const data = await res.json().catch(() => null);
+      // 403 means the server was started without --allow-plugin-install. Its
+      // message names the flag, so pass it through rather than paraphrasing.
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
       setSpec('');
       setNote({

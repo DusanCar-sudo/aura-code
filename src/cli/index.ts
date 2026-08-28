@@ -3529,6 +3529,8 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --lan')}                        Also serve phones over Wi-Fi (TLS, pinned)
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --tailscale')}                  Also serve phones on any network, via Tailscale
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve --allow-plugin-install')}        Let the web client install plugins and set API keys
+                                            (off by default: plugins run unsandboxed)
     aura ${chalk.hex(TEXT_DIM_HEX)('sidecar')}                            Engine over stdio (NDJSON) — see docs/PROTOCOL.md
     aura ${chalk.hex(TEXT_DIM_HEX)('devices')}                            List phones paired to this desktop
     aura ${chalk.hex(TEXT_DIM_HEX)('devices add <name>')}                 Pair a phone; prints its token once
@@ -3753,6 +3755,7 @@ if (require.main !== module) {
     lan: argv.lan === true,
     lanAddress: typeof argv.lan === 'string' ? argv.lan : undefined,
     tailscale: argv.tailscale === true || argv.remote === true,
+    allowPluginInstall: argv['allow-plugin-install'] === true,
   }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {
   main().catch(e => { console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`)); process.exit(1); });

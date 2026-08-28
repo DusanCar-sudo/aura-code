@@ -39,6 +39,17 @@ export interface ServeOptions {
   lanAddress?: string;
   /** Also listen on the Tailscale address, reachable from any network. */
   tailscale?: boolean;
+  /**
+   * Allow the web client to install and remove plugins, and to set provider
+   * API keys, over HTTP.
+   *
+   * Off by default. Installing a plugin downloads and runs code with this
+   * process's full privileges and no sandbox (src/plugins/hooks.ts), so over
+   * `--lan` or `--tailscale` an enabled endpoint turns any paired device into
+   * remote code execution. The pairing token is the only thing in front of it,
+   * which is fine for a local convenience and not enough for a standing one.
+   */
+  allowPluginInstall?: boolean;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
@@ -365,7 +376,23 @@ export async function startServer(opts: ServeOptions): Promise<void> {
    * make in their own environment, not something a web form should do quietly.
    * The value is never logged and never read back.
    */
+  /**
+   * Mutating extension endpoints are gated: see ServeOptions.allowPluginInstall.
+   * Refusing with 403 and the flag name beats a silent 404 — the operator
+   * should learn the capability exists and is deliberately off.
+   */
+  function requireMutationsAllowed(res: express.Response): boolean {
+    if (opts.allowPluginInstall) return true;
+    res.status(403).json({
+      error: 'Plugin install/remove and API-key changes are disabled. '
+        + 'Restart with `aura serve --allow-plugin-install` to enable them. '
+        + 'Plugins run unsandboxed with full privileges, so this is off by default.',
+    });
+    return false;
+  }
+
   app.post('/api/apikey', (req, res) => {
+    if (!requireMutationsAllowed(res)) return;
     const body = (req.body ?? {}) as { envKey?: unknown; value?: unknown };
     const envKey = typeof body.envKey === 'string' ? body.envKey.trim() : '';
     const value = typeof body.value === 'string' ? body.value.trim() : '';
@@ -396,6 +423,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
    * of its protection, and the UI says so plainly.
    */
   app.post('/api/plugins/install', async (req, res) => {
+    if (!requireMutationsAllowed(res)) return;
     const spec = typeof (req.body as { spec?: unknown })?.spec === 'string'
       ? String((req.body as { spec: string }).spec).trim()
       : '';
@@ -416,6 +444,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   });
 
   app.post('/api/plugins/remove', (req, res) => {
+    if (!requireMutationsAllowed(res)) return;
     const name = typeof (req.body as { name?: unknown })?.name === 'string'
       ? String((req.body as { name: string }).name).trim()
       : '';
