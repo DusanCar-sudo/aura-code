@@ -332,10 +332,35 @@ export function checkEnv(root: string): Finding[] {
     });
   }
 
+  // Web search. The no-key path scrapes DuckDuckGo, which blocks a lot of IPs
+  // with a bot-check page; when that happens every research-shaped command
+  // (:research, :ecclesia, :designx) degrades. Worth surfacing here because the
+  // symptom at the call site — searches that return nothing — reads as "the
+  // topic is obscure" rather than "the tool is down".
+  if (process.env.BRAVE_API_KEY || process.env.BRAVE_SEARCH_API_KEY || process.env.TAVILY_API_KEY) {
+    const which = process.env.BRAVE_API_KEY || process.env.BRAVE_SEARCH_API_KEY ? 'Brave' : 'Tavily';
+    out.push({
+      category: 'env', name: 'web search',
+      severity: 'ok',
+      message: `web_search backed by the ${which} API.`,
+      fixable: false,
+    });
+  } else {
+    out.push({
+      category: 'env', name: 'web search',
+      severity: 'warn',
+      message: 'No search API key set — web_search falls back to scraping DuckDuckGo, which blocks '
+        + 'many IPs with a bot-check page. Set BRAVE_API_KEY (free tier: brave.com/search/api) or '
+        + 'TAVILY_API_KEY for search that works reliably.',
+      fixable: false,
+    });
+  }
+
   const knownEnvVars = [
     'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY',
     'XAI_API_KEY', 'OPENROUTER_API_KEY', 'XIAOMI_API_KEY',
     'ZHIPU_API_KEY', 'OPENCODE_GO_API_KEY', 'DEEPSEEK_API_KEY',
+    'ARK_API_KEY', 'FPT_API_KEY',
   ];
 
   const set: string[] = [];

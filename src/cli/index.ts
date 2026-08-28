@@ -79,6 +79,9 @@ import { handleComputerCommand } from './repl-computer-commands.js';
 import { handleLessonCommand } from './repl-lesson-commands.js';
 import { handleCostCommand } from './repl-cost-command.js';
 import { createSteeringInbox, type SteeringInbox } from '../agent/steering.js';
+import { handleArchimedesCommand } from './repl-archimedes-commands.js';
+import { handleUsageCommand } from './repl-usage-commands.js';
+import { handleSkillsCommand } from './repl-skills-command.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
@@ -141,7 +144,7 @@ const argv = minimist(process.argv.slice(2), {
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
-    mode:  'normal',
+    mode:  'auto',
   },
 });
 
@@ -537,7 +540,7 @@ const resolved = resolveConfig(
     maxRetries: cliMaxRetries,
     fallbacks: cliFallbacks.length > 0 ? cliFallbacks : undefined,
   },
-  { model: undefined as unknown as string, mode: 'normal', ignore: [] },
+  { model: undefined as unknown as string, mode: 'auto', ignore: [] },
 );
 
 // Register custom providers from .aura.json
@@ -2100,6 +2103,9 @@ const FAMILY_TO_PROVIDER_ID: Record<string, string | undefined> = {
   gmi: 'gmi',
   kilocode: 'kilocode',
   alibaba: 'alibaba',
+  byteplus: 'byteplus',
+  fpt: 'fpt',
+  fptcloud: 'fpt',
   'openai-compatible': 'openai',
 };
 
@@ -2650,52 +2656,25 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === ':small1' || input === ':small1 on') {
-    const { getEpisodeStats } = await import('../archimedes/index.js');
-    const stats = await getEpisodeStats(c.ctx.root);
-    const attempts = stats.archimedesSuccesses + stats.archimedesFailures;
-    const score = attempts > 0
-      ? `${Math.round((stats.archimedesSuccesses / attempts) * 100)}% over ${attempts} attempt(s)`
-      : 'no recorded attempts yet';
-    c.display.success(
-      `Starting with Archimedes (small1 override — competence gate bypassed, current score: ${score}). ` +
-      `Verification and escalation still apply; attempts update the score normally. :small1 off to revert.`,
-    );
-    return { handled: true, newSmall1Override: true };
-  }
+  // ── Archimedes routing ───────────────────────────────────────────────────
+  // :small1, :archon, :archoff, :archmodel. In repl-archimedes-commands.ts so
+  // they can be tested without importing this self-executing module — each one
+  // only returns an override flag, and a dropped return looks identical to a
+  // working command from the outside. Called from the exact position those
+  // branches occupied.
+  const archCmd = await handleArchimedesCommand(input, {
+    projectRoot: c.ctx.root,
+    archimedesModelOverride: c.archimedesModelOverride,
+    display: c.display,
+  });
+  if (archCmd) return archCmd;
 
-  if (input === ':small1 off') {
-    c.display.success('small1 override: OFF — normal Archimedes competence routing restored.');
-    return { handled: true, newSmall1Override: false };
-  }
-
-  if (input === ':archon') {
-    c.display.success('Archimedes Alternator: ON for this session (overrides .aura.json until :archoff or restart).');
-    return { handled: true, newArchimedesOverride: true };
-  }
-
-  if (input === ':archoff') {
-    c.display.success('Archimedes Alternator: OFF for this session (overrides .aura.json until :archon or restart).');
-    return { handled: true, newArchimedesOverride: false };
-  }
-
-  if (input.startsWith(':archmodel ')) {
-    const modelTag = input.slice(11).trim();
-    if (!modelTag) {
-      c.display.warning(
-        'Usage: :archmodel <model>  e.g. :archmodel qwen3-vl:4b (Ollama) ' +
-        'or :archmodel lmstudio/qwen/qwen3-1.7b (LM Studio)',
-      );
-      return { handled: true };
-    }
-    return { handled: true, newArchimedesModelOverride: modelTag };
-  }
-
-  if (input === ':archmodel') {
-    const current = c.archimedesModelOverride ?? '(from .aura.json or auto-detect)';
-    c.display.success(`Archimedes model: ${current}`);
-    return { handled: true };
-  }
+  // ── Skills ───────────────────────────────────────────────────────────────
+  // :skills reports the parsed catalog the agent routes against — see
+  // repl-skills-command.ts for why an installed skill is otherwise
+  // indistinguishable from a loaded one.
+  const skillsCmd = handleSkillsCommand(input, { projectRoot: c.ctx.root });
+  if (skillsCmd) return skillsCmd;
 
   if (input === ':help' || input === '/help') {
     console.log(chalk.hex(TEXT_DIM_HEX)(HELP_TEXT.join('\n')));
@@ -3047,54 +3026,18 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  if (input === '/clear' || input === '/reset') {
-    c.cumulative.turns = 0;
-    c.cumulative.toolCalls = 0;
-    c.cumulative.inputTokens = 0;
-    c.cumulative.outputTokens = 0;
-    c.cumulative.costUsd = 0;
-    console.log(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
-    // This zeroes the *displayed* counters only — the underlying history
-    // (what actually gets resent and billed on the next task) is untouched.
-    // Say so explicitly: "reset"/"clear" reads as "start fresh" otherwise,
-    // and a user who believes that will keep paying to resend everything.
-    console.log(chalk.hex(TEXT_DIM_HEX)('    (conversation history is unchanged — use :new or :clear-history to actually reset it)'));
-    return { handled: true };
-  }
-
-  if (input === '/stats' || input === '/usage') {
-    const u = c.cumulative;
-    const total = u.inputTokens + u.outputTokens;
-    console.log(chalk.hex(TEXT_DIM_HEX)([
-      '',
-      `  Session usage:`,
-      `    Turns:        ${u.turns}`,
-      `    Tool calls:   ${u.toolCalls}`,
-      `    Input tokens: ${u.inputTokens.toLocaleString()}`,
-      `    Output tokens:${u.outputTokens.toLocaleString()}`,
-      `    Total tokens: ${total.toLocaleString()}`,
-      `    Est. cost:    ${u.costUsd.toFixed(4)}`,
-      '',
-    ].join('\n')));
-    return { handled: true };
-  }
-
-  if (input === '/context') {
-    const u = c.cumulative;
-    const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
-    h.turnCount = u.turns;
-    h.toolCallCount = u.toolCalls;
-    c.display.contextDashboard?.(h);
-    return { handled: true };
-  }
-
-  if (input === '/cost' || input.startsWith('/cost ')) {
-    const { readTokenLog, formatCostReport } = await import('./cost-report.js');
-    const arg = input.startsWith('/cost ') ? input.slice('/cost '.length).trim() : '';
-    const recent = /^\d+$/.test(arg) ? Number(arg) : 20;
-    console.log(formatCostReport(readTokenLog(c.ctx.root), recent));
-    return { handled: true };
-  }
+  // ── Usage reporting ──────────────────────────────────────────────────────
+  // /clear, /stats, /context, /cost — the commands that only read or reset the
+  // counters, never the history. In repl-usage-commands.ts so they can be
+  // tested without importing this self-executing module. /context tune stays
+  // below: it drives the shared readline, which is this loop's state.
+  const usageCmd = await handleUsageCommand(input, {
+    projectRoot: c.ctx.root,
+    cumulative: c.cumulative,
+    healthTracker: c.healthTracker,
+    display: c.display,
+  });
+  if (usageCmd) return usageCmd;
 
   if (input === '/context tune' || input === '/ct') {
     const u = c.cumulative;

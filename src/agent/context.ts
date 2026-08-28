@@ -10,6 +10,7 @@ export interface ProjectContext {
   framework: string;     // framework detected (React, Django, etc.)
   readme: string;        // README contents (truncated)
   auraRules: string;     // AURA.md standing rules (truncated), if present
+  agentNotes: string;    // AGENTS.md project description (truncated), if present
   tree: string;          // directory tree
   config: string;        // package.json / requirements.txt / Cargo.toml
   recentCommits: string; // last 5 git commits
@@ -28,6 +29,12 @@ export async function loadProjectContext(cwd: string): Promise<ProjectContext> {
     framework,
     readme:        readTruncated(root, ['README.md', 'README.txt', 'README.rst'], 2000),
     auraRules:     readTruncated(root, ['AURA.md'], 2000, 'AURA.md'),
+    // AGENTS.md is the cross-tool convention (Codex, Cursor, Copilot, Gemini
+    // all read it) and holds what this project *is*; AURA.md above holds the
+    // rules for working in it. Two files, two jobs, two budgets — merging them
+    // would push the standing rules past a shared truncation point, which is
+    // the failure this split avoids. CLAUDE.md is accepted as the old name.
+    agentNotes:    readTruncated(root, ['AGENTS.md', 'CLAUDE.md'], 4000, 'AGENTS.md'),
     tree:          buildTree(root).split('\n').slice(0, 150).join('\n'),
     config:        readConfig(root),
     recentCommits: readGitLog(root),

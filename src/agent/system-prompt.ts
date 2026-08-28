@@ -3,11 +3,13 @@ import { getDomainPromptBlock } from './domain-expertise.js';
 import { loadUnifiedMemory } from './unified-memory.js';
 import { loadConfessionsSection } from './confess.js';
 import { loadAllPlugins } from '../plugins/loader.js';
+import { loadProjectSkills, formatSkillCatalog } from '../plugins/project-skills.js';
 
 const WEB_KEYWORDS = /website|webpage|frontend|front-end|ui component|landing page|homepage|web app|portfolio|hero section|marketing page|site design|visual design|html.*css|make.*page|create.*page|build.*site/;
 
 let _cachedMemory: string | null = null;
 let _cachedConfessions: string | null = null;
+let _cachedSkills: string | null = null;
 
 export function buildSystemPrompt(ctx: ProjectContext, providerName: string, task: string): string {
   const domainBlock = getDomainPromptBlock(task);
@@ -26,6 +28,12 @@ export function buildSystemPrompt(ctx: ProjectContext, providerName: string, tas
   const confessionsBlock = _cachedConfessions ?? (_cachedConfessions = loadConfessionsSection());
   // Plugin skills: inject relevant plugin skills when task matches their domain.
   const pluginBlock = loadPluginSkillsBlock(task);
+  // Project skills (.agents/skills/): a catalog of names and descriptions, not
+  // bodies — see project-skills.ts for why those two sources are injected
+  // differently. Memoized for the same reason as the memory block: it sits in
+  // the cacheable prefix, and a skill installed mid-session must not silently
+  // invalidate the provider's prompt cache between tasks.
+  const skillsBlock = _cachedSkills ?? (_cachedSkills = formatSkillCatalog(loadProjectSkills(ctx.root)));
 
   return `You are Aura — a precise, efficient AI coding agent.
 You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framework}).
@@ -54,7 +62,7 @@ You are working in a ${ctx.language} project called "${ctx.name}" (${ctx.framewo
 - Match the existing code style: indentation, naming conventions, comment style.
 - Do not introduce new dependencies unless explicitly asked.
 - Add or update tests when you modify logic.
-${domainBlock}${memoryBlock}${confessionsBlock}${pluginBlock}
+${domainBlock}${memoryBlock}${confessionsBlock}${pluginBlock}${skillsBlock}
 ## Safety
 - Never delete files unless explicitly instructed.
 - Never commit to git unless explicitly instructed.
@@ -79,6 +87,9 @@ ${ctx.config}
 
 ### Aura Standing Rules
 ${ctx.auraRules}
+
+### Project notes (AGENTS.md)
+${ctx.agentNotes}
 
 ### README
 ${ctx.readme}
