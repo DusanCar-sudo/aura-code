@@ -140,6 +140,7 @@ export class ResilientProvider implements LLMProvider {
     // 2. Run under circuit breaker + retry
     return await this.breaker.call(async () => {
       return await withRetry(fn, {
+        provider: this.inner.name,
         maxAttempts: this.opts.maxRetries ?? 5,
         baseDelayMs: 1000,
         maxDelayMs: 60_000,

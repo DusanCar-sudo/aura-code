@@ -22,6 +22,7 @@ import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.
 import { elideToolCallArgs, elideGoogleParts, pruneToolResultImages } from './tool-elision.js';
 import { detectFrustration } from './affect.js';
 import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
+import { looksPromissory, MAX_PROMISE_NUDGES, PROMISE_CORRECTION } from './promise-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 import { formatSteering, type SteeringInbox } from './steering.js';
 
@@ -38,6 +39,32 @@ const REPETITION_CORRECTION =
   'Do not describe or narrate what you are about to write. Make the tool call directly — ' +
   'call write_file once with the complete file content. If the file is genuinely too large for one ' +
   'call, write a first section with write_file and append the rest with follow-up edit_file calls.';
+
+/** How many times a stalled run may be nudged to change approach before it
+ *  gives up. Three, because a stall is usually one wrong idea the model keeps
+ *  re-deriving, and naming it back is often enough to break it — but a model
+ *  that ignores three explicit corrections is not going to obey a fourth. */
+const MAX_STALL_CORRECTIONS = 3;
+
+/** How many times the per-invocation turn ceiling may be extended before it
+ *  becomes hard again. Twenty windows of the default 50 is 1,000 turns — far
+ *  past any real task, but finite, which matters: AURA_SESSION_BUDGET=0 is
+ *  documented as "no ceiling", so a budget alone is not proof the run can end.
+ *  Without this, disabling the token ceiling turns an unproductive run into a
+ *  genuinely infinite loop — the exact runaway the turn cap exists to stop. */
+const MAX_TURN_EXTENSIONS = 20;
+
+/** Sent when the stall detector fires. Names the loop concretely, then demands
+ *  a different action rather than a retry of the same one. */
+function stallCorrection(kind: StallKind, threshold: number): string {
+  const what = kind === 'repeat'
+    ? `You have now made the identical tool call ${threshold} times in a row.`
+    : `You are alternating between the same two tool calls and have done so ${threshold} times.`;
+  return `${what} Repeating it again will return the same result and make no progress. ` +
+    'Stop and change approach: state in one sentence why the previous attempt did not work, ' +
+    'then take a DIFFERENT action — inspect something you have not read yet, try another file or ' +
+    'another tool, or if the task is already complete, say so and stop calling tools.';
+}
 
 /**
  * Provider errors can carry entire HTML error pages (e.g. a 404 from a
@@ -455,10 +482,38 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   // multi-segment coder conversation only this one carries forward.
   let budgetStop: BudgetStop | null = null;
 
+  // Per-invocation turn ceiling. Extended in place rather than enforced as a
+  // hard stop when a SessionBudget is present: the cap exists to bound a
+  // runaway, and SessionBudget already bounds one far more meaningfully (by
+  // billed input tokens, cumulatively, across the whole conversation). Halting
+  // a *productive* run at turn 50 to make the user type /continue does not save
+  // anything — the next segment resends the same history — it just moves the
+  // decision to a human who has no more information than the loop does.
+  //
+  // With no budget supplied (embedders that omit it) the ceiling stays hard,
+  // because then nothing else is counting.
+  let turnCeiling = maxTurns;
+  let turnExtensions = 0;
+  let stallCorrections = 0;
+
   while (true) {
-    // Flat turn cap — pi's loop has no equivalent check at all (it runs
-    // until the model stops calling tools); this is the one guard we kept.
-    if (turns >= maxTurns) break;
+    if (turns >= turnCeiling) {
+      // Extension is justified only by something else actually counting. A
+      // budget of Infinity/Infinity (AURA_SESSION_BUDGET=0, "no ceiling")
+      // counts nothing, so it is no basis for lifting this ceiling — there the
+      // cap stays hard, and it is the only thing standing between an
+      // unproductive run and an unbounded one.
+      const b = opts.budget;
+      const bounded = b != null
+        && (Number.isFinite(b.maxInputTokens) || Number.isFinite(b.maxTurns));
+      if (!bounded || b.exhausted() !== null || turnExtensions >= MAX_TURN_EXTENSIONS) break;
+      turnExtensions++;
+      turnCeiling += maxTurns;
+      display.warning(
+        `Turn ${turns} — past the ${maxTurns}-turn window, continuing to ${turnCeiling} ` +
+        `(session token budget still has room; extension ${turnExtensions}/${MAX_TURN_EXTENSIONS}).`,
+      );
+    }
 
     if (opts.budget) {
       budgetStop = opts.budget.exhausted();
@@ -710,10 +765,30 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     }
 
     if (finalResponse?.stopReason === 'done') {
+      // A run that called nothing and signed off by announcing the work is not
+      // finished — it is the "1 turn · 0 tool call" failure, where the loop
+      // reports success for a promise. Push back instead of returning, but only
+      // when the whole run touched no tools: a reply with prose after real work
+      // is a summary, which is exactly what we want here.
+      if (toolCallCount === 0 && looksPromissory(responseText)
+          && (loopState._promiseNudges ?? 0) < MAX_PROMISE_NUDGES) {
+        loopState._promiseNudges = (loopState._promiseNudges ?? 0) + 1;
+        display.warning(
+          `Model described the work instead of doing it (no tool calls) — ` +
+          `telling it to act (nudge ${loopState._promiseNudges}/${MAX_PROMISE_NUDGES}).`,
+        );
+        history.push({ role: 'assistant', content: responseText });
+        history.push({ role: 'user', content: PROMISE_CORRECTION });
+        display.agentThinking();
+        continue;
+      }
+
       history.push({ role: 'assistant', content: responseText });
       await persist(opts.sessionPath, history);
       return {
-        success: true,
+        // Still not a success if it never acted: reporting "Done" for a promise
+        // is what sent the user back to retype the task.
+        success: !(toolCallCount === 0 && looksPromissory(responseText)),
         summary: responseText,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
@@ -965,10 +1040,25 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     pruneToolResultImages(history);
 
     if (stall) {
-      display.warning(stall === 'repeat'
-        ? `Repeated identical tool call ${profile.stallThreshold}x in a row — stopping loop (stall detected)`
-        : `Alternating between the same two tool calls ${profile.stallThreshold}x — stopping loop (cycle stall detected)`);
-      break;
+      const what = stall === 'repeat'
+        ? `Repeated identical tool call ${profile.stallThreshold}x in a row`
+        : `Alternating between the same two tool calls ${profile.stallThreshold}x`;
+      if (stallCorrections < MAX_STALL_CORRECTIONS) {
+        stallCorrections++;
+        display.warning(
+          `${what} — telling the model to change approach ` +
+          `(nudge ${stallCorrections}/${MAX_STALL_CORRECTIONS}).`,
+        );
+        history.push({ role: 'user', content: stallCorrection(stall, profile.stallThreshold) });
+        // The signatures that triggered this are still the tail of the list, so
+        // without clearing them the very next turn re-fires the detector and
+        // burns every remaining nudge on one stall.
+        turnSignatures.length = 0;
+        stall = null;
+      } else {
+        display.warning(`${what}, and ${MAX_STALL_CORRECTIONS} corrections did not change it — stopping loop.`);
+        break;
+      }
     }
 
     if (primaryArgLoopReason) {
@@ -982,10 +1072,10 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   await persist(opts.sessionPath, history);
   const sessionId = opts.sessionPath ? path.basename(opts.sessionPath, '.json') : undefined;
   const resumeHint = sessionId ? ` Type /continue to resume session ${sessionId}` : '';
-  const capDesc = profile.maxTurns === Infinity ? 'none' : String(profile.maxTurns);
+  const capDesc = turnCeiling === Infinity ? 'none' : String(turnCeiling);
   const reason = primaryArgLoopReason ? primaryArgLoopReason
-    : stall === 'repeat' ? 'stalled (repeated identical tool calls)'
-    : stall === 'cycle' ? 'stalled (cycling between the same two tool calls)'
+    : stall === 'repeat' ? `stalled (repeated identical tool calls; ${MAX_STALL_CORRECTIONS} corrections ignored)`
+    : stall === 'cycle' ? `stalled (cycling between the same two tool calls; ${MAX_STALL_CORRECTIONS} corrections ignored)`
     : budgetStop ? describeBudgetStop(budgetStop)
     : `ended after ${turns} turns (cap: ${capDesc})`;
   // ── The knowledge-gap pass ────────────────────────────────────────────────

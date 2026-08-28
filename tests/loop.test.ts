@@ -197,10 +197,10 @@ describe('runAgentLoop', () => {
     expect(result.turns).toBe(3);
   });
 
-  it('stops on a two-call cycle stall (A B A B A B)', async () => {
+  it('nudges a two-call cycle stall, then stops if it persists (A B A B A B)', async () => {
     const a = { id: 'c', name: 'read_file', input: { path: 'package.json' } };
     const b = { id: 'c', name: 'read_file', input: { path: 'other.json' } };
-    const responses = Array.from({ length: 20 }, (_, i) => ({
+    const responses = Array.from({ length: 40 }, (_, i) => ({
       text: '',
       toolCalls: [i % 2 === 0 ? a : b],
       stopReason: 'tools' as const,
@@ -211,9 +211,19 @@ describe('runAgentLoop', () => {
       provider, task: 'hi', context: ctx, // single-file: stallThreshold 3
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
+    // A cycle no longer ends the run on sight: the loop names it and demands a
+    // different action first, because most stalls are one wrong idea the model
+    // will drop when it is pointed at. Three ignored corrections still stop it.
+    // Detecting A-B-A-B-A-B costs 6 turns, and the signature list is cleared
+    // after each nudge, so this is four detections — three nudged, the fourth
+    // fatal — at 6 turns apiece.
     expect(result.success).toBe(false);
-    expect(result.turns).toBe(6); // 3 full A-B cycles
+    expect(result.turns).toBe(24);
     expect(result.summary).toMatch(/cycling/);
+    expect(result.summary).toMatch(/3 corrections ignored/);
+    expect(result.history.filter(
+      m => m.role === 'user' && /change approach/i.test(m.content ?? ''),
+    )).toHaveLength(3);
   });
 
   it('stops at the flat default ceiling on a productive but overlong run', async () => {
