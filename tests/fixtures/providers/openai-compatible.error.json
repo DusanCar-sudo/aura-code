@@ -1,0 +1,7 @@
+{
+  "transportClass": "openai-compatible",
+  "via": "api.z.ai /api/paas/v4/chat/completions (Zhipu)",
+  "capturedAt": "2026-08-28T01:58:46.939Z",
+  "status": 400,
+  "body": "{\"error\":{\"code\":\"1214\",\"message\":\"modelCode: does not exist\"}}"
+}

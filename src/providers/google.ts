@@ -12,13 +12,32 @@ export class GoogleProvider implements LLMProvider {
 
   private client: GoogleGenerativeAI;
   private maxTokens: number;
+  /**
+   * Request timeout. The SDK defaults to none, so a Gemini endpoint under load
+   * — the 503 "This model is currently experiencing high demand" state — can
+   * leave a call outstanding indefinitely instead of failing into the retry and
+   * fallback machinery, which is what makes Google look hung while every other
+   * provider is fine. Override with GOOGLE_TIMEOUT_MS.
+   */
+  private timeoutMs: number;
 
   constructor(config: ProviderConfig) {
     this.model = config.model;
     this.maxTokens = config.maxTokens ?? 8192;
+    this.timeoutMs = Number(process.env.GOOGLE_TIMEOUT_MS) || 120_000;
     this.client = new GoogleGenerativeAI(
       config.apiKey ?? getApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY') ?? '',
     );
+  }
+
+  /** Model handle shared by complete() and stream() — same params, same timeout. */
+  private modelFor(system: string, tools: ToolDefinition[]) {
+    return this.client.getGenerativeModel({
+      model: this.model,
+      systemInstruction: system,
+      tools: tools.length > 0 ? [{ functionDeclarations: tools.map(toGoogleTool) }] : undefined,
+      generationConfig: { maxOutputTokens: this.maxTokens },
+    }, { timeout: this.timeoutMs });
   }
 
   async complete(
@@ -26,12 +45,7 @@ export class GoogleProvider implements LLMProvider {
     history: HistoryMessage[],
     tools: ToolDefinition[],
   ): Promise<LLMResponse> {
-    const genModel = this.client.getGenerativeModel({
-      model: this.model,
-      systemInstruction: system,
-      tools: tools.length > 0 ? [{ functionDeclarations: tools.map(toGoogleTool) }] : undefined,
-      generationConfig: { maxOutputTokens: this.maxTokens },
-    });
+    const genModel = this.modelFor(system, tools);
 
     const { contents } = toGoogleHistory(history);
     const result = await genModel.generateContent({ contents });
@@ -44,12 +58,7 @@ export class GoogleProvider implements LLMProvider {
     history: HistoryMessage[],
     tools: ToolDefinition[],
   ): AsyncGenerator<StreamChunk> {
-    const genModel = this.client.getGenerativeModel({
-      model: this.model,
-      systemInstruction: system,
-      tools: tools.length > 0 ? [{ functionDeclarations: tools.map(toGoogleTool) }] : undefined,
-      generationConfig: { maxOutputTokens: this.maxTokens },
-    });
+    const genModel = this.modelFor(system, tools);
 
     const { contents } = toGoogleHistory(history);
     const result = await genModel.generateContentStream({ contents });
@@ -137,7 +146,8 @@ function toGoogleHistory(history: HistoryMessage[]): { contents: GoogleContent[]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fromGoogleResponse(response: any): LLMResponse & { googleParts?: Part[] } {
+/** Exported so recorded wire fixtures can be replayed through the real parser. */
+export function fromGoogleResponse(response: any): LLMResponse & { googleParts?: Part[] } {
   const candidates = response?.candidates ?? [];
   const parts: Part[] = candidates[0]?.content?.parts ?? [];
 

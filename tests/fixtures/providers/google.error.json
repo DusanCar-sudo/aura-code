@@ -1,0 +1,7 @@
+{
+  "transportClass": "google",
+  "via": "generativelanguage.googleapis.com v1beta generateContent",
+  "capturedAt": "2026-08-28T01:58:46.163Z",
+  "status": 400,
+  "body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"* GenerateContentRequest.contents: contents is not specified\\n\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n"
+}

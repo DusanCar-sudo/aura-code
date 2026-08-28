@@ -1,0 +1,7 @@
+{
+  "transportClass": "archimedes-local",
+  "via": "localhost:11434 (Ollama) /v1/chat/completions",
+  "capturedAt": "2026-08-28T01:58:51.661Z",
+  "status": 200,
+  "body": "data: {\"id\":\"chatcmpl-451\",\"object\":\"chat.completion.chunk\",\"created\":1787882331,\"model\":\"granite4.1:3b\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"pong\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-451\",\"object\":\"chat.completion.chunk\",\"created\":1787882331,\"model\":\"granite4.1:3b\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+}
