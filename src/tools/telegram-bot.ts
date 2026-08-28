@@ -36,7 +36,7 @@ import { auraPath } from '../util/aura-home.js';
 interface TelegramConfig {
   bot_token: string;
   default_chat_id?: string;
-  model?: string;          // LLM model for chat (default: gemini-2.0-flash)
+  model?: string;          // LLM model for chat (default: deepseek/deepseek-v4-flash)
   system_prompt?: string;  // system prompt override
   /** Telegram user IDs allowed to use the bot. If set, everyone else is
    *  refused (the bot can run shell commands, so this gate is mandatory). */
