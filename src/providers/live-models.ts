@@ -286,6 +286,22 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
       // FPT Cloud's marketplace catalogue changes without notice, so the ids
       // are always fetched rather than pinned. FPT_BASE_URL mirrors the
       // per-account endpoint honoured in factory.ts.
+      // Ark's catalogue is regional and key-scoped, so it is fetched, never
+      // pinned. ARK_BASE_URL mirrors the override honoured in factory.ts.
+      case 'byteplus': {
+        const key = getApiKey('ARK_API_KEY');
+        if (!key) return [];
+        const base = process.env.ARK_BASE_URL?.trim().replace(/\/+$/, '')
+          ?? 'https://ark.ap-southeast.bytepluses.com/api/v3';
+        const r = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!r.ok) return [];
+        const d = await r.json() as { data?: { id: string }[] };
+        return (d.data ?? []).map(m => ({ id: `byteplus/${m.id}`, name: m.id }));
+      }
+
       case 'fpt': {
         const key = getApiKey('FPT_API_KEY');
         if (!key) return [];
@@ -359,13 +375,14 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'groq',         name: 'Groq',                      desc: 'Very fast inference',                           envKey: 'GROQ_API_KEY',        liveFetch: true },
   { id: 'nvidia',       name: 'NVIDIA NIM',                desc: 'Nemotron models via build.nvidia.com',          envKey: 'NVIDIA_API_KEY',      liveFetch: true },
   { id: 'fpt',          name: 'FPT Cloud AI',              desc: 'Marketplace: DeepSeek, GLM, Qwen, Gemma, GPT-OSS',  envKey: 'FPT_API_KEY',         liveFetch: true },
+  { id: 'byteplus',     name: 'BytePlus ModelArk',         desc: 'DeepSeek V4 Flash/Pro GA, Seed, Kimi',          envKey: 'ARK_API_KEY',         liveFetch: true },
   { id: 'anthropic',    name: 'Anthropic',                 desc: 'Claude models via API key',                     envKey: 'ANTHROPIC_API_KEY',   liveFetch: true },
   { id: 'openai',       name: 'OpenAI',                    desc: 'GPT models direct API',                         envKey: 'OPENAI_API_KEY',      liveFetch: true },
   { id: 'opencode-zen', name: 'OpenCode Zen',              desc: 'Pay-as-you-go endpoint',                        envKey: 'OPENCODE_API_KEY',    liveFetch: true },
   { id: 'opencode-go',  name: 'OpenCode Go',               desc: '$10/month subscription',                        envKey: 'OPENCODE_GO_API_KEY' },
   { id: 'lmstudio',     name: 'LM Studio',                 desc: 'Local desktop app with built-in model server',  liveFetch: true },
   { id: 'huggingface',  name: 'Hugging Face',              desc: 'Inference Providers',                           envKey: 'HUGGINGFACE_API_KEY', liveFetch: true },
-  { id: 'vertex',       name: 'Google Vertex AI',          desc: 'Gemini via GCP; OAuth2 or ADC',                 envKey: 'GOOGLE_API_KEY' },
+  { id: 'vertex',       name: 'Google Vertex AI',          desc: 'Gemini under a GCP project; ADC or gcloud token', envKey: 'GOOGLE_VERTEX_ACCESS_TOKEN' },
   { id: 'stepfun',      name: 'StepFun Step Plan',         desc: 'Agent / coding models',                         envKey: 'STEPFUN_API_KEY',     liveFetch: true },
   { id: 'tencent',      name: 'Tencent TokenHub',          desc: 'Hy3 Preview via tokenhub.tencentmaas.com',      envKey: 'TENCENT_API_KEY',     liveFetch: true },
   { id: 'fireworks',    name: 'Fireworks AI',              desc: 'OpenAI-compatible direct model API',            envKey: 'FIREWORKS_API_KEY',   liveFetch: true },

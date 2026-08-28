@@ -64,9 +64,15 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     envKey: 'GOOGLE_API_KEY',
     signupUrl: 'https://aistudio.google.com/apikey',
+    // The 2.5 line still appears in Google's /models listing but answers
+    // generateContent with 404 "no longer available to new users" — a listing
+    // is not an entitlement. Every id below was confirmed with a live
+    // generateContent call on an AI Studio key.
     models: [
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', speed: 'Fast', contextWindow: 1_000_000 },
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', speed: 'Powerful', contextWindow: 1_000_000 },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', speed: 'Fast', contextWindow: 1_000_000 },
+      { id: 'gemini-pro-latest', label: 'Gemini Pro (latest)', speed: 'Powerful', contextWindow: 1_000_000 },
+      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', speed: 'Fastest · cheap', contextWindow: 1_000_000 },
+      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', speed: 'Fast · cheap', contextWindow: 1_000_000 },
     ],
   },
   {
@@ -98,17 +104,34 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    // Free-tier ids churn fast on the Zen gateway: gpt-5-nano now answers 500,
+    // and minimax-m2.5-free / nemotron-3-super-free / ling-2.6-flash-free were
+    // removed from /models entirely. Every id below was confirmed against a
+    // live completion; `aura --models` lists the current set.
     name: 'OpenCode Zen',
     baseUrl: 'https://opencode.ai/zen/v1',
     envKey: 'OPENCODE_API_KEY',
     signupUrl: 'https://opencode.ai',
     models: [
-      { id: 'opencode/gpt-5-nano', label: 'GPT-5 Nano (free)', speed: 'Fast · free', contextWindow: 128_000 },
       { id: 'opencode/big-pickle', label: 'Big Pickle (free)', speed: 'Powerful · free', contextWindow: 128_000 },
       { id: 'opencode/mimo-v2.5-free', label: 'MiMo V2.5 (free)', speed: 'Fast · free', contextWindow: 128_000 },
-      { id: 'opencode/minimax-m2.5-free', label: 'MiniMax M2.5 (free)', speed: 'Reasoning · free', contextWindow: 128_000 },
-      { id: 'opencode/nemotron-3-super-free', label: 'Nemotron 3 Super (free)', speed: 'Fast · free', contextWindow: 128_000 },
-      { id: 'opencode/ling-2.6-flash-free', label: 'Ling 2.6 Flash (free)', speed: 'Fast · free', contextWindow: 128_000 },
+      { id: 'opencode/nemotron-3-ultra-free', label: 'Nemotron 3 Ultra (free)', speed: 'Powerful · free', contextWindow: 128_000 },
+      { id: 'opencode/hy3-free', label: 'HY3 (free)', speed: 'Fast · free', contextWindow: 128_000 },
+      { id: 'opencode/gpt-5.4', label: 'GPT-5.4', speed: 'Powerful · paid', contextWindow: 400_000 },
+      { id: 'opencode/claude-sonnet-5', label: 'Claude Sonnet 5', speed: 'Powerful · paid', contextWindow: 200_000 },
+    ],
+  },
+  {
+    // Same gateway, separate subscription and key. Kept distinct so a Go
+    // subscription's balance problems don't read as a broken Zen key.
+    name: 'OpenCode Go',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    envKey: 'OPENCODE_GO_API_KEY',
+    signupUrl: 'https://opencode.ai',
+    models: [
+      { id: 'go-anthropic/claude-sonnet-5', label: 'Claude Sonnet 5', speed: 'Powerful', contextWindow: 200_000 },
+      { id: 'go-anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5', speed: 'Fast', contextWindow: 200_000 },
+      { id: 'go-anthropic/claude-opus-5', label: 'Claude Opus 5', speed: 'Powerful', contextWindow: 200_000 },
     ],
   },
   {
@@ -212,13 +235,23 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    name: 'BytePlus ModelArk',
+    baseUrl: 'https://ark.ap-southeast.bytepluses.com/api/v3',
+    envKey: 'ARK_API_KEY',
+    signupUrl: 'https://console.byteplus.com/ark/',
+    models: [
+      { id: 'deepseek-v4-flash-ga-260731', label: 'DeepSeek V4 Flash GA', speed: 'Fast · GA build', contextWindow: 128_000 },
+      { id: 'deepseek-v4-pro-ga-260813', label: 'DeepSeek V4 Pro GA', speed: 'Powerful · GA build', contextWindow: 128_000 },
+    ],
+  },
+  {
     name: 'FPT Cloud AI',
     baseUrl: 'https://mkp-api.fptcloud.com/v1',
     envKey: 'FPT_API_KEY',
     signupUrl: 'https://fptcloud.com/',
     models: [
-      { id: 'DeepSeek-R1', label: 'DeepSeek R1', speed: 'Reasoning · marketplace', contextWindow: 64_000 },
-      { id: 'DeepSeek-V3', label: 'DeepSeek V3', speed: 'Powerful · marketplace', contextWindow: 64_000 },
+      { id: 'DeepSeek-V4-Flash', label: 'DeepSeek V4 Flash', speed: 'Fast · marketplace', contextWindow: 64_000 },
+      { id: 'GLM-5.2', label: 'GLM-5.2', speed: 'Powerful · marketplace', contextWindow: 64_000 },
       { id: 'Qwen2.5-Coder-32B-Instruct', label: 'Qwen 2.5 Coder 32B', speed: 'Code · marketplace', contextWindow: 32_768 },
     ],
   },
