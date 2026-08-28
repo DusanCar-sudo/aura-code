@@ -6,11 +6,14 @@ import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
 import { SettingsPanel } from './components/Settings';
 import { SigilWatermark, Sigil } from './components/Sigil';
+import { runCommand } from './lib/commands';
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 860);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'general' | 'provider' | 'skills' | 'about'>('general');
+  const [openMenuAt, setOpenMenuAt] = useState(0);
 
   const t = useCallback((key: string) => translate(settings.locale, key), [settings.locale]);
 
@@ -29,6 +32,30 @@ export function App() {
   const patch = useCallback((p: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...p }));
   }, []);
+
+  /**
+   * A leading ':' means a command, and a command must run or explain itself —
+   * never reach the model. Sending `:resume` as a turn made the agent research
+   * the word, which is the failure this intercept exists to prevent.
+   */
+  const submit = useCallback((text: string, attachments: Parameters<typeof aura.send>[1]) => {
+    if (text.trim().startsWith(':')) {
+      runCommand(text, {
+        t,
+        sessionId: aura.sessionId,
+        conversations: aura.conversations,
+        messages: aura.messages,
+        usage: aura.usage,
+        newChat: () => void aura.newChat(),
+        openChat: (id) => void aura.openChat(id),
+        note: aura.systemNote,
+        openSettings: (tab) => { setSettingsTab(tab); setSettingsOpen(true); },
+        openCommandMenu: () => setOpenMenuAt(Date.now()),
+      });
+      return;
+    }
+    void aura.send(text, attachments);
+  }, [aura, t]);
 
   const usage = aura.usage;
   const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
@@ -64,7 +91,7 @@ export function App() {
           </button>
 
           <div className="topbar-title">
-            <Sigil size={16} />
+            <Sigil size={18} />
             <span>{settings.model || 'Aura'}</span>
           </div>
 
@@ -93,7 +120,8 @@ export function App() {
           busy={aura.busy}
           error={aura.error}
           t={t}
-          onSend={(text, attachments) => void aura.send(text, attachments)}
+          openMenuAt={openMenuAt}
+          onSend={submit}
           onStop={() => void aura.stop()}
           onRegenerate={() => void aura.regenerate()}
         />
@@ -125,6 +153,7 @@ export function App() {
         <SettingsPanel
           settings={settings}
           tools={aura.tools}
+          initialTab={settingsTab}
           t={t}
           onChange={patch}
           onClose={() => setSettingsOpen(false)}

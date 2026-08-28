@@ -23,6 +23,14 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'cmd.noSessions': 'No saved conversations.',
+  'cmd.resumed': 'Resumed:',
+  'cmd.turns': 'turns in this conversation',
+  'cmd.noSession': 'No active session.',
+  'cmd.noUsage': 'No usage recorded yet.',
+  'cmd.quit': 'Nothing to quit — close the tab, or stop `aura serve` in the terminal.',
+  'cmd.renameUnsupported': 'Renaming needs an engine method the protocol does not have yet. Use the sidebar to start or delete conversations.',
+  'cmd.terminalOnly': 'runs in the terminal (`aura`), not in this client yet.',
   'settings.provider': 'Provider / Agent',
   'settings.providerPick': 'Choose a provider…',
   'settings.apiKey': 'API key',
@@ -135,6 +143,14 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'cmd.noSessions': 'Нема сачуваних разговора.',
+  'cmd.resumed': 'Настављено:',
+  'cmd.turns': 'корака у овом разговору',
+  'cmd.noSession': 'Нема активне сесије.',
+  'cmd.noUsage': 'Још нема забележене потрошње.',
+  'cmd.quit': 'Нема шта да се затвори — затвори картицу или заустави `aura serve` у терминалу.',
+  'cmd.renameUnsupported': 'Преименовање захтева методу коју протокол још нема. Користи бочну траку за нове или брисање разговора.',
+  'cmd.terminalOnly': 'ради у терминалу (`aura`), још не у овом клијенту.',
   'settings.provider': 'Провајдер / Агент',
   'settings.providerPick': 'Изабери провајдера…',
   'settings.apiKey': 'API кључ',
@@ -241,6 +257,14 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'cmd.noSessions': 'Aucune discussion enregistrée.',
+  'cmd.resumed': 'Reprise :',
+  'cmd.turns': 'tours dans cette discussion',
+  'cmd.noSession': 'Aucune session active.',
+  'cmd.noUsage': 'Aucune consommation enregistrée.',
+  'cmd.quit': 'Rien à quitter — fermez l’onglet, ou arrêtez `aura serve` dans le terminal.',
+  'cmd.renameUnsupported': 'Renommer nécessite une méthode que le protocole n’a pas encore. Utilisez la barre latérale pour créer ou supprimer.',
+  'cmd.terminalOnly': 's’exécute dans le terminal (`aura`), pas encore dans ce client.',
   'settings.provider': 'Fournisseur / Agent',
   'settings.providerPick': 'Choisir un fournisseur…',
   'settings.apiKey': 'Clé API',
@@ -347,6 +371,14 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'cmd.noSessions': 'Nessuna conversazione salvata.',
+  'cmd.resumed': 'Ripresa:',
+  'cmd.turns': 'turni in questa conversazione',
+  'cmd.noSession': 'Nessuna sessione attiva.',
+  'cmd.noUsage': 'Nessun consumo registrato.',
+  'cmd.quit': 'Niente da chiudere — chiudi la scheda o ferma `aura serve` nel terminale.',
+  'cmd.renameUnsupported': 'Rinominare richiede un metodo che il protocollo non ha ancora. Usa la barra laterale per creare o eliminare.',
+  'cmd.terminalOnly': 'gira nel terminale (`aura`), non ancora in questo client.',
   'settings.provider': 'Provider / Agente',
   'settings.providerPick': 'Scegli un provider…',
   'settings.apiKey': 'Chiave API',
@@ -453,6 +485,14 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'cmd.noSessions': 'No hay conversaciones guardadas.',
+  'cmd.resumed': 'Reanudada:',
+  'cmd.turns': 'turnos en esta conversación',
+  'cmd.noSession': 'No hay sesión activa.',
+  'cmd.noUsage': 'Aún no hay consumo registrado.',
+  'cmd.quit': 'Nada que cerrar — cierra la pestaña o detén `aura serve` en la terminal.',
+  'cmd.renameUnsupported': 'Renombrar necesita un método que el protocolo aún no tiene. Usa la barra lateral para crear o eliminar.',
+  'cmd.terminalOnly': 'se ejecuta en la terminal (`aura`), todavía no en este cliente.',
   'settings.provider': 'Proveedor / Agente',
   'settings.providerPick': 'Elige un proveedor…',
   'settings.apiKey': 'Clave API',
@@ -559,6 +599,14 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'cmd.noSessions': 'لا توجد محادثات محفوظة.',
+  'cmd.resumed': 'استُؤنفت:',
+  'cmd.turns': 'جولات في هذه المحادثة',
+  'cmd.noSession': 'لا توجد جلسة نشطة.',
+  'cmd.noUsage': 'لم يُسجَّل استهلاك بعد.',
+  'cmd.quit': 'لا شيء لإغلاقه — أغلق التبويب أو أوقف `aura serve` في الطرفية.',
+  'cmd.renameUnsupported': 'إعادة التسمية تحتاج طريقة لا يملكها البروتوكول بعد. استخدم الشريط الجانبي للإنشاء أو الحذف.',
+  'cmd.terminalOnly': 'يعمل في الطرفية (`aura`) وليس في هذا العميل بعد.',
   'settings.provider': 'المزوّد / الوكيل',
   'settings.providerPick': 'اختر مزوّدًا…',
   'settings.apiKey': 'مفتاح API',
@@ -665,6 +713,14 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'cmd.noSessions': 'Сохранённых чатов нет.',
+  'cmd.resumed': 'Продолжено:',
+  'cmd.turns': 'ходов в этом чате',
+  'cmd.noSession': 'Нет активной сессии.',
+  'cmd.noUsage': 'Расход пока не записан.',
+  'cmd.quit': 'Нечего закрывать — закройте вкладку или остановите `aura serve` в терминале.',
+  'cmd.renameUnsupported': 'Переименование требует метода, которого в протоколе пока нет. Используйте боковую панель.',
+  'cmd.terminalOnly': 'работает в терминале (`aura`), в этом клиенте пока нет.',
   'settings.provider': 'Провайдер / Агент',
   'settings.providerPick': 'Выберите провайдера…',
   'settings.apiKey': 'API-ключ',

@@ -11,7 +11,7 @@ import type { Settings } from '../lib/settings';
  * growing answer instead of a stack of fragments.
  */
 
-export type Role = 'user' | 'assistant';
+export type Role = 'user' | 'assistant' | 'system';
 
 export interface ToolEvent {
   id: string;
@@ -268,6 +268,18 @@ export function useAura(settings: Settings) {
     void refreshConversations();
   }, [sessionId, refreshConversations]);
 
+  /**
+   * Put a note in the thread that did not come from the engine — a command's
+   * answer, or the reason a command could not run. Local only: it is never
+   * sent as a turn and never reaches the model.
+   */
+  const systemNote = useCallback((text: string) => {
+    setMessages((prev) => [
+      ...prev,
+      { id: `s${Date.now()}${Math.random()}`, role: 'system', text, tools: [], at: Date.now() },
+    ]);
+  }, []);
+
   const send = useCallback(async (
     text: string,
     attachments: Array<{ name: string; type: string; size: number; dataUrl: string }> = [],
@@ -341,9 +353,9 @@ export function useAura(settings: Settings) {
 
   return useMemo(() => ({
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
-    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations,
+    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations, systemNote,
   }), [
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
-    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations,
+    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations, systemNote,
   ]);
 }

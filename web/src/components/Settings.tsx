@@ -24,15 +24,17 @@ interface PluginInfo {
 }
 
 export function SettingsPanel({
-  settings, tools, t, onChange, onClose,
+  settings, tools, t, initialTab = 'general', onChange, onClose,
 }: {
   settings: S;
   tools: string[];
   t: T;
+  /** Which tab to land on — `:provider` and `:apikey` open straight to it. */
+  initialTab?: Tab;
   onChange: (patch: Partial<S>) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('general');
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   const permissions: Array<{ value: PermissionLevel; label: string; hint: string }> = [
     { value: 'read-only', label: t('settings.permissionReadOnly'), hint: t('settings.permissionReadOnlyHint') },

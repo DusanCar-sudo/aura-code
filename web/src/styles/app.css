@@ -14,20 +14,29 @@
   isolation: isolate;
 }
 
-/* ── The sigil watermark ──────────────────────────────────────────────────── */
+/* ── The watermark ────────────────────────────────────────────────────────── */
 .sigil-watermark {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
   pointer-events: none;
+  user-select: none;
   z-index: 0;
-  color: var(--terracotta);
   opacity: 0.10;              /* the mark is present, never competing */
 }
-.sigil-watermark svg {
-  width: min(62vh, 52vw);
-  height: auto;
+.sigil-watermark img {
+  height: min(78vh, 88vw);
+  width: auto;
+  max-width: 92vw;
+  object-fit: contain;
+  display: block;
+}
+/* The figure is mid-grey pewter. Against the light theme it reads as-is;
+   against #0f1724 at 10% it would all but vanish, so lift and warm it just
+   enough to register without turning the mark into decoration. */
+:root:not([data-theme='light']) .sigil-watermark img {
+  filter: brightness(1.7) saturate(1.15);
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
@@ -53,8 +62,8 @@
 .brand { display: flex; align-items: center; gap: 8px; color: var(--terracotta); }
 .brand-name {
   font-family: var(--mono);
-  font-size: var(--fs-body);
-  letter-spacing: 0.16em;
+  font-size: 17px;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text);
 }
@@ -216,7 +225,7 @@
   text-align: center;
 }
 .empty-sigil { color: var(--terracotta); opacity: 0.8; }
-.empty-title { margin: 4px 0 0; font-size: 18px; font-weight: 500; }
+.empty-title { margin: 4px 0 0; font-size: 24px; font-weight: 500; }
 .empty-body { margin: 0; color: var(--text-dim); font-size: var(--fs-body); max-width: 44ch; }
 
 .msg { display: flex; gap: 12px; padding: 14px 0; }
@@ -260,6 +269,16 @@
   border-radius: var(--radius-sm);
 }
 .msg-action:hover { border-color: var(--terracotta); }
+
+.msg-system .msg-badge { color: var(--faint); }
+.system-out {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .thinking { display: flex; align-items: center; gap: 5px; padding: 4px 0; }
 .thinking-dot {
@@ -475,7 +494,7 @@
 .markdown { font-size: var(--fs-body); line-height: 1.7; overflow-wrap: anywhere; }
 .markdown > *:first-child { margin-top: 0 }
 .markdown > *:last-child { margin-bottom: 0 }
-.markdown h1, .markdown h2, .markdown h3 { font-size: 13px; margin: 18px 0 8px; font-weight: 600; }
+.markdown h1, .markdown h2, .markdown h3 { font-size: 15px; margin: 18px 0 8px; font-weight: 600; }
 .markdown p { margin: 0 0 11px; }
 .markdown ul, .markdown ol { margin: 0 0 11px; padding-inline-start: 22px; }
 .markdown li { margin: 3px 0; }
@@ -551,7 +570,7 @@
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
-.modal-title { margin: 0; font-size: var(--fs-body); font-weight: 600; }
+.modal-title { margin: 0; font-size: 15px; font-weight: 600; }
 .modal-body { padding: 16px; overflow-y: auto; }
 .modal-foot {
   display: flex;
@@ -692,7 +711,7 @@
 }
 .about-mark {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: 0.1em;
   color: var(--terracotta);
 }

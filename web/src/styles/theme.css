@@ -33,17 +33,18 @@
   --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
 
   /* ── Metrics ── */
-  --sidebar-w: 250px;
+  --sidebar-w: 264px;
   --radius: 8px;
   --radius-sm: 5px;
   --gutter: 16px;
-  --header-h: 42px;
+  --header-h: 48px;
 
-  /* Type scale. The TUI is a terminal, so the whole app sits at 11-12px and
-     nothing is allowed to drift larger except the one empty-state heading. */
-  --fs-body: 12px;
-  --fs-small: 11px;
-  --fs-micro: 10px;
+  /* Type scale. Terminal-flavoured but not cramped: 11-12px measured well on
+     paper and badly on a real screen, so the scale sits a step up. Change
+     these three and the whole app follows. */
+  --fs-body: 14px;
+  --fs-small: 12.5px;
+  --fs-micro: 11px;
   /* Chat column width, and the measure the thread reads at. */
   --col-w: 820px;
 }

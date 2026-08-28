@@ -28,11 +28,13 @@ export interface SlashCommand {
  * than copied here, so the two surfaces cannot drift apart.
  */
 export function Composer({
-  busy, canRegenerate, t, onSend, onStop, onRegenerate,
+  busy, canRegenerate, t, openMenuAt, onSend, onStop, onRegenerate,
 }: {
   busy: boolean;
   canRegenerate: boolean;
   t: T;
+  /** Changes when something else asks for the menu (`:help`). */
+  openMenuAt: number;
   onSend: (text: string, attachments: Attachment[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
@@ -64,6 +66,7 @@ export function Composer({
   }, []);
 
   useEffect(() => { if (slashOpen) slashRef.current?.focus(); }, [slashOpen]);
+  useEffect(() => { if (openMenuAt > 0) setSlashOpen(true); }, [openMenuAt]);
 
   const filtered = useMemo(() => {
     const q = slashQuery.trim().toLowerCase().replace(/^[/:]/, '');
@@ -107,13 +110,21 @@ export function Composer({
     setAttachments([]);
   };
 
+  /** Commands that read an argument; those are staged in the box to be completed. */
+  const TAKES_ARG = new Set([':archmodel', ':save', ':model', ':workflow', ':q add', ':forget']);
+
   const pickCommand = (id: string) => {
-    // Commands go into the box rather than firing immediately: several take an
-    // argument, and sending ":archmodel" alone would just be an error.
-    setDraft((prev) => (prev.trim() ? `${prev.trim()} ${id}` : `${id} `));
     setSlashOpen(false);
     setSlashQuery('');
-    taRef.current?.focus();
+    if (TAKES_ARG.has(id)) {
+      setDraft(`${id} `);
+      taRef.current?.focus();
+      return;
+    }
+    // Everything else runs on selection — staging it in the box was how a
+    // command ended up being sent to the model as a question.
+    onSend(id, []);
+    setDraft('');
   };
 
   return (

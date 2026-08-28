@@ -37,10 +37,25 @@ function ToolRow({ tool, t }: { tool: ToolEvent; t: T }) {
 
 function MessageRow({ message, t }: { message: Message; t: T }) {
   const mine = message.role === 'user';
+  const system = message.role === 'system';
+
+  // A command's answer is not the model speaking, so it does not wear the
+  // model's badge — it is shown as terminal output, which is what it is.
+  if (system) {
+    return (
+      <div className="msg msg-system">
+        <div className="msg-gutter" aria-hidden="true"><span className="msg-badge">·</span></div>
+        <div className="msg-body">
+          <pre className="system-out">{message.text}</pre>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`msg ${mine ? 'msg-user' : 'msg-aura'}`}>
       <div className="msg-gutter" aria-hidden="true">
-        {mine ? <span className="msg-badge">›</span> : <Sigil size={17} />}
+        {mine ? <span className="msg-badge">›</span> : <Sigil size={19} />}
       </div>
       <div className="msg-body">
         <div className="msg-who">{mine ? t('chat.you') : t('chat.aura')}</div>
@@ -73,12 +88,14 @@ function MessageRow({ message, t }: { message: Message; t: T }) {
 }
 
 export function Chat({
-  messages, busy, error, t, onSend, onStop, onRegenerate,
+  messages, busy, error, t, openMenuAt, onSend, onStop, onRegenerate,
 }: {
   messages: Message[];
   busy: boolean;
   error: string | null;
   t: T;
+  /** Bumped to open the command menu from elsewhere (`:help`). */
+  openMenuAt: number;
   onSend: (text: string, attachments: Attachment[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
@@ -105,7 +122,6 @@ export function Chat({
       >
         {messages.length === 0 ? (
           <div className="empty">
-            <Sigil size={46} className="empty-sigil" />
             <h1 className="empty-title">{t('chat.emptyTitle')}</h1>
             <p className="empty-body">{t('chat.emptyBody')}</p>
           </div>
@@ -118,6 +134,7 @@ export function Chat({
       </div>
 
       <Composer
+        openMenuAt={openMenuAt}
         busy={busy}
         canRegenerate={messages.some((m) => m.role === 'user')}
         t={t}

@@ -33,7 +33,7 @@ export function Sidebar({
       <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
         <div className="sidebar-head">
           <div className="brand">
-            <Sigil size={19} />
+            <Sigil size={22} />
             <span className="brand-name">Aura</span>
           </div>
           <button type="button" className="icon-btn sidebar-close" onClick={onClose} aria-label={t('settings.close')}>

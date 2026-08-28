@@ -1,3 +1,5 @@
+import archangel from '../assets/archangel.png';
+
 /**
  * The Aura sigil: a downward blade with the A at its base and a wing to each
  * side.
@@ -76,13 +78,19 @@ export function Sigil({
 }
 
 /**
- * The watermark layer. Fixed, centred, non-interactive, 10% opacity — present
- * in the way a maker's mark is present, never competing with the conversation.
+ * The watermark layer: Archangel Michael, fixed, centred, non-interactive, at
+ * 10% opacity — present the way a maker's mark is present, never competing
+ * with the conversation.
+ *
+ * The photograph rather than the drawn sigil, because this is the mark the
+ * project actually has. The drawn `Sigil` above stays for the inline marks in
+ * the header and message gutter: a figurine at 16px is mud, whereas a blade
+ * and two wings still reads.
  */
 export function SigilWatermark() {
   return (
     <div className="sigil-watermark" aria-hidden="true">
-      <Sigil watermark />
+      <img src={archangel} alt="" draggable={false} />
     </div>
   );
 }
