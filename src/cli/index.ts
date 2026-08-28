@@ -66,6 +66,7 @@ import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { applyModelOverride } from '../archimedes/endpoint.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler, confirm } from '../safety/permissions.js';
+import { inSandbox, sandboxPreflight, sandboxBanner, reexecSandboxed } from '../safety/sandbox.js';
 import { createTerminalDisplay } from './display.js';
 import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
 import { startServer } from '../server/index.js';
@@ -150,7 +151,7 @@ function makeStdinTunerIO(): TunerIO {
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -224,6 +225,29 @@ if (argv.version) {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
   console.log(`Aura v${pkg.version}`);
   process.exit(0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sandbox
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// As early as possible: everything below this point is work the inner process
+// will redo anyway, and the re-exec must happen before any of it reads
+// credentials or touches the filesystem.
+//
+// A flag that silently does nothing is worse than no flag, because it
+// manufactures exactly the false confidence the sandbox exists to remove. So
+// there is no fallback path here — no mechanism, no sandbox, non-zero exit.
+if (argv.sandboxed && !inSandbox()) {
+  const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
+  const pre = sandboxPreflight({ projectRoot: root, computerUse: argv.computer === true });
+  if (!pre.ok) {
+    console.error(chalk.hex('#cc785c')('\n  --sandboxed cannot run here:\n'));
+    for (const err of pre.errors) console.error(`    ${err}\n`);
+    process.exit(2);
+  }
+  console.log(chalk.hex(FAINT_HEX)('\n' + sandboxBanner(pre.paths!) + '\n'));
+  process.exit(reexecSandboxed(pre.paths!));
 }
 
 if (argv.models) {
@@ -3523,6 +3547,10 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
                              Folded to the target's ceiling; "none" stops thinking.
     --auto                   Auto-approve all tool calls (no confirmation)
     --readonly               Read-only mode (no file writes or shell commands)
+    --sandboxed              Run inside a kernel-enforced sandbox: Aura's own install is
+                             read-only and writes outside the project fail at the OS level.
+                             Linux + bubblewrap only; refuses rather than pretending elsewhere.
+                             Cannot be combined with --computer.
     --computer               Enable computer use: screenshots + real mouse/keyboard.
                              Also needs AURA_COMPUTER_USE=1, and a one-time
                              disclosure you must accept. Or skip both and type

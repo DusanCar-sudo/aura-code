@@ -284,6 +284,7 @@ aura                       # interactive TUI
 aura serve                 # start the HTTP API server
 aura --auto 'task'         # fully autonomous, no confirmations
 aura --readonly 'analyze'  # read-only analysis
+aura --sandboxed 'refactor auth'  # kernel-enforced boundary (Linux)
 aura --doctor              # self-diagnostic
 ```
 
@@ -296,6 +297,7 @@ aura --doctor              # self-diagnostic
 | `--base-url <url>` | Custom API endpoint (Ollama, proxies, etc.) |
 | `--auto` | Auto-approve all tool calls (no confirmation) |
 | `--readonly` | Read-only mode (no file writes or shell commands) |
+| `--sandboxed` | Kernel-enforced boundary: Aura's own install is read-only and writes outside the project fail at the OS level. Linux + bubblewrap; refuses rather than pretending elsewhere. Not combinable with `--computer`. See [SECURITY.md](SECURITY.md) |
 | `--gazelle` | [Gazelle mode](#gazelle--conversational-mode): lean conversational path, no tools |
 | `--mode gazelle` | Same as `--gazelle` (env: `AURA_MODE=gazelle`) |
 | `--cwd <path>` | Working directory (default: current) |

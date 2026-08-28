@@ -174,6 +174,51 @@ Being direct about the gaps rather than implying coverage that doesn't exist:
   a guarantee rather than a guardrail, it has to come from outside the process —
   file permissions, a container, or a user account that cannot write to Aura's
   install directory.
+  **`--sandboxed` is that outside-the-process boundary** — see below. The paragraph
+  above describes the default path, and stays true of it.
+
+### Two modes: guardrail by default, boundary on request
+
+**Default — a guardrail.** Everything described above. In-process gates that stop
+accidents, honest about not stopping an operator.
+
+**`--sandboxed` — a boundary.** On Linux with bubblewrap installed, Aura re-executes
+itself inside an unprivileged user namespace before doing any work. Two guarantees,
+both enforced by the kernel rather than by TypeScript:
+
+- **Tampering cannot persist.** Aura's installed tree is read-only from inside. A
+  write to it returns `EROFS` whatever the agent does, so nothing one session does
+  can change what the next session enforces.
+- **The blast radius is the project.** Only the project root, your state directory
+  (`~/.aura`), and a private in-memory `/tmp` are writable. Everything else on the
+  filesystem — your home directory, `~/.ssh`, other projects — is read-only at the
+  OS level, with `path-jail.ts` out of the picture entirely.
+
+And one thing it explicitly does **not** give you:
+
+- **The agent can still run arbitrary code.** `run_shell` exists by design; inside
+  the sandbox the agent can still write a script and execute it. This bounds the
+  blast radius and prevents persistent tampering. It does not make an adversarial
+  agent safe.
+
+Three refusals, all deliberate, all loud rather than silent:
+
+- **No mechanism, no sandbox.** On a platform or machine with nothing to enforce it
+  (macOS and Windows today, or Linux without unprivileged user namespaces),
+  `--sandboxed` exits non-zero and explains why. A flag that silently did nothing
+  would manufacture exactly the false confidence it exists to remove.
+- **Not on Aura's own checkout.** In a development checkout the install directory
+  *is* the project root, and the two guarantees contradict each other there. It
+  refuses. `--sandboxed` protects users running Aura against other projects, which
+  is the deployment that exists.
+- **Not with computer use.** `--sandboxed` and `--computer` are mutually exclusive,
+  and `:compon` is refused inside a sandbox. A process that can drive your keyboard
+  can open a terminal outside the jail, so allowing both would leave the guarantee
+  technically true and practically worthless.
+
+```bash
+aura --sandboxed 'refactor the auth module'   # Linux + bubblewrap
+```
 
 ### Practical recommendations
 

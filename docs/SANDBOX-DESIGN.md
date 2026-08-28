@@ -1,6 +1,9 @@
 # `--sandboxed`: a real boundary
 
-**Status:** design, awaiting approval. Nothing implemented.
+**Status:** implemented (Linux/bubblewrap), `src/safety/sandbox.ts`, verified by
+`tests/safety/sandbox-boundary.test.ts`. The open questions at the bottom are
+answered in "Decisions taken" below; the rest of this document is the design as
+approved, kept for the reasoning behind the options that were rejected.
 
 ## The problem, stated exactly
 
@@ -215,7 +218,42 @@ appears to work while the agent edits its own guards is worse than no sandbox.
 Note this means `--sandboxed` will not protect work *on this repo* — it protects
 users running Aura against other projects, which is the actual deployment.
 
-## Open questions for review
+## Decisions taken
+
+1. **`~/.aura` is inside the boundary; config is not.** State and config already
+   live in different directories — state in `~/.aura`, config in
+   `~/.config/aura-code/` — so the split the question asked for costs nothing.
+   State is bound read-write; the config file stays read-only, and with it the
+   default permission level it can carry. A session cannot weaken the next one.
+
+2. **`--sandboxed` stays opt-in for now.** Making it the default is the change
+   that would actually move users' security posture, but it is a separate
+   decision from shipping the mechanism, and it wants real-world use first.
+
+3. **Computer use is refused under `--sandboxed`.** The two are mutually
+   exclusive: the CLI refuses the combination at startup, and
+   `checkComputerUseGate` refuses inside a sandbox so `:compon` cannot lift it
+   mid-session. Host display access is a genuine escape route from a filesystem
+   boundary, and a guarantee with a documented way around it is not one.
+
+## What the implementation found that the design did not
+
+**A private `/tmp`, mounted first.** The design's path set named the install,
+the project and the state dir. It did not mention `/tmp`, and the first
+implementation bound the host's one read-write so builds would keep working —
+which quietly punched a hole through G2, since `/tmp` is outside the project and
+world-readable. The boundary test caught it by *succeeding* at a write it was
+supposed to be refused. It is now `--tmpfs`: private, writable, gone when the
+sandbox exits.
+
+Then the ordering bit. bwrap applies its arguments left to right, so a tmpfs
+mounted after the project bind mounts straight over it — a project at
+`/tmp/my-app` appeared inside the sandbox as an empty directory, with no error
+anywhere. The tmpfs now comes first and the writable binds land on top. Both
+behaviours are pinned by tests, because both failed silently, which is the
+failure mode this whole document exists to argue against.
+
+## Open questions, as originally written
 
 1. **Is `~/.aura` inside or outside the boundary?** It must be writable
    (sessions, episodes, cost ledger). But `~/.aura/config.json` can carry a

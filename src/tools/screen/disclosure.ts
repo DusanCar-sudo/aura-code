@@ -28,6 +28,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+import { inSandbox } from '../../safety/sandbox.js';
 import { auraPath } from '../../util/aura-home.js';
 
 /** Env var that must be set to 1/true, in addition to the CLI flag. */
@@ -101,6 +103,22 @@ export interface GateResult {
  * risk. The permission level is not consulted, by design (see module comment).
  */
 export function checkComputerUseGate(flagEnabled: boolean, env = process.env): GateResult {
+  // --sandboxed and computer use are mutually exclusive, and this is the point
+  // where that is actually enforced: the CLI refuses the combination at
+  // startup, but :compon can turn computer use on mid-session, and a boundary
+  // that a colon command can lift is not one. The sandbox bounds the
+  // filesystem; a process that can drive the keyboard can open a terminal
+  // outside it, so permitting both would leave the guarantee technically true
+  // and practically worthless.
+  if (inSandbox(env)) {
+    return {
+      allowed: false,
+      reason: 'Computer use is unavailable in a sandboxed session, and :compon will not enable it. '
+        + 'The sandbox is a filesystem boundary; driving the keyboard would step around it. '
+        + 'Do not retry. Tell the user to restart without --sandboxed if they need computer use.',
+    };
+  }
+
   const raw = (env[COMPUTER_USE_ENV] ?? '').trim().toLowerCase();
   const envEnabled = raw === '1' || raw === 'true' || raw === 'yes';
 
