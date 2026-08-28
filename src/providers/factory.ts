@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process';
 import type { LLMProvider, ProviderConfig } from './types.js';
 import { AnthropicProvider } from './anthropic.js';
 import { OpenAICompatibleProvider } from './openai-compatible.js';
@@ -22,6 +23,61 @@ export const ZHIPU_GENERAL_BASE_URL = 'https://api.z.ai/api/paas/v4';
 /** Zhipu (Z.ai) Coding Plan endpoint — GLM Coding Plan subscription quota. */
 export const ZHIPU_CODING_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
 
+/**
+ * Google Vertex AI, through its OpenAI-compatible surface.
+ *
+ * Vertex is a different entitlement from AI Studio, not a skin over it: models
+ * retired for new AI Studio keys (the whole gemini-2.5 line answers 404 "no
+ * longer available to new users" there) still serve on Vertex under a GCP
+ * project, and its capacity is separate from the AI Studio pool that produces
+ * "This model is currently experiencing high demand".
+ *
+ * Auth is OAuth, not an API key: a short-lived access token, from
+ * GOOGLE_VERTEX_ACCESS_TOKEN if set, otherwise minted from Application Default
+ * Credentials via gcloud.
+ */
+export const VERTEX_DEFAULT_LOCATION = 'global';
+
+export function vertexProjectId(): string | undefined {
+  return getEnv('VERTEX_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT');
+}
+
+export function vertexBaseUrl(project: string, location = VERTEX_DEFAULT_LOCATION): string {
+  const host = location === 'global'
+    ? 'https://aiplatform.googleapis.com'
+    : `https://${location}-aiplatform.googleapis.com`;
+  return `${host}/v1/projects/${project}/locations/${location}/endpoints/openapi`;
+}
+
+/**
+ * Vertex model ids are vendor-qualified on the OpenAI surface
+ * ("google/gemini-3.6-flash"). Accept either form from the user.
+ */
+export function vertexModelId(model: string): string {
+  const bare = model.replace(/^vertex\//i, '');
+  return bare.includes('/') ? bare : `google/${bare}`;
+}
+
+/**
+ * Mint a Vertex access token. Tokens last about an hour; a run longer than that
+ * will need a fresh provider. Returns undefined rather than throwing so the
+ * caller can report a setup problem instead of a stack trace.
+ */
+export function vertexAccessToken(): string | undefined {
+  const fromEnv = getEnv('GOOGLE_VERTEX_ACCESS_TOKEN');
+  if (fromEnv) return fromEnv;
+  try {
+    return execFileSync('gcloud', ['auth', 'print-access-token'], {
+      encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** BytePlus ModelArk (international Ark gateway) — OpenAI-compatible. */
+export const BYTEPLUS_BASE_URL = 'https://ark.ap-southeast.bytepluses.com/api/v3';
+
 let customProviders: ProviderDef[] = [];
 
 /**
@@ -41,8 +97,14 @@ export function getCustomProviders(): ProviderDef[] {
  * Strip Aura's internal routing prefixes from a model id so it can be looked
  * up against registry entries (which store unprefixed ids).
  */
-function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|fpt|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
+export function stripRoutingPrefix(model: string): string {
+  // deepseek/ and openrouter/ were missing here while being present in every
+  // other routing structure: the prefixed id then found no registry entry, so
+  // getContextWindow returned undefined and callers fell back to 128k — an 8x
+  // under-read of deepseek-v4-pro's 1M window, compacting far earlier than
+  // needed. Only slash prefixes are stripped, so bare `deepseek-v4-pro` (a real
+  // DeepSeek API model name, not a routing shorthand) is left intact.
+  return model.replace(/^(opencode|zen|vertex|byteplus|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|fpt|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|deepseek|openrouter)\//, '');
 }
 
 /**
@@ -89,6 +151,9 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
   if (m.startsWith('groq/')) return 'GROQ_API_KEY';
   if (m.startsWith('nvidia/')) return 'NVIDIA_API_KEY';
   if (m.startsWith('fpt/')) return 'FPT_API_KEY';
+  // Vertex authenticates with an OAuth access token, not a key env var.
+  if (m.startsWith('vertex/')) return 'GOOGLE_VERTEX_ACCESS_TOKEN';
+  if (m.startsWith('byteplus/')) return 'ARK_API_KEY';
   if (m.startsWith('huggingface/')) return 'HUGGINGFACE_API_KEY';
   if (m.startsWith('kimi/')) return 'MOONSHOT_API_KEY';
   if (m.startsWith('qwen/')) return 'DASHSCOPE_API_KEY';
@@ -122,6 +187,7 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('mimo-') || m.startsWith('xiaomi/') || m.startsWith('mimo/')) return 'xiaomi';
   if (m.startsWith('glm-') || m.startsWith('zhipu/') || m.startsWith('zhipu-coding/')) return 'zhipu';
   if (m.startsWith('claude-')) return 'anthropic';
+  if (m.startsWith('vertex/')) return 'vertex';
   if (m.startsWith('gemini-') || m.startsWith('gemini/')) return 'google';
   if (m.startsWith('openrouter/')) return 'openrouter';
   if (m.startsWith('grok-') || m.startsWith('xai/')) return 'xai';
@@ -130,6 +196,7 @@ export function modelProviderFamily(modelId: string): string {
   if (m.startsWith('groq/')) return 'groq';
   if (m.startsWith('nvidia/')) return 'nvidia';
   if (m.startsWith('fpt/')) return 'fpt';
+  if (m.startsWith('byteplus/')) return 'byteplus';
   if (m.startsWith('huggingface/')) return 'huggingface';
   if (m.startsWith('kimi/')) return 'kimi';
   if (m.startsWith('qwen/')) return 'qwen';
@@ -158,6 +225,7 @@ const FAMILY_API_KEY_ENV: Record<string, string> = {
   groq: 'GROQ_API_KEY',
   nvidia: 'NVIDIA_API_KEY',
   fpt: 'FPT_API_KEY',
+  byteplus: 'ARK_API_KEY',
   huggingface: 'HUGGINGFACE_API_KEY',
   kimi: 'MOONSHOT_API_KEY',
   qwen: 'DASHSCOPE_API_KEY',
@@ -210,7 +278,7 @@ export function getApiKeyForModel(model: string): string | undefined {
  * `--reset-setup`). Without this, the cross-provider guard below only
  * activates once *some* prior config already exists to diff against.
  */
-const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
+export const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://api.deepseek.com/v1': 'deepseek',
   'https://token-plan-sgp.xiaomimimo.com/v1': 'xiaomi',
   [ZHIPU_GENERAL_BASE_URL]: 'zhipu',
@@ -221,10 +289,17 @@ const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
   'https://api.x.ai/v1': 'xai',
   'https://opencode.ai/zen/v1': 'opencode',
   'https://mkp-api.fptcloud.com/v1': 'fpt',
+  [BYTEPLUS_BASE_URL]: 'byteplus',
   'https://dashscope-intl.aliyuncs.com/compatible-mode/v1': 'qwen',
   'https://dashscope.aliyuncs.com/compatible-mode/v1': 'qwen',
   'https://api.minimax.io/v1': 'minimax',
   'https://api.moonshot.ai/v1': 'kimi',
+  // Hugging Face was absent here while present in the other four structures.
+  // baseUrlFamily() then answered undefined, which switches the cross-provider
+  // guard off entirely (it only fires on a KNOWN family), so a stale HF baseUrl
+  // from an earlier wizard run survived a switch to another provider — exactly
+  // the failure this map exists to prevent.
+  'https://router.huggingface.co/v1': 'huggingface',
   'https://api.groq.com/openai/v1': 'groq',
   'https://integrate.api.nvidia.com/v1': 'nvidia',
   'https://api.stepfun.com/v1': 'stepfun',
@@ -400,7 +475,40 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     return new AnthropicProvider(config);
   }
 
-  // ── Google ─────────────────────────────────────────────────────────────────
+  // ── Google Vertex AI ───────────────────────────────────────────────────────
+  // Advertised in the model picker ("Gemini via GCP; OAuth2 or ADC") long
+  // before it routed anywhere: `vertex` was aliased onto the plain gemini ids,
+  // so choosing it silently used AI Studio and inherited its retirements and
+  // its 503s.
+  if (model.startsWith('vertex/')) {
+    const project = vertexProjectId();
+    if (!project) {
+      throw new Error(
+        'Vertex AI needs a GCP project — set VERTEX_PROJECT_ID (or GOOGLE_CLOUD_PROJECT).',
+      );
+    }
+    const token = config.apiKey ?? vertexAccessToken();
+    if (!token) {
+      throw new Error(
+        'Vertex AI needs an access token — run `gcloud auth application-default login`, '
+        + 'or set GOOGLE_VERTEX_ACCESS_TOKEN.',
+      );
+    }
+    const location = getEnv('VERTEX_LOCATION') ?? VERTEX_DEFAULT_LOCATION;
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: vertexModelId(config.model),
+      baseUrl: config.baseUrl ?? vertexBaseUrl(project, location),
+      apiKey: token,
+      // Gemini 3.x on Vertex answers any nonzero penalty with 400 "Penalty is
+      // not enabled for this model", so the repetition-guard default that
+      // suits DeepSeek has to be off here.
+      frequencyPenalty: config.frequencyPenalty ?? 0,
+      presencePenalty: config.presencePenalty ?? 0,
+    }, 'Google Vertex AI');
+  }
+
+  // ── Google AI Studio ───────────────────────────────────────────────────────
   // Accept both bare gemini-* and the selector's gemini/<id> prefixed form.
   if (model.startsWith('gemini-') || model.startsWith('gemini/')) {
     return new GoogleProvider({ ...config, model: config.model.replace(/^gemini\//i, '') });
@@ -456,6 +564,22 @@ export function createProvider(config: ProviderConfig): LLMProvider {
         ?? 'https://mkp-api.fptcloud.com/v1',
       apiKey: config.apiKey ?? getApiKey('FPT_API_KEY'),
     }, 'FPT Cloud AI');
+  }
+
+  // ── BytePlus ModelArk ──────────────────────────────────────────────────────
+  // ARK_BASE_URL is honoured because Ark is regional (ap-southeast here, but
+  // cn-beijing on Volcengine) and a key is only valid against its own region.
+  if (model.startsWith('byteplus/')) {
+    return new OpenAICompatibleProvider({
+      ...config,
+      // config.model, not the lower-cased dispatch copy: Ark ids carry a date
+      // suffix the gateway matches exactly (deepseek-v4-flash-ga-260731).
+      model: config.model.replace(/^byteplus\//i, ''),
+      baseUrl: config.baseUrl
+        ?? process.env.ARK_BASE_URL?.trim().replace(/\/+$/, '')
+        ?? BYTEPLUS_BASE_URL,
+      apiKey: config.apiKey ?? getApiKey('ARK_API_KEY'),
+    }, 'BytePlus ModelArk');
   }
 
   // ── Hugging Face Inference Providers ──────────────────────────────────────
@@ -679,13 +803,14 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'o4-mini',         name: 'o4-mini',         provider: 'OpenAI', speed: 'Reasoning · fastest' },
 
   // ── Google Gemini (offline fallback — prefer live fetch, see note above) ─
-  { id: 'gemini-2.5-pro',            name: 'Gemini 2.5 Pro',     provider: 'Google', speed: 'Powerful · long context' },
-  { id: 'gemini-2.5-flash',          name: 'Gemini 2.5 Flash',   provider: 'Google', speed: 'Fast · cheap' },
-  { id: 'gemini-2.0-pro',            name: 'Gemini 2.0 Pro',     provider: 'Google', speed: 'Powerful' },
-  { id: 'gemini-2.0-flash',          name: 'Gemini 2.0 Flash',   provider: 'Google', speed: 'Fast' },
-  { id: 'gemini-1.5-pro',            name: 'Gemini 1.5 Pro',     provider: 'Google', speed: 'Long context · legacy' },
-  { id: 'gemini-1.5-flash',          name: 'Gemini 1.5 Flash',   provider: 'Google', speed: 'Fast · legacy' },
-  { id: 'gemini-1.5-flash-8b',       name: 'Gemini 1.5 Flash-8B', provider: 'Google', speed: 'Fastest · tiny' },
+  { id: 'gemini-pro-latest',         name: 'Gemini Pro (latest)', provider: 'Google', speed: 'Powerful · long context' },
+  { id: 'gemini-3.6-flash',          name: 'Gemini 3.6 Flash',   provider: 'Google', speed: 'Fast · cheap' },
+  { id: 'gemini-3.5-flash',          name: 'Gemini 3.5 Flash',   provider: 'Google', speed: 'Fast' },
+  { id: 'gemini-3.5-flash-lite',     name: 'Gemini 3.5 Flash Lite', provider: 'Google', speed: 'Fastest · cheap' },
+  { id: 'gemini-3.1-flash-lite',     name: 'Gemini 3.1 Flash Lite', provider: 'Google', speed: 'Fast · cheap' },
+  { id: 'gemini-3-flash-preview',    name: 'Gemini 3 Flash (preview)', provider: 'Google', speed: 'Fast' },
+  // The 1.5/2.0/2.5 lines are retired for new keys: they are still returned by
+  // /models but generateContent answers 404 "no longer available to new users".
 
   // ── DeepSeek ─────────────────────────────────────────────────────────────
   { id: 'deepseek/deepseek-chat',     name: 'DeepSeek Chat (V3)', provider: 'DeepSeek', speed: 'Powerful · fast' },
@@ -758,8 +883,13 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'fireworks/accounts/fireworks/models/llama-v3p3-70b-instruct', name: 'Llama 3.3 70B (Fireworks)', provider: 'Fireworks AI', speed: 'Balanced · 128k' },
 
   // ── FPT Cloud AI ─────────────────────────────────────────────────────────
-  { id: 'fpt/DeepSeek-R1', name: 'DeepSeek R1 (FPT)', provider: 'FPT Cloud AI', speed: 'Reasoning · marketplace' },
-  { id: 'fpt/DeepSeek-V3', name: 'DeepSeek V3 (FPT)', provider: 'FPT Cloud AI', speed: 'Powerful · marketplace' },
+  { id: 'fpt/DeepSeek-V4-Flash', name: 'DeepSeek V4 Flash (FPT)', provider: 'FPT Cloud AI', speed: 'Fast · marketplace' },
+  { id: 'fpt/GLM-5.2', name: 'GLM-5.2 (FPT)', provider: 'FPT Cloud AI', speed: 'Powerful · marketplace' },
+
+  // ── BytePlus ModelArk ────────────────────────────────────────────────────
+  // Ark pins a dated build per id; the GA build is the stable one to default to.
+  { id: 'byteplus/deepseek-v4-flash-ga-260731', name: 'DeepSeek V4 Flash GA', provider: 'BytePlus ModelArk', speed: 'Fast · GA build' },
+  { id: 'byteplus/deepseek-v4-pro-ga-260813', name: 'DeepSeek V4 Pro GA', provider: 'BytePlus ModelArk', speed: 'Powerful · GA build' },
 
   // ── Upstage ──────────────────────────────────────────────────────────────
   { id: 'upstage/solar-pro',  name: 'Solar Pro',        provider: 'Upstage', speed: 'Powerful · 64k' },
@@ -838,7 +968,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
 
 const LIVE_PREFERRED_PROVIDERS = new Set([
   'Anthropic', 'OpenAI', 'Google', 'OpenRouter', 'DeepSeek', 'Qwen', 'MiniMax',
-  'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'Upstage',
+  'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'BytePlus ModelArk', 'Upstage',
   'Arcee AI', 'Tencent TokenHub', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
   'Xiaomi MiMo', 'Zhipu',
 ]);
