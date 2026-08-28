@@ -47,6 +47,9 @@ function safeConfig(config: ArchimedesConfig): ArchimedesConfig {
     epsilonProbeRate: clamp01(
       config?.epsilonProbeRate ?? DEFAULT_ARCHIMEDES_CONFIG.epsilonProbeRate,
     ),
+    // Like `backend`, this must survive normalisation — dropping it would
+    // silently hand verification back to the model that wrote the answer.
+    ...(config?.verifierModel ? { verifierModel: config.verifierModel } : {}),
   };
 }
 
@@ -82,8 +85,9 @@ function tasksSimilar(task: string, other: string): boolean {
 
 /**
  * Derives a stable pattern key from a task string and optional category.
+ * Exported so the cost log can tag rows with the same key competence uses.
  */
-function taskPatternFrom(task: string, category?: string): string {
+export function derivePatternKey(task: string, category?: string): string {
   const tokens = tokenize(task).slice(0, 8);
   const slug = tokens.join('_') || 'generic';
   const cat = category ?? 'other';
@@ -162,7 +166,7 @@ export function assessCompetence(
     const safeTask = typeof task === 'string' ? task : '';
     const list = safeEpisodes(episodes);
     const matched = list.filter(e => tasksSimilar(safeTask, e.task));
-    const pattern = taskPatternFrom(
+    const pattern = derivePatternKey(
       safeTask,
       matched[0]?.taskCategory ?? 'other',
     );
@@ -220,7 +224,7 @@ export function updateCompetence(
     if (!episode?.archimedesAttempted) return Array.isArray(existing) ? [...existing] : [];
 
     const list = Array.isArray(existing) ? [...existing] : [];
-    const pattern = taskPatternFrom(episode.task ?? '', episode.taskCategory);
+    const pattern = derivePatternKey(episode.task ?? '', episode.taskCategory);
     const idx = list.findIndex(l => l.taskPattern === pattern);
     const prev = idx >= 0 ? list[idx] : undefined;
 

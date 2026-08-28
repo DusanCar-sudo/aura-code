@@ -74,6 +74,18 @@ export interface ArchimedesConfig {
    * since scores only move on actual attempts.
    */
   epsilonProbeRate: number;
+  /**
+   * Model that verifies answers, when it should not be the model that wrote
+   * them. Omitted (the default) keeps the long-standing behaviour: the large
+   * model verifies, including on the escalation and council paths where it is
+   * grading its own output — the model marks its own homework.
+   *
+   * Set this to any routing id (`claude-sonnet-5`, `deepseek/deepseek-v4-pro`,
+   * `ollama/…`) to hand verification to a different provider. Whether that
+   * changes the missed-escalation rate is the measurement of self-grading bias
+   * — see benchmark/escalation.
+   */
+  verifierModel?: string;
 }
 
 /** Sensible defaults for local Ollama + Qwen coder 1.5B. */
@@ -153,19 +165,30 @@ export interface AlternationDecision {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * One instruction-tuning row derived from an episode where the large model
- * corrected or replaced Archimedes's output.
+ * One instruction-tuning row derived from the Archimedes alternation loop.
+ *
+ * Two provenances exist (see src/mining/):
+ *   - 'mined'      — a generalized lesson written by Papa Archimedes (local model)
+ *                    from statistical clusters (Path A, existing mining path).
+ *   - 'correction' — a direct correction pair: the exact task, the context the
+ *                    small model saw, and the accepted large-model output
+ *                    (Path B, from escalation episodes where Archimedes failed).
+ * The tag survives into the jsonl so the two sources can be ablated separately.
  */
 export interface TrainingExample {
   /** System or high-level directive for the small model. */
   instruction: string;
   /** Task context shown to the model. */
   input: string;
-  /** Target output (typically from the large model after review). */
+  /** Target output — the accepted answer. For 'correction' rows this is the
+   * large model's output after review; for 'mined' rows it is the local
+   * model's generalized lesson. */
   output: string;
   metadata: {
     projectRoot: string;
     taskCategory: string;
+    /** Which pipeline produced this row. Survives into the jsonl. */
+    provenance: 'mined' | 'correction';
     /** Why Archimedes failed, when known — used to filter low-quality rows. */
     archimedesFailureReason?: string;
     timestamp: number;
