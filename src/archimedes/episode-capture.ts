@@ -25,7 +25,10 @@ export interface EpisodeStats {
  */
 export const episodeStore = {
   defaultDir(): string {
-    return path.join(process.env.HOME ?? '/tmp', '.aura', 'episodes');
+    // AURA_EPISODES_DIR: harnesses (benchmark/escalation) isolate runs into a
+    // scratch dir so synthetic episodes never pollute live competence data.
+    return process.env.AURA_EPISODES_DIR
+      ?? path.join(process.env.HOME ?? '/tmp', '.aura', 'episodes');
   },
 
   /**

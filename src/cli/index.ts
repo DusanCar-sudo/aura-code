@@ -77,6 +77,7 @@ import { handleModeCommand } from './repl-mode-commands.js';
 import { handleTurnCommand } from './repl-turn-commands.js';
 import { handleComputerCommand } from './repl-computer-commands.js';
 import { handleLessonCommand } from './repl-lesson-commands.js';
+import { handleCostCommand } from './repl-cost-command.js';
 import { createSteeringInbox, type SteeringInbox } from '../agent/steering.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
@@ -2469,24 +2470,57 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   // ── :mine — Baby Archimedes experience mining (src/mining/). The base pass is
   // zero-LLM (pure clustering over episodes/*.json); --refine additionally
   // runs Papa Archimedes, one local-model call per qualifying concept, appending
-  // accepted lessons to training-data/<date>.jsonl.
-  if (input === ':mine' || input === ':mine --refine') {
-    const refine = input.endsWith('--refine');
-    const { mineExperience } = await import('../mining/extract.js');
-    const mined = await mineExperience(c.ctx.root);
-    if (mined.episodeCount === 0) {
-      c.display.warning('No episodes to mine yet — run some tasks first.');
+  // accepted lessons to training-data/<date>.jsonl; --corrections emits direct
+  // correction pairs (Path B) from escalation episodes; --stats shows row counts
+  // by provenance.
+  if (input === ':mine' || input.startsWith(':mine ')) {
+    const refine = input.includes('--refine');
+    const corrections = input.includes('--corrections');
+    const stats = input.includes('--stats');
+    if (!refine && !corrections && !stats) {
+      c.display.warning('Usage: :mine [--refine] [--corrections] [--stats] — base pass mines concepts; --refine judges them with the local model; --corrections writes direct correction pairs; --stats reports the training-data corpus by provenance.');
       return { handled: true };
     }
-    console.log(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
-    for (const con of mined.concepts.slice(0, 15)) {
-      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${con.concept}`) + chalk.hex(FAINT_HEX)(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
-      if (con.keywords.length > 0) console.log(chalk.hex(FAINT_HEX)(`    keywords: ${con.keywords.join(', ')}`));
+    // --stats / --corrections work on their own; the base mine pass (concept
+    // listing + --refine) is only needed when the user asks for it.
+    if (stats) {
+      const { trainingDataStats } = await import('../mining/corpus.js');
+      const s = trainingDataStats(c.ctx.root);
+      if (s.total === 0) {
+        c.display.warning('No training-data rows yet — run :mine --refine or :mine --corrections to produce them.');
+      } else {
+        console.log(chalk.hex('#cc785c').bold(`\n  Training-data corpus (${s.total} row(s)):\n`));
+        for (const [prov, n] of Object.entries(s.byProvenance)) {
+          console.log(chalk.hex(TEXT_DIM_HEX)(`    ${prov.padEnd(12)} ${n}`));
+        }
+      }
     }
-    if (mined.concepts.length > 15) {
-      console.log(chalk.hex(FAINT_HEX)(`  … and ${mined.concepts.length - 15} more.`));
+    if (corrections) {
+      const { collectCorrections } = await import('../mining/corrections.js');
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Collecting direct correction pairs from escalation episodes…'));
+      const res = await collectCorrections(c.ctx.root);
+      if (res.written.length > 0) {
+        console.log(chalk.hex('#5a9e6e')(`  ✓ ${res.written.length} correction pair(s) appended: ${res.outputPath}`));
+        console.log(chalk.hex(FAINT_HEX)(`    ${res.skipped} episode(s) skipped (not escalations).\n`));
+      } else {
+        c.display.warning(`No correction pairs — ${res.skipped} episode(s) skipped (not escalations).`);
+      }
     }
     if (refine) {
+      const { mineExperience } = await import('../mining/extract.js');
+      const mined = await mineExperience(c.ctx.root);
+      if (mined.episodeCount === 0) {
+        c.display.warning('No episodes to mine yet — run some tasks first.');
+        return { handled: true };
+      }
+      console.log(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
+      for (const con of mined.concepts.slice(0, 15)) {
+        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${con.concept}`) + chalk.hex(FAINT_HEX)(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
+        if (con.keywords.length > 0) console.log(chalk.hex(FAINT_HEX)(`    keywords: ${con.keywords.join(', ')}`));
+      }
+      if (mined.concepts.length > 15) {
+        console.log(chalk.hex(FAINT_HEX)(`  … and ${mined.concepts.length - 15} more.`));
+      }
       console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refining with the local Archimedes model (Papa Archimedes)…'));
       const { refineConcepts } = await import('../mining/refine.js');
       const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
@@ -2496,8 +2530,6 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       } else {
         c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
       }
-    } else if (mined.concepts.length > 0) {
-      console.log(chalk.hex(FAINT_HEX)('\n  :mine --refine judges these with the local Archimedes model and writes training-data/*.jsonl\n'));
     }
     return { handled: true };
   }
@@ -2690,6 +2722,14 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       projectRoot: c.ctx.root,
     });
     if (lessonResult) return lessonResult;
+  }
+
+  // ── Cost ledger (:cost) ────────────────────────────────────────────────
+  // Every Archimedes-path attempt appends a row to ~/.aura/cost-log/;
+  // this reads it back and reports whether small-first actually saves.
+  {
+    const costResult = await handleCostCommand(input);
+    if (costResult) return costResult;
   }
 
   // ── Computer use (:compon, :compoff, :comp) ─────────────────────────────
@@ -3582,7 +3622,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
       "rateLimitTpm": 1000000,
       "maxTurns": 50,
       "maxRetries": 6,
-      "fallbacks": ["gpt-4o-mini", "gemini-2.5-flash"],
+      "fallbacks": ["gpt-4o-mini", "gemini-3.6-flash"],
       "ignore": ["dist/", "*.generated.ts"]
     }
     CLI flags always override .aura.json.
@@ -3604,7 +3644,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
   ${chalk.hex(FAINT_HEX)('Model examples:')}
     aura -m claude-opus-4-5-20251001  "refactor auth"
     aura -m gpt-4o                    "add unit tests"
-    aura -m gemini-2.5-pro --rate-limit-rpm 20  "explain this codebase"
+    aura -m gemini-pro-latest --rate-limit-rpm 20 "explain this codebase"
     aura -m ollama/llama3.2           "local model, no API key needed"
 
   ${chalk.hex(FAINT_HEX)('API keys (set as env vars):')}
