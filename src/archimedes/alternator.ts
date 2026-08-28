@@ -22,6 +22,9 @@ import { episodeStore } from './episode-capture.js';
 import type { EpisodeStats } from './episode-capture.js';
 import { countText } from '../agent/compactor.js';
 import { appendCostLog, type CostLogEntry, type CostModelUsage, type CostOutcome } from './cost-log.js';
+import {
+  extractClaimTerms, claimAwareExcerpt, TOTAL_EVIDENCE_BUDGET,
+} from './claim-evidence.js';
 
 // Tools sent to the Archimedes attempt — read-only subset only.
 // Mutating tools (edit_file, write_file, run_shell) are already blocked by the
@@ -211,14 +214,26 @@ interface ArchimedesVerification {
 }
 
 /**
- * Condense Archimedes's tool activity from loop history into a short, cheap summary
- * for the verifier. The toolCallLog on LoopResult only records name+input, so
- * actual outputs are pulled from `tool_result` history entries; args come from
- * the matching assistant toolCalls (paired by id). Each result is truncated so
- * the verification call stays one cheap prompt, not a transcript dump.
+ * Condense Archimedes's tool activity from loop history into a short, cheap
+ * summary for the verifier. The toolCallLog on LoopResult only records
+ * name+input, so actual outputs are pulled from `tool_result` history entries;
+ * args come from the matching assistant toolCalls (paired by id).
+ *
+ * When `answer` is supplied, results are excerpted around the claims that
+ * answer actually makes (see claim-evidence.ts) rather than head-truncated at a
+ * flat 300 chars. The verifier's job is spotting contradiction against
+ * evidence, and a fixed head almost never contains the contradicting line — on
+ * a real file read it was about 6% of the file, chosen without reference to
+ * what was being checked.
+ *
+ * Without an `answer` there is nothing to select against, so the old
+ * head-truncation applies; those callers only need a gist for the escalation
+ * prompt.
  */
-function summarizeToolActivity(history: HistoryMessage[]): string {
+function summarizeToolActivity(history: HistoryMessage[], answer?: string): string {
   const MAX_RESULT_CHARS = 300;
+  const terms = answer ? extractClaimTerms(answer) : [];
+  let evidenceBudget = TOTAL_EVIDENCE_BUDGET;
   const argsById = new Map<string, string>();
   for (const msg of history) {
     if (msg.role === 'assistant' && msg.toolCalls) {
@@ -234,9 +249,15 @@ function summarizeToolActivity(history: HistoryMessage[]): string {
   for (const msg of history) {
     if (msg.role !== 'tool_result') continue;
     for (const r of msg.results) {
-      let content = r.content.replace(/\s+/g, ' ').trim();
-      if (content.length > MAX_RESULT_CHARS) {
-        content = content.slice(0, MAX_RESULT_CHARS) + '…';
+      let content: string;
+      if (terms.length > 0 && evidenceBudget > 0) {
+        content = claimAwareExcerpt(r.content, terms, Math.min(600, evidenceBudget));
+        evidenceBudget -= content.length;
+      } else {
+        content = r.content.replace(/\s+/g, ' ').trim();
+        if (content.length > MAX_RESULT_CHARS) {
+          content = content.slice(0, MAX_RESULT_CHARS) + '…';
+        }
       }
       lines.push(`- ${r.name}(${argsById.get(r.id) ?? ''}) -> ${content}`);
     }
@@ -260,7 +281,7 @@ export async function verifyArchimedesAnswer(
   history: HistoryMessage[],
   verifierProvider: LLMProvider,
 ): Promise<ArchimedesVerification> {
-  const toolSummary = summarizeToolActivity(history);
+  const toolSummary = summarizeToolActivity(history, answer);
   const mode = taskMode(task);
 
   const prompt = mode === 'retrieval' ? [
@@ -587,7 +608,7 @@ export class ArchimedesAlternator {
                   `Archimedes's answer failed verification: ${verification.reason}`,
                   ``,
                   `Archimedes's tool activity:`,
-                  summarizeToolActivity(loopResult.history),
+                  summarizeToolActivity(loopResult.history, archimedesOutput),
                   ``,
                   `Archimedes's (invalid) answer, for reference only — verify independently:`,
                   archimedesOutput!,
