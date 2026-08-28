@@ -60,6 +60,21 @@ const limit = Number(argOf('--limit', '0')) || 0;
 const only = (argOf('--only', '') || '').split(',').filter(Boolean);
 const model = argOf('--model', process.env.AURA_MODEL || 'gemini/gemini-3.6-flash');
 const maxTurns = Number(argOf('--max-turns', '6'));
+const rebuildFrom = argOf('--rebuild-sheet', '');
+
+/**
+ * A run that hit the turn cap did not answer — it was truncated by a harness
+ * setting. Scoring "Loop ended after 6 turns" against a real answer would
+ * credit the other path for this harness's arbitrary limit, so such pairs are
+ * excluded from the blind sheet and reported instead of silently scored.
+ */
+function truncatedByCap(side) {
+  return /^Loop ended after \d+ turns/.test((side.text ?? '').trim());
+}
+function scoreable(pair) {
+  return Boolean(pair.gazelle.text.trim()) && Boolean(pair.coder.text.trim())
+    && !truncatedByCap(pair.gazelle) && !truncatedByCap(pair.coder);
+}
 
 // ── a display that says nothing ──────────────────────────────────────────────
 // The harness must not print model output as it streams: a scorer reading the
@@ -127,6 +142,7 @@ async function runCoder(prompt, context) {
 }
 
 async function main() {
+  if (rebuildFrom) return rebuildSheet(rebuildFrom);
   const spec = JSON.parse(readFileSync(join(__dirname, 'prompts.json'), 'utf8'));
   let prompts = spec.prompts;
   if (only.length > 0) prompts = prompts.filter(p => only.includes(p.id));
@@ -162,8 +178,9 @@ async function main() {
 
   // ── blind scoring sheet: shuffled, labels stripped ────────────────────────
   const key = [];
+  const excluded = pairs.filter(p => !scoreable(p));
   const sheet = pairs
-    .filter(({ gazelle, coder }) => gazelle.text.trim() && coder.text.trim())
+    .filter(scoreable)
     .map(({ prompt, gazelle, coder }, idx) => {
       // Independent coin flip per pair, so a scorer cannot learn "A is always X".
       const gazelleFirst = shuffle([true, false], seed + idx)[0];
@@ -172,6 +189,17 @@ async function main() {
       key.push({ id: prompt.id, A: gazelleFirst ? 'gazelle' : 'coder', B: gazelleFirst ? 'coder' : 'gazelle' });
       return { id: prompt.id, category: prompt.category, prompt: prompt.text, A: A.text, B: B.text };
     });
+
+  if (excluded.length > 0) {
+    console.log(`\n  ${excluded.length} pair(s) excluded from scoring (no usable answer from one side):`);
+    for (const e of excluded) {
+      const why = truncatedByCap(e.coder) ? 'coder hit the turn cap'
+        : truncatedByCap(e.gazelle) ? 'gazelle hit the turn cap'
+        : !e.gazelle.text.trim() ? 'gazelle produced no text' : 'coder produced no text';
+      console.log(`    ${e.prompt.id} (${e.prompt.category}) — ${why}`);
+    }
+    console.log('    Re-run these with a higher --max-turns rather than scoring a truncation.');
+  }
 
   const sheetFile = join(RESULTS, `sheet-${stamp}.json`);
   const keyFile = join(RESULTS, `key-${stamp}.json`);
@@ -190,6 +218,44 @@ async function main() {
   console.log(`  sheet:  ${sheetFile}   ← give this to the scorer`);
   console.log(`  key:    ${keyFile}   ← the scorer must NOT see this`);
   console.log('\nNext: node benchmark/gazelle-eval/score.mjs --sheet <sheet> [--judge <model>]');
+}
+
+/**
+ * Rebuild a blind sheet from one or more existing records, applying the current
+ * exclusion rule. No API calls — used after fixing a methodological problem so
+ * the runs already paid for are not thrown away.
+ */
+function rebuildSheet(recordPaths) {
+  const files = recordPaths.split(',').map(f => f.trim()).filter(Boolean);
+  const pairs = [];
+  let model = '';
+  for (const f of files) {
+    const rec = JSON.parse(readFileSync(f, 'utf8'));
+    model = rec.model;
+    for (const p of rec.pairs) {
+      // A later record wins for the same prompt id (a re-run supersedes).
+      const at = pairs.findIndex(x => x.prompt.id === p.prompt.id);
+      if (at >= 0) pairs[at] = p; else pairs.push(p);
+    }
+  }
+  const excluded = pairs.filter(p => !scoreable(p));
+  const kept = pairs.filter(scoreable);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const seed = 20260828;
+  const key = [];
+  const sheet = kept.map(({ prompt, gazelle, coder }, idx) => {
+    const gazelleFirst = shuffle([true, false], seed + idx)[0];
+    const A = gazelleFirst ? gazelle : coder;
+    const B = gazelleFirst ? coder : gazelle;
+    key.push({ id: prompt.id, A: gazelleFirst ? 'gazelle' : 'coder', B: gazelleFirst ? 'coder' : 'gazelle' });
+    return { id: prompt.id, category: prompt.category, prompt: prompt.text, A: A.text, B: B.text };
+  });
+  writeFileSync(join(RESULTS, `run-${stamp}.json`), JSON.stringify({ model, seed, stamp, pairs }, null, 2) + '\n');
+  writeFileSync(join(RESULTS, `sheet-${stamp}.json`), JSON.stringify({ stamp, items: shuffle(sheet, seed) }, null, 2) + '\n');
+  writeFileSync(join(RESULTS, `key-${stamp}.json`), JSON.stringify({ stamp, key }, null, 2) + '\n');
+  console.log(`Rebuilt from ${files.length} record(s): ${pairs.length} pair(s), ${kept.length} scoreable, ${excluded.length} excluded.`);
+  for (const e of excluded) console.log(`  excluded ${e.prompt.id} (${e.prompt.category})`);
+  console.log(`\n  sheet: ${join(RESULTS, `sheet-${stamp}.json`)}`);
 }
 
 void main();
