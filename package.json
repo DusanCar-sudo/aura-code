@@ -23,7 +23,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "repair-anchors": "npm run build && node dist/machina/repair.js",
-    "fixtures:capture": "ts-node scripts/capture-provider-fixtures.ts"
+    "fixtures:capture": "ts-node scripts/capture-provider-fixtures.ts",
+    "eval:gazelle": "node benchmark/gazelle-eval/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
