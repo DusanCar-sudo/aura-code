@@ -395,6 +395,12 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
  */
 const ROUTE_PREFIX: Record<string, string> = {
   vertex: 'vertex/',
+  // BytePlus and FPT resell other vendors' models under their own gateway, so
+  // their catalogue ids are bare vendor names — "deepseek-v4-flash-ga-260813",
+  // "DeepSeek-V4-Flash". Without a prefix those route to DeepSeek's own API
+  // with a DeepSeek key, which is the wrong endpoint and the wrong bill.
+  byteplus: 'byteplus/',
+  fpt: 'fpt/',
   'opencode-zen': 'zen/',
   'opencode-go': 'go-anthropic/',
   openrouter: 'openrouter/',
@@ -418,12 +424,13 @@ const ROUTE_PREFIX: Record<string, string> = {
   alibaba: 'alibaba/',
 };
 
-/** Prefix a bare model id with its provider's routing prefix when missing. */
-function applyRoutePrefix(providerId: string, id: string): string {
+/** Prefix a bare model id with its provider's routing prefix when missing.
+ *  Exported so the registry-to-routing invariant can be tested. */
+export function applyRoutePrefix(providerId: string, id: string): string {
   const prefix = ROUTE_PREFIX[providerId];
   if (!prefix || id.startsWith(prefix)) return id;
   // Already carries some other known routing prefix (user typed it fully) — leave alone.
-  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//.test(id)) return id;
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|vertex)\//.test(id)) return id;
   return prefix + id;
 }
 

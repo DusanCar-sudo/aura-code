@@ -1,36 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { marked } from 'marked';
+import { renderMarkdown } from '../lib/markdown';
 
 /**
  * Markdown rendering with copyable code blocks.
  *
- * `marked` is already a dependency of the engine, so this costs no new package.
- *
- * Sanitisation: model output is untrusted text. marked does not sanitise, so
- * raw HTML is disabled at the renderer level and the result is additionally
- * scrubbed of script/style/event-handler vectors before it reaches innerHTML.
- * A chat client that renders model output as live HTML is an XSS hole with a
- * nice font.
+ * The rendering and sanitisation live in lib/markdown.ts so they can be
+ * tested; this file is the DOM half.
  */
-
-marked.setOptions({ gfm: true, breaks: true });
-
-/** Strip the vectors that survive "no raw HTML" — belt and braces. */
-function scrub(html: string): string {
-  return html
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*\/?>/gi, '')
-    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/(href|src)\s*=\s*(?:"\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi, '$1="#"');
-}
-
-function renderMarkdown(text: string): string {
-  const renderer = new marked.Renderer();
-  // Never emit author-supplied HTML.
-  renderer.html = () => '';
-  const out = marked.parse(text, { renderer, async: false }) as string;
-  return scrub(out);
-}
 
 export function Markdown({ text }: { text: string }) {
   const html = useMemo(() => renderMarkdown(text), [text]);
