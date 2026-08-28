@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
@@ -20,6 +22,10 @@ import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
 import { openExternal } from '../util/open.js';
+import { loadAllPlugins } from '../plugins/loader.js';
+
+/** Name of the session cookie the browser client authenticates with. */
+const AUTH_COOKIE = 'aura_token';
 
 export interface ServeOptions {
   port: number; cwd: string; model: string;
@@ -174,12 +180,46 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     res.json({ token: paired.token, device: { id: paired.device.id, name: paired.device.name } });
   });
 
+  /**
+   * Read the session cookie.
+   *
+   * The web client is a real page with its own asset and API requests, and a
+   * browser attaches neither a query string nor a custom header to a <script>
+   * it was told to fetch. Without a cookie every asset 401s and the page
+   * renders blank — which is exactly what happened. The cookie is set below,
+   * only after a valid token arrived by query or header, so it grants nothing
+   * that was not already granted.
+   */
+  function cookieToken(req: express.Request): string | undefined {
+    const raw = req.header('cookie');
+    if (!raw) return undefined;
+    for (const part of raw.split(';')) {
+      const [name, ...rest] = part.trim().split('=');
+      if (name === AUTH_COOKIE) return decodeURIComponent(rest.join('='));
+    }
+    return undefined;
+  }
+
   app.use((req, res, next) => {
-    const provided = (req.query.token as string | undefined) ?? req.header('x-aura-token');
+    const explicit = (req.query.token as string | undefined) ?? req.header('x-aura-token');
+    const provided = explicit ?? cookieToken(req);
     const who = identify(provided);
     if (!who) {
       res.status(401).send('Unauthorized: missing or invalid token.');
       return;
+    }
+    // Promote a proven token to a cookie so the page's own subresources
+    // authenticate. httpOnly keeps it away from page scripts; SameSite=Strict
+    // keeps another origin from riding it; Secure only under TLS, since the
+    // default bind is plain http on loopback where Secure would drop it.
+    if (explicit && explicit === provided) {
+      res.cookie?.(AUTH_COOKIE, explicit, {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: req.protocol === 'https',
+        maxAge: 12 * 60 * 60 * 1000,
+        path: '/',
+      });
     }
     // Carried so /api/history and /api/reset act on the caller's own
     // conversation instead of a single shared one.
@@ -235,9 +275,70 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   }
   console.log('');
 
+  // ── Web client ───────────────────────────────────────────────────────────
+  // dist/web is the built React client (npm run build:web). When it is absent
+  // — a source checkout that has not built the web assets — fall back to the
+  // original inline UI rather than serving a blank page.
+  const webDir = path.join(__dirname, '..', 'web');
+  const hasWebClient = fs.existsSync(path.join(webDir, 'index.html'));
+
+  if (hasWebClient) {
+    // Assets only: '/' stays a handler below so the pairing token can be
+    // injected into the URL the browser actually loads.
+    // Assets are content-hashed, so they are immutable and cache hard.
+    app.use(express.static(webDir, { index: false, immutable: true, maxAge: '365d' }));
+  }
+
   app.get('/', (_req, res) => {
+    if (hasWebClient) {
+      res.setHeader('Content-Type', 'text/html');
+      // Never cached: it is the document that names the current asset hashes,
+      // so a stale copy pins the browser to a previous build.
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(fs.readFileSync(path.join(webDir, 'index.html'), 'utf8'));
+      return;
+    }
     res.setHeader('Content-Type', 'text/html');
     res.send(buildUI(ctx.name, opts.model, token));
+  });
+
+  /**
+   * Skills and plugins, for the settings panel's loader.
+   *
+   * Read-only by design: listing what is installed is safe, whereas installing
+   * over the network is not — plugins run unsandboxed with the operator's full
+   * privileges (see src/plugins/hooks.ts), so that stays a deliberate local act.
+   */
+  app.get('/api/skills', (_req, res) => {
+    try {
+      const skills = loadAllPlugins().flatMap((plugin) =>
+        plugin.skills.map((skill) => ({
+          id: `${plugin.name}:${skill.name}`,
+          name: skill.name,
+          description: skill.description,
+          source: plugin.name,
+        })));
+      res.json({ skills });
+    } catch {
+      res.json({ skills: [] });
+    }
+  });
+
+  app.get('/api/plugins', (_req, res) => {
+    try {
+      const plugins = loadAllPlugins().map((plugin) => ({
+        id: plugin.name,
+        name: plugin.manifest.name || plugin.name,
+        description: plugin.manifest.description,
+        source: plugin.path,
+        commands: plugin.commands.length,
+        skills: plugin.skills.length,
+        hooks: plugin.hooks.length,
+      }));
+      res.json({ plugins });
+    } catch {
+      res.json({ plugins: [] });
+    }
   });
   app.get('/api/history', (req, res) => res.json(stateFor(clientOf(req)).session.getDisplay()));
   app.get('/api/project', (req, res) => res.json({

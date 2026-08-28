@@ -141,6 +141,10 @@ export class ProtocolHandler {
       ? p.projectRoot
       : this.opts.defaultProjectRoot;
     const model = typeof p.model === 'string' && p.model ? p.model : this.opts.defaultModel;
+    // An unrecognised level falls back to 'normal' rather than to the most
+    // permissive reading of a typo.
+    const permission: 'read-only' | 'normal' | 'auto' =
+      p.permission === 'read-only' || p.permission === 'auto' ? p.permission : 'normal';
     if (!model) {
       return this.fail(req.id, { code: 'bad_params', message: 'No model given and no engine default configured.' });
     }
@@ -165,7 +169,7 @@ export class ProtocolHandler {
       apiKey: typeof p.apiKey === 'string' ? p.apiKey : this.opts.defaultApiKey,
       baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl : this.opts.defaultBaseUrl,
       context,
-      permissions: new PermissionSystem('normal'),
+      permissions: new PermissionSystem(permission),
       // Per session, not per process: two concurrent sessions get independent
       // ceilings rather than racing each other toward one shared total.
       budget: new SessionBudget(maxInputTokens !== undefined ? { maxInputTokens } : {}),

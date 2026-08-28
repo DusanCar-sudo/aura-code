@@ -1,0 +1,330 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ProtocolClient, M, type ConnectionState } from '../lib/protocol';
+import type { Settings } from '../lib/settings';
+
+/**
+ * The client's whole state machine.
+ *
+ * The engine owns conversation truth; this hook owns what the screen needs to
+ * paint between events. Streaming deltas are accumulated into the last
+ * assistant message rather than appended as new ones, so a turn renders as one
+ * growing answer instead of a stack of fragments.
+ */
+
+export type Role = 'user' | 'assistant';
+
+export interface ToolEvent {
+  id: string;
+  name: string;
+  input?: unknown;
+  result?: string;
+  blocked?: string;
+  elapsedMs?: number;
+}
+
+export interface Message {
+  id: string;
+  role: Role;
+  text: string;
+  /** Tool activity that happened while producing this message. */
+  tools: ToolEvent[];
+  /** Still receiving deltas. */
+  streaming?: boolean;
+  error?: string;
+  at: number;
+}
+
+export interface Conversation {
+  sessionId: string;
+  title: string;
+  at: number;
+}
+
+export interface PendingApproval {
+  /** Resolve with true to allow, false to deny. */
+  resolve: (allowed: boolean) => void;
+  tool: string;
+  detail: string;
+  /** 1 auto · 2 accept-edits · 3 approval · 4 bypass (see ApprovalTier). */
+  tier: number;
+}
+
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd?: number;
+  contextUsed?: number;
+  contextWindow?: number;
+}
+
+export function useAura(settings: Settings) {
+  const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [approval, setApproval] = useState<PendingApproval | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [tools, setTools] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const clientRef = useRef<ProtocolClient | null>(null);
+  // Settings are read inside long-lived callbacks; a ref keeps those current
+  // without tearing down the socket every time a preference changes.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  /** Append text to the streaming assistant message, creating it if needed. */
+  const appendDelta = useCallback((text: string) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant' && last.streaming) {
+        const next = prev.slice(0, -1);
+        next.push({ ...last, text: last.text + text });
+        return next;
+      }
+      return [...prev, {
+        id: `a${Date.now()}`, role: 'assistant', text, tools: [], streaming: true, at: Date.now(),
+      }];
+    });
+  }, []);
+
+  /** Attach a tool event to the in-flight assistant message. */
+  const noteTool = useCallback((patch: ToolEvent, mode: 'call' | 'result' | 'blocked') => {
+    setMessages((prev) => {
+      let list = prev;
+      let last = list[list.length - 1];
+      if (!last || last.role !== 'assistant' || !last.streaming) {
+        last = {
+          id: `a${Date.now()}`, role: 'assistant', text: '', tools: [], streaming: true, at: Date.now(),
+        };
+        list = [...list, last];
+      }
+      const tools = [...last.tools];
+      const at = tools.findIndex((t) => t.id === patch.id);
+      if (mode === 'call') {
+        if (at < 0) tools.push(patch);
+      } else if (at >= 0) {
+        tools[at] = { ...tools[at], ...patch };
+      } else {
+        tools.push(patch);
+      }
+      return [...list.slice(0, -1), { ...last, tools }];
+    });
+  }, []);
+
+  const onEvent = useCallback((method: string, params: unknown) => {
+    const p = (params ?? {}) as Record<string, any>;
+    switch (method) {
+      case M.turnStarted:
+        setBusy(true);
+        setError(null);
+        break;
+      case M.turnDelta:
+        if (typeof p.text === 'string') appendDelta(p.text);
+        break;
+      // Tool events carry no per-call id — the engine keys them by name within
+      // a turn (see ToolCallEvent in src/protocol/types.ts), so the result must
+      // attach to the most recent unresolved call of that name.
+      case M.turnToolCall:
+        noteTool({ id: String(p.name ?? 'tool'), name: String(p.name ?? 'tool'), input: p.input }, 'call');
+        break;
+      case M.turnToolResult:
+        noteTool({
+          id: String(p.name ?? 'tool'), name: String(p.name ?? 'tool'),
+          result: typeof p.result === 'string' ? p.result : JSON.stringify(p.result ?? ''),
+          elapsedMs: typeof p.elapsedMs === 'number' ? p.elapsedMs : undefined,
+        }, 'result');
+        break;
+      case M.turnToolBlocked:
+        noteTool({
+          id: String(p.name ?? 'tool'), name: String(p.name ?? 'tool'),
+          blocked: String(p.reason ?? 'blocked'),
+        }, 'blocked');
+        break;
+      case M.turnCompleted:
+        setBusy(false);
+        setMessages((prev) => prev.map((m, i) => {
+          if (i !== prev.length - 1 || !m.streaming) return m;
+          // Some paths emit no deltas at all and deliver the whole answer in
+          // `summary`. Falling back to it stops those turns rendering blank.
+          const summary = typeof p.summary === 'string' ? p.summary : '';
+          return { ...m, streaming: false, text: m.text.trim() ? m.text : summary };
+        }));
+        if (p.usage) {
+          setUsage({
+            inputTokens: Number(p.usage.inputTokens ?? 0),
+            outputTokens: Number(p.usage.outputTokens ?? 0),
+            costUsd: typeof p.usage.costUsd === 'number' ? p.usage.costUsd : undefined,
+          });
+        }
+        break;
+      case M.turnError:
+        setBusy(false);
+        setError(String(p.message ?? 'turn failed'));
+        setMessages((prev) => prev.map((m, i) =>
+          i === prev.length - 1 && m.streaming
+            ? { ...m, streaming: false, error: String(p.message ?? 'turn failed') }
+            : m));
+        break;
+      default:
+        break;
+    }
+  }, [appendDelta, noteTool]);
+
+  /**
+   * The engine asking permission. Held as UI state until the operator answers;
+   * the promise the engine is waiting on resolves with their choice, so an
+   * unanswered prompt blocks that turn rather than silently allowing it.
+   */
+  const onRequest = useCallback((method: string, params: unknown) => {
+    if (method !== M.approvalRequest) return { decision: 'deny' as const };
+    const p = (params ?? {}) as Record<string, any>;
+    return new Promise<{ decision: 'allow' | 'deny' }>((resolve) => {
+      setApproval({
+        tool: String(p.tool || 'tool'),
+        tier: Number(p.tier ?? 3),
+        // `rendered` is the engine's own one-liner and is always populated;
+        // the raw args are the fallback, never the headline.
+        detail: typeof p.rendered === 'string' && p.rendered
+          ? p.rendered
+          : JSON.stringify(p.args ?? {}, null, 2),
+        resolve: (allowed) => {
+          setApproval(null);
+          resolve({ decision: allowed ? 'allow' : 'deny' });
+        },
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const client = new ProtocolClient({ onEvent, onRequest, onState: setConnection });
+    clientRef.current = client;
+    client.connect();
+    return () => { client.close(); clientRef.current = null; };
+    // Deliberately mounted once: the callbacks are stable, and reconnecting on
+    // every settings change would drop an in-flight turn.
+  }, [onEvent, onRequest]);
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const res = await clientRef.current?.request<{ sessions?: any[] }>(M.sessionList);
+      const list = (res?.sessions ?? []).map((s: any) => ({
+        sessionId: String(s.sessionId),
+        title: String(s.name || 'Untitled'),
+        at: Number(s.createdAt ?? Date.now()),
+      }));
+      setConversations(list.sort((a, b) => b.at - a.at));
+    } catch { /* a listing failure must not blank the UI */ }
+  }, []);
+
+  const newChat = useCallback(async (title?: string) => {
+    const s = settingsRef.current;
+    try {
+      const res = await clientRef.current?.request<{ sessionId: string }>(M.sessionCreate, {
+        projectRoot: '.',
+        ...(s.model ? { model: s.model } : {}),
+        ...(s.maxInputTokens ? { maxInputTokens: s.maxInputTokens } : {}),
+        name: title,
+        // Actually enforced by the engine (see SessionCreateParams.permission).
+        permission: s.permission,
+      });
+      if (res?.sessionId) {
+        setSessionId(res.sessionId);
+        setMessages([]);
+        setUsage(null);
+        setError(null);
+        void refreshConversations();
+      }
+      return res?.sessionId ?? null;
+    } catch (e) {
+      setError(String(e));
+      return null;
+    }
+  }, [refreshConversations]);
+
+  const openChat = useCallback(async (id: string) => {
+    setSessionId(id);
+    setError(null);
+    try {
+      const res = await clientRef.current?.request<{ messages?: any[] }>(M.sessionHistory, {
+        sessionId: id,
+      });
+      setMessages((res?.messages ?? []).map((m: any, i: number) => ({
+        id: `h${i}`,
+        role: m.role === 'user' ? 'user' : 'assistant',
+        text: typeof m.content === 'string' ? m.content : String(m.text ?? ''),
+        tools: [],
+        at: Number(m.at ?? Date.now()),
+      })));
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
+  const deleteChat = useCallback(async (id: string) => {
+    try { await clientRef.current?.request(M.sessionDestroy, { sessionId: id }); } catch { /* */ }
+    if (sessionId === id) { setSessionId(null); setMessages([]); }
+    void refreshConversations();
+  }, [sessionId, refreshConversations]);
+
+  const send = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    let id = sessionId;
+    if (!id) id = await newChat(trimmed.slice(0, 60));
+    if (!id) return;
+
+    setMessages((prev) => [
+      ...prev,
+      { id: `u${Date.now()}`, role: 'user', text: trimmed, tools: [], at: Date.now() },
+    ]);
+    setBusy(true);
+    setError(null);
+    try {
+      await clientRef.current?.request(M.turnSend, { sessionId: id, message: trimmed });
+    } catch (e) {
+      setBusy(false);
+      setError(String(e));
+    }
+  }, [busy, sessionId, newChat]);
+
+  const stop = useCallback(async () => {
+    if (!sessionId) return;
+    try { await clientRef.current?.request(M.turnCancel, { sessionId }); } catch { /* */ }
+    setBusy(false);
+  }, [sessionId]);
+
+  /** Re-ask the last user message, dropping the answer it produced. */
+  const regenerate = useCallback(async () => {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser || busy) return;
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === lastUser.id);
+      return idx >= 0 ? prev.slice(0, idx + 1) : prev;
+    });
+    setBusy(true);
+    try {
+      await clientRef.current?.request(M.turnSend, { sessionId, message: lastUser.text });
+    } catch (e) {
+      setBusy(false);
+      setError(String(e));
+    }
+  }, [messages, busy, sessionId]);
+
+  useEffect(() => {
+    if (connection !== 'open') return;
+    void refreshConversations();
+    clientRef.current?.request<{ tools?: any[] }>(M.toolsList)
+      .then((r) => setTools((r?.tools ?? []).map((t: any) => String(t.name ?? t))))
+      .catch(() => { /* tool listing is informational */ });
+  }, [connection, refreshConversations]);
+
+  return useMemo(() => ({
+    connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
+    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations,
+  }), [
+    connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
+    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations,
+  ]);
+}

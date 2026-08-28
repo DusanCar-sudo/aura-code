@@ -1,0 +1,116 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Aura web — the TUI's design language, rendered graphically.
+
+   Every colour here is lifted verbatim from src/cli/diamond.ts so the web
+   client and the terminal are recognisably the same product. Nothing is
+   "web-styled" for its own sake: the terminal is the reference.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Palette, from src/cli/diamond.ts ── */
+  --ruby: #9b1b30;
+  --bg: #0f1724;
+  --panel-bg: #1c2739;
+  --terracotta: #cc785c;
+  --text: #e8e6e3;
+  --text-dim: #8a94a6;
+  --faint: #4a5568;
+
+  /* ── Status, from src/cli/display.ts ── */
+  --ok: #5a9e6e;
+  --err: #b15439;
+  --warn: #d4903a;
+
+  /* ── Derived surfaces ── */
+  --panel-raised: #22304a;
+  --line: #243149;
+  --line-soft: #1a2436;
+  --overlay: rgba(15, 23, 36, 0.82);
+  --selection: rgba(204, 120, 92, 0.26);
+
+  /* ── Type ── */
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+
+  /* ── Metrics ── */
+  --sidebar-w: 268px;
+  --radius: 8px;
+  --radius-sm: 5px;
+  --gutter: 16px;
+  --header-h: 46px;
+}
+
+/* Light theme — the same hues, inverted in role rather than replaced, so the
+   product still reads as Aura rather than as a generic light app. */
+:root[data-theme='light'] {
+  --bg: #f4f2ef;
+  --panel-bg: #e9e5e0;
+  --panel-raised: #ddd8d1;
+  --text: #1b2330;
+  --text-dim: #5c6675;
+  --faint: #9aa3b0;
+  --line: #d3ccc3;
+  --line-soft: #e2ddd6;
+  --overlay: rgba(244, 242, 239, 0.86);
+  --selection: rgba(204, 120, 92, 0.22);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection { background: var(--selection); }
+
+/* Scrollbars, kept in the terminal register: present but never decorative. */
+* { scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--faint);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--text-dim); }
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+button:hover:not(:disabled) { color: var(--text); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+:focus-visible {
+  outline: 1px solid var(--terracotta);
+  outline-offset: 2px;
+}
+
+/* Respect the OS setting for anyone who asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

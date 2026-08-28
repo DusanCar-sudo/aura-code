@@ -80,6 +80,14 @@ export interface SessionCreateParams {
   name?: string;
   /** Cumulative billed-input ceiling. Omit for the configured default. */
   maxInputTokens?: number;
+  /**
+   * Enforcement level for this session's tools. Omit for 'normal'.
+   *
+   * Carried on the wire because a client that shows a permission control must
+   * actually change enforcement — a toggle the engine never hears is a lie
+   * told by a switch.
+   */
+  permission?: 'read-only' | 'normal' | 'auto';
 }
 
 export interface SessionCreateResult {
