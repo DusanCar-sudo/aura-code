@@ -25,6 +25,8 @@ export interface Settings {
    * asked (see docs/SANDBOX-DESIGN.md).
    */
   sandbox: boolean;
+  /** Provider display name from the engine registry, e.g. "DeepSeek". */
+  provider: string;
   model: string;
   maxTurns: number;
   maxInputTokens: number;
@@ -37,6 +39,7 @@ export const DEFAULTS: Settings = {
   theme: 'dark',
   permission: 'normal',
   sandbox: false,
+  provider: '',
   model: '',
   maxTurns: 30,
   maxInputTokens: 0,

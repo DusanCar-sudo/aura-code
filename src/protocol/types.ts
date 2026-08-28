@@ -114,6 +114,11 @@ export interface TurnSendParams {
   sessionId: string;
   /** The user's instruction. Replaces run_agent's `goal`. */
   message: string;
+  /**
+   * Images attached to this turn, as base64 data URIs. Passed straight to the
+   * loop's multimodal input; a provider without vision simply never sees them.
+   */
+  images?: string[];
 }
 
 export interface TurnSendResult {

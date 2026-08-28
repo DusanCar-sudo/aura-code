@@ -34,7 +34,10 @@ export function App() {
   const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
 
   return (
-    <div className="app">
+    // `app-sidebar` tells the stylesheet the sidebar is docked, so the chat
+    // column can be pulled back to the centre of the viewport rather than
+    // sitting centred in the space left over beside it.
+    <div className={`app ${sidebarOpen ? 'app-sidebar' : ''}`}>
       <SigilWatermark />
 
       <Sidebar
@@ -90,7 +93,7 @@ export function App() {
           busy={aura.busy}
           error={aura.error}
           t={t}
-          onSend={(text) => void aura.send(text)}
+          onSend={(text, attachments) => void aura.send(text, attachments)}
           onStop={() => void aura.stop()}
           onRegenerate={() => void aura.regenerate()}
         />

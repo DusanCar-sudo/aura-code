@@ -33,11 +33,19 @@
   --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
 
   /* ── Metrics ── */
-  --sidebar-w: 268px;
+  --sidebar-w: 250px;
   --radius: 8px;
   --radius-sm: 5px;
   --gutter: 16px;
-  --header-h: 46px;
+  --header-h: 42px;
+
+  /* Type scale. The TUI is a terminal, so the whole app sits at 11-12px and
+     nothing is allowed to drift larger except the one empty-state heading. */
+  --fs-body: 12px;
+  --fs-small: 11px;
+  --fs-micro: 10px;
+  /* Chat column width, and the measure the thread reads at. */
+  --col-w: 820px;
 }
 
 /* Light theme — the same hues, inverted in role rather than replaced, so the
@@ -66,7 +74,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: var(--fs-body);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;

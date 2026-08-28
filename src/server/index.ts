@@ -23,6 +23,9 @@ import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
 import { openExternal } from '../util/open.js';
 import { loadAllPlugins } from '../plugins/loader.js';
+import { installPlugin, removePlugin } from '../plugins/market.js';
+import { PALETTE_COMMANDS } from '../cli/command-palette.js';
+import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
 
 /** Name of the session cookie the browser client authenticates with. */
 const AUTH_COOKIE = 'aura_token';
@@ -322,6 +325,107 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     } catch {
       res.json({ skills: [] });
     }
+  });
+
+  /**
+   * The command set the TUI exposes, so the web client's "/" menu is the same
+   * list rather than a copy that drifts. Served from PALETTE_COMMANDS itself.
+   */
+  app.get('/api/commands', (_req, res) => {
+    res.json({ commands: PALETTE_COMMANDS });
+  });
+
+  /**
+   * Providers, their models, and WHETHER a key is configured.
+   *
+   * Never the key itself: this endpoint answers "is it set", never "what is
+   * it". A settings screen only needs the boolean, and echoing a secret back
+   * over the wire to render it would be a way to lose it.
+   */
+  app.get('/api/providers', (_req, res) => {
+    res.json({
+      providers: PROVIDER_REGISTRY.map((entry) => ({
+        name: entry.name,
+        baseUrl: entry.baseUrl,
+        envKey: entry.envKey,
+        signupUrl: entry.signupUrl,
+        keySet: entry.envKey ? Boolean(process.env[entry.envKey]?.trim()) : true,
+        models: entry.models.map((m) => ({
+          id: m.id, label: m.label, speed: m.speed, contextWindow: m.contextWindow,
+        })),
+      })),
+    });
+  });
+
+  /**
+   * Set a provider API key for this running engine.
+   *
+   * Process-scoped on purpose — it is not written to disk, so closing the
+   * server forgets it. Persisting a pasted secret is the operator's decision to
+   * make in their own environment, not something a web form should do quietly.
+   * The value is never logged and never read back.
+   */
+  app.post('/api/apikey', (req, res) => {
+    const body = (req.body ?? {}) as { envKey?: unknown; value?: unknown };
+    const envKey = typeof body.envKey === 'string' ? body.envKey.trim() : '';
+    const value = typeof body.value === 'string' ? body.value.trim() : '';
+    // Only keys the registry actually declares — this must not become a
+    // general "set any environment variable on the host" endpoint.
+    const known = PROVIDER_REGISTRY.some((e) => e.envKey === envKey);
+    if (!known || !/^[A-Z0-9_]+$/.test(envKey)) {
+      res.status(400).json({ error: 'Unknown API key name.' });
+      return;
+    }
+    if (!value) {
+      delete process.env[envKey];
+      res.json({ ok: true, keySet: false });
+      return;
+    }
+    process.env[envKey] = value;
+    res.json({ ok: true, keySet: true });
+  });
+
+  /**
+   * Install a plugin. Accepts anything installPlugin does: a marketplace name,
+   * owner/repo, a git URL, or a local path — which is what makes the loader
+   * source-agnostic.
+   *
+   * Plugins run unsandboxed with this process's privileges (src/plugins/hooks.ts),
+   * so this route is as dangerous as the CLI equivalent. It is reachable only
+   * behind the pairing token on a loopback bind by default; that is the whole
+   * of its protection, and the UI says so plainly.
+   */
+  app.post('/api/plugins/install', async (req, res) => {
+    const spec = typeof (req.body as { spec?: unknown })?.spec === 'string'
+      ? String((req.body as { spec: string }).spec).trim()
+      : '';
+    if (!spec) {
+      res.status(400).json({ error: 'Missing plugin source.' });
+      return;
+    }
+    try {
+      const result = await installPlugin(spec);
+      res.json({
+        ok: true,
+        plugin: { id: result.plugin.name, name: result.plugin.manifest.name || result.plugin.name },
+        warnings: result.warnings,
+      });
+    } catch (e) {
+      res.status(400).json({ error: String(e instanceof Error ? e.message : e) });
+    }
+  });
+
+  app.post('/api/plugins/remove', (req, res) => {
+    const name = typeof (req.body as { name?: unknown })?.name === 'string'
+      ? String((req.body as { name: string }).name).trim()
+      : '';
+    // Reject any path shape: this deletes a directory, so the name must be a
+    // plain plugin id and never a traversal.
+    if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) {
+      res.status(400).json({ error: 'Invalid plugin name.' });
+      return;
+    }
+    res.json({ ok: removePlugin(name) });
   });
 
   app.get('/api/plugins', (_req, res) => {

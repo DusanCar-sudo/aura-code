@@ -268,21 +268,40 @@ export function useAura(settings: Settings) {
     void refreshConversations();
   }, [sessionId, refreshConversations]);
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (
+    text: string,
+    attachments: Array<{ name: string; type: string; size: number; dataUrl: string }> = [],
+  ) => {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if ((!trimmed && attachments.length === 0) || busy) return;
     let id = sessionId;
     if (!id) id = await newChat(trimmed.slice(0, 60));
     if (!id) return;
 
+    // Images ride the protocol's `images` field. Everything else is named in
+    // the message: the engine reads files with its own tools, so handing it a
+    // path it can open beats shipping an opaque blob it cannot inspect.
+    const images = attachments.filter((a) => a.type.startsWith('image/')).map((a) => a.dataUrl);
+    const others = attachments.filter((a) => !a.type.startsWith('image/'));
+    const note = others.length > 0
+      ? `\n\n[attached: ${others.map((a) => `${a.name} (${Math.ceil(a.size / 1024)} KB)`).join(', ')}]`
+      : '';
+    const shown = trimmed
+      + (images.length > 0 ? `\n\n[${images.length} image${images.length > 1 ? 's' : ''} attached]` : '')
+      + note;
+
     setMessages((prev) => [
       ...prev,
-      { id: `u${Date.now()}`, role: 'user', text: trimmed, tools: [], at: Date.now() },
+      { id: `u${Date.now()}`, role: 'user', text: shown, tools: [], at: Date.now() },
     ]);
     setBusy(true);
     setError(null);
     try {
-      await clientRef.current?.request(M.turnSend, { sessionId: id, message: trimmed });
+      await clientRef.current?.request(M.turnSend, {
+        sessionId: id,
+        message: trimmed + note,
+        ...(images.length > 0 ? { images } : {}),
+      });
     } catch (e) {
       setBusy(false);
       setError(String(e));

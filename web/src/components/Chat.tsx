@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Markdown, CopyButton } from './Markdown';
 import { Sigil } from './Sigil';
+import { Composer, type Attachment } from './Composer';
 import type { Message, ToolEvent } from '../hooks/useAura';
 
 type T = (key: string) => string;
@@ -78,13 +79,11 @@ export function Chat({
   busy: boolean;
   error: string | null;
   t: T;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments: Attachment[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
 }) {
-  const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const taRef = useRef<HTMLTextAreaElement>(null);
   // Only auto-scroll when the reader is already at the bottom; yanking them
   // down while they read back through a long answer is hostile.
   const pinned = useRef(true);
@@ -93,21 +92,6 @@ export function Chat({
     const el = scrollRef.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
-
-  useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${Math.min(ta.scrollHeight, 220)}px`;
-  }, [draft]);
-
-  const submit = () => {
-    const text = draft.trim();
-    if (!text || busy) return;
-    onSend(text);
-    setDraft('');
-    pinned.current = true;
-  };
 
   return (
     <div className="chat">
@@ -133,49 +117,14 @@ export function Chat({
         )}
       </div>
 
-      <div className="composer-wrap">
-        <div className="composer">
-          <textarea
-            ref={taRef}
-            className="composer-input"
-            rows={1}
-            value={draft}
-            placeholder={t('chat.placeholder')}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter sends; Shift+Enter is a newline — the convention every
-              // chat client shares, so breaking it would be the surprise.
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-          />
-          <div className="composer-actions">
-            {busy ? (
-              <button type="button" className="btn btn-stop" onClick={onStop}>
-                <span className="stop-glyph" aria-hidden="true">■</span>{t('chat.stop')}
-              </button>
-            ) : (
-              <>
-                {messages.some((m) => m.role === 'user') && (
-                  <button type="button" className="btn btn-ghost" onClick={onRegenerate}>
-                    ⟳ {t('chat.regenerate')}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-send"
-                  onClick={submit}
-                  disabled={!draft.trim()}
-                >
-                  {t('chat.send')} <span aria-hidden="true">↵</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <Composer
+        busy={busy}
+        canRegenerate={messages.some((m) => m.role === 'user')}
+        t={t}
+        onSend={(text, attachments) => { pinned.current = true; onSend(text, attachments); }}
+        onStop={onStop}
+        onRegenerate={onRegenerate}
+      />
     </div>
   );
 }

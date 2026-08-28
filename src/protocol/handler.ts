@@ -269,9 +269,18 @@ export class ProtocolHandler {
         baseUrl: s.baseUrl,
       });
 
+      // Only well-formed image data URIs are forwarded. Anything else is
+      // dropped rather than handed to a provider as an opaque blob.
+      const images = Array.isArray(p.images)
+        ? (p.images as unknown[]).filter(
+          (i): i is string => typeof i === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(i),
+        )
+        : undefined;
+
       const result = await runAgentLoop({
         provider,
         task: p.message,
+        ...(images && images.length > 0 ? { images } : {}),
         context: s.context,
         permissions: s.permissions,
         display: this.displayFor(s, turnId),

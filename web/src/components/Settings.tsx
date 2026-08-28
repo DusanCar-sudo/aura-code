@@ -1,11 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LOCALES, type Locale } from '../i18n';
 import type { PermissionLevel, Settings as S } from '../lib/settings';
 
 type T = (key: string) => string;
-type Tab = 'general' | 'agent' | 'skills' | 'about';
+type Tab = 'general' | 'provider' | 'skills' | 'about';
 
-interface SkillInfo { id: string; name: string; description?: string; source?: string }
+interface ProviderModel { id: string; label: string; speed: string; contextWindow: number }
+interface ProviderInfo {
+  name: string;
+  baseUrl: string;
+  envKey: string | null;
+  signupUrl: string;
+  /** Whether a key is configured. Never the key itself. */
+  keySet: boolean;
+  models: ProviderModel[];
+}
+interface SkillInfo {
+  id: string; name: string; description?: string; source?: string;
+}
+interface PluginInfo {
+  id: string; name: string; description?: string;
+  commands?: number; skills?: number; hooks?: number;
+}
 
 export function SettingsPanel({
   settings, tools, t, onChange, onClose,
@@ -17,23 +33,6 @@ export function SettingsPanel({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('general');
-  const [skills, setSkills] = useState<SkillInfo[] | null>(null);
-  const [plugins, setPlugins] = useState<SkillInfo[] | null>(null);
-
-  // Skills and plugins are engine-side facts, so they are fetched rather than
-  // guessed. A failure leaves the list null and the UI says "none found"
-  // rather than pretending an empty set is a confirmed empty set.
-  const loadExtensions = () => {
-    setSkills(null);
-    setPlugins(null);
-    void fetch('./api/skills').then((r) => (r.ok ? r.json() : null))
-      .then((d) => setSkills(Array.isArray(d?.skills) ? d.skills : []))
-      .catch(() => setSkills([]));
-    void fetch('./api/plugins').then((r) => (r.ok ? r.json() : null))
-      .then((d) => setPlugins(Array.isArray(d?.plugins) ? d.plugins : []))
-      .catch(() => setPlugins([]));
-  };
-  useEffect(() => { if (tab === 'skills') loadExtensions(); }, [tab]);
 
   const permissions: Array<{ value: PermissionLevel; label: string; hint: string }> = [
     { value: 'read-only', label: t('settings.permissionReadOnly'), hint: t('settings.permissionReadOnlyHint') },
@@ -50,7 +49,7 @@ export function SettingsPanel({
         </header>
 
         <nav className="tabs">
-          {(['general', 'agent', 'skills', 'about'] as Tab[]).map((id) => (
+          {(['general', 'provider', 'skills', 'about'] as Tab[]).map((id) => (
             <button
               key={id}
               type="button"
@@ -131,119 +130,398 @@ export function SettingsPanel({
             </>
           )}
 
-          {tab === 'agent' && (
-            <>
-              <Field label={t('settings.model')}>
-                <input
-                  className="input"
-                  value={settings.model}
-                  placeholder="anthropic/claude-sonnet-5"
-                  onChange={(e) => onChange({ model: e.target.value })}
-                />
-              </Field>
-              <Field label={t('settings.maxTurns')}>
-                <input
-                  className="input"
-                  type="number"
-                  min={1}
-                  value={settings.maxTurns}
-                  onChange={(e) => onChange({ maxTurns: Number(e.target.value) || 1 })}
-                />
-              </Field>
-              <Field label={t('settings.budget')}>
-                <input
-                  className="input"
-                  type="number"
-                  min={0}
-                  value={settings.maxInputTokens}
-                  onChange={(e) => onChange({ maxInputTokens: Number(e.target.value) || 0 })}
-                />
-              </Field>
-              <Field label="Tools">
-                <div className="chips">
-                  {tools.length === 0
-                    ? <span className="field-hint">—</span>
-                    : tools.map((name) => <span key={name} className="chip">{name}</span>)}
-                </div>
-              </Field>
-            </>
+          {tab === 'provider' && (
+            <ProviderTab settings={settings} tools={tools} t={t} onChange={onChange} />
           )}
 
-          {tab === 'skills' && (
-            <>
-              <div className="row-between">
-                <span className="field-label">{t('settings.skills')}</span>
-                <button type="button" className="btn btn-ghost" onClick={loadExtensions}>
-                  ⟳ {t('settings.reload')}
-                </button>
-              </div>
+          {tab === 'skills' && <SkillsTab t={t} />}
 
-              <div className="ext-list">
-                {skills === null ? (
-                  <div className="field-hint">…</div>
-                ) : skills.length === 0 ? (
-                  <div className="field-hint">{t('settings.skillsNone')}</div>
-                ) : (
-                  skills.map((s) => {
-                    const off = settings.disabledSkills.includes(s.id);
-                    return (
-                      <label key={s.id} className="ext">
-                        <input
-                          type="checkbox"
-                          checked={!off}
-                          onChange={() => onChange({
-                            disabledSkills: off
-                              ? settings.disabledSkills.filter((x) => x !== s.id)
-                              : [...settings.disabledSkills, s.id],
-                          })}
-                        />
-                        <span className="ext-body">
-                          <span className="ext-name">{s.name || s.id}</span>
-                          {s.description && <span className="ext-desc">{s.description}</span>}
-                        </span>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="row-between" style={{ marginTop: 18 }}>
-                <span className="field-label">Plugins</span>
-              </div>
-              <div className="ext-list">
-                {plugins === null ? (
-                  <div className="field-hint">…</div>
-                ) : plugins.length === 0 ? (
-                  <div className="field-hint">{t('settings.pluginsNone')}</div>
-                ) : (
-                  plugins.map((p) => (
-                    <div key={p.id} className="ext">
-                      <span className="ext-body">
-                        <span className="ext-name">{p.name || p.id}</span>
-                        {p.description && <span className="ext-desc">{p.description}</span>}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-              {/* Plugins run unsandboxed with full privileges — see src/plugins/hooks.ts. */}
-              <p className="field-hint warn-hint">
-                Plugins are user-installed code and run with your full privileges. Install only what you trust.
-              </p>
-            </>
-          )}
-
-          {tab === 'about' && (
-            <div className="about">
-              <p className="about-line">Aura — model-agnostic autonomous coding agent.</p>
-              <p className="field-hint">
-                This client speaks the same protocol as <code>aura sidecar</code>, over the
-                WebSocket that served the page.
-              </p>
-            </div>
-          )}
+          {tab === 'about' && <AboutTab t={t} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Provider / Agent.
+ *
+ * The provider is named explicitly and picked from the engine's own registry,
+ * rather than left as a free-text model id the operator has to know by heart.
+ * When the provider's key is not configured, the field to paste one appears
+ * right there — a model list you cannot actually call is a dead end.
+ */
+function ProviderTab({
+  settings, tools, t, onChange,
+}: {
+  settings: S; tools: string[]; t: T; onChange: (patch: Partial<S>) => void;
+}) {
+  const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
+  const [keyDraft, setKeyDraft] = useState('');
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyNote, setKeyNote] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    void fetch('./api/providers')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setProviders(Array.isArray(d?.providers) ? d.providers : []))
+      .catch(() => setProviders([]));
+  }, []);
+  useEffect(load, [load]);
+
+  const current = providers?.find((p) => p.name === settings.provider)
+    // Fall back to whichever provider owns the configured model, so an existing
+    // setup shows the right provider instead of an empty box.
+    ?? providers?.find((p) => p.models.some((m) => settings.model.endsWith(m.id)));
+
+  const saveKey = async () => {
+    if (!current?.envKey || !keyDraft.trim()) return;
+    setKeyBusy(true);
+    setKeyNote(null);
+    try {
+      const res = await fetch('./api/apikey', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ envKey: current.envKey, value: keyDraft.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setKeyDraft('');
+      setKeyNote(t('settings.keySaved'));
+      load();
+    } catch (e) {
+      setKeyNote(String(e instanceof Error ? e.message : e));
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Field label={t('settings.provider')}>
+        <select
+          className="select"
+          value={current?.name ?? ''}
+          onChange={(e) => {
+            const next = providers?.find((p) => p.name === e.target.value);
+            onChange({
+              provider: e.target.value,
+              // Move to that provider's first model, so the pair is never
+              // mismatched — a provider with another vendor's model id is a 404.
+              model: next?.models[0]?.id ?? '',
+            });
+            setKeyDraft('');
+            setKeyNote(null);
+          }}
+        >
+          <option value="" disabled>{t('settings.providerPick')}</option>
+          {(providers ?? []).map((p) => (
+            <option key={p.name} value={p.name}>
+              {p.name}{p.envKey && !p.keySet ? ` — ${t('settings.keyMissingShort')}` : ''}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {current && (
+        <>
+          <Field label={t('settings.model')}>
+            <select
+              className="select"
+              value={settings.model}
+              onChange={(e) => onChange({ model: e.target.value })}
+            >
+              <option value="">{t('settings.modelDefault')}</option>
+              {current.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} · {m.speed} · {Math.round(m.contextWindow / 1000)}k
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">{current.baseUrl}</p>
+          </Field>
+
+          <Field label={t('settings.apiKey')}>
+            {current.envKey === null ? (
+              <p className="field-hint">{t('settings.keyNotNeeded')}</p>
+            ) : current.keySet ? (
+              <div className="key-row">
+                <span className="key-ok">✓ {t('settings.keySet')} <code>{current.envKey}</code></span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setKeyDraft('');
+                    void fetch('./api/apikey', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ envKey: current.envKey, value: '' }),
+                    }).then(load);
+                  }}
+                >
+                  {t('settings.keyClear')}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="key-row">
+                  <input
+                    className="input"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={keyDraft}
+                    placeholder={current.envKey}
+                    onChange={(e) => setKeyDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(); }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-send"
+                    disabled={!keyDraft.trim() || keyBusy}
+                    onClick={() => void saveKey()}
+                  >
+                    {t('settings.save')}
+                  </button>
+                </div>
+                {/* Says plainly where the secret goes, because a paste field
+                    that is vague about that is a field people should not use. */}
+                <p className="field-hint">{t('settings.keyScope')}</p>
+                <a className="field-link" href={current.signupUrl} target="_blank" rel="noreferrer noopener">
+                  {t('settings.keyGet')} ↗
+                </a>
+              </>
+            )}
+            {keyNote && <p className="field-hint warn-hint">{keyNote}</p>}
+          </Field>
+        </>
+      )}
+
+      <Field label={t('settings.maxTurns')}>
+        <input
+          className="input"
+          type="number"
+          min={1}
+          value={settings.maxTurns}
+          onChange={(e) => onChange({ maxTurns: Number(e.target.value) || 1 })}
+        />
+      </Field>
+
+      <Field label={t('settings.budget')}>
+        <input
+          className="input"
+          type="number"
+          min={0}
+          value={settings.maxInputTokens}
+          onChange={(e) => onChange({ maxInputTokens: Number(e.target.value) || 0 })}
+        />
+      </Field>
+
+      <Field label={t('settings.tools')}>
+        <div className="chips">
+          {tools.length === 0
+            ? <span className="field-hint">—</span>
+            : tools.map((name) => <span key={name} className="chip">{name}</span>)}
+        </div>
+      </Field>
+    </>
+  );
+}
+
+/**
+ * Skills & plugins.
+ *
+ * Source-agnostic by construction: the engine's installer already takes a
+ * marketplace name, an owner/repo, a git URL, or a local path, so a Claude
+ * plugin, a DeepSeek plugin, or a private repo all install the same way. Skills
+ * arrive inside plugins, which is why removing a skill removes its plugin and
+ * the UI says which plugin that is.
+ */
+function SkillsTab({ t }: { t: T }) {
+  const [skills, setSkills] = useState<SkillInfo[] | null>(null);
+  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null);
+  const [spec, setSpec] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setSkills(null);
+    setPlugins(null);
+    void fetch('./api/skills').then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSkills(Array.isArray(d?.skills) ? d.skills : []))
+      .catch(() => setSkills([]));
+    void fetch('./api/plugins').then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPlugins(Array.isArray(d?.plugins) ? d.plugins : []))
+      .catch(() => setPlugins([]));
+  }, []);
+  useEffect(load, [load]);
+
+  const install = async () => {
+    const value = spec.trim();
+    if (!value) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch('./api/plugins/install', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ spec: value }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setSpec('');
+      setNote([t('settings.installed'), ...(data?.warnings ?? [])].join(' · '));
+      load();
+    } catch (e) {
+      setNote(String(e instanceof Error ? e.message : e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (name: string) => {
+    if (!confirm(t('settings.removeConfirm'))) return;
+    await fetch('./api/plugins/remove', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).catch(() => null);
+    load();
+  };
+
+  return (
+    <>
+      <Field label={t('settings.addPlugin')}>
+        <div className="key-row">
+          <input
+            className="input"
+            value={spec}
+            placeholder="owner/repo · name@marketplace · git URL · /local/path"
+            onChange={(e) => setSpec(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void install(); }}
+          />
+          <button
+            type="button"
+            className="btn btn-send"
+            disabled={!spec.trim() || busy}
+            onClick={() => void install()}
+          >
+            {busy ? '…' : t('settings.add')}
+          </button>
+        </div>
+        <p className="field-hint">{t('settings.addPluginHint')}</p>
+        {note && <p className="field-hint warn-hint">{note}</p>}
+      </Field>
+
+      <div className="row-between">
+        <span className="field-label">{t('settings.installedPlugins')}</span>
+        <button type="button" className="btn btn-ghost" onClick={load}>⟳ {t('settings.reload')}</button>
+      </div>
+      <div className="ext-list">
+        {plugins === null ? (
+          <div className="field-hint">…</div>
+        ) : plugins.length === 0 ? (
+          <div className="field-hint">{t('settings.pluginsNone')}</div>
+        ) : (
+          plugins.map((p) => (
+            <div key={p.id} className="ext">
+              <span className="ext-body">
+                <span className="ext-name">{p.name}</span>
+                {p.description && <span className="ext-desc">{p.description}</span>}
+                <span className="ext-desc">
+                  {p.skills ?? 0} skills · {p.commands ?? 0} commands · {p.hooks ?? 0} hooks
+                </span>
+              </span>
+              <button type="button" className="ext-del" onClick={() => void remove(p.id)}>
+                {t('settings.remove')}
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="row-between" style={{ marginTop: 18 }}>
+        <span className="field-label">{t('settings.skills')}</span>
+      </div>
+      <div className="ext-list">
+        {skills === null ? (
+          <div className="field-hint">…</div>
+        ) : skills.length === 0 ? (
+          <div className="field-hint">{t('settings.skillsNone')}</div>
+        ) : (
+          skills.map((s) => (
+            <div key={s.id} className="ext">
+              <span className="ext-body">
+                <span className="ext-name">{s.name}</span>
+                {s.description && <span className="ext-desc">{s.description}</span>}
+                <span className="ext-desc">{t('settings.fromPlugin')} {s.source}</span>
+              </span>
+              {s.source && (
+                <button type="button" className="ext-del" onClick={() => void remove(s.source!)}>
+                  {t('settings.remove')}
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Plugins run unsandboxed with full privileges — src/plugins/hooks.ts. */}
+      <p className="field-hint warn-hint">{t('settings.pluginWarning')}</p>
+    </>
+  );
+}
+
+function AboutTab({ t }: { t: T }) {
+  return (
+    <div className="about">
+      <div className="about-head">
+        <span className="about-mark">Lean Progress IQ</span>
+        <span className="about-sub">{t('settings.aboutTagline')}</span>
+      </div>
+
+      <Field label={t('settings.creator')}>
+        <p className="about-line">Dušan Milosavljević</p>
+      </Field>
+
+      <Field label={t('settings.links')}>
+        <div className="about-links">
+          <a className="field-link" href="https://leanproiq.com" target="_blank" rel="noreferrer noopener">
+            leanproiq.com ↗
+          </a>
+          <a
+            className="field-link"
+            href="https://github.com/leanprogressiq"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            GitHub ↗
+          </a>
+        </div>
+      </Field>
+
+      <Field label={t('settings.ecosystem')}>
+        <div className="eco">
+          <div className="eco-item">
+            <span className="eco-name">Aura Code</span>
+            <span className="eco-desc">{t('settings.ecoCode')}</span>
+          </div>
+          <div className="eco-item">
+            <span className="eco-name">Aura Droid</span>
+            <span className="eco-desc">{t('settings.ecoDroid')}</span>
+          </div>
+          <div className="eco-item">
+            <span className="eco-name">Mesh</span>
+            <span className="eco-desc">{t('settings.ecoMesh')}</span>
+          </div>
+          <div className="eco-item">
+            <span className="eco-name">Archimedes</span>
+            <span className="eco-desc">{t('settings.ecoArchimedes')}</span>
+          </div>
+        </div>
+      </Field>
+
+      <p className="field-hint">{t('settings.aboutProtocol')}</p>
     </div>
   );
 }
