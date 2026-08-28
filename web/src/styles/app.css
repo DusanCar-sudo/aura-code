@@ -630,6 +630,33 @@
 .radio-hint { font-size: var(--fs-small); color: var(--text-dim); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.tool-bulk { margin-bottom: 8px; }
+.tool-bulk-actions { display: flex; gap: 6px; }
+.chip-toggle { cursor: pointer; opacity: 0.45; }
+.chip-toggle:hover { opacity: 0.8; }
+.chip-on {
+  opacity: 1;
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+  background: color-mix(in srgb, var(--terracotta) 10%, transparent);
+}
+.install-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+  border-inline-start: 2px solid var(--line);
+}
+.install-err {
+  border-inline-start-color: var(--err);
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+  color: var(--text);
+}
+.install-ok {
+  border-inline-start-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--text);
+}
 .chip {
   font-family: var(--mono);
   font-size: var(--fs-small);

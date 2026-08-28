@@ -23,6 +23,11 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'settings.toolsOn': 'enabled',
+  'settings.toolsAll': 'All',
+  'settings.toolsNone': 'None',
+  'settings.toolsHint': 'Chosen tools are sent to the model; the rest are withheld, which also trims context cost. This is not a security control — blocking execution is the permission level’s job. Applies to new conversations.',
+  'settings.addEmpty': 'Type a source first — a marketplace name, owner/repo, a git URL, or a local path.',
   'cmd.noSessions': 'No saved conversations.',
   'cmd.resumed': 'Resumed:',
   'cmd.turns': 'turns in this conversation',
@@ -143,6 +148,11 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'settings.toolsOn': 'укључено',
+  'settings.toolsAll': 'Све',
+  'settings.toolsNone': 'Ништа',
+  'settings.toolsHint': 'Изабрани алати се шаљу моделу, остали не, што смањује и трошак контекста. Ово није безбедносна контрола — блокирање извршавања је посао нивоа дозвола. Важи за нове разговоре.',
+  'settings.addEmpty': 'Прво унеси извор — име са маркета, owner/repo, git адресу или локалну путању.',
   'cmd.noSessions': 'Нема сачуваних разговора.',
   'cmd.resumed': 'Настављено:',
   'cmd.turns': 'корака у овом разговору',
@@ -257,6 +267,11 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'settings.toolsOn': 'activés',
+  'settings.toolsAll': 'Tous',
+  'settings.toolsNone': 'Aucun',
+  'settings.toolsHint': 'Les outils choisis sont envoyés au modèle, les autres non, ce qui réduit aussi le coût en contexte. Ce n’est pas un contrôle de sécurité — bloquer l’exécution relève du niveau d’autorisation. S’applique aux nouvelles discussions.',
+  'settings.addEmpty': 'Indiquez d’abord une source — nom de marketplace, owner/repo, URL git ou chemin local.',
   'cmd.noSessions': 'Aucune discussion enregistrée.',
   'cmd.resumed': 'Reprise :',
   'cmd.turns': 'tours dans cette discussion',
@@ -371,6 +386,11 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'settings.toolsOn': 'attivi',
+  'settings.toolsAll': 'Tutti',
+  'settings.toolsNone': 'Nessuno',
+  'settings.toolsHint': 'Gli strumenti scelti vengono inviati al modello, gli altri no, riducendo anche il costo di contesto. Non è un controllo di sicurezza — bloccare l’esecuzione spetta al livello di permessi. Vale per le nuove conversazioni.',
+  'settings.addEmpty': 'Inserisci prima una fonte — nome del marketplace, owner/repo, URL git o percorso locale.',
   'cmd.noSessions': 'Nessuna conversazione salvata.',
   'cmd.resumed': 'Ripresa:',
   'cmd.turns': 'turni in questa conversazione',
@@ -485,6 +505,11 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'settings.toolsOn': 'activas',
+  'settings.toolsAll': 'Todas',
+  'settings.toolsNone': 'Ninguna',
+  'settings.toolsHint': 'Las herramientas elegidas se envían al modelo; el resto se omiten, lo que además reduce el coste de contexto. No es un control de seguridad — bloquear la ejecución corresponde al nivel de permisos. Se aplica a conversaciones nuevas.',
+  'settings.addEmpty': 'Escribe primero una fuente — nombre de marketplace, owner/repo, URL de git o ruta local.',
   'cmd.noSessions': 'No hay conversaciones guardadas.',
   'cmd.resumed': 'Reanudada:',
   'cmd.turns': 'turnos en esta conversación',
@@ -599,6 +624,11 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'settings.toolsOn': 'مُفعّلة',
+  'settings.toolsAll': 'الكل',
+  'settings.toolsNone': 'لا شيء',
+  'settings.toolsHint': 'تُرسل الأدوات المختارة إلى النموذج ويُحجب الباقي، ما يقلّل أيضًا كلفة السياق. هذه ليست ضابط أمان — منع التنفيذ من مهام مستوى الأذونات. تسري على المحادثات الجديدة.',
+  'settings.addEmpty': 'اكتب مصدرًا أولًا — اسم من السوق، owner/repo، رابط git، أو مسار محلي.',
   'cmd.noSessions': 'لا توجد محادثات محفوظة.',
   'cmd.resumed': 'استُؤنفت:',
   'cmd.turns': 'جولات في هذه المحادثة',
@@ -713,6 +743,11 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'settings.toolsOn': 'включено',
+  'settings.toolsAll': 'Все',
+  'settings.toolsNone': 'Ничего',
+  'settings.toolsHint': 'Выбранные инструменты отправляются модели, остальные — нет, что также снижает расход контекста. Это не средство защиты: блокировка выполнения — задача уровня прав. Действует для новых чатов.',
+  'settings.addEmpty': 'Сначала укажите источник — имя из маркета, owner/repo, git-URL или локальный путь.',
   'cmd.noSessions': 'Сохранённых чатов нет.',
   'cmd.resumed': 'Продолжено:',
   'cmd.turns': 'ходов в этом чате',

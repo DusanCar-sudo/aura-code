@@ -65,7 +65,7 @@ export function useAura(settings: Settings) {
   const [busy, setBusy] = useState(false);
   const [approval, setApproval] = useState<PendingApproval | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [tools, setTools] = useState<string[]>([]);
+  const [tools, setTools] = useState<Array<{ name: string; description: string }>>([]);
   const [error, setError] = useState<string | null>(null);
 
   const clientRef = useRef<ProtocolClient | null>(null);
@@ -73,6 +73,9 @@ export function useAura(settings: Settings) {
   // without tearing down the socket every time a preference changes.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Read inside newChat, which must not be rebuilt every time the tool list
+  // arrives — a changing identity there would restart the session flow.
+  const toolNamesRef = useRef<string[]>([]);
 
   /** Append text to the streaming assistant message, creating it if needed. */
   const appendDelta = useCallback((text: string) => {
@@ -228,6 +231,11 @@ export function useAura(settings: Settings) {
         name: title,
         // Actually enforced by the engine (see SessionCreateParams.permission).
         permission: s.permission,
+        // Only send an allowlist when something is actually switched off:
+        // omitting it means "every tool", including any added since.
+        ...(s.disabledTools.length > 0 && toolNamesRef.current.length > 0
+          ? { allowedTools: toolNamesRef.current.filter((n) => !s.disabledTools.includes(n)) }
+          : {}),
       });
       if (res?.sessionId) {
         setSessionId(res.sessionId);
@@ -347,9 +355,14 @@ export function useAura(settings: Settings) {
     if (connection !== 'open') return;
     void refreshConversations();
     clientRef.current?.request<{ tools?: any[] }>(M.toolsList)
-      .then((r) => setTools((r?.tools ?? []).map((t: any) => String(t.name ?? t))))
+      .then((r) => setTools((r?.tools ?? []).map((t: any) => ({
+        name: String(t.name ?? t),
+        description: String(t.description ?? ''),
+      }))))
       .catch(() => { /* tool listing is informational */ });
   }, [connection, refreshConversations]);
+
+  toolNamesRef.current = tools.map((t) => t.name);
 
   return useMemo(() => ({
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,

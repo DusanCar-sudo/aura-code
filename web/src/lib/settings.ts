@@ -32,6 +32,8 @@ export interface Settings {
   maxInputTokens: number;
   /** Skill ids the operator has turned off. Absent = enabled. */
   disabledSkills: string[];
+  /** Tool names the operator has turned off. Absent = enabled. */
+  disabledTools: string[];
 }
 
 export const DEFAULTS: Settings = {
@@ -44,6 +46,7 @@ export const DEFAULTS: Settings = {
   maxTurns: 30,
   maxInputTokens: 0,
   disabledSkills: [],
+  disabledTools: [],
 };
 
 const KEY = 'aura.settings';
@@ -62,6 +65,7 @@ export function loadSettings(): Settings {
       permission: isPermission(parsed.permission) ? parsed.permission : base.permission,
       theme: parsed.theme === 'light' ? 'light' : 'dark',
       disabledSkills: Array.isArray(parsed.disabledSkills) ? parsed.disabledSkills : [],
+      disabledTools: Array.isArray(parsed.disabledTools) ? parsed.disabledTools : [],
     };
   } catch {
     return base;

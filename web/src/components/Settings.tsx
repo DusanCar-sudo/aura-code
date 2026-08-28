@@ -23,11 +23,13 @@ interface PluginInfo {
   commands?: number; skills?: number; hooks?: number;
 }
 
+export interface ToolInfo { name: string; description: string }
+
 export function SettingsPanel({
   settings, tools, t, initialTab = 'general', onChange, onClose,
 }: {
   settings: S;
-  tools: string[];
+  tools: ToolInfo[];
   t: T;
   /** Which tab to land on — `:provider` and `:apikey` open straight to it. */
   initialTab?: Tab;
@@ -156,7 +158,7 @@ export function SettingsPanel({
 function ProviderTab({
   settings, tools, t, onChange,
 }: {
-  settings: S; tools: string[]; t: T; onChange: (patch: Partial<S>) => void;
+  settings: S; tools: ToolInfo[]; t: T; onChange: (patch: Partial<S>) => void;
 }) {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
   const [keyDraft, setKeyDraft] = useState('');
@@ -320,11 +322,58 @@ function ProviderTab({
       </Field>
 
       <Field label={t('settings.tools')}>
-        <div className="chips">
-          {tools.length === 0
-            ? <span className="field-hint">—</span>
-            : tools.map((name) => <span key={name} className="chip">{name}</span>)}
-        </div>
+        {tools.length === 0 ? (
+          <span className="field-hint">—</span>
+        ) : (
+          <>
+            <div className="row-between tool-bulk">
+              <span className="field-hint">
+                {tools.length - settings.disabledTools.length}/{tools.length} {t('settings.toolsOn')}
+              </span>
+              <span className="tool-bulk-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => onChange({ disabledTools: [] })}
+                >
+                  {t('settings.toolsAll')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => onChange({ disabledTools: tools.map((x) => x.name) })}
+                >
+                  {t('settings.toolsNone')}
+                </button>
+              </span>
+            </div>
+            <div className="chips">
+              {tools.map((tool) => {
+                const off = settings.disabledTools.includes(tool.name);
+                return (
+                  <button
+                    key={tool.name}
+                    type="button"
+                    className={`chip chip-toggle ${off ? '' : 'chip-on'}`}
+                    title={tool.description || tool.name}
+                    aria-pressed={!off}
+                    onClick={() => onChange({
+                      disabledTools: off
+                        ? settings.disabledTools.filter((n) => n !== tool.name)
+                        : [...settings.disabledTools, tool.name],
+                    })}
+                  >
+                    {tool.name}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Says exactly what this does and does not do, so it is not read
+                as a security control — blocking execution is the permission
+                level's job, not this list's. */}
+            <p className="field-hint">{t('settings.toolsHint')}</p>
+          </>
+        )}
       </Field>
     </>
   );
@@ -344,7 +393,7 @@ function SkillsTab({ t }: { t: T }) {
   const [plugins, setPlugins] = useState<PluginInfo[] | null>(null);
   const [spec, setSpec] = useState('');
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const load = useCallback(() => {
     setSkills(null);
@@ -360,7 +409,12 @@ function SkillsTab({ t }: { t: T }) {
 
   const install = async () => {
     const value = spec.trim();
-    if (!value) return;
+    if (!value) {
+      // Previously the button was simply disabled, which reads as broken
+      // rather than as "type something first".
+      setNote({ kind: 'err', text: t('settings.addEmpty') });
+      return;
+    }
     setBusy(true);
     setNote(null);
     try {
@@ -372,10 +426,13 @@ function SkillsTab({ t }: { t: T }) {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
       setSpec('');
-      setNote([t('settings.installed'), ...(data?.warnings ?? [])].join(' · '));
+      setNote({
+        kind: 'ok',
+        text: [t('settings.installed'), ...(data?.warnings ?? [])].join(' · '),
+      });
       load();
     } catch (e) {
-      setNote(String(e instanceof Error ? e.message : e));
+      setNote({ kind: 'err', text: String(e instanceof Error ? e.message : e) });
     } finally {
       setBusy(false);
     }
@@ -405,14 +462,20 @@ function SkillsTab({ t }: { t: T }) {
           <button
             type="button"
             className="btn btn-send"
-            disabled={!spec.trim() || busy}
+            disabled={busy}
             onClick={() => void install()}
           >
             {busy ? '…' : t('settings.add')}
           </button>
         </div>
         <p className="field-hint">{t('settings.addPluginHint')}</p>
-        {note && <p className="field-hint warn-hint">{note}</p>}
+        {/* The engine's own error, verbatim — "no marketplaces registered" and
+            "directory contains no plugin" both tell you exactly what to fix. */}
+        {note && (
+          <p className={`install-note ${note.kind === 'err' ? 'install-err' : 'install-ok'}`}>
+            {note.text}
+          </p>
+        )}
       </Field>
 
       <div className="row-between">

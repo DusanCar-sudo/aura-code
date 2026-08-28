@@ -58,6 +58,8 @@ interface Session {
   activeTurn: { turnId: string; abort: AbortController } | null;
   /** Tools the client approved for the rest of this session. */
   alwaysAllow: Set<string>;
+  /** Client-chosen tool allowlist, or null for every tool. */
+  allowedTools: string[] | null;
 }
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
@@ -145,6 +147,15 @@ export class ProtocolHandler {
     // permissive reading of a typo.
     const permission: 'read-only' | 'normal' | 'auto' =
       p.permission === 'read-only' || p.permission === 'auto' ? p.permission : 'normal';
+    // Unknown names are dropped rather than rejected: a client built against an
+    // older tool set should lose the tool, not the session. An empty result
+    // means "no tools", which is a legitimate ask, so null is the only "all".
+    const known = new Set(TOOL_DEFINITIONS.map((d) => d.name));
+    const allowedTools = Array.isArray(p.allowedTools)
+      ? (p.allowedTools as unknown[])
+        .filter((n): n is string => typeof n === 'string')
+        .filter((n) => known.has(n))
+      : null;
     if (!model) {
       return this.fail(req.id, { code: 'bad_params', message: 'No model given and no engine default configured.' });
     }
@@ -170,6 +181,7 @@ export class ProtocolHandler {
       baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl : this.opts.defaultBaseUrl,
       context,
       permissions: new PermissionSystem(permission),
+      allowedTools,
       // Per session, not per process: two concurrent sessions get independent
       // ceilings rather than racing each other toward one shared total.
       budget: new SessionBudget(maxInputTokens !== undefined ? { maxInputTokens } : {}),
@@ -284,6 +296,7 @@ export class ProtocolHandler {
         context: s.context,
         permissions: s.permissions,
         display: this.displayFor(s, turnId),
+        ...(s.allowedTools ? { allowedTools: s.allowedTools } : {}),
         budget: s.budget,
         initialHistory: s.history,
         abortSignal: abort.signal,

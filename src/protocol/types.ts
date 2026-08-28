@@ -88,6 +88,16 @@ export interface SessionCreateParams {
    * told by a switch.
    */
   permission?: 'read-only' | 'normal' | 'auto';
+  /**
+   * Restrict which tools reach the provider for this session. Omitted means
+   * every tool. Names are matched against TOOL_DEFINITIONS; unknown names are
+   * ignored rather than failing the session.
+   *
+   * This trims the schema block the model sees. It is not a security control —
+   * blocking execution remains the PermissionSystem's job — so a client must
+   * not present it as one.
+   */
+  allowedTools?: string[];
 }
 
 export interface SessionCreateResult {
