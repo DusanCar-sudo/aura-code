@@ -2,8 +2,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { webSearch, WEB_SEARCH_DEFINITION } from '../src/tools/web-search.js';
 
 const mockFetch = vi.fn();
-beforeEach(() => { vi.stubGlobal('fetch', mockFetch); mockFetch.mockReset(); });
-afterEach(() => { vi.restoreAllMocks(); });
+const savedEnv = { ...process.env };
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
+  mockFetch.mockReset();
+  delete process.env.BRAVE_API_KEY;
+  delete process.env.TAVILY_API_KEY;
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  process.env = { ...savedEnv };
+});
 
 function mockResponse(body: string, init?: ResponseInit) {
   return new Response(body, init);

@@ -80,6 +80,24 @@ export interface SessionCreateParams {
   name?: string;
   /** Cumulative billed-input ceiling. Omit for the configured default. */
   maxInputTokens?: number;
+  /**
+   * Enforcement level for this session's tools. Omit for 'normal'.
+   *
+   * Carried on the wire because a client that shows a permission control must
+   * actually change enforcement — a toggle the engine never hears is a lie
+   * told by a switch.
+   */
+  permission?: 'read-only' | 'normal' | 'auto';
+  /**
+   * Restrict which tools reach the provider for this session. Omitted means
+   * every tool. Names are matched against TOOL_DEFINITIONS; unknown names are
+   * ignored rather than failing the session.
+   *
+   * This trims the schema block the model sees. It is not a security control —
+   * blocking execution remains the PermissionSystem's job — so a client must
+   * not present it as one.
+   */
+  allowedTools?: string[];
 }
 
 export interface SessionCreateResult {
@@ -106,6 +124,11 @@ export interface TurnSendParams {
   sessionId: string;
   /** The user's instruction. Replaces run_agent's `goal`. */
   message: string;
+  /**
+   * Images attached to this turn, as base64 data URIs. Passed straight to the
+   * loop's multimodal input; a provider without vision simply never sees them.
+   */
+  images?: string[];
 }
 
 export interface TurnSendResult {

@@ -47,7 +47,9 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   // Memory
   { id: ':dream', label: 'Dream', description: 'Consolidate episodes', category: 'Memory' },
   { id: ':rem', label: 'Show memory', description: 'Reconciled memory', category: 'Memory' },
-  { id: ':mine', label: 'Mine patterns', description: 'Mine episodes for patterns', category: 'Memory' },
+  { id: ':mine --refine', label: 'Mine + refine patterns', description: 'Mine episodes and judge concepts with the local model', category: 'Memory' },
+  { id: ':mine --corrections', label: 'Collect correction pairs', description: 'Write direct correction pairs from escalation episodes', category: 'Memory' },
+  { id: ':mine --stats', label: 'Training data stats', description: 'Show training-data row counts by provenance', category: 'Memory' },
   { id: ':research', label: 'Research', description: 'Multi-step research pass', category: 'Memory' },
   { id: ':btw', label: 'Side question', description: 'Quick read-only question', category: 'Memory' },
   { id: ':lessons', label: 'Lessons learned', description: 'What Aura learned and now tells herself', category: 'Memory' },

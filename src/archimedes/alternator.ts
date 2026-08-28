@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
+import { createProvider } from '../providers/factory.js';
 import { runAgentLoop, type LoopResult } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -15,10 +16,15 @@ import type {
   ArchimedesConfig,
   TaskCategory,
 } from './types.js';
-import { assessCompetence, shouldFineTune } from './competence.js';
+import { assessCompetence, shouldFineTune, derivePatternKey } from './competence.js';
 import { resolveEndpoint, wireModelName } from './endpoint.js';
 import { episodeStore } from './episode-capture.js';
 import type { EpisodeStats } from './episode-capture.js';
+import { countText } from '../agent/compactor.js';
+import { appendCostLog, type CostLogEntry, type CostModelUsage, type CostOutcome } from './cost-log.js';
+import {
+  extractClaimTerms, claimAwareExcerpt, TOTAL_EVIDENCE_BUDGET,
+} from './claim-evidence.js';
 
 // Tools sent to the Archimedes attempt — read-only subset only.
 // Mutating tools (edit_file, write_file, run_shell) are already blocked by the
@@ -203,17 +209,31 @@ async function isLocalBackendAvailable(config: ArchimedesConfig): Promise<boolea
 interface ArchimedesVerification {
   valid: boolean;
   reason: string;
+  /** Real usage reported by the verifier call, when the provider reports it. */
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
 /**
- * Condense Archimedes's tool activity from loop history into a short, cheap summary
- * for the verifier. The toolCallLog on LoopResult only records name+input, so
- * actual outputs are pulled from `tool_result` history entries; args come from
- * the matching assistant toolCalls (paired by id). Each result is truncated so
- * the verification call stays one cheap prompt, not a transcript dump.
+ * Condense Archimedes's tool activity from loop history into a short, cheap
+ * summary for the verifier. The toolCallLog on LoopResult only records
+ * name+input, so actual outputs are pulled from `tool_result` history entries;
+ * args come from the matching assistant toolCalls (paired by id).
+ *
+ * When `answer` is supplied, results are excerpted around the claims that
+ * answer actually makes (see claim-evidence.ts) rather than head-truncated at a
+ * flat 300 chars. The verifier's job is spotting contradiction against
+ * evidence, and a fixed head almost never contains the contradicting line — on
+ * a real file read it was about 6% of the file, chosen without reference to
+ * what was being checked.
+ *
+ * Without an `answer` there is nothing to select against, so the old
+ * head-truncation applies; those callers only need a gist for the escalation
+ * prompt.
  */
-function summarizeToolActivity(history: HistoryMessage[]): string {
+function summarizeToolActivity(history: HistoryMessage[], answer?: string): string {
   const MAX_RESULT_CHARS = 300;
+  const terms = answer ? extractClaimTerms(answer) : [];
+  let evidenceBudget = TOTAL_EVIDENCE_BUDGET;
   const argsById = new Map<string, string>();
   for (const msg of history) {
     if (msg.role === 'assistant' && msg.toolCalls) {
@@ -229,9 +249,15 @@ function summarizeToolActivity(history: HistoryMessage[]): string {
   for (const msg of history) {
     if (msg.role !== 'tool_result') continue;
     for (const r of msg.results) {
-      let content = r.content.replace(/\s+/g, ' ').trim();
-      if (content.length > MAX_RESULT_CHARS) {
-        content = content.slice(0, MAX_RESULT_CHARS) + '…';
+      let content: string;
+      if (terms.length > 0 && evidenceBudget > 0) {
+        content = claimAwareExcerpt(r.content, terms, Math.min(600, evidenceBudget));
+        evidenceBudget -= content.length;
+      } else {
+        content = r.content.replace(/\s+/g, ' ').trim();
+        if (content.length > MAX_RESULT_CHARS) {
+          content = content.slice(0, MAX_RESULT_CHARS) + '…';
+        }
       }
       lines.push(`- ${r.name}(${argsById.get(r.id) ?? ''}) -> ${content}`);
     }
@@ -249,13 +275,13 @@ function summarizeToolActivity(history: HistoryMessage[]): string {
  * - Retrieval tasks: strict tool-evidence corroboration (original behavior)
  * - Design tasks: factual premises still strict, recommendations judged on coherence/relevance
  */
-async function verifyArchimedesAnswer(
+export async function verifyArchimedesAnswer(
   task: string,
   answer: string,
   history: HistoryMessage[],
   verifierProvider: LLMProvider,
 ): Promise<ArchimedesVerification> {
-  const toolSummary = summarizeToolActivity(history);
+  const toolSummary = summarizeToolActivity(history, answer);
   const mode = taskMode(task);
 
   const prompt = mode === 'retrieval' ? [
@@ -314,11 +340,19 @@ async function verifyArchimedesAnswer(
       [],
     );
     const text = response.text.trim();
+    // Same token source the live session uses: provider-reported usage when
+    // present, else the session's own estimator (countText) — never a new one.
+    const usage = response.usage
+      ? { inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens }
+      : {
+          inputTokens: countText(systemMsg) + countText(prompt),
+          outputTokens: countText(text),
+        };
     if (text.toUpperCase().startsWith('VALID')) {
-      return { valid: true, reason: '' };
+      return { valid: true, reason: '', usage };
     }
     const reason = text.replace(/^INVALID:?\s*/i, '') || 'failed verification';
-    return { valid: false, reason };
+    return { valid: false, reason, usage };
   } catch (e) {
     return { valid: false, reason: `verification error: ${String(e)}` };
   }
@@ -376,6 +410,33 @@ function recordingSteeringProxy(inbox: SteeringInbox | undefined): {
  * and a large model based on
  * learned competence, capturing every alternation as an {@link Episode}.
  */
+/**
+ * The provider that grades answers.
+ *
+ * Defaults to the large model, which is the behaviour this path has always
+ * had — and on the escalation and council paths that means the large model
+ * grades its own output. Self-grading is not a neutral check: a model asked
+ * whether its own answer is valid is a poor detector of its own fabrications.
+ *
+ * `verifierModel` hands verification to an independent provider. Whether that
+ * moves the missed-escalation rate is the measurement of self-grading bias.
+ * A misconfigured verifier falls back rather than failing the run.
+ */
+export function resolveVerifierProvider(
+  config: ArchimedesConfig,
+  largeModelProvider: LLMProvider,
+): { provider: LLMProvider; error?: string } {
+  if (!config.verifierModel) return { provider: largeModelProvider };
+  if (config.verifierModel === largeModelProvider.model) {
+    return { provider: largeModelProvider };
+  }
+  try {
+    return { provider: createProvider({ model: config.verifierModel }) };
+  } catch (e) {
+    return { provider: largeModelProvider, error: String(e) };
+  }
+}
+
 export class ArchimedesAlternator {
   private readonly opts: AlternatorOptions;
   private readonly display: Display;
@@ -395,6 +456,16 @@ export class ArchimedesAlternator {
     const startMs = Date.now();
     const { archimedesConfig, largeModelProvider, projectRoot, context } = this.opts;
 
+    // Verification provider — the large model unless verifierModel names another.
+    const verifier = resolveVerifierProvider(archimedesConfig, largeModelProvider);
+    const verifierProvider = verifier.provider;
+    if (verifier.error) {
+      this.display.warning(
+        `Verifier model "${archimedesConfig.verifierModel}" could not be created (${verifier.error}) — `
+        + 'falling back to the large model as verifier.',
+      );
+    }
+
     let decision: AlternationDecision = {
       useArchimedes: false,
       reason: 'Initializing alternation.',
@@ -411,6 +482,20 @@ export class ArchimedesAlternator {
     let usedArchimedes = false;
     let result = '';
     let finalLoopResult: LoopResult | undefined;
+    // Cost ledger bookkeeping (see cost-log.ts) — why no small attempt happened,
+    // and what each tier actually consumed in tokens.
+    let attemptBlocked: 'unavailable' | 'disabled' | 'gate' | undefined;
+    let archimedesUsage: CostModelUsage | undefined;
+    let largeUsage: CostModelUsage | undefined;
+    let verifierTokens = { input: 0, output: 0 };
+    let verifierCalled = false;
+    const noteVerification = (v: ArchimedesVerification): void => {
+      if (v.usage) {
+        verifierTokens.input += v.usage.inputTokens;
+        verifierTokens.output += v.usage.outputTokens;
+        verifierCalled = true;
+      }
+    };
     // Populated whenever Archimedes is attempted and fails/errors, so the escalation
     // call isn't blind to what Archimedes already tried. Never fed back into the
     // Episode — only into the large model's task text for this run.
@@ -455,10 +540,16 @@ export class ArchimedesAlternator {
 
       this.display.header('Archimedes Principle', decision.reason);
 
+      // Cost-ledger bookkeeping: why the small model did (or did not) run.
+      if (!decision.useArchimedes) {
+        attemptBlocked = archimedesConfig.enabled ? 'gate' : 'disabled';
+      }
+
       if (decision.useArchimedes && (archimedesConfig.enabled || this.opts.forceArchimedes)) {
         const endpoint = resolveEndpoint(archimedesConfig);
         const available = await isLocalBackendAvailable(archimedesConfig);
         if (!available) {
+          attemptBlocked = 'unavailable';
           this.display.warning(
             `Archimedes (${endpoint.label} at ${endpoint.baseUrl}) is not reachable — escalating to large model.`,
           );
@@ -492,14 +583,20 @@ export class ArchimedesAlternator {
 
             archimedesTokens = loopResult.usage.totalTokens;
             archimedesOutput = loopResult.summary;
+            archimedesUsage = {
+              model: wireModelName(archimedesConfig),
+              tokensIn: loopResult.usage.inputTokens,
+              tokensOut: loopResult.usage.outputTokens,
+            };
 
             if (isNonEmptyResult(archimedesOutput) && loopResult.success) {
               const verification = await verifyArchimedesAnswer(
                 task,
                 archimedesOutput!,
                 loopResult.history,
-                largeModelProvider,
+                verifierProvider,
               );
+              noteVerification(verification);
               if (verification.valid) {
                 archimedesSucceeded = true;
                 usedArchimedes = true;
@@ -511,7 +608,7 @@ export class ArchimedesAlternator {
                   `Archimedes's answer failed verification: ${verification.reason}`,
                   ``,
                   `Archimedes's tool activity:`,
-                  summarizeToolActivity(loopResult.history),
+                  summarizeToolActivity(loopResult.history, archimedesOutput),
                   ``,
                   `Archimedes's (invalid) answer, for reference only — verify independently:`,
                   archimedesOutput!,
@@ -577,6 +674,11 @@ export class ArchimedesAlternator {
           });
           largeModelTokens = loopResult.usage.totalTokens;
           largeModelOutput = loopResult.summary;
+          largeUsage = {
+            model: largeModelProvider.model,
+            tokensIn: loopResult.usage.inputTokens,
+            tokensOut: loopResult.usage.outputTokens,
+          };
           finalLoopResult = loopResult;
           result = isNonEmptyResult(largeModelOutput)
             ? largeModelOutput!
@@ -592,8 +694,9 @@ export class ArchimedesAlternator {
               task,
               largeModelOutput!,
               loopResult.history,
-              largeModelProvider,
+              verifierProvider,
             );
+            noteVerification(largeModelVerification);
 
             if (!largeModelVerification.valid) {
               this.display.warning(
@@ -666,8 +769,9 @@ export class ArchimedesAlternator {
                       task,
                       councilAnswer,
                       loopResult.history, // original tool evidence is the ground truth
-                      largeModelProvider,
+                      verifierProvider,
                     );
+                    noteVerification(councilVerification);
 
                     if (councilVerification.valid) {
                       result = councilAnswer;
@@ -699,6 +803,7 @@ export class ArchimedesAlternator {
       this.display.error(result);
     }
 
+    const taskCategory = inferTaskCategory(task);
     const episode: Episode = {
       id: randomUUID(),
       timestamp: Date.now(),
@@ -715,13 +820,45 @@ export class ArchimedesAlternator {
         largeModel: usedArchimedes ? undefined : largeModelTokens,
       },
       durationMs: Date.now() - startMs,
-      taskCategory: inferTaskCategory(task),
+      taskCategory,
     };
 
     try {
       await episodeStore.saveEpisode(projectRoot, episode);
     } catch (e) {
       this.display.warning(`Failed to save episode: ${String(e)}`);
+    }
+
+    // Cost ledger — one row per attempt. Best-effort like the episode write:
+    // a failed append must never fail the task it is measuring.
+    try {
+      const outcome: CostOutcome = archimedesAttempted
+        ? archimedesSucceeded
+          ? 'small-success'
+          : 'escalated'
+        : attemptBlocked === 'gate'
+          ? 'gated'
+          : 'direct-large';
+      const entry: CostLogEntry = {
+        timestamp: Date.now(),
+        taskCategory,
+        patternKey: decision.competenceLevel?.taskPattern
+          ?? derivePatternKey(task, taskCategory),
+        outcome,
+        smallModel: archimedesUsage ?? null,
+        verifier: verifierCalled
+          ? {
+              model: verifierProvider.model,
+              tokensIn: verifierTokens.input,
+              tokensOut: verifierTokens.output,
+            }
+          : null,
+        largeModel: largeUsage ?? null,
+        wallMs: Date.now() - startMs,
+      };
+      await appendCostLog(entry);
+    } catch {
+      /* best-effort */
     }
 
     try {

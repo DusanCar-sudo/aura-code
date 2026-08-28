@@ -10,6 +10,7 @@
 import * as https from 'https';
 import * as http from 'http';
 import { URL } from 'url';
+import { stripRoutingPrefix } from '../providers/factory.js';
 
 export interface ProviderTestConfig {
   provider: string;
@@ -18,9 +19,56 @@ export interface ProviderTestConfig {
   apiKey?: string;
 }
 
+/**
+ * Why a connection test failed — the wizard offers a different remedy for each.
+ *
+ * The distinction matters: a 429 quota error, a 401 "insufficient balance", and
+ * a 500 from a dead gateway model all used to surface as one generic
+ * "Connection failed", whose only offered fix was "re-enter your API key".
+ * Re-typing a perfectly good key cannot fix any of them, which is exactly how
+ * a working key reads as a permanently rejected one.
+ */
+export type TestFailureKind =
+  | 'auth'      // the key itself is wrong, missing, or revoked
+  | 'billing'   // the key authenticated; the account is out of credit/quota
+  | 'rate'      // authenticated, momentarily rate-limited
+  | 'model'     // key and endpoint fine; this model id is unavailable
+  | 'server'    // the provider's own 5xx
+  | 'network';  // never reached the provider
+
 export interface TestResult {
   ok: boolean;
   error?: string;
+  /** Present whenever `ok` is false. */
+  kind?: TestFailureKind;
+  /** HTTP status, when one was received. */
+  status?: number;
+}
+
+/** Wording providers use when the key is valid but the account cannot pay. */
+const BILLING_RE = /insufficient|balance|quota|credit|billing|payment|expired|exceeded your current/i;
+/** Wording that points at the model id rather than the credentials. */
+const MODEL_RE = /model|deployment|not found|unavailable|does not exist|unsupported/i;
+
+/**
+ * Map an HTTP status plus the provider's own message onto a remedy.
+ * The message is consulted first for 401/403 and 429, because providers
+ * overload those statuses for billing state (OpenCode Zen answers 401
+ * "Insufficient balance"; OpenAI answers 429 "exceeded your current quota").
+ */
+export function classifyFailure(status: number, message: string): TestFailureKind {
+  if (status === 401 || status === 403) {
+    return BILLING_RE.test(message) ? 'billing' : 'auth';
+  }
+  if (status === 429) {
+    return BILLING_RE.test(message) ? 'billing' : 'rate';
+  }
+  if (status === 404) return 'model';
+  if (status === 400 || status === 422) {
+    return MODEL_RE.test(message) ? 'model' : 'auth';
+  }
+  if (status >= 500) return 'server';
+  return 'auth';
 }
 
 /**
@@ -47,22 +95,16 @@ export function normalizeBaseUrl(raw: string): string {
  * (e.g. OpenRouter's "qwen/qwen3-coder:free").
  */
 function stripModelPrefix(model: string): string {
-  // opencode/ or zen/ prefix (OpenCode Zen gateway)
-  if (/^(opencode|zen)\//.test(model)) return model.replace(/^(opencode|zen)\//, '');
-  // zhipu/ or zhipu-coding/ prefix (Zhipu Z.ai — endpoint routing only)
-  if (/^zhipu(-coding)?\//.test(model)) return model.replace(/^zhipu(-coding)?\//, '');
-  // openrouter/vendor/model  → just model (last segment)
+  // openrouter/vendor/model → vendor/model (the vendor segment is part of the
+  // remote id there, so this one can't go through the shared stripper).
   if (model.startsWith('openrouter/')) {
     const parts = model.split('/');
     return parts.slice(2).join('/') || model;
   }
-  // ollama/model, local/model, lmstudio/model
-  if (/^(ollama|local|lmstudio)\//.test(model)) return model.replace(/^[^/]+\//, '');
-  // xai/model
-  if (model.startsWith('xai/')) return model.replace('xai/', '');
-  // xiaomi/model, mimo/model (factory accepts both prefixes)
-  if (/^(xiaomi|mimo)\//.test(model)) return model.replace(/^(xiaomi|mimo)\//, '');
-  return model;
+  // Everything else shares the factory's prefix list, so a prefix added for
+  // routing (go-anthropic/, byteplus/, fpt/, …) can never again be routable
+  // but untestable — which is how OpenCode Go's ids reached the wire intact.
+  return stripRoutingPrefix(model);
 }
 
 /**
@@ -108,7 +150,7 @@ async function testOllamaConnection(baseUrl: string): Promise<TestResult> {
       if (res.statusCode === 200) {
         resolve({ ok: true });
       } else {
-        resolve({ ok: false, error: `Ollama responded with HTTP ${res.statusCode}` });
+        resolve({ ok: false, error: `Ollama responded with HTTP ${res.statusCode}`, status: res.statusCode, kind: 'server' });
       }
       res.resume();
     });
@@ -116,11 +158,12 @@ async function testOllamaConnection(baseUrl: string): Promise<TestResult> {
       resolve({
         ok: false,
         error: `Ollama doesn't seem to be running. Start it first: ollama serve (${e.message})`,
+        kind: 'network',
       });
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, error: 'Connection timed out after 10 seconds' });
+      resolve({ ok: false, error: 'Connection timed out after 10 seconds', kind: 'network' });
     });
   });
 }
@@ -224,6 +267,8 @@ function makeRequest(
             resolve({
               ok: false,
               error: `Endpoint answered HTTP ${res.statusCode} but not with JSON (got ${data.trimStart().startsWith('<') ? 'an HTML page' : 'unparseable data'}) — the base URL probably points at a website, not an API. Check that it ends with the API root (e.g. /v1).`,
+              status: res.statusCode,
+              kind: 'network',
             });
             return;
           }
@@ -233,27 +278,34 @@ function makeRequest(
             resolve({
               ok: false,
               error: `Endpoint answered HTTP ${res.statusCode} but the response has no "${opts.expectField}" field${errMsg ? ` (server said: ${errMsg})` : ''} — wrong API format or base URL path.`,
+              status: res.statusCode,
+              kind: 'network',
             });
             return;
           }
           resolve({ ok: true });
         } else {
-          let errorMsg = `HTTP ${res.statusCode}`;
+          const status = res.statusCode ?? 0;
+          let msg = '';
           try {
             const parsed = JSON.parse(data);
-            const msg = parsed.error?.message ?? parsed.error?.type ?? parsed.message ?? parsed.detail ?? parsed.title ?? '';
-            if (msg) errorMsg += `: ${msg}`;
+            msg = parsed.error?.message ?? parsed.error?.type ?? parsed.message ?? parsed.detail ?? parsed.title ?? '';
           } catch { /* ignore parse errors */ }
-          resolve({ ok: false, error: errorMsg });
+          resolve({
+            ok: false,
+            error: `HTTP ${status}${msg ? `: ${msg}` : ''}`,
+            status,
+            kind: classifyFailure(status, msg),
+          });
         }
       });
     });
     req.on('error', (e: Error) => {
-      resolve({ ok: false, error: `Connection failed: ${e.message}` });
+      resolve({ ok: false, error: `Connection failed: ${e.message}`, kind: 'network' });
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, error: 'Connection timed out after 10 seconds' });
+      resolve({ ok: false, error: 'Connection timed out after 10 seconds', kind: 'network' });
     });
     req.write(opts.body);
     req.end();

@@ -178,7 +178,12 @@ async function interactiveList(title: string, items: ListItem[], opts?: { filter
       if (key.name === 'pagedown') { selected = Math.min(vis.length - 1, selected + 10); return render(); }
       if (filtering) {
         if (key.name === 'backspace') { filter = filter.slice(0, -1); selected = 0; return render(); }
-        if (str && !key.ctrl && str >= ' ') { filter += str; selected = 0; return render(); }
+        // Escape sequences never belong in the filter. A paste arrives wrapped
+        // in bracketed-paste markers (\x1b[200~ … \x1b[201~) and a mouse report
+        // as \x1b[<b;x;yM — both decode into keypresses whose `str` is
+        // printable, so without this guard their bytes end up as filter text.
+        const escapeSeq = str?.includes('\x1b') || key.sequence?.startsWith('\x1b');
+        if (str && !key.ctrl && !escapeSeq && str >= ' ') { filter += str; selected = 0; return render(); }
         return;
       }
       if (opts?.filter && str === '/') { filtering = true; return render(); }
@@ -213,7 +218,10 @@ function staticModelsForProvider(providerId: string): { id: string; name: string
     switch (providerId) {
       case 'anthropic': return p === 'anthropic' || id.startsWith('claude-');
       case 'openai': return p === 'openai' || id.startsWith('gpt-') || /^o\d/.test(id);
-      case 'gemini':
+      case 'gemini': return p === 'google' || id.startsWith('gemini');
+      // Vertex serves the same model names under a GCP project, including ones
+      // AI Studio has retired — so it offers the Gemini catalogue, and
+      // ROUTE_PREFIX turns the pick into a vertex/ id that actually goes there.
       case 'vertex': return p === 'google' || id.startsWith('gemini');
       case 'glm': return id.startsWith('glm-') || id.startsWith('zhipu');
       case 'mimo': return id.startsWith('mimo') || id.startsWith('xiaomi/');
@@ -221,6 +229,7 @@ function staticModelsForProvider(providerId: string): { id: string; name: string
       case 'opencode-go': return id.startsWith('go-anthropic/');
       case 'nvidia': return p === 'nvidia' || id.startsWith('nvidia/');
       case 'fpt': return p.includes('fpt') || id.startsWith('fpt/');
+      case 'byteplus': return p.includes('byteplus') || id.startsWith('byteplus/');
       case 'fireworks': return p.includes('fireworks') || id.startsWith('fireworks/');
       case 'tencent': return p.includes('tencent') || id.startsWith('tencent/');
       case 'gmi': return p.includes('gmi') || id.startsWith('gmi/');
@@ -385,6 +394,7 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
  * default (which 401s against api.openai.com).
  */
 const ROUTE_PREFIX: Record<string, string> = {
+  vertex: 'vertex/',
   'opencode-zen': 'zen/',
   'opencode-go': 'go-anthropic/',
   openrouter: 'openrouter/',

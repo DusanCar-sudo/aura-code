@@ -1,0 +1,7 @@
+{
+  "transportClass": "google",
+  "via": "generativelanguage.googleapis.com v1beta generateContent",
+  "capturedAt": "2026-08-28T01:58:44.231Z",
+  "status": 200,
+  "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"pong\",\n            \"thoughtSignature\": \"EsMDCsADARFNMg9Yh0AoaR4lQReY1R+oNRSvX/pb2AJrN61K4fsPvMdQPGa3ZmarLkE/Z3i1TDKC605i6dksMGvP4fpNPRphuPz8Bn8FDceAp/BwfUAio2J/5lPTARKoZgYGaGF62YWWBsydptqEyMGYgzLakf1MGPraZZkbo6p2PTynOTg9RvQHDt9xMai30mTfRXZBd2195P3ovybESnfIV3k9kXF9Ra+FTf43vl1EeVag7wWNB5H8X2qAezo2Lmr9YPlqAoJBWgFepdLPT2yPLDdjKzJs4FUy+qA/fVCjQzENZTDu/UdJtbpXcQ5AMGNPceM31s0+BfFzAVJSFWrvD6VIxr0IPeAhCVHjNez6owEJXznXjw6EHoA/njyYImJwpy8SufEJCkLzkMbMpzTynYtcLUT1edrW5VJUjh+ELVur8O0N9L3UtDNOH2+vaqdiMQ9GhOezB3cJMWCb0SOfBlPcB267kTkb5lcfhOPCKeIHJmt2BLXSqjh/Gh+c6IxYQ6vjdvWBXVJI4sSa6bJvcI0klh++AcvFyl/S9GkPd4m//3ZOo7UAkNMBpYAwhcZatEY3yqy9l0vx2jHGn/fqsFBQGw==\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 8,\n    \"candidatesTokenCount\": 1,\n    \"totalTokenCount\": 95,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 8\n      }\n    ],\n    \"thoughtsTokenCount\": 86,\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.6-flash\",\n  \"responseId\": \"X-uQariqIImz2roP-OmXsQM\"\n}\n"
+}

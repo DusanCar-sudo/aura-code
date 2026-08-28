@@ -1,0 +1,7 @@
+{
+  "transportClass": "archimedes-local",
+  "via": "localhost:11434 (Ollama) /v1/chat/completions",
+  "capturedAt": "2026-08-28T01:58:51.289Z",
+  "status": 200,
+  "body": "{\"id\":\"chatcmpl-10\",\"object\":\"chat.completion\",\"created\":1787882331,\"model\":\"granite4.1:3b\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"pong\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":2,\"total_tokens\":17}}\n"
+}

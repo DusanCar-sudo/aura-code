@@ -67,6 +67,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
     });
   }
 
+  /**
+   * Penalties, as request fields — omitted entirely when zero.
+   *
+   * Not cosmetic: Vertex AI rejects a nonzero penalty on the Gemini 3 line with
+   * 400 "Penalty is not enabled for this model", and an explicit
+   * `frequency_penalty: 0` is noise on every endpoint that does support it,
+   * since zero is already the default.
+   */
+  private penaltyFields(): Record<string, number> {
+    return {
+      ...(this.frequencyPenalty ? { frequency_penalty: this.frequencyPenalty } : {}),
+      ...(this.presencePenalty ? { presence_penalty: this.presencePenalty } : {}),
+    };
+  }
+
   async complete(
     system: string,
     history: HistoryMessage[],
@@ -77,8 +92,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
-      frequency_penalty: this.frequencyPenalty,
-      presence_penalty: this.presencePenalty,
+      ...this.penaltyFields(),
       tools: tools.length > 0 ? tools.map(toOpenAITool) : undefined,
       messages,
       // GLM defaults to "max" thinking effort (~85k reasoning tokens per Z.ai's
@@ -128,8 +142,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
-      frequency_penalty: this.frequencyPenalty,
-      presence_penalty: this.presencePenalty,
+      ...this.penaltyFields(),
       tools: tools.length > 0 ? tools.map(toOpenAITool) : undefined,
       messages,
       stream: true,
@@ -344,7 +357,8 @@ export function toOpenAIMessages(
   return out;
 }
 
-function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
+/** Exported so recorded wire fixtures can be replayed through the real parser. */
+export function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse {
   const choice = response.choices[0];
   if (!choice) return { text: '', toolCalls: [], stopReason: 'done' };
 

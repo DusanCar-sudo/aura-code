@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
@@ -20,6 +22,13 @@ import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import type { ProviderConfig } from '../providers/types.js';
 import { openExternal } from '../util/open.js';
+import { loadAllPlugins } from '../plugins/loader.js';
+import { installPlugin, removePlugin } from '../plugins/market.js';
+import { PALETTE_COMMANDS } from '../cli/command-palette.js';
+import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
+
+/** Name of the session cookie the browser client authenticates with. */
+const AUTH_COOKIE = 'aura_token';
 
 export interface ServeOptions {
   port: number; cwd: string; model: string;
@@ -30,6 +39,17 @@ export interface ServeOptions {
   lanAddress?: string;
   /** Also listen on the Tailscale address, reachable from any network. */
   tailscale?: boolean;
+  /**
+   * Allow the web client to install and remove plugins, and to set provider
+   * API keys, over HTTP.
+   *
+   * Off by default. Installing a plugin downloads and runs code with this
+   * process's full privileges and no sandbox (src/plugins/hooks.ts), so over
+   * `--lan` or `--tailscale` an enabled endpoint turns any paired device into
+   * remote code execution. The pairing token is the only thing in front of it,
+   * which is fine for a local convenience and not enough for a standing one.
+   */
+  allowPluginInstall?: boolean;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
@@ -174,12 +194,46 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     res.json({ token: paired.token, device: { id: paired.device.id, name: paired.device.name } });
   });
 
+  /**
+   * Read the session cookie.
+   *
+   * The web client is a real page with its own asset and API requests, and a
+   * browser attaches neither a query string nor a custom header to a <script>
+   * it was told to fetch. Without a cookie every asset 401s and the page
+   * renders blank — which is exactly what happened. The cookie is set below,
+   * only after a valid token arrived by query or header, so it grants nothing
+   * that was not already granted.
+   */
+  function cookieToken(req: express.Request): string | undefined {
+    const raw = req.header('cookie');
+    if (!raw) return undefined;
+    for (const part of raw.split(';')) {
+      const [name, ...rest] = part.trim().split('=');
+      if (name === AUTH_COOKIE) return decodeURIComponent(rest.join('='));
+    }
+    return undefined;
+  }
+
   app.use((req, res, next) => {
-    const provided = (req.query.token as string | undefined) ?? req.header('x-aura-token');
+    const explicit = (req.query.token as string | undefined) ?? req.header('x-aura-token');
+    const provided = explicit ?? cookieToken(req);
     const who = identify(provided);
     if (!who) {
       res.status(401).send('Unauthorized: missing or invalid token.');
       return;
+    }
+    // Promote a proven token to a cookie so the page's own subresources
+    // authenticate. httpOnly keeps it away from page scripts; SameSite=Strict
+    // keeps another origin from riding it; Secure only under TLS, since the
+    // default bind is plain http on loopback where Secure would drop it.
+    if (explicit && explicit === provided) {
+      res.cookie?.(AUTH_COOKIE, explicit, {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: req.protocol === 'https',
+        maxAge: 12 * 60 * 60 * 1000,
+        path: '/',
+      });
     }
     // Carried so /api/history and /api/reset act on the caller's own
     // conversation instead of a single shared one.
@@ -235,9 +289,189 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   }
   console.log('');
 
+  // ── Web client ───────────────────────────────────────────────────────────
+  // dist/web is the built React client (npm run build:web). When it is absent
+  // — a source checkout that has not built the web assets — fall back to the
+  // original inline UI rather than serving a blank page.
+  const webDir = path.join(__dirname, '..', 'web');
+  const hasWebClient = fs.existsSync(path.join(webDir, 'index.html'));
+
+  if (hasWebClient) {
+    // Assets only: '/' stays a handler below so the pairing token can be
+    // injected into the URL the browser actually loads.
+    // Assets are content-hashed, so they are immutable and cache hard.
+    app.use(express.static(webDir, { index: false, immutable: true, maxAge: '365d' }));
+  }
+
   app.get('/', (_req, res) => {
+    if (hasWebClient) {
+      res.setHeader('Content-Type', 'text/html');
+      // Never cached: it is the document that names the current asset hashes,
+      // so a stale copy pins the browser to a previous build.
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(fs.readFileSync(path.join(webDir, 'index.html'), 'utf8'));
+      return;
+    }
     res.setHeader('Content-Type', 'text/html');
     res.send(buildUI(ctx.name, opts.model, token));
+  });
+
+  /**
+   * Skills and plugins, for the settings panel's loader.
+   *
+   * Read-only by design: listing what is installed is safe, whereas installing
+   * over the network is not — plugins run unsandboxed with the operator's full
+   * privileges (see src/plugins/hooks.ts), so that stays a deliberate local act.
+   */
+  app.get('/api/skills', (_req, res) => {
+    try {
+      const skills = loadAllPlugins().flatMap((plugin) =>
+        plugin.skills.map((skill) => ({
+          id: `${plugin.name}:${skill.name}`,
+          name: skill.name,
+          description: skill.description,
+          source: plugin.name,
+        })));
+      res.json({ skills });
+    } catch {
+      res.json({ skills: [] });
+    }
+  });
+
+  /**
+   * The command set the TUI exposes, so the web client's "/" menu is the same
+   * list rather than a copy that drifts. Served from PALETTE_COMMANDS itself.
+   */
+  app.get('/api/commands', (_req, res) => {
+    res.json({ commands: PALETTE_COMMANDS });
+  });
+
+  /**
+   * Providers, their models, and WHETHER a key is configured.
+   *
+   * Never the key itself: this endpoint answers "is it set", never "what is
+   * it". A settings screen only needs the boolean, and echoing a secret back
+   * over the wire to render it would be a way to lose it.
+   */
+  app.get('/api/providers', (_req, res) => {
+    res.json({
+      providers: PROVIDER_REGISTRY.map((entry) => ({
+        name: entry.name,
+        baseUrl: entry.baseUrl,
+        envKey: entry.envKey,
+        signupUrl: entry.signupUrl,
+        keySet: entry.envKey ? Boolean(process.env[entry.envKey]?.trim()) : true,
+        models: entry.models.map((m) => ({
+          id: m.id, label: m.label, speed: m.speed, contextWindow: m.contextWindow,
+        })),
+      })),
+    });
+  });
+
+  /**
+   * Set a provider API key for this running engine.
+   *
+   * Process-scoped on purpose — it is not written to disk, so closing the
+   * server forgets it. Persisting a pasted secret is the operator's decision to
+   * make in their own environment, not something a web form should do quietly.
+   * The value is never logged and never read back.
+   */
+  /**
+   * Mutating extension endpoints are gated: see ServeOptions.allowPluginInstall.
+   * Refusing with 403 and the flag name beats a silent 404 — the operator
+   * should learn the capability exists and is deliberately off.
+   */
+  function requireMutationsAllowed(res: express.Response): boolean {
+    if (opts.allowPluginInstall) return true;
+    res.status(403).json({
+      error: 'Plugin install/remove and API-key changes are disabled. '
+        + 'Restart with `aura serve --allow-plugin-install` to enable them. '
+        + 'Plugins run unsandboxed with full privileges, so this is off by default.',
+    });
+    return false;
+  }
+
+  app.post('/api/apikey', (req, res) => {
+    if (!requireMutationsAllowed(res)) return;
+    const body = (req.body ?? {}) as { envKey?: unknown; value?: unknown };
+    const envKey = typeof body.envKey === 'string' ? body.envKey.trim() : '';
+    const value = typeof body.value === 'string' ? body.value.trim() : '';
+    // Only keys the registry actually declares — this must not become a
+    // general "set any environment variable on the host" endpoint.
+    const known = PROVIDER_REGISTRY.some((e) => e.envKey === envKey);
+    if (!known || !/^[A-Z0-9_]+$/.test(envKey)) {
+      res.status(400).json({ error: 'Unknown API key name.' });
+      return;
+    }
+    if (!value) {
+      delete process.env[envKey];
+      res.json({ ok: true, keySet: false });
+      return;
+    }
+    process.env[envKey] = value;
+    res.json({ ok: true, keySet: true });
+  });
+
+  /**
+   * Install a plugin. Accepts anything installPlugin does: a marketplace name,
+   * owner/repo, a git URL, or a local path — which is what makes the loader
+   * source-agnostic.
+   *
+   * Plugins run unsandboxed with this process's privileges (src/plugins/hooks.ts),
+   * so this route is as dangerous as the CLI equivalent. It is reachable only
+   * behind the pairing token on a loopback bind by default; that is the whole
+   * of its protection, and the UI says so plainly.
+   */
+  app.post('/api/plugins/install', async (req, res) => {
+    if (!requireMutationsAllowed(res)) return;
+    const spec = typeof (req.body as { spec?: unknown })?.spec === 'string'
+      ? String((req.body as { spec: string }).spec).trim()
+      : '';
+    if (!spec) {
+      res.status(400).json({ error: 'Missing plugin source.' });
+      return;
+    }
+    try {
+      const result = await installPlugin(spec);
+      res.json({
+        ok: true,
+        plugin: { id: result.plugin.name, name: result.plugin.manifest.name || result.plugin.name },
+        warnings: result.warnings,
+      });
+    } catch (e) {
+      res.status(400).json({ error: String(e instanceof Error ? e.message : e) });
+    }
+  });
+
+  app.post('/api/plugins/remove', (req, res) => {
+    if (!requireMutationsAllowed(res)) return;
+    const name = typeof (req.body as { name?: unknown })?.name === 'string'
+      ? String((req.body as { name: string }).name).trim()
+      : '';
+    // Reject any path shape: this deletes a directory, so the name must be a
+    // plain plugin id and never a traversal.
+    if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) {
+      res.status(400).json({ error: 'Invalid plugin name.' });
+      return;
+    }
+    res.json({ ok: removePlugin(name) });
+  });
+
+  app.get('/api/plugins', (_req, res) => {
+    try {
+      const plugins = loadAllPlugins().map((plugin) => ({
+        id: plugin.name,
+        name: plugin.manifest.name || plugin.name,
+        description: plugin.manifest.description,
+        source: plugin.path,
+        commands: plugin.commands.length,
+        skills: plugin.skills.length,
+        hooks: plugin.hooks.length,
+      }));
+      res.json({ plugins });
+    } catch {
+      res.json({ plugins: [] });
+    }
   });
   app.get('/api/history', (req, res) => res.json(stateFor(clientOf(req)).session.getDisplay()));
   app.get('/api/project', (req, res) => res.json({

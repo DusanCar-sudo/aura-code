@@ -35,6 +35,25 @@ benchmark/
 6. `task-006-mock-leak` — Testing
 7. `task-007-lru-cache` — Algorithms
 
+## Tiering: there is none, and there never was
+
+This set is **flat** — seven `task-00N-*` fixtures of equal weight. It does
+not start at "tier 5": it starts at `task-001` and no tier structure exists.
+This is a verified fact, not an omission:
+
+- `git log --all -- benchmark/` shows three commits ever touching this
+  directory (`af116eb` harness + task-001, `e78f678` fixtures 002–007,
+  `4094638` scratch-dir isolation). No tier directory or tier-named file has
+  ever existed in the repo's history.
+- An earlier plan sketch asked to "restore tiers 1–4 from git history." They
+  are not in history. Nothing was renumbered or invented to pretend they were.
+- The fixture-by-fixture counts, domains, and last-touching commits live in
+  [`MANIFEST.md`](MANIFEST.md), which is regenerated from git whenever a
+  fixture changes.
+
+**Truthful totals: 7 fixtures, 35 questions** (one question per `test()`
+declaration in each fixture's verify suite).
+
 ## Usage
 
 ```bash

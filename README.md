@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
-[![Providers](https://img.shields.io/badge/providers-17-purple?style=flat-square)](#providers)
+[![Providers](https://img.shields.io/badge/routing%20targets-31-purple?style=flat-square)](#providers)
 
 **→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows guide](docs/WINDOWS.md) · [styled version](https://v2-seven-flax.vercel.app/aura-windows-manual)
 
@@ -32,9 +32,10 @@ language — it reads your codebase, plans, executes, verifies, and reports back
 
 Most coding agents are appliances: you get the workflow their authors chose, and
 customising it means waiting for them. Aura is built the other way round. The
-model is yours to pick (17 providers, or any OpenAI-compatible endpoint, or a
-local Ollama model with no key at all), the tools are yours to extend, and the
-parts you add are ordinary files you can read, edit and share.
+model is yours to pick (31 routing targets over four transports, or any
+OpenAI-compatible endpoint, or a local model with no key at all), the tools are
+yours to extend, and the parts you add are ordinary files you can read, edit
+and share.
 
 That costs you nothing at the start — `npm install -g aura-code` and a task in
 plain English is the whole first run. The framework is there when you want it,
@@ -104,7 +105,7 @@ run the bare command exactly as before. `AURA_RTK=0` opts out.
 - **Full TUI** — terminal UI with command palette, diff view, markdown rendering, vim-style input
 - **Persistent memory** — identity, lessons, and project context survive across sessions
 - **Telegram bot** — voice notes, PC control, file transfer, webcam snapshots
-- **17 providers** — DeepSeek, Claude, GPT, Gemini, GLM, MiMo, Ollama, OpenRouter and more
+- **31 routing targets, 4 transports** — DeepSeek, Claude, GPT, Gemini, GLM, MiMo, Ollama, OpenRouter and more
 - **Token efficiency** — tiered context strategy, prompt caching, tool relevance gating
 - **MCP support** — Model Context Protocol for external tool connections
 
@@ -186,20 +187,37 @@ word away.
 | Claude (Anthropic) | Opus 4, Sonnet 4.6, Haiku |
 | GPT (OpenAI) | gpt-4o, gpt-4o-mini |
 | Gemini (Google) | gemini-2.5-pro, gemini-2.5-flash |
-| GLM (Zhipu / Z.ai) | glm-5.2, glm-5.1, glm-5 |
-| MiMo (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 |
-| Ollama | any local model |
+| GLM (Zhipu / Z.ai) | glm-5.2, glm-5.1, glm-5 — `zhipu-coding/` routes via the Coding Plan |
+| MiMo (Xiaomi) | mimo-v2.5-pro, mimo-v2.5 (`mimo/`, `xiaomi/`) |
+| Ollama | any local model (`ollama/`, `local/`, `local-profile/`) |
+| LM Studio | any loaded model (`lmstudio/`) |
 | OpenRouter | 100+ models |
 | Groq | llama, mixtral |
 | xAI (Grok) | grok-2, grok-2-mini, grok-beta |
-| BytePlus ModelArk | ark-code-latest, dola-seed-2.0-pro/lite/code (`byteplus/`) |
+| BytePlus ModelArk | DeepSeek V4 Flash/Pro GA, Seed, Kimi (`byteplus/`) |
 | FPT Cloud AI | DeepSeek V4, GLM-5.2, Qwen3.8, Gemma 4, GPT-OSS, Embeddings (`fpt/`) |
 | OpenCode Go | MiniMax M3/M2.7, Kimi K3 and more (`go-anthropic/`) |
 | OpenCode Zen | free tier — DeepSeek V4 Flash, Ling 3.0, MiMo V2.5 (`zen/`) |
+| OpenCode | `opencode/` |
 | NVIDIA NIM | any NIM-hosted model (`nvidia/`) |
 | Hugging Face | Inference Providers router (`huggingface/`) |
 | Kimi (Moonshot) | any Moonshot model (`kimi/`) |
 | Qwen (DashScope) | any DashScope model (`qwen/`) |
+| MiniMax | any MiniMax model (`minimax/`) |
+| StepFun | any StepFun model (`stepfun/`) |
+| Fireworks AI | any Fireworks model (`fireworks/`) |
+| Upstage | Solar models (`upstage/`) |
+| Arcee AI | any Arcee model (`arcee/`) |
+| Tencent Hunyuan | any Hunyuan model (`tencent/`) |
+| GMI Cloud | any GMI-hosted model (`gmi/`) |
+| Kilo Code | any Kilo-routed model (`kilocode/`) |
+| Alibaba Cloud | any Model Studio model (`alibaba/`) |
+
+Thirty-one routing targets, but not thirty-one integrations. They collapse onto **four
+transports**: `AnthropicProvider` and `GoogleProvider` for the two wire formats
+that differ, `OpenAICompatibleProvider` for everything else, and
+`ArchimedesModel` for the local small-model path. Adding a provider is a base
+URL, an API key env var, and a model-id rewrite — not a new class.
 
 ---
 

@@ -58,6 +58,8 @@ interface Session {
   activeTurn: { turnId: string; abort: AbortController } | null;
   /** Tools the client approved for the rest of this session. */
   alwaysAllow: Set<string>;
+  /** Client-chosen tool allowlist, or null for every tool. */
+  allowedTools: string[] | null;
 }
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
@@ -141,6 +143,19 @@ export class ProtocolHandler {
       ? p.projectRoot
       : this.opts.defaultProjectRoot;
     const model = typeof p.model === 'string' && p.model ? p.model : this.opts.defaultModel;
+    // An unrecognised level falls back to 'normal' rather than to the most
+    // permissive reading of a typo.
+    const permission: 'read-only' | 'normal' | 'auto' =
+      p.permission === 'read-only' || p.permission === 'auto' ? p.permission : 'normal';
+    // Unknown names are dropped rather than rejected: a client built against an
+    // older tool set should lose the tool, not the session. An empty result
+    // means "no tools", which is a legitimate ask, so null is the only "all".
+    const known = new Set(TOOL_DEFINITIONS.map((d) => d.name));
+    const allowedTools = Array.isArray(p.allowedTools)
+      ? (p.allowedTools as unknown[])
+        .filter((n): n is string => typeof n === 'string')
+        .filter((n) => known.has(n))
+      : null;
     if (!model) {
       return this.fail(req.id, { code: 'bad_params', message: 'No model given and no engine default configured.' });
     }
@@ -165,7 +180,8 @@ export class ProtocolHandler {
       apiKey: typeof p.apiKey === 'string' ? p.apiKey : this.opts.defaultApiKey,
       baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl : this.opts.defaultBaseUrl,
       context,
-      permissions: new PermissionSystem('normal'),
+      permissions: new PermissionSystem(permission),
+      allowedTools,
       // Per session, not per process: two concurrent sessions get independent
       // ceilings rather than racing each other toward one shared total.
       budget: new SessionBudget(maxInputTokens !== undefined ? { maxInputTokens } : {}),
@@ -265,12 +281,22 @@ export class ProtocolHandler {
         baseUrl: s.baseUrl,
       });
 
+      // Only well-formed image data URIs are forwarded. Anything else is
+      // dropped rather than handed to a provider as an opaque blob.
+      const images = Array.isArray(p.images)
+        ? (p.images as unknown[]).filter(
+          (i): i is string => typeof i === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(i),
+        )
+        : undefined;
+
       const result = await runAgentLoop({
         provider,
         task: p.message,
+        ...(images && images.length > 0 ? { images } : {}),
         context: s.context,
         permissions: s.permissions,
         display: this.displayFor(s, turnId),
+        ...(s.allowedTools ? { allowedTools: s.allowedTools } : {}),
         budget: s.budget,
         initialHistory: s.history,
         abortSignal: abort.signal,

@@ -20,7 +20,7 @@ import {
   PROVIDER_REGISTRY, detectExistingKey, maskApiKey,
   type ProviderEntry,
 } from './provider-registry.js';
-import { testProviderConnection, normalizeBaseUrl } from './provider-test.js';
+import { testProviderConnection, normalizeBaseUrl, type TestFailureKind } from './provider-test.js';
 import { saveGlobalConfig, globalConfigPath } from './global-config.js';
 import { saveKey } from './key-store.js';
 import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig, xiaomiKeyKind } from './xiaomi.js';
@@ -135,7 +135,7 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     };
 
     // ── Step 4: Test Connection ─────────────────────────────────────────────
-    const saved = await testAndSave(rl, config, askInputFn);
+    const saved = await testAndSave(rl, config, askInputFn, provider);
     return saved;
   } finally {
     if (!existingRl) {
@@ -256,7 +256,7 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry, 
     console.log(chalk.hex('#8a7768')(`  Source: environment (${provider.envKey})\n`));
     console.log(chalk.hex('#8a7768')('   1. Keep this key'));
     console.log(chalk.hex('#8a7768')('   2. Replace with new key\n'));
-    const choice = await askInput(rl, '  ▸ Choose (1 or 2): ');
+    const choice = await askInput(rl, '  ▸ Choose (1 or 2): ', askInputFn);
     if (choice === '2') {
       const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
       if (!newKey) {
@@ -285,7 +285,23 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry, 
 // Step 4: Test Connection & Save
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function testAndSave(rl: readline.Interface, config: ProviderConfig, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderConfig | null> {
+/**
+ * Test the connection, then save — or offer the remedy that actually fits the
+ * failure.
+ *
+ * The old menu offered "re-enter API key" for every failure, which is how a
+ * valid key came to look permanently rejected: OpenAI answers an unpaid account
+ * with 429 "exceeded your current quota", OpenCode Zen answers one with 401
+ * "Insufficient balance", and a retired gateway model answers 500 — none of
+ * which a different key can fix. Each failure kind now leads with the step that
+ * can.
+ */
+async function testAndSave(
+  rl: readline.Interface,
+  config: ProviderConfig,
+  askInputFn?: (prompt: string) => Promise<string>,
+  provider?: ProviderEntry,
+): Promise<ProviderConfig | null> {
   console.log(chalk.hex('#cc785c')(`\n  Testing connection to ${config.provider}...`));
 
   const result = await testProviderConnection({
@@ -302,21 +318,67 @@ async function testAndSave(rl: readline.Interface, config: ProviderConfig, askIn
     return config;
   }
 
-  // Connection failed — offer retry/skip/cancel
-  console.log(chalk.hex('#b15439')(`  ✗ Connection failed: ${result.error}\n`));
-  console.log(chalk.hex('#8a7768')('   1. Re-enter API key'));
-  console.log(chalk.hex('#8a7768')('   2. Skip test and save anyway'));
-  console.log(chalk.hex('#8a7768')('   3. Cancel\n'));
-  const choice = await askInput(rl, '  ▸ Choose (1, 2, or 3): ', askInputFn);
-  if (choice === '1') {
+  const kind: TestFailureKind = result.kind ?? 'auth';
+  const dim = chalk.hex('#8a7768');
+  const bad = chalk.hex('#b15439');
+
+  // Headline: name what actually went wrong, and say plainly when the key is
+  // not the problem — otherwise the user retypes it forever.
+  const headline: Record<TestFailureKind, string> = {
+    auth: 'Authentication failed — the provider rejected this key.',
+    billing: 'Your key works. The account has no credit or quota left.',
+    rate: 'Your key works. The provider is rate-limiting right now.',
+    model: `Your key works. The model "${config.model}" is not available on this endpoint.`,
+    server: 'Your key reached the provider, but the provider returned an error.',
+    network: 'Never reached the provider — check the base URL and your connection.',
+  };
+  console.log(bad(`  ✗ ${headline[kind]}`));
+  console.log(dim(`    ${result.error}\n`));
+
+  // Remedies, most-likely-to-help first for this kind.
+  type Remedy = 'key' | 'model' | 'retry' | 'save' | 'cancel';
+  const order: Record<TestFailureKind, Remedy[]> = {
+    auth: ['key', 'save', 'cancel'],
+    billing: ['save', 'retry', 'key', 'cancel'],
+    rate: ['retry', 'save', 'cancel'],
+    model: ['model', 'retry', 'save', 'cancel'],
+    server: ['retry', 'save', 'cancel'],
+    network: ['retry', 'save', 'cancel'],
+  };
+  const text: Record<Remedy, string> = {
+    key: 'Re-enter API key',
+    model: 'Choose a different model',
+    retry: 'Test again',
+    save: 'Save anyway (skip the test)',
+    cancel: 'Cancel',
+  };
+
+  // "Choose a different model" only makes sense against a preset list.
+  const remedies = order[kind].filter(r => r !== 'model' || (provider?.models?.length ?? 0) > 1);
+  remedies.forEach((r, i) => console.log(dim(`   ${i + 1}. ${text[r]}`)));
+  console.log();
+
+  const answer = await askInput(rl, `  ▸ Choose (1-${remedies.length}) [1]: `, askInputFn);
+  const picked = remedies[(parseInt(answer.trim(), 10) || 1) - 1] ?? 'cancel';
+
+  if (picked === 'key') {
     const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
     if (!newKey) return null;
     config.apiKey = newKey;
-    return testAndSave(rl, config, askInputFn); // Recursive retry
+    return testAndSave(rl, config, askInputFn, provider);
   }
-  if (choice === '2') {
+  if (picked === 'model' && provider) {
+    const newModel = await selectModel(rl, provider, askInputFn);
+    if (!newModel) return null;
+    config.model = newModel;
+    return testAndSave(rl, config, askInputFn, provider);
+  }
+  if (picked === 'retry') {
+    return testAndSave(rl, config, askInputFn, provider);
+  }
+  if (picked === 'save') {
     saveProviderConfig(config);
-    console.log(chalk.hex('#8a7768')(`\n  Saved to ${globalConfigPath()} (connection not verified)\n`));
+    console.log(dim(`\n  Saved to ${globalConfigPath()} (connection not verified)\n`));
     return config;
   }
   return null; // Cancel
@@ -356,8 +418,78 @@ function askInput(rl: readline.Interface, prompt: string, askInputFn?: (prompt: 
   });
 }
 
-/** Alias kept for call sites that want to be explicit about reading a secret. */
-const askSecretInput = askInput;
+/**
+ * Read a secret (API key) without putting it on screen in clear text.
+ *
+ * Echoes one `*` per character so a paste is visibly *received* — the previous
+ * behaviour was a plain alias for askInput, which left the caller staring at a
+ * prompt that looked like it had swallowed the paste.
+ *
+ * Takes stdin directly in raw mode for the duration rather than going through
+ * readline: readline echoes what it reads, and there is no supported way to
+ * make it echo something else. The interface is paused first so the two are
+ * never both reading — that contention is exactly what makes pasting into this
+ * wizard feel unreliable.
+ *
+ * Falls back to askInput when stdin is not a TTY (piped input, CI), where raw
+ * mode is unavailable and there is no terminal to hide the value from anyway.
+ */
+function askSecretInput(rl: readline.Interface, prompt: string): Promise<string> {
+  const stdin = process.stdin as NodeJS.ReadStream;
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
+    return askInput(rl, prompt);
+  }
+
+  return new Promise<string>(resolve => {
+    process.stdout.write(chalk.hex('#cc785c')(prompt));
+
+    const wasRaw = stdin.isRaw === true;
+    rl.pause();
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let buf = '';
+
+    const finish = (value: string): void => {
+      stdin.removeListener('data', onData);
+      stdin.setRawMode(wasRaw);
+      if (!wasRaw) stdin.pause();
+      process.stdout.write('\n');
+      rl.resume();
+      resolve(value.trim());
+    };
+
+    const onData = (chunk: Buffer): void => {
+      // Drop CSI/escape sequences wholesale: bracketed-paste markers
+      // (\x1b[200~ … \x1b[201~) and any stray arrow keys would otherwise land
+      // in the key as literal bytes.
+      const text = chunk.toString('utf8').replace(/\x1b\[[0-9;]*[~A-Za-z]/g, '');
+
+      for (const ch of text) {
+        if (ch === '\r' || ch === '\n') { finish(buf); return; }
+        if (ch === '\x03') { finish(''); return; }          // Ctrl-C — cancel
+        if (ch === '\x04') { finish(buf); return; }         // Ctrl-D — submit
+        if (ch === '\x7f' || ch === '\b') {                 // Backspace
+          if (buf) { buf = buf.slice(0, -1); process.stdout.write('\b \b'); }
+          continue;
+        }
+        if (ch === '\x15') {                                // Ctrl-U — clear
+          process.stdout.write('\b \b'.repeat(buf.length));
+          buf = '';
+          continue;
+        }
+        if (ch < ' ') continue;                             // other control chars
+        buf += ch;
+        process.stdout.write('*');
+      }
+    };
+
+    stdin.on('data', onData);
+  });
+}
+
+/** Internals exposed for tests only — not part of the module's public surface. */
+export const __testing = { askSecretInput };
 
 /**
  * Save the provider config to ~/.config/aura-code/config.json and export

@@ -204,6 +204,7 @@ async function refineOne(
     metadata: {
       projectRoot,
       taskCategory: concept.category,
+      provenance: 'mined',
       timestamp: Date.now(),
     },
   };

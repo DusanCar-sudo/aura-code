@@ -1,0 +1,7 @@
+{
+  "transportClass": "archimedes-local",
+  "via": "localhost:11434 (Ollama) /v1/chat/completions",
+  "capturedAt": "2026-08-28T01:58:51.666Z",
+  "status": 404,
+  "body": "{\"error\":{\"message\":\"model 'definitely-not-installed:0b' not found\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}}\n"
+}

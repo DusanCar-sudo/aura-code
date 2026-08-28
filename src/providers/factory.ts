@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process';
 import type { LLMProvider, ProviderConfig } from './types.js';
 import { AnthropicProvider } from './anthropic.js';
 import { OpenAICompatibleProvider } from './openai-compatible.js';
@@ -6,7 +7,11 @@ import { getApiKey, getEnv } from '../util/env.js';
 import type { ProviderDef } from '../config/project-config.js';
 import { getLiveModels } from './live-models.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
-import { defaultXiaomiBaseUrl } from '../setup/xiaomi.js';
+import {
+  descriptorFor, routingPrefixFor, slashPrefixes,
+  buildKnownBaseUrls, buildFamilyApiKeyEnv,
+  type ProviderDescriptor,
+} from './provider-descriptors.js';
 // Circular with provider-wizard (it imports the ZHIPU_* consts below) — safe
 // because both sides only touch the other's exports inside function bodies.
 import { loadProviderConfig } from '../setup/provider-wizard.js';
@@ -17,10 +22,65 @@ import * as http from 'http';
 // Custom provider registry  (populated from .aura.json or programmatically)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Zhipu (Z.ai) General/International endpoint — pay-as-you-go API keys. */
-export const ZHIPU_GENERAL_BASE_URL = 'https://api.z.ai/api/paas/v4';
-/** Zhipu (Z.ai) Coding Plan endpoint — GLM Coding Plan subscription quota. */
-export const ZHIPU_CODING_BASE_URL = 'https://api.z.ai/api/coding/paas/v4';
+// Endpoint constants live with the descriptor table now; re-exported here
+// because provider-wizard and the tests import them from this module.
+export {
+  ZHIPU_GENERAL_BASE_URL,
+  ZHIPU_CODING_BASE_URL,
+  BYTEPLUS_BASE_URL,
+} from './provider-descriptors.js';
+
+/**
+ * Google Vertex AI, through its OpenAI-compatible surface.
+ *
+ * Vertex is a different entitlement from AI Studio, not a skin over it: models
+ * retired for new AI Studio keys (the whole gemini-2.5 line answers 404 "no
+ * longer available to new users" there) still serve on Vertex under a GCP
+ * project, and its capacity is separate from the AI Studio pool that produces
+ * "This model is currently experiencing high demand".
+ *
+ * Auth is OAuth, not an API key: a short-lived access token, from
+ * GOOGLE_VERTEX_ACCESS_TOKEN if set, otherwise minted from Application Default
+ * Credentials via gcloud.
+ */
+export const VERTEX_DEFAULT_LOCATION = 'global';
+
+export function vertexProjectId(): string | undefined {
+  return getEnv('VERTEX_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT');
+}
+
+export function vertexBaseUrl(project: string, location = VERTEX_DEFAULT_LOCATION): string {
+  const host = location === 'global'
+    ? 'https://aiplatform.googleapis.com'
+    : `https://${location}-aiplatform.googleapis.com`;
+  return `${host}/v1/projects/${project}/locations/${location}/endpoints/openapi`;
+}
+
+/**
+ * Vertex model ids are vendor-qualified on the OpenAI surface
+ * ("google/gemini-3.6-flash"). Accept either form from the user.
+ */
+export function vertexModelId(model: string): string {
+  const bare = model.replace(/^vertex\//i, '');
+  return bare.includes('/') ? bare : `google/${bare}`;
+}
+
+/**
+ * Mint a Vertex access token. Tokens last about an hour; a run longer than that
+ * will need a fresh provider. Returns undefined rather than throwing so the
+ * caller can report a setup problem instead of a stack trace.
+ */
+export function vertexAccessToken(): string | undefined {
+  const fromEnv = getEnv('GOOGLE_VERTEX_ACCESS_TOKEN');
+  if (fromEnv) return fromEnv;
+  try {
+    return execFileSync('gcloud', ['auth', 'print-access-token'], {
+      encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 let customProviders: ProviderDef[] = [];
 
@@ -37,12 +97,24 @@ export function getCustomProviders(): ProviderDef[] {
   return customProviders;
 }
 
+/** Slash-terminated routing prefixes, longest first (so zhipu-coding/ wins). */
+const SLASH_PREFIXES = slashPrefixes();
+
 /**
  * Strip Aura's internal routing prefixes from a model id so it can be looked
  * up against registry entries (which store unprefixed ids).
  */
-function stripRoutingPrefix(model: string): string {
-  return model.replace(/^(opencode|zen|zhipu(-coding)?|ollama|local|lmstudio|xai|xiaomi|mimo|go-anthropic|local-profile|groq|nvidia|fpt|huggingface|kimi|qwen|gemini|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba)\//, '');
+export function stripRoutingPrefix(model: string): string {
+  // Derived from the descriptor table, so a new provider is stripped the
+  // moment it is declared — this list used to be maintained by hand and had
+  // drifted (deepseek/ and openrouter/ were missing, costing DeepSeek 8x its
+  // real context window). Only slash prefixes are stripped, so bare
+  // `deepseek-v4-pro` — a real DeepSeek API model name, not a routing
+  // shorthand — reaches the wire intact.
+  for (const prefix of SLASH_PREFIXES) {
+    if (model.toLowerCase().startsWith(prefix)) return model.slice(prefix.length);
+  }
+  return model;
 }
 
 /**
@@ -76,32 +148,7 @@ export function apiKeyEnvVarForModel(model: string): string | undefined {
       return p.apiKeyEnv;
     }
   }
-  if (m.startsWith('go-anthropic/')) return 'OPENCODE_GO_API_KEY';
-  if (m.startsWith('opencode/') || m.startsWith('zen/')) return 'OPENCODE_API_KEY';
-  if (m.startsWith('deepseek/') || m.startsWith('deepseek-')) return 'DEEPSEEK_API_KEY';
-  if (m.startsWith('glm-') || m.startsWith('zhipu')) return 'ZHIPU_API_KEY';
-  if (m.startsWith('mimo-') || m.startsWith('mimo/') || m.startsWith('xiaomi/')) return 'XIAOMI_API_KEY';
-  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return 'OPENAI_API_KEY';
-  if (m.startsWith('claude') || m.startsWith('anthropic')) return 'ANTHROPIC_API_KEY';
-  if (m.startsWith('gemini')) return 'GOOGLE_API_KEY';
-  if (m.includes('grok') || m.startsWith('xai/')) return 'XAI_API_KEY';
-  if (m.startsWith('openrouter/')) return 'OPENROUTER_API_KEY';
-  if (m.startsWith('groq/')) return 'GROQ_API_KEY';
-  if (m.startsWith('nvidia/')) return 'NVIDIA_API_KEY';
-  if (m.startsWith('fpt/')) return 'FPT_API_KEY';
-  if (m.startsWith('huggingface/')) return 'HUGGINGFACE_API_KEY';
-  if (m.startsWith('kimi/')) return 'MOONSHOT_API_KEY';
-  if (m.startsWith('qwen/')) return 'DASHSCOPE_API_KEY';
-  if (m.startsWith('minimax/')) return 'MINIMAX_API_KEY';
-  if (m.startsWith('stepfun/')) return 'STEPFUN_API_KEY';
-  if (m.startsWith('fireworks/')) return 'FIREWORKS_API_KEY';
-  if (m.startsWith('upstage/')) return 'UPSTAGE_API_KEY';
-  if (m.startsWith('arcee/')) return 'ARCEE_API_KEY';
-  if (m.startsWith('tencent/')) return 'TENCENT_API_KEY';
-  if (m.startsWith('gmi/')) return 'GMI_API_KEY';
-  if (m.startsWith('kilocode/')) return 'KILOCODE_API_KEY';
-  if (m.startsWith('alibaba/')) return 'ALIBABA_API_KEY';
-  return undefined;
+  return descriptorFor(m)?.apiKeyEnv?.[0];
 }
 
 /**
@@ -117,61 +164,10 @@ export function detectProviderKind(model: string): 'anthropic' | 'google' | 'ope
 
 /** Rough provider family for routing / alternator guardrails. */
 export function modelProviderFamily(modelId: string): string {
-  const m = modelId.toLowerCase();
-  if (m.startsWith('deepseek/') || m.startsWith('deepseek-')) return 'deepseek';
-  if (m.startsWith('mimo-') || m.startsWith('xiaomi/') || m.startsWith('mimo/')) return 'xiaomi';
-  if (m.startsWith('glm-') || m.startsWith('zhipu/') || m.startsWith('zhipu-coding/')) return 'zhipu';
-  if (m.startsWith('claude-')) return 'anthropic';
-  if (m.startsWith('gemini-') || m.startsWith('gemini/')) return 'google';
-  if (m.startsWith('openrouter/')) return 'openrouter';
-  if (m.startsWith('grok-') || m.startsWith('xai/')) return 'xai';
-  if (m.startsWith('opencode/') || m.startsWith('zen/') || m.startsWith('go-anthropic/')) return 'opencode';
-  if (m.startsWith('ollama/')) return 'ollama';
-  if (m.startsWith('groq/')) return 'groq';
-  if (m.startsWith('nvidia/')) return 'nvidia';
-  if (m.startsWith('fpt/')) return 'fpt';
-  if (m.startsWith('huggingface/')) return 'huggingface';
-  if (m.startsWith('kimi/')) return 'kimi';
-  if (m.startsWith('qwen/')) return 'qwen';
-  if (m.startsWith('lmstudio/') || m.startsWith('local/')) return 'lmstudio';
-  if (m.startsWith('minimax/')) return 'minimax';
-  if (m.startsWith('stepfun/')) return 'stepfun';
-  if (m.startsWith('fireworks/')) return 'fireworks';
-  if (m.startsWith('upstage/')) return 'upstage';
-  if (m.startsWith('arcee/')) return 'arcee';
-  if (m.startsWith('tencent/')) return 'tencent';
-  if (m.startsWith('gmi/')) return 'gmi';
-  if (m.startsWith('kilocode/')) return 'kilocode';
-  if (m.startsWith('alibaba/')) return 'alibaba';
-  return 'openai-compatible';
+  return descriptorFor(modelId)?.family ?? 'openai-compatible';
 }
 
-const FAMILY_API_KEY_ENV: Record<string, string> = {
-  deepseek: 'DEEPSEEK_API_KEY',
-  xiaomi: 'XIAOMI_API_KEY',
-  zhipu: 'ZHIPU_API_KEY',
-  anthropic: 'ANTHROPIC_API_KEY',
-  google: 'GOOGLE_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY',
-  xai: 'XAI_API_KEY',
-  opencode: 'OPENCODE_API_KEY',
-  groq: 'GROQ_API_KEY',
-  nvidia: 'NVIDIA_API_KEY',
-  fpt: 'FPT_API_KEY',
-  huggingface: 'HUGGINGFACE_API_KEY',
-  kimi: 'MOONSHOT_API_KEY',
-  qwen: 'DASHSCOPE_API_KEY',
-  minimax: 'MINIMAX_API_KEY',
-  stepfun: 'STEPFUN_API_KEY',
-  fireworks: 'FIREWORKS_API_KEY',
-  upstage: 'UPSTAGE_API_KEY',
-  arcee: 'ARCEE_API_KEY',
-  tencent: 'TENCENT_API_KEY',
-  gmi: 'GMI_API_KEY',
-  kilocode: 'KILOCODE_API_KEY',
-  alibaba: 'ALIBABA_API_KEY',
-  'openai-compatible': 'OPENAI_API_KEY',
-};
+const FAMILY_API_KEY_ENV: Record<string, string> = buildFamilyApiKeyEnv();
 
 /**
  * Resolves an API key for a given model, trying that model's own provider
@@ -210,31 +206,7 @@ export function getApiKeyForModel(model: string): string | undefined {
  * `--reset-setup`). Without this, the cross-provider guard below only
  * activates once *some* prior config already exists to diff against.
  */
-const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
-  'https://api.deepseek.com/v1': 'deepseek',
-  'https://token-plan-sgp.xiaomimimo.com/v1': 'xiaomi',
-  [ZHIPU_GENERAL_BASE_URL]: 'zhipu',
-  [ZHIPU_CODING_BASE_URL]: 'zhipu',
-  'https://api.anthropic.com': 'anthropic',
-  'https://generativelanguage.googleapis.com/v1beta': 'google',
-  'https://openrouter.ai/api/v1': 'openrouter',
-  'https://api.x.ai/v1': 'xai',
-  'https://opencode.ai/zen/v1': 'opencode',
-  'https://mkp-api.fptcloud.com/v1': 'fpt',
-  'https://dashscope-intl.aliyuncs.com/compatible-mode/v1': 'qwen',
-  'https://dashscope.aliyuncs.com/compatible-mode/v1': 'qwen',
-  'https://api.minimax.io/v1': 'minimax',
-  'https://api.moonshot.ai/v1': 'kimi',
-  'https://api.groq.com/openai/v1': 'groq',
-  'https://integrate.api.nvidia.com/v1': 'nvidia',
-  'https://api.stepfun.com/v1': 'stepfun',
-  'https://api.fireworks.ai/inference/v1': 'fireworks',
-  'https://api.upstage.ai/v1': 'upstage',
-  'https://conductor.arcee.ai/v1': 'arcee',
-  'https://tokenhub.tencentmaas.com/v1': 'tencent',
-  'https://api.gmi-serving.com/v1': 'gmi',
-  'https://api.kilocode.ai/api/openrouter': 'kilocode',
-};
+export const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = buildKnownBaseUrls();
 
 /**
  * Base URL for a local model server. The model picker tells users to set
@@ -356,22 +328,89 @@ export function resolveTaskModelBaseUrl(opts: {
  *   local/*              → Local OpenAI-compatible (localhost:1234)
  *   anything else        → OpenAI-compatible (uses baseUrl from config)
  */
+/** Trim an operator-supplied endpoint: no whitespace, no trailing slashes. */
+function normalizeEnvUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim().replace(/\/+$/, '');
+  return trimmed || undefined;
+}
+
+/**
+ * Instantiate the transport a descriptor names. This is the fifth view of the
+ * provider table — the other four are pure lookups, this one builds the client.
+ *
+ * Endpoint precedence, highest first: an explicit config.baseUrl, the
+ * provider's own <X>_BASE_URL override, a host-local default, a per-call
+ * computed URL (Zhipu's plan tier, Xiaomi's key type), then the descriptor's
+ * fixed default.
+ */
+function buildFromDescriptor(
+  descriptor: ProviderDescriptor,
+  config: ProviderConfig,
+): LLMProvider {
+  const prefix = routingPrefixFor(descriptor, config.model);
+  // Slice off config.model, never the lower-cased dispatch copy: marketplace
+  // ids are case- and suffix-sensitive (DeepSeek-V3, deepseek-v4-flash-ga-260731)
+  // and the gateways match them exactly.
+  const wireModel = (prefix ? config.model.slice(prefix.length) : config.model) || config.model;
+
+  const apiKey = config.apiKey
+    ?? descriptor.staticApiKey
+    ?? (descriptor.apiKeyEnv ? getApiKey(...(descriptor.apiKeyEnv as [string, ...string[]])) : undefined);
+
+  if (descriptor.transport === 'anthropic') return new AnthropicProvider(config);
+  if (descriptor.transport === 'google') {
+    return new GoogleProvider({ ...config, model: wireModel });
+  }
+
+  if (descriptor.transport === 'vertex') {
+    const project = vertexProjectId();
+    if (!project) {
+      throw new Error(
+        'Vertex AI needs a GCP project — set VERTEX_PROJECT_ID (or GOOGLE_CLOUD_PROJECT).',
+      );
+    }
+    const token = config.apiKey ?? vertexAccessToken();
+    if (!token) {
+      throw new Error(
+        'Vertex AI needs an OAuth token — run `gcloud auth application-default login`, '
+        + 'or set GOOGLE_VERTEX_ACCESS_TOKEN.',
+      );
+    }
+    const location = getEnv('VERTEX_LOCATION') ?? VERTEX_DEFAULT_LOCATION;
+    return new OpenAICompatibleProvider({
+      ...config,
+      model: vertexModelId(config.model),
+      baseUrl: config.baseUrl ?? vertexBaseUrl(project, location),
+      apiKey: token,
+      ...descriptor.extraConfig,
+    }, descriptor.displayName);
+  }
+
+  const baseUrl = config.baseUrl
+    ?? (descriptor.baseUrlEnv ? normalizeEnvUrl(getEnv(...(descriptor.baseUrlEnv as [string, ...string[]]))) : undefined)
+    ?? (descriptor.localBaseUrl
+      ? localBaseUrl(descriptor.localBaseUrl.env, descriptor.localBaseUrl.fallback)
+      : undefined)
+    ?? descriptor.resolveBaseUrl?.({ ...config, apiKey }, config.model.toLowerCase())
+    ?? descriptor.baseUrl;
+
+  return new OpenAICompatibleProvider({
+    ...config,
+    model: wireModel,
+    baseUrl,
+    apiKey,
+    ...descriptor.extraConfig,
+  }, descriptor.displayName);
+}
+
 export function createProvider(config: ProviderConfig): LLMProvider {
   const model = config.model.toLowerCase();
 
-  // ── OpenCode Go (Zen endpoint — OpenAI-compatible /chat/completions) ────
-  // The Zen API speaks the OpenAI wire format; routing these through the
-  // Anthropic provider sent /v1/messages-shaped requests to a
-  // /chat/completions endpoint.
-  if (model.startsWith('go-anthropic/')) {
-    const goModel = config.model.replace(/^go-anthropic\//i, '');
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: goModel,
-      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/v1',
-      apiKey: config.apiKey ?? getApiKey('OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY'),
-    }, 'OpenCode Go');
-  }
+  const descriptor = descriptorFor(model);
+
+  // OpenCode Go is resolved ahead of the .aura.json providers, as it always
+  // has been — the only descriptor that outranks a user's own config.
+  if (descriptor?.beforeCustomProviders) return buildFromDescriptor(descriptor, config);
 
   // ── Custom providers (from .aura.json) ─────────────────────────────────
   for (const def of customProviders) {
@@ -395,227 +434,9 @@ export function createProvider(config: ProviderConfig): LLMProvider {
     }
   }
 
-  // ── Anthropic ──────────────────────────────────────────────────────────────
-  if (model.startsWith('claude-')) {
-    return new AnthropicProvider(config);
-  }
+  // ── Built-in providers, all driven by the one descriptor table ───────────
+  if (descriptor) return buildFromDescriptor(descriptor, config);
 
-  // ── Google ─────────────────────────────────────────────────────────────────
-  // Accept both bare gemini-* and the selector's gemini/<id> prefixed form.
-  if (model.startsWith('gemini-') || model.startsWith('gemini/')) {
-    return new GoogleProvider({ ...config, model: config.model.replace(/^gemini\//i, '') });
-  }
-
-  // ── OpenCode Zen ───────────────────────────────────────────────────────────
-  // zen/* and opencode/* had key resolution (apiKeyEnvVarForModel) but no
-  // routing branch — they fell through to the OpenAI-compatible default and
-  // 401'd against api.openai.com.
-  if (model.startsWith('zen/') || model.startsWith('opencode/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^(zen|opencode)\//i, ''),
-      baseUrl: config.baseUrl ?? 'https://opencode.ai/zen/v1',
-      apiKey: config.apiKey ?? getApiKey('OPENCODE_API_KEY'),
-    }, 'OpenCode Zen');
-  }
-
-  // ── Groq ───────────────────────────────────────────────────────────────────
-  if (model.startsWith('groq/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^groq\//i, ''),
-      baseUrl: config.baseUrl ?? 'https://api.groq.com/openai/v1',
-      apiKey: config.apiKey ?? getApiKey('GROQ_API_KEY'),
-    }, 'Groq');
-  }
-
-  // ── NVIDIA NIM ─────────────────────────────────────────────────────────────
-  if (model.startsWith('nvidia/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^nvidia\//i, ''),
-      baseUrl: config.baseUrl ?? 'https://integrate.api.nvidia.com/v1',
-      apiKey: config.apiKey ?? getApiKey('NVIDIA_API_KEY'),
-    }, 'NVIDIA NIM');
-  }
-
-  // ── FPT Cloud AI Marketplace ───────────────────────────────────────────────
-  // FPT_BASE_URL is honoured because the marketplace documents a per-account
-  // endpoint, and agents.env.example tells users to set it — read here, or a
-  // non-default endpoint would list its models and then send every request to
-  // the shared one.
-  if (model.startsWith('fpt/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      // config.model, not the lower-cased `model` this function dispatches on:
-      // marketplace ids are mixed case (DeepSeek-V3, GPT-OSS-120B) and the
-      // gateway matches them exactly.
-      model: config.model.replace(/^fpt\//i, ''),
-      baseUrl: config.baseUrl
-        ?? process.env.FPT_BASE_URL?.trim().replace(/\/+$/, '')
-        ?? 'https://mkp-api.fptcloud.com/v1',
-      apiKey: config.apiKey ?? getApiKey('FPT_API_KEY'),
-    }, 'FPT Cloud AI');
-  }
-
-  // ── Hugging Face Inference Providers ──────────────────────────────────────
-  if (model.startsWith('huggingface/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^huggingface\//i, ''),
-      baseUrl: config.baseUrl ?? 'https://router.huggingface.co/v1',
-      apiKey: config.apiKey ?? getApiKey('HUGGINGFACE_API_KEY', 'HF_TOKEN'),
-    }, 'Hugging Face');
-  }
-
-  // ── Kimi / Moonshot ────────────────────────────────────────────────────────
-  if (model.startsWith('kimi/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^kimi\//i, ''),
-      baseUrl: config.baseUrl ?? getEnv('MOONSHOT_BASE_URL') ?? 'https://api.moonshot.ai/v1',
-      apiKey: config.apiKey ?? getApiKey('MOONSHOT_API_KEY', 'KIMI_API_KEY'),
-    }, 'Kimi');
-  }
-
-  // ── Qwen / DashScope ───────────────────────────────────────────────────────
-  if (model.startsWith('qwen/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^qwen\//i, ''),
-      baseUrl: config.baseUrl ?? getEnv('DASHSCOPE_BASE_URL', 'QWEN_BASE_URL') ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-      apiKey: config.apiKey ?? getApiKey('DASHSCOPE_API_KEY', 'QWEN_API_KEY'),
-    }, 'Qwen');
-  }
-
-  // ── Simple OpenAI-compatible vendors (one table row each) ─────────────────
-  // Prefix-routed like the branches above; default endpoint overridable via
-  // <X>_BASE_URL. Kept in a table because they differ only in name/URL/key.
-  const SIMPLE_VENDORS: Record<string, { name: string; baseUrl: string; baseUrlEnv: string; keyEnv: string }> = {
-    'minimax/':   { name: 'MiniMax',        baseUrl: 'https://api.minimax.io/v1',                    baseUrlEnv: 'MINIMAX_BASE_URL',   keyEnv: 'MINIMAX_API_KEY' },
-    'stepfun/':   { name: 'StepFun',        baseUrl: 'https://api.stepfun.com/v1',                   baseUrlEnv: 'STEPFUN_BASE_URL',   keyEnv: 'STEPFUN_API_KEY' },
-    'fireworks/': { name: 'Fireworks AI',   baseUrl: 'https://api.fireworks.ai/inference/v1',        baseUrlEnv: 'FIREWORKS_BASE_URL', keyEnv: 'FIREWORKS_API_KEY' },
-    'upstage/':   { name: 'Upstage',        baseUrl: 'https://api.upstage.ai/v1',                    baseUrlEnv: 'UPSTAGE_BASE_URL',   keyEnv: 'UPSTAGE_API_KEY' },
-    'arcee/':     { name: 'Arcee AI',       baseUrl: 'https://conductor.arcee.ai/v1',                baseUrlEnv: 'ARCEE_BASE_URL',     keyEnv: 'ARCEE_API_KEY' },
-    'tencent/':   { name: 'Tencent TokenHub', baseUrl: 'https://tokenhub.tencentmaas.com/v1',        baseUrlEnv: 'TENCENT_BASE_URL',   keyEnv: 'TENCENT_API_KEY' },
-    'gmi/':       { name: 'GMI Cloud',      baseUrl: 'https://api.gmi-serving.com/v1',               baseUrlEnv: 'GMI_BASE_URL',       keyEnv: 'GMI_API_KEY' },
-    'kilocode/':  { name: 'Kilo Code',      baseUrl: 'https://api.kilocode.ai/api/openrouter',       baseUrlEnv: 'KILOCODE_BASE_URL',  keyEnv: 'KILOCODE_API_KEY' },
-    'alibaba/':   { name: 'Alibaba Coding', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', baseUrlEnv: 'ALIBABA_BASE_URL', keyEnv: 'ALIBABA_API_KEY' },
-  };
-  for (const [prefix, v] of Object.entries(SIMPLE_VENDORS)) {
-    if (model.startsWith(prefix)) {
-      return new OpenAICompatibleProvider({
-        ...config,
-        model: config.model.slice(prefix.length),
-        baseUrl: config.baseUrl ?? getEnv(v.baseUrlEnv) ?? v.baseUrl,
-        apiKey: config.apiKey ?? getApiKey(v.keyEnv),
-      }, v.name);
-    }
-  }
-
-  // ── OpenRouter ─────────────────────────────────────────────────────────────
-  if (model.startsWith('openrouter/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^openrouter\//i, ''),
-      baseUrl: 'https://openrouter.ai/api/v1',
-      apiKey: config.apiKey ?? getApiKey('OPENROUTER_API_KEY'),
-    }, 'OpenRouter');
-  }
-
-  // ── Xiaomi MiMo ────────────────────────────────────────────────────────────
-  if (model.startsWith('mimo-') || model.startsWith('xiaomi/') || model.startsWith('mimo/')) {
-    const mimoModel = config.model.replace(/^(xiaomi|mimo)\//i, '');
-    const mimoKey = config.apiKey ?? getApiKey('XIAOMI_API_KEY');
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: mimoModel,
-      // Key-type aware default: tp- keys → Token Plan endpoint, sk- keys →
-      // pay-as-you-go api.xiaomimimo.com. A hardcoded token-plan URL used to
-      // send pay-as-you-go keys to the wrong host.
-      baseUrl: config.baseUrl ?? getEnv('XIAOMI_BASE_URL') ?? defaultXiaomiBaseUrl(mimoKey),
-      apiKey: mimoKey,
-    }, 'Xiaomi MiMo');
-  }
-
-  // ── Zhipu (Z.ai GLM) — two endpoints ───────────────────────────────────────
-  //   glm-* / zhipu/*   → General/International  https://api.z.ai/api/paas/v4
-  //   zhipu-coding/*    → Coding Plan            https://api.z.ai/api/coding/paas/v4
-  // ZHIPU_BASE_URL overrides either.
-  if (model.startsWith('glm-') || model.startsWith('zhipu/') || model.startsWith('zhipu-coding/')) {
-    const coding = model.startsWith('zhipu-coding/');
-    const glmModel = config.model.replace(/^zhipu(-coding)?\//i, '');
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: glmModel,
-      baseUrl: config.baseUrl
-        ?? getEnv('ZHIPU_BASE_URL')
-        ?? (coding ? ZHIPU_CODING_BASE_URL : ZHIPU_GENERAL_BASE_URL),
-      apiKey: config.apiKey ?? getApiKey('ZHIPU_API_KEY'),
-    }, 'Zhipu');
-  }
-
-  // ── xAI / Grok ─────────────────────────────────────────────────────────────
-  if (model.startsWith('grok-') || model.startsWith('xai/')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^xai\//i, ''),
-      baseUrl: 'https://api.x.ai/v1',
-      apiKey: config.apiKey ?? getApiKey('XAI_API_KEY'),
-    }, 'xAI');
-  }
-
-  // ── DeepSeek ──────────────────────────────────────────────────────────────
-  // Bare `deepseek-*` (e.g. "deepseek-v4-flash") is DeepSeek's own API model
-  // name, not just a routing shorthand — apiKeyEnvVarForModel and
-  // isModelConfigured above already recognize it unprefixed. This branch used
-  // to require the `deepseek/` slash prefix, so a caller resolving to the
-  // bare name (tiered-context.ts's resolveSummaryModel) fell through every
-  // branch to the OpenAI-compatible default and 401'd on a missing
-  // OPENAI_API_KEY instead of reaching DeepSeek.
-  if (model.startsWith('deepseek/') || model.startsWith('deepseek-')) {
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: config.model.replace(/^deepseek\//i, ''),
-      baseUrl: config.baseUrl ?? 'https://api.deepseek.com/v1',
-      apiKey: config.apiKey ?? getApiKey('DEEPSEEK_API_KEY'),
-    }, 'DeepSeek');
-  }
-
-  // ── Ollama (local) ─────────────────────────────────────────────────────────
-  if (model.startsWith('ollama/') || model.startsWith('ollama:')) {
-    const ollamaModel = config.model.replace(/^ollama[/:]/i, '');
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: ollamaModel,
-      baseUrl: config.baseUrl ?? localBaseUrl('OLLAMA_BASE_URL', 'http://localhost:11434/v1'),
-      apiKey: 'ollama',
-    }, 'Ollama');
-  }
-
-  // ── LM Studio / local OpenAI-compatible ───────────────────────────────────
-  if (model.startsWith('local/') || model.startsWith('lmstudio/')) {
-    const localModel = config.model.replace(/^(local|lmstudio)\//i, '');
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: localModel,
-      baseUrl: config.baseUrl ?? localBaseUrl('LMSTUDIO_BASE_URL', 'http://localhost:1234/v1'),
-      apiKey: 'lm-studio',
-    }, 'Local');
-  }
-
-  // ── Local profile (qwen2.5-coder:7b or similar, no API key) ─────────────
-  if (model.startsWith('local-profile/')) {
-    const localModel = config.model.replace(/^local-profile\//i, '');
-    return new OpenAICompatibleProvider({
-      ...config,
-      model: localModel,
-      baseUrl: config.baseUrl ?? 'http://localhost:11434/v1',
-      apiKey: 'ollama',
-    }, 'Local (Ollama)');
-  }
-
-  // ── OpenAI (default OpenAI-compatible fallback) ───────────────────────────
   // Guard the silent 401 path: an unrecognized model with no baseUrl and no
   // OpenAI key would be sent to api.openai.com and fail — tell the user what
   // routing prefix is missing instead. Ollama tags are the common culprit
@@ -679,13 +500,14 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'o4-mini',         name: 'o4-mini',         provider: 'OpenAI', speed: 'Reasoning · fastest' },
 
   // ── Google Gemini (offline fallback — prefer live fetch, see note above) ─
-  { id: 'gemini-2.5-pro',            name: 'Gemini 2.5 Pro',     provider: 'Google', speed: 'Powerful · long context' },
-  { id: 'gemini-2.5-flash',          name: 'Gemini 2.5 Flash',   provider: 'Google', speed: 'Fast · cheap' },
-  { id: 'gemini-2.0-pro',            name: 'Gemini 2.0 Pro',     provider: 'Google', speed: 'Powerful' },
-  { id: 'gemini-2.0-flash',          name: 'Gemini 2.0 Flash',   provider: 'Google', speed: 'Fast' },
-  { id: 'gemini-1.5-pro',            name: 'Gemini 1.5 Pro',     provider: 'Google', speed: 'Long context · legacy' },
-  { id: 'gemini-1.5-flash',          name: 'Gemini 1.5 Flash',   provider: 'Google', speed: 'Fast · legacy' },
-  { id: 'gemini-1.5-flash-8b',       name: 'Gemini 1.5 Flash-8B', provider: 'Google', speed: 'Fastest · tiny' },
+  { id: 'gemini-pro-latest',         name: 'Gemini Pro (latest)', provider: 'Google', speed: 'Powerful · long context' },
+  { id: 'gemini-3.6-flash',          name: 'Gemini 3.6 Flash',   provider: 'Google', speed: 'Fast · cheap' },
+  { id: 'gemini-3.5-flash',          name: 'Gemini 3.5 Flash',   provider: 'Google', speed: 'Fast' },
+  { id: 'gemini-3.5-flash-lite',     name: 'Gemini 3.5 Flash Lite', provider: 'Google', speed: 'Fastest · cheap' },
+  { id: 'gemini-3.1-flash-lite',     name: 'Gemini 3.1 Flash Lite', provider: 'Google', speed: 'Fast · cheap' },
+  { id: 'gemini-3-flash-preview',    name: 'Gemini 3 Flash (preview)', provider: 'Google', speed: 'Fast' },
+  // The 1.5/2.0/2.5 lines are retired for new keys: they are still returned by
+  // /models but generateContent answers 404 "no longer available to new users".
 
   // ── DeepSeek ─────────────────────────────────────────────────────────────
   { id: 'deepseek/deepseek-chat',     name: 'DeepSeek Chat (V3)', provider: 'DeepSeek', speed: 'Powerful · fast' },
@@ -758,8 +580,13 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'fireworks/accounts/fireworks/models/llama-v3p3-70b-instruct', name: 'Llama 3.3 70B (Fireworks)', provider: 'Fireworks AI', speed: 'Balanced · 128k' },
 
   // ── FPT Cloud AI ─────────────────────────────────────────────────────────
-  { id: 'fpt/DeepSeek-R1', name: 'DeepSeek R1 (FPT)', provider: 'FPT Cloud AI', speed: 'Reasoning · marketplace' },
-  { id: 'fpt/DeepSeek-V3', name: 'DeepSeek V3 (FPT)', provider: 'FPT Cloud AI', speed: 'Powerful · marketplace' },
+  { id: 'fpt/DeepSeek-V4-Flash', name: 'DeepSeek V4 Flash (FPT)', provider: 'FPT Cloud AI', speed: 'Fast · marketplace' },
+  { id: 'fpt/GLM-5.2', name: 'GLM-5.2 (FPT)', provider: 'FPT Cloud AI', speed: 'Powerful · marketplace' },
+
+  // ── BytePlus ModelArk ────────────────────────────────────────────────────
+  // Ark pins a dated build per id; the GA build is the stable one to default to.
+  { id: 'byteplus/deepseek-v4-flash-ga-260731', name: 'DeepSeek V4 Flash GA', provider: 'BytePlus ModelArk', speed: 'Fast · GA build' },
+  { id: 'byteplus/deepseek-v4-pro-ga-260813', name: 'DeepSeek V4 Pro GA', provider: 'BytePlus ModelArk', speed: 'Powerful · GA build' },
 
   // ── Upstage ──────────────────────────────────────────────────────────────
   { id: 'upstage/solar-pro',  name: 'Solar Pro',        provider: 'Upstage', speed: 'Powerful · 64k' },
@@ -838,7 +665,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
 
 const LIVE_PREFERRED_PROVIDERS = new Set([
   'Anthropic', 'OpenAI', 'Google', 'OpenRouter', 'DeepSeek', 'Qwen', 'MiniMax',
-  'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'Upstage',
+  'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'BytePlus ModelArk', 'Upstage',
   'Arcee AI', 'Tencent TokenHub', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
   'Xiaomi MiMo', 'Zhipu',
 ]);

@@ -272,8 +272,11 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?:
   'claude-haiku-4-5-20251001':  { in: 0.8, out: 4   },
   'gpt-4o':                     { in: 2.5, out: 10  },
   'gpt-4o-mini':                { in: 0.15,out: 0.6 },
-  'gemini-2.5-pro':             { in: 1.25,out: 10  },
-  'gemini-2.5-flash':           { in: 0.075,out: 0.3},
+  'gemini-pro-latest':          { in: 1.25,out: 10  },
+  'gemini-3.6-flash':           { in: 0.075,out: 0.3},
+  'gemini-3.5-flash':           { in: 0.075,out: 0.3},
+  'gemini-3.5-flash-lite':      { in: 0.05,out: 0.2 },
+  'gemini-3.1-flash-lite':      { in: 0.05,out: 0.2 },
   'grok-beta':                  { in: 5,   out: 15  },
   // Published rates, docs.z.ai/guides/overview/pricing (checked 2026-07-26).
   // 5.1/5.2 were previously carried at the GLM-5 rate on the assumption they
