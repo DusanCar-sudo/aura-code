@@ -22,6 +22,20 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
+      # poppler-utils supplies pdftotext and pdfinfo, which are how the render
+      # tests read a PDF back and prove its content is really there. Without
+      # them five tests fail: three in tools/document because the tool honestly
+      # reports "content not verified" and downgrades its blank-page detection,
+      # and two in design/templates that call the binaries directly and get
+      # ENOENT.
+      #
+      # Installed rather than skipped. Those tests exist to prove a blank render
+      # is CAUGHT, and a test that self-skips is indistinguishable from one that
+      # passes — skipping them would leave the suite green while the thing they
+      # guard went untested.
+      - name: Install PDF text extraction
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Install dependencies
         run: npm ci
 
