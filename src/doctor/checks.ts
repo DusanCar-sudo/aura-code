@@ -14,6 +14,7 @@ import type { Episode } from '../archimedes/types.js';
 import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
 import { getCompetenceReport } from '../archimedes/competence.js';
 import { loadProjectConfig } from '../config/project-config.js';
+import { fetchLatestVersion, isUpdateAvailable } from '../util/update-check.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -416,27 +417,23 @@ export function checkVersion(root: string, _offline?: boolean): Finding[] {
 
 /** Async latest-version check. Returns a Finding or null if it can't reach the API. */
 export async function checkLatestVersion(currentVersion: string): Promise<Finding | null> {
-  try {
-    const url = 'https://api.github.com/repos/milodule3-debug/aura-code/releases/latest';
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'aura-doctor' } });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const data = await res.json() as { tag_name?: string };
-    if (!data.tag_name) return null;
-    const latest = data.tag_name.replace(/^v/, '');
-    if (latest !== currentVersion) {
-      return {
-        category: 'version', name: 'latest version', severity: 'warn',
-        message: `Latest release is ${latest} — you are on ${currentVersion}.`,
-        fixable: true, fixDescription: 'Run npm install -g aura-code to update.',
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  // npm, not GitHub releases. Users install with `npm install -g aura-code`, so
+  // the registry is what "is there an update" means for them — and the GitHub
+  // URL this used to call was a stale mirror (milodule3-debug/aura-code, last
+  // release v0.10.3) that would have told everyone on 0.16.0 they were behind.
+  //
+  // The comparison is numeric too. It used to be `latest !== current`, which
+  // reports a *downgrade* as an update: with 0.15.5 published and 0.16.0 built
+  // locally — this repo's exact state while the publish workflow was blocked —
+  // it advised updating to an older version.
+  const latest = await fetchLatestVersion();
+  if (!latest) return null;
+  if (!isUpdateAvailable(currentVersion, latest)) return null;
+  return {
+    category: 'version', name: 'latest version', severity: 'warn',
+    message: `Latest release is ${latest} — you are on ${currentVersion}.`,
+    fixable: true, fixDescription: 'Run npm install -g aura-code to update.',
+  };
 }
 
 // ── 10. Memory pipeline ──────────────────────────────────────────────────────

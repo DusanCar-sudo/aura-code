@@ -86,6 +86,7 @@ import {
 } from './repl-session-commands.js';
 import { handleModeCommand } from './repl-mode-commands.js';
 import { handleWebCommand } from './repl-web-command.js';
+import { pendingUpdateNotice, refreshUpdateCacheInBackground } from '../util/update-check.js';
 import type { ChildProcess } from 'child_process';
 import { handleTurnCommand } from './repl-turn-commands.js';
 import { handleComputerCommand } from './repl-computer-commands.js';
@@ -1023,6 +1024,14 @@ async function main() {
       ...(activeChatId ? [`chat ${activeChatId}`] : []),
     ],
   });
+
+  // A newer release, if the last background check found one. Read from a cache
+  // file rather than fetched here: a version notice is the least important
+  // thing this program does, so it must never be the reason a prompt is slow
+  // to appear. The refresh below runs detached and is only ever seen next time.
+  const updateNotice = pendingUpdateNotice(pkg.version);
+  if (updateNotice) console.log(chalk.hex('#d4903a')(`  ↑ ${updateNotice}`));
+  refreshUpdateCacheInBackground();
 
   // You are running dist/, but you edit and test src/ — say so when they've
   // diverged, or an edit looks landed while the binary runs the old code.
