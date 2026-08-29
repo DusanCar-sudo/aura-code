@@ -23,6 +23,8 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'board.dragHint': 'Drag to move this task',
+  'board.linkDrag': 'Drag to the task that should follow this one',
   'board.urgent': 'Urgent',
   'board.attention': 'Needs me',
   'board.linkTo': 'Then run',
@@ -176,6 +178,8 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'board.dragHint': 'Превуците да померите задатак',
+  'board.linkDrag': 'Превуците до задатка који следи након овог',
   'board.urgent': 'Хитно',
   'board.attention': 'Треба ме',
   'board.linkTo': 'Затим покрени',
@@ -323,6 +327,8 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'board.dragHint': 'Faites glisser pour déplacer',
+  'board.linkDrag': 'Faites glisser vers la tâche qui doit suivre',
   'board.urgent': 'Urgent',
   'board.attention': 'J\'interviens',
   'board.linkTo': 'Puis lancer',
@@ -470,6 +476,8 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'board.dragHint': 'Trascina per spostare',
+  'board.linkDrag': 'Trascina verso l\'attività che deve seguire',
   'board.urgent': 'Urgente',
   'board.attention': 'Serve io',
   'board.linkTo': 'Poi esegui',
@@ -617,6 +625,8 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'board.dragHint': 'Arrastra para mover',
+  'board.linkDrag': 'Arrastra a la tarea que debe seguir a esta',
   'board.urgent': 'Urgente',
   'board.attention': 'Me necesita',
   'board.linkTo': 'Luego ejecuta',
@@ -764,6 +774,8 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'board.dragHint': 'اسحب لنقل المهمة',
+  'board.linkDrag': 'اسحب إلى المهمة التي تلي هذه',
   'board.urgent': 'عاجل',
   'board.attention': 'يحتاجني',
   'board.linkTo': 'ثم شغّل',
@@ -911,6 +923,8 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'board.dragHint': 'Перетащите, чтобы переместить',
+  'board.linkDrag': 'Перетащите к задаче, которая идёт следом',
   'board.urgent': 'Срочно',
   'board.attention': 'Нужен я',
   'board.linkTo': 'Затем запустить',

@@ -728,17 +728,83 @@ export class ProtocolHandler {
       attention: false,
     });
 
-    // A workflow link pulls the next task forward — but only when this one
-    // actually worked. Advancing the chain past a failure would march a
-    // sequence of tasks through a board on top of a step that did not happen,
-    // which is worse than stopping and being obvious about it.
-    if (done?.linkedTo && outcome.success) {
-      const next = after.tasks.find((t) => t.id === done.linkedTo);
-      if (next && next.column === 'planning') {
-        updateTask(after, next.id, { column: 'preparation' });
-      }
-    }
     this.boardCommit(root, after);
+
+    // The link is a workflow, so it runs the next task rather than tidying it
+    // into the next column and waiting for someone to press the button. Only
+    // on success: marching a chain past a step that did not happen is worse
+    // than stopping where it broke and being obvious about it.
+    if (done?.linkedTo && outcome.success) {
+      // `seen` carries through the whole chain. Without it a link back to an
+      // earlier task is an infinite workflow that spends real money until
+      // somebody notices.
+      await this.runLinked(root, done.linkedTo, chosen, new Set([id]));
+    }
+  }
+
+  /**
+   * Run the next task in a workflow chain.
+   *
+   * Separate from boardRun because it answers to nobody: there is no request
+   * open, so a failure here is reported on the tile and in the log rather than
+   * to a caller who has long since had their response.
+   */
+  private async runLinked(
+    root: string,
+    id: string,
+    permission: 'read-only' | 'normal' | 'auto' | undefined,
+    seen: Set<string>,
+  ): Promise<void> {
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const state = loadBoard(root);
+    const task = state.tasks.find((t) => t.id === id);
+    if (!task || task.column === 'execution') return;
+
+    const preset = AGENT_PRESETS[task.agent] ?? AGENT_PRESETS.aura;
+    const model = task.model || this.opts.defaultModel;
+    if (!model) return;
+
+    let context: ProjectContext;
+    try { context = await loadProjectContext(root); } catch { return; }
+
+    const sessionId = randomUUID();
+    const session: Session = {
+      id: sessionId,
+      name: task.title.slice(0, 60),
+      projectRoot: root,
+      model,
+      apiKey: this.opts.defaultApiKey,
+      baseUrl: this.opts.defaultBaseUrl,
+      context,
+      permissions: new PermissionSystem(effectivePermission(preset, permission)),
+      allowedTools: preset.allowedTools ?? null,
+      budget: new SessionBudget({}),
+      history: [],
+      createdAt: Date.now(),
+      activeTurn: null,
+      alwaysAllow: new Set(),
+    };
+    this.sessions.set(sessionId, session);
+
+    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false });
+    this.boardCommit(root, state);
+
+    const outcome = await this.runTurn(session, randomUUID(), taskPrompt(task));
+
+    const after = loadBoard(root);
+    const done = updateTask(after, id, {
+      column: 'finished',
+      result: outcome.summary,
+      failed: !outcome.success,
+      attention: false,
+    });
+    this.boardCommit(root, after);
+
+    if (done?.linkedTo && outcome.success) {
+      await this.runLinked(root, done.linkedTo, permission, seen);
+    }
   }
 
   private ok(id: string, result: Record<string, unknown>): void {

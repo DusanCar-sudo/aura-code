@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Cables } from './Cables';
 import {
   BOARD_COLUMNS, isOrderable, orderBetween, tasksIn,
   type BoardApi, type BoardColumn, type BoardTask,
@@ -33,14 +34,78 @@ export function Board({ board, busy, onRun, t }: {
   // time: two open inputs would leave the user guessing which one Enter lands
   // in.
   const [adding, setAdding] = useState<BoardColumn | null>(null);
-  /** The tile being dragged, so a drop knows what to move. */
-  const [dragging, setDragging] = useState<string | null>(null);
+  /**
+   * The tile being dragged, and where the pointer is.
+   *
+   * Pointer events rather than HTML5 drag-and-drop. The native API refuses to
+   * start a drag from several ordinary places (a <button>, which is most of a
+   * tile), does not fire at all in a window the browser considers unfocused,
+   * and gives no control over the drag image — it was reported as "I can't
+   * move the boxes" twice before this was replaced. Pointer events are what
+   * every kanban that works actually uses.
+   */
+  const [drag, setDrag] = useState<
+    { id: string; x: number; y: number; mode: 'move' | 'wire' } | null
+  >(null);
+  const dragging = drag?.mode === 'move' ? drag.id : null;
+  /** The tile a cable is being pulled from, if any. Separate from `dragging`
+   *  because dropping a cable links two tasks and dropping a tile moves one —
+   *  the same gesture on the same element meaning two things would be a coin
+   *  toss for the user. */
+  const wiring = drag?.mode === 'wire' ? drag.id : null;
+  const boardRef = useRef<HTMLDivElement | null>(null);
+
+  /** Where a drop at this point would land: the column, and the index in it. */
+  const targetAt = (x: number, y: number): { column: BoardColumn; at: number } | null => {
+    const el = document.elementFromPoint(x, y);
+    const col = el?.closest<HTMLElement>('.board-col');
+    const column = BOARD_COLUMNS.find((c) => col?.classList.contains(`board-col-${c}`));
+    if (!column) return null;
+
+    // Index by midpoint: above a tile's centre means before it. Anything below
+    // the last tile is the end of the column.
+    const tiles = [...(col?.querySelectorAll<HTMLElement>('.board-card') ?? [])]
+      .filter((t) => t.dataset.taskId !== dragging);
+    let at = tiles.length;
+    for (let i = 0; i < tiles.length; i++) {
+      const box = tiles[i].getBoundingClientRect();
+      if (y < box.top + box.height / 2) { at = i; break; }
+    }
+    return { column, at };
+  };
+
+  const endDrag = (x: number, y: number) => {
+    const held = drag;
+    setDrag(null);
+    if (!held) return;
+
+    if (held.mode === 'wire') {
+      // The cable runs from the tile it was pulled off to the one under the
+      // pointer: the source is what pulls that task in when it finishes.
+      const over = document.elementFromPoint(x, y)?.closest<HTMLElement>('.board-card');
+      const onto = over?.dataset.taskId;
+      if (onto && onto !== held.id) void board.update(held.id, { linkedTo: onto });
+      return;
+    }
+
+    const target = targetAt(x, y);
+    if (target) void drop(board, held.id, target.column, target.at);
+  };
 
   return (
     <div className="board-wrap">
       {board.error && <div className="board-bar"><span className="board-error">{board.error}</span></div>}
 
-      <div className="board">
+      <div
+        className={`board${drag ? ' board-dragging' : ''}`}
+        ref={boardRef}
+        onPointerMove={(e) => { if (drag) setDrag({ ...drag, x: e.clientX, y: e.clientY }); }}
+        onPointerUp={(e) => endDrag(e.clientX, e.clientY)}
+        // A pointer that leaves the window mid-drag must not leave the board
+        // stuck holding a tile that no longer follows it.
+        onPointerCancel={() => setDrag(null)}
+      >
+        <Cables tasks={board.tasks} container={boardRef} />
         {BOARD_COLUMNS.map((column) => {
           const cards = tasksIn(board.tasks, column);
           return (
@@ -66,15 +131,7 @@ export function Board({ board, busy, onRun, t }: {
                   +
                 </button>
               </header>
-              <div
-                className="board-col-cards"
-                onDragOver={(e) => { if (dragging) e.preventDefault(); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  // Dropping into the empty space below the tiles means "last".
-                  if (dragging) void drop(board, dragging, column, cards.length, setDragging);
-                }}
-              >
+              <div className="board-col-cards">
                 {adding === column && (
                   <NewJob
                     t={t}
@@ -92,8 +149,9 @@ export function Board({ board, busy, onRun, t }: {
                     onToggle={() => setEditing(editing === task.id ? null : task.id)}
                     onRun={onRun}
                     dragging={dragging}
-                    setDragging={setDragging}
-                    onDropAt={() => { if (dragging) void drop(board, dragging, column, at, setDragging); }}
+                    onGrab={(id, x, y) => setDrag({ id, x, y, mode: 'move' })}
+                    onWire={(id, x, y) => setDrag({ id, x, y, mode: 'wire' })}
+                    wiring={wiring}
                     t={t}
                   />
                 ))}
@@ -122,9 +180,7 @@ async function drop(
   id: string,
   column: BoardColumn,
   at: number,
-  setDragging: (v: string | null) => void,
 ): Promise<void> {
-  setDragging(null);
   const task = board.tasks.find((t) => t.id === id);
   if (!task) return;
 
@@ -257,7 +313,10 @@ function prevColumn(column: BoardColumn): BoardColumn | null {
   return at <= 0 ? null : BOARD_COLUMNS[at - 1];
 }
 
-function Tile({ task, board, busy, open, onToggle, onRun, dragging, setDragging, onDropAt, t }: {
+function Tile({
+  task, board, busy, open, onToggle, onRun,
+  dragging, onGrab, onWire, wiring, t,
+}: {
   task: BoardTask;
   board: BoardApi;
   busy: boolean;
@@ -265,8 +324,9 @@ function Tile({ task, board, busy, open, onToggle, onRun, dragging, setDragging,
   onToggle: () => void;
   onRun: (task: BoardTask) => void;
   dragging: string | null;
-  setDragging: (v: string | null) => void;
-  onDropAt: () => void;
+  onGrab: (id: string, x: number, y: number) => void;
+  onWire: (id: string, x: number, y: number) => void;
+  wiring: string | null;
   t: T;
 }) {
   const preset = board.presets.find((p) => p.id === task.agent);
@@ -284,6 +344,9 @@ function Tile({ task, board, busy, open, onToggle, onRun, dragging, setDragging,
     task.priority === 'urgent' ? 'board-card-urgent' : '',
     task.attention ? 'board-card-attention' : '',
     dragging === task.id ? 'board-card-dragging' : '',
+    // Somewhere to drop a cable that is currently being pulled — but not onto
+    // itself, which would be a task that runs itself for ever.
+    wiring && wiring !== task.id ? 'board-card-wirable' : '',
   ].filter(Boolean).join(' ');
 
   const linked = task.linkedTo ? board.tasks.find((x) => x.id === task.linkedTo) : undefined;
@@ -291,18 +354,52 @@ function Tile({ task, board, busy, open, onToggle, onRun, dragging, setDragging,
   return (
     <article
       className={classes}
-      // The whole tile is the drag handle. A dedicated grip would be another
-      // small target on a card that already has several.
-      draggable
-      onDragStart={(e) => { setDragging(task.id); e.dataTransfer.effectAllowed = 'move'; }}
-      onDragEnd={() => setDragging(null)}
-      onDragOver={(e) => { if (dragging && dragging !== task.id) e.preventDefault(); }}
-      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); onDropAt(); }}
+      data-task-id={task.id}
     >
+      {/* The drag handle is its own element, and has to be. The whole tile was
+          draggable at first, but the face below it is a <button> covering most
+          of the card, and a browser will not start a drag from a button — so
+          the gesture was swallowed almost everywhere the user would grab. */}
+      <span
+        className="board-grip"
+        title={t('board.dragHint')}
+        aria-label={t('board.dragHint')}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // Capture on the board, not the grip: the pointer spends the whole
+          // drag over other elements, and without capture the move events stop
+          // arriving the moment it leaves this 14px span.
+          onGrab(task.id, e.clientX, e.clientY);
+        }}
+      >
+        ⠿
+      </span>
+
       <button type="button" className="board-card-face" onClick={onToggle} aria-expanded={open}>
         <span className="board-card-title">{task.title}</span>
         <span className="board-card-agent">{preset?.label ?? task.agent}</span>
       </button>
+
+      {/* The connector port. Cables attach here, and the overlay measures this
+          element to know where to draw — hence data-task-port. */}
+      <span
+        className={`board-port${task.linkedTo ? ' board-port-wired' : ''}`}
+        data-task-port={task.id}
+        title={t('board.linkDrag')}
+        onPointerDown={(e) => {
+          // Wiring, not moving — a separate gesture from the grip.
+          e.preventDefault();
+          e.stopPropagation();
+          onWire(task.id, e.clientX, e.clientY);
+        }}
+        onClick={(e) => {
+          // Clicking a wired port unhooks it — the cable has to be removable
+          // by the thing that draws it, not only from a dropdown.
+          e.stopPropagation();
+          if (task.linkedTo) void board.update(task.id, { linkedTo: '' });
+        }}
+      />
 
       {linked && (
         <div className="board-card-link" title={t('board.linkHint')}>

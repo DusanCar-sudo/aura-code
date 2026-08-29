@@ -946,8 +946,10 @@
   .board-card-attention { animation: none; border-inline-start-color: var(--warn); }
 }
 
-.board-card[draggable='true'] { cursor: grab; }
-.board-card-dragging { opacity: 0.45; cursor: grabbing; }
+.board-card-dragging { opacity: 0.4; }
+/* While a tile is being carried, the columns must not fight the pointer for
+   it — a text selection starting mid-drag makes the whole board feel broken. */
+.board-dragging { user-select: none; cursor: grabbing; }
 
 /* What this tile pulls in when it finishes. */
 .board-card-link {
@@ -1117,3 +1119,88 @@
   .board { padding: 10px; gap: 8px; }
   .board-col { flex-basis: 200px; }
 }
+
+/* ── Workflow cables ───────────────────────────────────────────────────────
+   The link between two tiles, drawn as something that hangs. A straight line
+   would say the same thing and read as a border; slack makes it obviously a
+   connection between two objects, and makes it move when a tile does. */
+
+.board { position: relative; }
+
+.board-cables {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Above the columns so a cable is never clipped by one, and transparent to
+     the mouse so it cannot swallow a click meant for a tile underneath. */
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.cable-line {
+  fill: none;
+  stroke: var(--terracotta);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.cable-glow {
+  fill: none;
+  stroke: var(--terracotta);
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.16;
+}
+.cable-bead { fill: var(--terracotta); opacity: 0.9; }
+.cable-urgent .cable-line, .cable-urgent .cable-bead { stroke: var(--err); fill: var(--err); }
+.cable-urgent .cable-glow { stroke: var(--err); }
+
+/* The port a cable is pulled from. Sits on the tile's trailing edge, where a
+   connector belongs on a node. */
+.board-port {
+  position: absolute;
+  inset-inline-end: -6px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--panel-raised);
+  cursor: crosshair;
+  z-index: 3;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+.board-card { position: relative; }
+.board-port:hover { transform: scale(1.35); border-color: var(--terracotta); }
+.board-port-wired {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+}
+/* While a cable is being pulled, every tile that could receive it says so. */
+.board-card-wirable {
+  outline: 1px dashed color-mix(in srgb, var(--terracotta) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* The drag handle. Its own element because the tile's face is a button, and a
+   browser will not begin a drag from one — with the whole card draggable the
+   gesture was swallowed almost everywhere a person would actually grab it. */
+.board-grip {
+  position: absolute;
+  inset-inline-start: 2px;
+  top: 7px;
+  /* A real target, not a glyph: this is the one control on the tile that has
+     to be grabbed accurately. */
+  padding: 4px 5px;
+  font-size: var(--fs-small);
+  line-height: 1;
+  color: var(--faint);
+  cursor: grab;
+  user-select: none;
+  z-index: 3;
+}
+.board-grip:hover { color: var(--terracotta); }
+.board-grip:active { cursor: grabbing; }
+/* Room for the grip, so it never sits on top of the title. */
+.board-card-face { padding-inline-start: 22px; }
