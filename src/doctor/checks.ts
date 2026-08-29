@@ -634,7 +634,7 @@ export const ALL_CHECKS: Array<{ category: Category; run: (root: string, offline
  * package to install rather than the symptom, because "No module named evdev"
  * is not something a user can act on.
  */
-export function checkComputerUse(root: string): Finding[] {
+export function checkComputerUse(root: string, platform: NodeJS.Platform = process.platform): Finding[] {
   const out: Finding[] = [];
   const add = (name: string, ok: boolean, okMsg: string, badMsg: string) =>
     out.push({
@@ -664,10 +664,15 @@ export function checkComputerUse(root: string): Finding[] {
     });
   }
 
-  if (process.platform !== 'linux') {
+  if (platform === 'darwin') {
+    out.push(...checkComputerUseMacOS());
+    return out;
+  }
+
+  if (platform !== 'linux') {
     out.push({
       category: 'computer', name: 'platform', severity: 'warn',
-      message: `Computer use currently supports Linux only (this is ${process.platform}).`,
+      message: `Computer use currently supports Linux only (this is ${platform}).`,
       fixable: false,
     });
     return out;
@@ -737,6 +742,112 @@ export function checkComputerUse(root: string): Finding[] {
       fixable: false,
     });
   }
+
+  return out;
+}
+
+/**
+ * Readiness preflight for computer use on macOS.
+ *
+ * **Computer use is not implemented on macOS yet.** This does not pretend
+ * otherwise, and the `platform` finding says so first. What it does is answer
+ * the question that has to be answered on real hardware before the backend can
+ * be written at all: *would this Mac be able to run it?*
+ *
+ * That inversion is the point. The Linux work established the rule the hard
+ * way — three of four input paths accepted every call and silently did
+ * nothing, so an exit code proved nothing and only an end-to-end capture-and-
+ * click did. macOS has the same shape of failure, in a worse form: when TCC
+ * permission is missing, the APIs do not error. `CGWindowListCreateImage`
+ * returns a picture of the desktop wallpaper with every window quietly
+ * omitted, and posted `CGEvent`s are accepted and dropped. A backend written
+ * against that, from a machine that cannot run it, would look finished and be
+ * worthless.
+ *
+ * So the probes below check the two permissions and the two runtime pieces
+ * that decide the outcome, and every one of them fails toward "not ready".
+ *
+ * A caveat stated rather than buried: these probes are written from Apple's
+ * documented APIs and have **not been run on a Mac**. If one is wrong it will
+ * mis-report readiness — which is why nothing here enables anything, and why
+ * the platform finding refuses on its own terms regardless of what the rest
+ * say.
+ */
+export function checkComputerUseMacOS(): Finding[] {
+  const out: Finding[] = [];
+  const add = (name: string, ok: boolean, okMsg: string, badMsg: string) =>
+    out.push({
+      category: 'computer', name,
+      severity: ok ? 'ok' : 'warn',
+      message: ok ? okMsg : badMsg,
+      fixable: false,
+    });
+
+  out.push({
+    category: 'computer', name: 'platform', severity: 'warn',
+    message: 'Computer use is not implemented on macOS yet — Linux only today. '
+      + 'The checks below report whether this Mac would be ready for it, so the backend '
+      + 'can be built against a machine that has actually been measured.',
+    fixable: false,
+  });
+
+  const python = process.env.AURA_PYTHON ?? 'python3';
+  const py = (code: string) => {
+    try {
+      execSync(`${python} -c ${JSON.stringify(code)}`, { stdio: 'pipe', timeout: 10_000 });
+      return true;
+    } catch { return false; }
+  };
+  const haveBin = (bin: string) => {
+    try { execSync(`command -v ${bin}`, { stdio: 'pipe', timeout: 5_000 }); return true; }
+    catch { return false; }
+  };
+
+  const hasPython = haveBin(python);
+  add('python3', hasPython,
+    `${python} found.`,
+    `${python} not found — install Python 3 (brew install python). Set AURA_PYTHON if it is elsewhere.`);
+  if (!hasPython) return out;
+
+  // Quartz is the whole macOS surface: CGDisplay for capture, CGEvent for
+  // input. Without pyobjc there is nothing to build a sidecar on.
+  add('pyobjc (Quartz)', py('import Quartz'),
+    'pyobjc Quartz bindings available (capture and input).',
+    'Missing pyobjc — install it (pip install pyobjc-framework-Quartz). '
+    + 'Without it neither screen capture nor pointer control can work.');
+
+  // Screen Recording. Denied, capture returns the desktop with every window
+  // omitted and no error at all — the silent failure this preflight exists for.
+  add('Screen Recording permission',
+    py('import Quartz; raise SystemExit(0 if Quartz.CGPreflightScreenCaptureAccess() else 1)'),
+    'Screen Recording is granted — capture will include windows.',
+    'Screen Recording is not granted to this terminal. Grant it in System Settings ▸ Privacy & '
+    + 'Security ▸ Screen Recording, then restart the terminal. Until then a capture returns the '
+    + 'wallpaper with every window silently missing, and reports no error.');
+
+  // Accessibility. Denied, CGEventPost is accepted and dropped — the exact
+  // failure mode ydotool had on Linux, where the exit code said success.
+  add('Accessibility permission',
+    py('from ApplicationServices import AXIsProcessTrusted; raise SystemExit(0 if AXIsProcessTrusted() else 1)'),
+    'Accessibility is granted — synthetic input will be delivered.',
+    'Accessibility is not granted to this terminal. Grant it in System Settings ▸ Privacy & '
+    + 'Security ▸ Accessibility, then restart the terminal. Until then clicks and keystrokes are '
+    + 'accepted and silently discarded — the call succeeds and nothing happens.');
+
+  // Both permissions attach to the *host application*, not to Aura, and that
+  // catches people out: granting it to a binary called "aura" is not a thing
+  // the system offers.
+  out.push({
+    category: 'computer', name: 'permission scope', severity: 'warn',
+    message: 'macOS grants these to the application that launched the process — Terminal, iTerm, '
+      + 'VS Code — not to Aura. Grant them to the terminal you run Aura from, and re-grant if you '
+      + 'switch terminals.',
+    fixable: false,
+  });
+
+  add('screencapture', haveBin('screencapture'),
+    'screencapture present (fallback capture path).',
+    'screencapture not found — unexpected on macOS, it ships with the OS.');
 
   return out;
 }
