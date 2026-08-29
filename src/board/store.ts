@@ -135,6 +135,9 @@ export function newTaskId(): string {
 
 export interface TaskPatch {
   attachments?: BoardAttachment[];
+  priority?: 'normal' | 'urgent';
+  attention?: boolean;
+  linkedTo?: string;
   title?: string;
   notes?: string;
   column?: BoardColumn;
@@ -197,6 +200,11 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   if (patch.failed !== undefined) task.failed = patch.failed;
   if (patch.order !== undefined) task.order = patch.order;
   if (patch.attachments !== undefined) task.attachments = patch.attachments;
+  if (patch.priority !== undefined) task.priority = patch.priority;
+  if (patch.attention !== undefined) task.attention = patch.attention;
+  // An empty string clears the link, so a connector can be removed as easily
+  // as it was made.
+  if (patch.linkedTo !== undefined) task.linkedTo = patch.linkedTo || undefined;
   task.updatedAt = new Date().toISOString();
   return task;
 }
@@ -235,11 +243,38 @@ export function reclaimStrandedTasks(state: BoardState): number {
   return found;
 }
 
-/** Tasks of one column, in display order. */
+/**
+ * Tasks of one column, in display order.
+ *
+ * The first three columns are ordered by `order`, which the operator sets by
+ * moving a tile: where something sits in a plan is a judgement, and the board
+ * should keep it.
+ *
+ * `finished` is different on purpose. It is a record of what happened, and the
+ * order things happened in is not the operator's to arrange — so it is sorted
+ * by completion, newest last, and dragging within it does nothing.
+ */
 export function tasksIn(state: BoardState, column: BoardColumn): BoardTask[] {
-  return state.tasks
-    .filter((t) => t.column === column)
-    .sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt));
+  const of = state.tasks.filter((t) => t.column === column);
+  if (column === 'finished') {
+    return of.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  }
+  return of.sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * The order value that puts a task between two neighbours.
+ *
+ * Averaging is why `addTask` spaces orders by 1000: a tile can be dropped
+ * between any two others without renumbering the column, which would be more
+ * code and more chances to lose one. When the gap closes to nothing the
+ * caller renumbers, which is rare enough to be worth the simplicity.
+ */
+export function orderBetween(before: BoardTask | undefined, after: BoardTask | undefined): number {
+  if (!before && !after) return 1000;
+  if (!before) return after!.order - 1000;
+  if (!after) return before.order + 1000;
+  return (before.order + after.order) / 2;
 }
 
 /**

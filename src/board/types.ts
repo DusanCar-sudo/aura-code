@@ -75,6 +75,25 @@ export interface BoardTask {
   failed?: boolean;
   /** Files and images the agent should look at. */
   attachments?: BoardAttachment[];
+  /** 'urgent' paints the tile red. Priority is the operator's judgement, not
+   *  something inferred — nothing here decides for them what is urgent. */
+  priority?: 'normal' | 'urgent';
+  /**
+   * The task is waiting on a person.
+   *
+   * Set when a run stops for an approval, and clearable by hand. It is a
+   * separate flag from `failed` because "it needs you" and "it went wrong" ask
+   * for different things, and a board that renders them the same trains people
+   * to ignore both.
+   */
+  attention?: boolean;
+  /**
+   * The task this one pulls in when it finishes — a workflow, one link at a
+   * time. Chains rather than a graph: a list of tasks that follow one another
+   * is what people actually build, and it cannot deadlock the way arbitrary
+   * dependencies can.
+   */
+  linkedTo?: string;
   /** Ordering within a column. Sparse, so a move never rewrites its neighbours. */
   order: number;
   createdAt: string;

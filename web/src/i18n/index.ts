@@ -23,6 +23,11 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'board.urgent': 'Urgent',
+  'board.attention': 'Needs me',
+  'board.linkTo': 'Then run',
+  'board.linkNone': 'nothing',
+  'board.linkHint': 'Pulled in when this task finishes',
   'board.files': 'Files',
   'board.filesAdd': 'Add files or images',
   'board.filesBusy': 'Uploading…',
@@ -171,6 +176,11 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'board.urgent': 'Хитно',
+  'board.attention': 'Треба ме',
+  'board.linkTo': 'Затим покрени',
+  'board.linkNone': 'ништа',
+  'board.linkHint': 'Повлачи се када овај задатак заврши',
   'board.files': 'Датотеке',
   'board.filesAdd': 'Додај датотеке или слике',
   'board.filesBusy': 'Отпремање…',
@@ -313,6 +323,11 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'board.urgent': 'Urgent',
+  'board.attention': 'J\'interviens',
+  'board.linkTo': 'Puis lancer',
+  'board.linkNone': 'rien',
+  'board.linkHint': 'Tirée quand cette tâche se termine',
   'board.files': 'Fichiers',
   'board.filesAdd': 'Ajouter des fichiers ou des images',
   'board.filesBusy': 'Envoi…',
@@ -455,6 +470,11 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'board.urgent': 'Urgente',
+  'board.attention': 'Serve io',
+  'board.linkTo': 'Poi esegui',
+  'board.linkNone': 'niente',
+  'board.linkHint': 'Richiamata quando questa attività finisce',
   'board.files': 'File',
   'board.filesAdd': 'Aggiungi file o immagini',
   'board.filesBusy': 'Caricamento…',
@@ -597,6 +617,11 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'board.urgent': 'Urgente',
+  'board.attention': 'Me necesita',
+  'board.linkTo': 'Luego ejecuta',
+  'board.linkNone': 'nada',
+  'board.linkHint': 'Se activa cuando esta tarea termina',
   'board.files': 'Archivos',
   'board.filesAdd': 'Añadir archivos o imágenes',
   'board.filesBusy': 'Subiendo…',
@@ -739,6 +764,11 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'board.urgent': 'عاجل',
+  'board.attention': 'يحتاجني',
+  'board.linkTo': 'ثم شغّل',
+  'board.linkNone': 'لا شيء',
+  'board.linkHint': 'تُسحب عند انتهاء هذه المهمة',
   'board.files': 'الملفات',
   'board.filesAdd': 'إضافة ملفات أو صور',
   'board.filesBusy': 'جارٍ الرفع…',
@@ -881,6 +911,11 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'board.urgent': 'Срочно',
+  'board.attention': 'Нужен я',
+  'board.linkTo': 'Затем запустить',
+  'board.linkNone': 'ничего',
+  'board.linkHint': 'Подтягивается по завершении этой задачи',
   'board.files': 'Файлы',
   'board.filesAdd': 'Добавить файлы или изображения',
   'board.filesBusy': 'Загрузка…',

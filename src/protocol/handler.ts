@@ -606,7 +606,15 @@ export class ProtocolHandler {
     // overwrite a stored value with undefined, or moving a tile would erase
     // its notes.
     const patch: Record<string, unknown> = {};
-    for (const key of ['title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result', 'failed', 'order']) {
+    // Every field a client may set. It is an allowlist so the wire cannot
+    // reach anything the board did not mean to expose — but a field added to
+    // BoardTask and forgotten here is dropped in silence, which is how urgent,
+    // attention and the workflow link all appeared to save and did not.
+    // TaskPatch is the list to keep this in step with.
+    for (const key of [
+      'title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result',
+      'failed', 'order', 'priority', 'attention', 'linkedTo',
+    ]) {
       if (p[key] !== undefined) patch[key] = p[key];
     }
     const task = updateTask(state, id, patch);
@@ -713,11 +721,23 @@ export class ProtocolHandler {
     // Re-read rather than mutating the copy captured above: minutes have
     // passed, and the user may have edited the tile while it ran.
     const after = loadBoard(root);
-    updateTask(after, id, {
+    const done = updateTask(after, id, {
       column: 'finished',
       result: outcome.summary,
       failed: !outcome.success,
+      attention: false,
     });
+
+    // A workflow link pulls the next task forward — but only when this one
+    // actually worked. Advancing the chain past a failure would march a
+    // sequence of tasks through a board on top of a step that did not happen,
+    // which is worse than stopping and being obvious about it.
+    if (done?.linkedTo && outcome.success) {
+      const next = after.tasks.find((t) => t.id === done.linkedTo);
+      if (next && next.column === 'planning') {
+        updateTask(after, next.id, { column: 'preparation' });
+      }
+    }
     this.boardCommit(root, after);
   }
 

@@ -41,6 +41,9 @@ export interface BoardTask {
   result?: string;
   failed?: boolean;
   attachments?: BoardAttachment[];
+  priority?: 'normal' | 'urgent';
+  attention?: boolean;
+  linkedTo?: string;
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -183,9 +186,28 @@ export function useBoard(
   }), [tasks, agents, presets, error, refresh, applyChanged, add, update, remove, attach]);
 }
 
-/** Tasks of one column, in display order. */
+/**
+ * Tasks of one column, in display order.
+ *
+ * The first three keep the arrangement the operator dragged them into.
+ * `finished` is a record of what happened and is ordered by when — that is not
+ * theirs to rearrange, so dropping into it does nothing.
+ */
 export function tasksIn(tasks: BoardTask[], column: BoardColumn): BoardTask[] {
-  return tasks
-    .filter((t) => t.column === column)
-    .sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt));
+  const of = tasks.filter((t) => t.column === column);
+  if (column === 'finished') return of.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  return of.sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Column order is fixed only where the record must be. */
+export function isOrderable(column: BoardColumn): boolean {
+  return column !== 'finished';
+}
+
+/** The order value that drops a task between two neighbours. */
+export function orderBetween(before?: BoardTask, after?: BoardTask): number {
+  if (!before && !after) return 1000;
+  if (!before) return after!.order - 1000;
+  if (!after) return before.order + 1000;
+  return (before.order + after.order) / 2;
 }

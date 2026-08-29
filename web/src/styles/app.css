@@ -828,6 +828,18 @@
   align-items: stretch;
 }
 
+/* Execution is the column where something is actually happening, so it is the
+   one that reads differently at a glance. Warm rather than loud: a whole column
+   in alarm colours competes with the per-tile states that carry real meaning. */
+.board-col-execution {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  background: color-mix(in srgb, var(--warn) 7%, var(--line-soft));
+}
+.board-col-execution .board-col-head {
+  border-bottom-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+}
+.board-col-execution .board-col-title { color: var(--warn); }
+
 .board-col {
   /* Shrinkable, so all four stages fit on a normal window at once — a Finished
      column parked off the right edge defeats the point. Below ~900px they stop
@@ -858,11 +870,15 @@
 }
 /* The + that adds a job straight into this column. */
 .board-add {
+  /* Sized as a real target rather than a glyph. At 11px in a header row it was
+     a hit area smaller than the cursor that had to find it. */
+  min-width: 26px;
+  height: 26px;
   padding: 0 6px;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-dim);
-  font-size: var(--fs-body);
+  font-size: var(--fs-title);
   line-height: 1;
 }
 .board-add:hover { background: var(--panel-raised); color: var(--terracotta); }
@@ -891,8 +907,71 @@
   border-inline-start: 2px solid var(--faint);
   border-radius: var(--radius-sm);
 }
-.board-card-running { border-inline-start-color: var(--warn); }
+/* A light lift, so a tile reads as an object on the column rather than a patch
+   of a different colour. Kept subtle: every tile glowing equally is the same as
+   none of them glowing. */
+.board-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+.board-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36); }
+
+.board-card-running {
+  border-inline-start-color: var(--warn);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--warn) 30%, transparent);
+}
 .board-card-failed  { border-inline-start-color: var(--err); }
+
+/* Urgent is the operator's own judgement, so it is the loudest thing on the
+   board: the whole tile, not a corner badge. */
+.board-card-urgent {
+  border-color: color-mix(in srgb, var(--err) 55%, var(--line));
+  border-inline-start-color: var(--err);
+  background: color-mix(in srgb, var(--err) 12%, var(--panel-bg));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--err) 28%, transparent);
+}
+
+/* Waiting on a person. It alternates rather than pulsing one colour, because a
+   single-colour pulse reads as "busy" — which is the opposite of what this
+   means. Held to a slow 1.6s: anything faster is an irritation people learn to
+   look away from, and this is the one state that must not be ignored. */
+.board-card-attention { animation: board-attention 1.6s ease-in-out infinite; }
+@keyframes board-attention {
+  0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--warn) 55%, transparent); border-inline-start-color: var(--warn); }
+  50%      { box-shadow: 0 0 12px color-mix(in srgb, #5b8dd6 55%, transparent);     border-inline-start-color: #5b8dd6; }
+}
+/* Respect a stated preference not to see motion — the colour change alone
+   still distinguishes the state. */
+@media (prefers-reduced-motion: reduce) {
+  .board-card-attention { animation: none; border-inline-start-color: var(--warn); }
+}
+
+.board-card[draggable='true'] { cursor: grab; }
+.board-card-dragging { opacity: 0.45; cursor: grabbing; }
+
+/* What this tile pulls in when it finishes. */
+.board-card-link {
+  padding: 0 10px 6px;
+  font-size: var(--fs-micro);
+  color: var(--terracotta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-flags { display: flex; gap: 6px; }
+.board-flag {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--fs-micro);
+}
+.board-flag:hover { color: var(--text); }
+.board-flag-on { border-color: currentColor; }
+.board-flag-urgent { color: var(--err); }
+.board-flag-attention { color: var(--warn); }
 
 /* The whole face is the disclosure control, so the hit target is the tile
    rather than a chevron nobody can hit on a touchscreen. */
@@ -999,11 +1078,11 @@
 
 .board-attach {
   align-self: flex-start;
-  padding: 4px 9px;
+  padding: 7px 12px;
   border-radius: var(--radius-sm);
   background: var(--panel-raised);
   color: var(--text-dim);
-  font-size: var(--fs-micro);
+  font-size: var(--fs-small);
 }
 .board-attach:hover { color: var(--text); }
 .board-attach:disabled { opacity: 0.5; cursor: progress; }

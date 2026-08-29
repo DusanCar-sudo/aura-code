@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  BOARD_COLUMNS, tasksIn,
+  BOARD_COLUMNS, isOrderable, orderBetween, tasksIn,
   type BoardApi, type BoardColumn, type BoardTask,
 } from '../hooks/useBoard';
 
@@ -33,6 +33,8 @@ export function Board({ board, busy, onRun, t }: {
   // time: two open inputs would leave the user guessing which one Enter lands
   // in.
   const [adding, setAdding] = useState<BoardColumn | null>(null);
+  /** The tile being dragged, so a drop knows what to move. */
+  const [dragging, setDragging] = useState<string | null>(null);
 
   return (
     <div className="board-wrap">
@@ -42,7 +44,11 @@ export function Board({ board, busy, onRun, t }: {
         {BOARD_COLUMNS.map((column) => {
           const cards = tasksIn(board.tasks, column);
           return (
-            <section className="board-col" key={column} aria-label={t(`board.col.${column}`)}>
+            <section
+              className={`board-col board-col-${column}`}
+              key={column}
+              aria-label={t(`board.col.${column}`)}
+            >
               <header className="board-col-head">
                 <h2 className="board-col-title">{t(`board.col.${column}`)}</h2>
                 <span className="board-col-count">{cards.length}</span>
@@ -60,7 +66,15 @@ export function Board({ board, busy, onRun, t }: {
                   +
                 </button>
               </header>
-              <div className="board-col-cards">
+              <div
+                className="board-col-cards"
+                onDragOver={(e) => { if (dragging) e.preventDefault(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  // Dropping into the empty space below the tiles means "last".
+                  if (dragging) void drop(board, dragging, column, cards.length, setDragging);
+                }}
+              >
                 {adding === column && (
                   <NewJob
                     t={t}
@@ -68,7 +82,7 @@ export function Board({ board, busy, onRun, t }: {
                     onAdd={(title) => { void board.add({ title, column }); setAdding(null); }}
                   />
                 )}
-                {cards.map((task) => (
+                {cards.map((task, at) => (
                   <Tile
                     key={task.id}
                     task={task}
@@ -77,6 +91,9 @@ export function Board({ board, busy, onRun, t }: {
                     open={editing === task.id}
                     onToggle={() => setEditing(editing === task.id ? null : task.id)}
                     onRun={onRun}
+                    dragging={dragging}
+                    setDragging={setDragging}
+                    onDropAt={() => { if (dragging) void drop(board, dragging, column, at, setDragging); }}
                     t={t}
                   />
                 ))}
@@ -90,6 +107,38 @@ export function Board({ board, busy, onRun, t }: {
       </div>
     </div>
   );
+}
+
+/**
+ * Move a dragged tile to a column, at a position.
+ *
+ * Position is only honoured where it means something: `finished` is a record
+ * of what happened, ordered by when, so a drop there moves the tile into the
+ * column and leaves the sequence alone rather than pretending the arrangement
+ * was kept.
+ */
+async function drop(
+  board: BoardApi,
+  id: string,
+  column: BoardColumn,
+  at: number,
+  setDragging: (v: string | null) => void,
+): Promise<void> {
+  setDragging(null);
+  const task = board.tasks.find((t) => t.id === id);
+  if (!task) return;
+
+  if (!isOrderable(column)) {
+    if (task.column !== column) await board.update(id, { column });
+    return;
+  }
+
+  // Neighbours as the column will look *without* the tile being moved, or a
+  // tile dropped one place down from where it already is lands back where it
+  // started, and the drag appears to have done nothing.
+  const others = tasksIn(board.tasks, column).filter((t) => t.id !== id);
+  const order = orderBetween(others[at - 1], others[at]);
+  await board.update(id, { column, order });
 }
 
 /**
@@ -208,13 +257,16 @@ function prevColumn(column: BoardColumn): BoardColumn | null {
   return at <= 0 ? null : BOARD_COLUMNS[at - 1];
 }
 
-function Tile({ task, board, busy, open, onToggle, onRun, t }: {
+function Tile({ task, board, busy, open, onToggle, onRun, dragging, setDragging, onDropAt, t }: {
   task: BoardTask;
   board: BoardApi;
   busy: boolean;
   open: boolean;
   onToggle: () => void;
   onRun: (task: BoardTask) => void;
+  dragging: string | null;
+  setDragging: (v: string | null) => void;
+  onDropAt: () => void;
   t: T;
 }) {
   const preset = board.presets.find((p) => p.id === task.agent);
@@ -225,12 +277,38 @@ function Tile({ task, board, busy, open, onToggle, onRun, t }: {
   // control disabled while another task is running.
   const advanceRuns = task.column === 'preparation';
 
+  const classes = [
+    'board-card',
+    task.failed ? 'board-card-failed' : '',
+    task.column === 'execution' ? 'board-card-running' : '',
+    task.priority === 'urgent' ? 'board-card-urgent' : '',
+    task.attention ? 'board-card-attention' : '',
+    dragging === task.id ? 'board-card-dragging' : '',
+  ].filter(Boolean).join(' ');
+
+  const linked = task.linkedTo ? board.tasks.find((x) => x.id === task.linkedTo) : undefined;
+
   return (
-    <article className={`board-card${task.failed ? ' board-card-failed' : ''}${task.column === 'execution' ? ' board-card-running' : ''}`}>
+    <article
+      className={classes}
+      // The whole tile is the drag handle. A dedicated grip would be another
+      // small target on a card that already has several.
+      draggable
+      onDragStart={(e) => { setDragging(task.id); e.dataTransfer.effectAllowed = 'move'; }}
+      onDragEnd={() => setDragging(null)}
+      onDragOver={(e) => { if (dragging && dragging !== task.id) e.preventDefault(); }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); onDropAt(); }}
+    >
       <button type="button" className="board-card-face" onClick={onToggle} aria-expanded={open}>
         <span className="board-card-title">{task.title}</span>
         <span className="board-card-agent">{preset?.label ?? task.agent}</span>
       </button>
+
+      {linked && (
+        <div className="board-card-link" title={t('board.linkHint')}>
+          ⤷ {linked.title}
+        </div>
+      )}
 
       {task.notes && !open && <div className="board-card-detail">{task.notes}</div>}
 
@@ -308,6 +386,42 @@ function Tile({ task, board, busy, open, onToggle, onRun, t }: {
                 }
               }}
             />
+          </label>
+
+          <div className="board-flags">
+            <button
+              type="button"
+              className={`board-flag${task.priority === 'urgent' ? ' board-flag-on board-flag-urgent' : ''}`}
+              onClick={() => void board.update(task.id, {
+                priority: task.priority === 'urgent' ? 'normal' : 'urgent',
+              })}
+            >
+              {t('board.urgent')}
+            </button>
+            <button
+              type="button"
+              className={`board-flag${task.attention ? ' board-flag-on board-flag-attention' : ''}`}
+              onClick={() => void board.update(task.id, { attention: !task.attention })}
+            >
+              {t('board.attention')}
+            </button>
+          </div>
+
+          <label className="board-field">
+            <span className="board-field-label">{t('board.linkTo')}</span>
+            <select
+              className="board-input"
+              value={task.linkedTo ?? ''}
+              onChange={(e) => void board.update(task.id, { linkedTo: e.target.value })}
+            >
+              <option value="">{t('board.linkNone')}</option>
+              {/* Only tasks still in planning: the connector pulls work
+                  forward, and offering something already finished would
+                  promise a move that cannot happen. */}
+              {board.tasks
+                .filter((x) => x.id !== task.id && x.column === 'planning')
+                .map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+            </select>
           </label>
 
           <Attachments task={task} board={board} t={t} />
