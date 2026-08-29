@@ -26,6 +26,7 @@ import { loadAllPlugins } from '../plugins/loader.js';
 import { installPlugin, removePlugin } from '../plugins/market.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
+import { loadBoard, saveAttachment, saveBoard, updateTask } from '../board/store.js';
 
 /** Name of the session cookie the browser client authenticates with. */
 const AUTH_COOKIE = 'aura_token';
@@ -298,6 +299,22 @@ export async function startServer(opts: ServeOptions): Promise<void> {
    * alongside the conversation it bounds.
    */
   interface ClientState { session: Session; budget: SessionBudget }
+  /**
+   * Every open socket, so an HTTP route can tell the browsers something.
+   *
+   * Each connection builds its own ProtocolHandler, which can only answer the
+   * socket it belongs to. The attachment upload arrives over HTTP but changes
+   * the board, and a second window must not keep showing a task without the
+   * file that was just added to it — so that one change is announced to all.
+   */
+  const sockets = new Set<WebSocket>();
+  const broadcast = (frame: unknown) => {
+    const line = JSON.stringify(frame);
+    for (const ws of sockets) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(line);
+    }
+  };
+
   const clients = new Map<string, ClientState>();
 
   function stateFor(who: ClientIdentity): ClientState {
@@ -389,6 +406,65 @@ export async function startServer(opts: ServeOptions): Promise<void> {
    * it". A settings screen only needs the boolean, and echoing a secret back
    * over the wire to render it would be a way to lose it.
    */
+
+  /**
+   * Attach a file or image to a board task.
+   *
+   * Its own body limit: the global express.json() cap is 100kb, which any
+   * screenshot exceeds, and raising it globally would let every other endpoint
+   * accept 25MB of JSON too. The file is written to disk beside the board and
+   * the task keeps only the path — see BoardAttachment on why bytes never go
+   * into the board file.
+   *
+   * Not gated behind the API-key or plugin flags: writing a file the user just
+   * picked into the user's own state directory is what they asked for, and it
+   * grants the agent nothing it did not already have — it can read the whole
+   * project anyway.
+   */
+  app.post('/api/board/attach', express.json({ limit: '25mb' }), (req, res) => {
+    const body = (req.body ?? {}) as {
+      taskId?: unknown; name?: unknown; type?: unknown; dataUrl?: unknown; projectRoot?: unknown;
+    };
+    const taskId = typeof body.taskId === 'string' ? body.taskId : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    const dataUrl = typeof body.dataUrl === 'string' ? body.dataUrl : '';
+    if (!taskId || !name || !dataUrl) {
+      res.status(400).json({ error: 'taskId, name and dataUrl are required.' });
+      return;
+    }
+    // `data:<mime>;base64,<payload>` — anything else is not something a file
+    // picker produced, so refuse rather than guess at the encoding.
+    const comma = dataUrl.indexOf(',');
+    if (!dataUrl.startsWith('data:') || !dataUrl.slice(0, comma).includes('base64') || comma < 0) {
+      res.status(400).json({ error: 'dataUrl must be a base64 data URL.' });
+      return;
+    }
+
+    const root = typeof body.projectRoot === 'string' && body.projectRoot
+      ? body.projectRoot : opts.cwd;
+    const state = loadBoard(root);
+    const task = state.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      res.status(404).json({ error: `No task with id "${taskId}".` });
+      return;
+    }
+
+    try {
+      const data = Buffer.from(dataUrl.slice(comma + 1), 'base64');
+      const attachment = saveAttachment(root, taskId, {
+        name,
+        type: typeof body.type === 'string' ? body.type : 'application/octet-stream',
+        data,
+      });
+      updateTask(state, taskId, { attachments: [...(task.attachments ?? []), attachment] });
+      saveBoard(root, state);
+      broadcast({ kind: 'evt', method: 'board.changed', params: { projectRoot: root, tasks: state.tasks } });
+      res.json({ ok: true, attachment });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
   app.get('/api/providers', (_req, res) => {
     res.json({
       providers: PROVIDER_REGISTRY.map((entry) => ({
@@ -636,6 +712,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     // silently dropping the agent back to the desktop's unread stdin.
     const pendingConfirms = new Map<string, (approved: boolean) => void>();
     const confirmFn = (message: string): Promise<boolean> => askClient(ws, pendingConfirms, message);
+
+    sockets.add(ws);
+    ws.on('close', () => sockets.delete(ws));
 
     // Protocol handler for frame-shaped clients (aura-droid and any other
     // non-browser consumer). The built-in browser UI still speaks the older

@@ -4,7 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import {
-  addTask, boardPath, loadBoard, removeTask, saveBoard, tasksIn, taskPrompt, updateTask,
+  addTask, attachmentsDir, boardPath, loadBoard, removeAttachments, removeTask,
+  saveAttachment, saveBoard, tasksIn, taskPrompt, updateTask,
 } from '../../src/board/store.js';
 import { EMPTY_BOARD, type BoardState } from '../../src/board/types.js';
 
@@ -198,5 +199,70 @@ describe('what gets sent to the agent', () => {
     const state: BoardState = { version: 1, tasks: [] };
     const task = addTask(state, { title: '  Fix the parser  ' });
     expect(taskPrompt(task)).toBe('Fix the parser');
+  });
+});
+
+describe('attachments', () => {
+  it('writes the file beside the board, never into the project', () => {
+    const a = saveAttachment(project, 'task1', {
+      name: 'shot.png', type: 'image/png', data: Buffer.from('bytes'),
+    });
+    expect(a.path.startsWith(home)).toBe(true);
+    expect(a.path.startsWith(project)).toBe(false);
+    expect(fs.readFileSync(a.path, 'utf8')).toBe('bytes');
+    expect(a.size).toBe(5);
+  });
+
+  it('refuses to let a filename escape the attachment directory', () => {
+    // The name comes from a browser file picker. Used verbatim, `../../` would
+    // let an upload land anywhere the process can write — the one place a
+    // path from outside must never be trusted.
+    const a = saveAttachment(project, 'task1', {
+      name: '../../../.bashrc', type: 'text/plain', data: Buffer.from('x'),
+    });
+    expect(a.path.startsWith(attachmentsDir(project, 'task1'))).toBe(true);
+    expect(a.name).not.toContain('..');
+    expect(a.name).not.toContain('/');
+  });
+
+  it('keeps two files that share a name', () => {
+    // Two screenshots are both called "Screenshot.png" and are not the same
+    // attachment; overwriting one with the other loses the user's file.
+    const first = saveAttachment(project, 't', { name: 'Screenshot.png', type: 'image/png', data: Buffer.from('one') });
+    const second = saveAttachment(project, 't', { name: 'Screenshot.png', type: 'image/png', data: Buffer.from('two') });
+    expect(second.path).not.toBe(first.path);
+    expect(fs.readFileSync(first.path, 'utf8')).toBe('one');
+    expect(fs.readFileSync(second.path, 'utf8')).toBe('two');
+  });
+
+  it('removes the files of a deleted task', () => {
+    const a = saveAttachment(project, 'doomed', { name: 'f.txt', type: 'text/plain', data: Buffer.from('x') });
+    expect(fs.existsSync(a.path)).toBe(true);
+    removeAttachments(project, 'doomed');
+    expect(fs.existsSync(a.path)).toBe(false);
+  });
+
+  it('does not throw when there is nothing to remove', () => {
+    expect(() => removeAttachments(project, 'never-existed')).not.toThrow();
+  });
+
+  it('names attachments by path in the prompt, never by content', () => {
+    // The agent has read_file and image_read. Handing it a path it can open
+    // beats inlining bytes it cannot inspect — and keeps a 20MB screenshot out
+    // of the prompt entirely.
+    const state: BoardState = { version: 1, tasks: [] };
+    const task = addTask(state, { title: 'Look at this' });
+    updateTask(state, task.id, {
+      attachments: [{ name: 'shot.png', type: 'image/png', size: 10, path: '/tmp/shot.png' }],
+    });
+    const prompt = taskPrompt(state.tasks[0]);
+    expect(prompt).toContain('/tmp/shot.png');
+    expect(prompt).toMatch(/read_file|image_read/);
+  });
+
+  it('leaves the prompt alone when there are no attachments', () => {
+    const state: BoardState = { version: 1, tasks: [] };
+    const task = addTask(state, { title: 'Plain' });
+    expect(taskPrompt(task)).toBe('Plain');
   });
 });

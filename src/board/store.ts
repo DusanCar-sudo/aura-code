@@ -19,7 +19,7 @@ import * as path from 'path';
 import { auraPath } from '../util/aura-home.js';
 import {
   EMPTY_BOARD, isBoardAgent, isBoardColumn,
-  type BoardAgent, type BoardColumn, type BoardState, type BoardTask,
+  type BoardAgent, type BoardAttachment, type BoardColumn, type BoardState, type BoardTask,
 } from './types.js';
 
 /**
@@ -89,12 +89,52 @@ export function saveBoard(projectRoot: string, state: BoardState): void {
   fs.renameSync(tmp, file);
 }
 
+/** Where a task's attachments are kept. Beside the board, never in the project. */
+export function attachmentsDir(projectRoot: string, taskId: string): string {
+  return path.join(path.dirname(boardPath(projectRoot)), 'attachments', taskId);
+}
+
+/**
+ * Write one attachment to disk and return its record.
+ *
+ * The filename is sanitised rather than trusted. It arrives from a browser
+ * file picker, and a name like `../../.bashrc` would otherwise let an upload
+ * land anywhere the process can write — the one place a path from outside must
+ * never be used verbatim.
+ */
+export function saveAttachment(
+  projectRoot: string,
+  taskId: string,
+  file: { name: string; type: string; data: Buffer },
+): BoardAttachment {
+  const safe = path.basename(file.name).replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'attachment';
+  const dir = attachmentsDir(projectRoot, taskId);
+  fs.mkdirSync(dir, { recursive: true });
+  // Collisions are resolved rather than overwritten: two screenshots both
+  // called "Screenshot.png" are two different attachments.
+  let target = path.join(dir, safe);
+  if (fs.existsSync(target)) {
+    const ext = path.extname(safe);
+    target = path.join(dir, `${path.basename(safe, ext)}-${Date.now().toString(36)}${ext}`);
+  }
+  fs.writeFileSync(target, file.data, { mode: 0o600 });
+  return { name: path.basename(target), type: file.type, size: file.data.length, path: target };
+}
+
+/** Delete a task's attachment directory. Best-effort — a leftover file is not
+ *  worth failing a delete over. */
+export function removeAttachments(projectRoot: string, taskId: string): void {
+  try { fs.rmSync(attachmentsDir(projectRoot, taskId), { recursive: true, force: true }); }
+  catch { /* best effort */ }
+}
+
 /** A short, collision-resistant task id. */
 export function newTaskId(): string {
   return crypto.randomBytes(6).toString('hex');
 }
 
 export interface TaskPatch {
+  attachments?: BoardAttachment[];
   title?: string;
   notes?: string;
   column?: BoardColumn;
@@ -156,6 +196,7 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   if (patch.result !== undefined) task.result = patch.result;
   if (patch.failed !== undefined) task.failed = patch.failed;
   if (patch.order !== undefined) task.order = patch.order;
+  if (patch.attachments !== undefined) task.attachments = patch.attachments;
   task.updatedAt = new Date().toISOString();
   return task;
 }
@@ -185,5 +226,11 @@ export function tasksIn(state: BoardState, column: BoardColumn): BoardTask[] {
  */
 export function taskPrompt(task: BoardTask): string {
   const notes = task.notes?.trim();
-  return notes ? `${task.title.trim()}\n\n${notes}` : task.title.trim();
+  const body = notes ? `${task.title.trim()}\n\n${notes}` : task.title.trim();
+  if (!task.attachments?.length) return body;
+  // Paths, not contents. The agent has read_file and image_read; naming the
+  // file it can open beats inlining bytes it cannot inspect, and keeps a
+  // twenty-megabyte screenshot out of the prompt.
+  const list = task.attachments.map((a) => `- ${a.path}`).join('\n');
+  return `${body}\n\nAttached files (read them with read_file or image_read):\n${list}`;
 }

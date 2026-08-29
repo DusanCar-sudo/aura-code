@@ -23,6 +23,10 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'board.files': 'Files',
+  'board.filesAdd': 'Add files or images',
+  'board.filesBusy': 'Uploading…',
+  'board.filesHint': 'The agent opens these itself with read_file or image_read.',
   'settings.keyLocked': 'Set this key in the environment before starting the server — key changes are disabled while it is reachable from the network.',
   'board.col.planning': 'Planning',
   'board.col.preparation': 'Preparation',
@@ -167,6 +171,10 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'board.files': 'Датотеке',
+  'board.filesAdd': 'Додај датотеке или слике',
+  'board.filesBusy': 'Отпремање…',
+  'board.filesHint': 'Агент их сам отвара помоћу read_file или image_read.',
   'settings.keyLocked': 'Поставите овај кључ у окружењу пре покретања сервера — измене кључа су онемогућене док је доступан са мреже.',
   'board.col.planning': 'Планирање',
   'board.col.preparation': 'Припрема',
@@ -305,6 +313,10 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'board.files': 'Fichiers',
+  'board.filesAdd': 'Ajouter des fichiers ou des images',
+  'board.filesBusy': 'Envoi…',
+  'board.filesHint': 'L\'agent les ouvre lui-même avec read_file ou image_read.',
   'settings.keyLocked': 'Définissez cette clé dans l\'environnement avant de démarrer le serveur — les modifications de clé sont désactivées tant qu\'il est accessible depuis le réseau.',
   'board.col.planning': 'Planification',
   'board.col.preparation': 'Préparation',
@@ -443,6 +455,10 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'board.files': 'File',
+  'board.filesAdd': 'Aggiungi file o immagini',
+  'board.filesBusy': 'Caricamento…',
+  'board.filesHint': 'L\'agente li apre da solo con read_file o image_read.',
   'settings.keyLocked': 'Imposta questa chiave nell\'ambiente prima di avviare il server — le modifiche alla chiave sono disabilitate finché è raggiungibile dalla rete.',
   'board.col.planning': 'Pianificazione',
   'board.col.preparation': 'Preparazione',
@@ -581,6 +597,10 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'board.files': 'Archivos',
+  'board.filesAdd': 'Añadir archivos o imágenes',
+  'board.filesBusy': 'Subiendo…',
+  'board.filesHint': 'El agente los abre por sí mismo con read_file o image_read.',
   'settings.keyLocked': 'Define esta clave en el entorno antes de iniciar el servidor — los cambios de clave están deshabilitados mientras sea accesible desde la red.',
   'board.col.planning': 'Planificación',
   'board.col.preparation': 'Preparación',
@@ -719,6 +739,10 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'board.files': 'الملفات',
+  'board.filesAdd': 'إضافة ملفات أو صور',
+  'board.filesBusy': 'جارٍ الرفع…',
+  'board.filesHint': 'يفتحها الوكيل بنفسه عبر read_file أو image_read.',
   'settings.keyLocked': 'اضبط هذا المفتاح في البيئة قبل تشغيل الخادم — تعديل المفاتيح معطّل ما دام الخادم متاحًا عبر الشبكة.',
   'board.col.planning': 'التخطيط',
   'board.col.preparation': 'التحضير',
@@ -857,6 +881,10 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'board.files': 'Файлы',
+  'board.filesAdd': 'Добавить файлы или изображения',
+  'board.filesBusy': 'Загрузка…',
+  'board.filesHint': 'Агент открывает их сам через read_file или image_read.',
   'settings.keyLocked': 'Задайте этот ключ в окружении до запуска сервера — изменение ключей отключено, пока сервер доступен из сети.',
   'board.col.planning': 'Планирование',
   'board.col.preparation': 'Подготовка',

@@ -22,6 +22,14 @@ import { M, type ProtocolClient } from '../lib/protocol';
 export const BOARD_COLUMNS = ['planning', 'preparation', 'execution', 'finished'] as const;
 export type BoardColumn = (typeof BOARD_COLUMNS)[number];
 
+export interface BoardAttachment {
+  name: string;
+  type: string;
+  size: number;
+  /** Absolute path on the machine running the engine. */
+  path: string;
+}
+
 export interface BoardTask {
   id: string;
   title: string;
@@ -32,6 +40,7 @@ export interface BoardTask {
   sessionId?: string;
   result?: string;
   failed?: boolean;
+  attachments?: BoardAttachment[];
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -66,6 +75,8 @@ export interface BoardApi {
   refresh: () => Promise<void>;
   /** Fold in a `board.changed` event. Called by useAura's event router. */
   applyChanged: (params: unknown) => void;
+  /** Upload a file or image onto a task. Resolves when the engine has it. */
+  attach: (taskId: string, file: File) => Promise<void>;
 }
 
 /** The default agent list, used only until the engine answers with its own. */
@@ -131,14 +142,45 @@ export function useBoard(
   );
   const remove = useCallback((id: string) => call(M.boardRemove, { id }), [call]);
 
+  /**
+   * Send a picked file to the engine, which writes it beside the board and
+   * puts the path on the task.
+   *
+   * Over HTTP rather than the socket: the protocol frames are JSON on a
+   * WebSocket, and pushing a 20MB base64 screenshot through the same channel
+   * the agent is streaming its answer on would stall the conversation while it
+   * transfers. The engine announces the result on `board.changed`, so the
+   * board still updates from one place.
+   */
+  const attach = useCallback(async (taskId: string, file: File) => {
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error('could not read the file'));
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch('./api/board/attach', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId, name: file.name, type: file.type, dataUrl }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not attach that file');
+    }
+  }, []);
+
   // Memoised, and not as a micro-optimisation. useAura's event router closes
   // over this object, and the socket effect is keyed on that router's
   // identity — so returning a fresh object literal each render tore the
   // WebSocket down and rebuilt it on every render, which froze the tab and
   // showed as a permanent "Disconnected".
   return useMemo(() => ({
-    tasks, agents, presets, error, refresh, applyChanged, add, update, remove,
-  }), [tasks, agents, presets, error, refresh, applyChanged, add, update, remove]);
+    tasks, agents, presets, error, refresh, applyChanged, add, update, remove, attach,
+  }), [tasks, agents, presets, error, refresh, applyChanged, add, update, remove, attach]);
 }
 
 /** Tasks of one column, in display order. */

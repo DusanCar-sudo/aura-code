@@ -33,6 +33,26 @@ export function isBoardAgent(v: unknown): v is BoardAgent {
   return typeof v === 'string' && (BOARD_AGENTS as readonly string[]).includes(v);
 }
 
+/**
+ * A file or image attached to a task.
+ *
+ * Stored as a real file on disk and referenced by absolute path — never as
+ * base64 inside the board. Two reasons, and both matter: a few screenshots
+ * would turn a small JSON file into megabytes that are re-read and re-written
+ * on every single edit, and the agent already has `read_file` and `image_read`.
+ * Handing it a path it can open beats shipping it an opaque blob it cannot
+ * inspect, which is the same call the chat composer makes for its own
+ * attachments.
+ */
+export interface BoardAttachment {
+  name: string;
+  /** MIME type as the browser reported it. */
+  type: string;
+  size: number;
+  /** Absolute path on the machine running the engine. */
+  path: string;
+}
+
 export interface BoardTask {
   id: string;
   /** One-line summary — the tile face. */
@@ -53,6 +73,8 @@ export interface BoardTask {
   result?: string;
   /** True when the run failed; `result` then holds the error. */
   failed?: boolean;
+  /** Files and images the agent should look at. */
+  attachments?: BoardAttachment[];
   /** Ordering within a column. Sparse, so a move never rewrites its neighbours. */
   order: number;
   createdAt: string;

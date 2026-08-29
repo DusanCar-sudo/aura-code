@@ -6,7 +6,7 @@ import { PermissionSystem, setConfirmHandler, type ConfirmContext } from '../saf
 import { SessionBudget } from '../agent/session-budget.js';
 import { TOOL_DEFINITIONS } from '../tools/index.js';
 import {
-  addTask, loadBoard, removeTask, saveBoard, updateTask,
+  addTask, loadBoard, removeAttachments, removeTask, saveBoard, updateTask,
 } from '../board/store.js';
 import { BOARD_AGENTS, BOARD_COLUMNS, type BoardColumn, type BoardAgent } from '../board/types.js';
 import { agentPresets } from '../board/agents.js';
@@ -566,6 +566,9 @@ export class ProtocolHandler {
     if (!removeTask(state, id)) {
       return this.fail(req.id, { code: 'no_such_task', message: `No task with id "${id}".` });
     }
+    // The files go with the task. Leaving them would accumulate uploads nobody
+    // can see or reach, in a directory the user never opens.
+    removeAttachments(root, id);
     this.boardCommit(root, state);
     this.ok(req.id, { removed: id });
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   BOARD_COLUMNS, tasksIn,
   type BoardApi, type BoardColumn, type BoardTask,
@@ -28,32 +28,15 @@ export function Board({ board, busy, onRun, t }: {
   onRun: (task: BoardTask) => void;
   t: T;
 }) {
-  const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
-
-  const addTask = () => {
-    const title = draft.trim();
-    if (!title) return;
-    setDraft('');
-    void board.add({ title, column: 'planning' });
-  };
+  // Which column is currently showing its new-job input, if any. One at a
+  // time: two open inputs would leave the user guessing which one Enter lands
+  // in.
+  const [adding, setAdding] = useState<BoardColumn | null>(null);
 
   return (
     <div className="board-wrap">
-      <div className="board-bar">
-        <input
-          className="board-new"
-          value={draft}
-          placeholder={t('board.new')}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
-          aria-label={t('board.new')}
-        />
-        <button type="button" className="btn btn-send" onClick={addTask} disabled={!draft.trim()}>
-          {t('board.add')}
-        </button>
-        {board.error && <span className="board-error">{board.error}</span>}
-      </div>
+      {board.error && <div className="board-bar"><span className="board-error">{board.error}</span></div>}
 
       <div className="board">
         {BOARD_COLUMNS.map((column) => {
@@ -63,8 +46,28 @@ export function Board({ board, busy, onRun, t }: {
               <header className="board-col-head">
                 <h2 className="board-col-title">{t(`board.col.${column}`)}</h2>
                 <span className="board-col-count">{cards.length}</span>
+                {/* A job can be added straight into any column, not only the
+                    first: work does not always arrive at the planning stage —
+                    something already investigated belongs in Preparation, and
+                    something already done belongs in Finished. */}
+                <button
+                  type="button"
+                  className="board-add"
+                  title={t('board.new')}
+                  aria-label={`${t('board.new')} — ${t(`board.col.${column}`)}`}
+                  onClick={() => setAdding(adding === column ? null : column)}
+                >
+                  +
+                </button>
               </header>
               <div className="board-col-cards">
+                {adding === column && (
+                  <NewJob
+                    t={t}
+                    onCancel={() => setAdding(null)}
+                    onAdd={(title) => { void board.add({ title, column }); setAdding(null); }}
+                  />
+                )}
                 {cards.map((task) => (
                   <Tile
                     key={task.id}
@@ -77,12 +80,119 @@ export function Board({ board, busy, onRun, t }: {
                     t={t}
                   />
                 ))}
-                {cards.length === 0 && <p className="board-col-empty">{t('board.colEmpty')}</p>}
+                {cards.length === 0 && adding !== column && (
+                  <p className="board-col-empty">{t('board.colEmpty')}</p>
+                )}
               </div>
             </section>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The inline input a `+` opens.
+ *
+ * Its own component so it can hold its own draft: keeping four drafts in the
+ * Board would mean every keystroke re-rendered every column and every tile.
+ * Autofocused, because the click that opened it was the user saying they want
+ * to type — making them click again would be asking twice.
+ */
+function NewJob({ onAdd, onCancel, t }: {
+  onAdd: (title: string) => void;
+  onCancel: () => void;
+  t: T;
+}) {
+  const [draft, setDraft] = useState('');
+  const commit = () => {
+    const title = draft.trim();
+    if (title) onAdd(title);
+    else onCancel();
+  };
+  return (
+    <input
+      className="board-new"
+      autoFocus
+      value={draft}
+      placeholder={t('board.new')}
+      aria-label={t('board.new')}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        // Escape abandons the draft outright. Blur commits instead, because
+        // clicking away from a half-typed job to check something is not the
+        // same as deciding against it.
+        if (e.key === 'Escape') onCancel();
+      }}
+      onBlur={commit}
+    />
+  );
+}
+
+
+/** 📷 for something the agent can look at, 📄 for something it can read. */
+function fileIcon(type: string): string {
+  return type.startsWith('image/') ? '📷' : '📄';
+}
+
+/**
+ * The `+` that puts files and images on a task.
+ *
+ * The picker takes several at once and uploads them in sequence rather than in
+ * parallel: each upload rewrites the board file, and firing five at once would
+ * have them overwrite each other's attachment list — last write wins, four
+ * files silently missing.
+ */
+function Attachments({ task, board, t }: { task: BoardTask; board: BoardApi; t: T }) {
+  const input = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const files = task.attachments ?? [];
+
+  const pick = async (chosen: FileList | null) => {
+    if (!chosen?.length) return;
+    setBusy(true);
+    for (const file of Array.from(chosen)) await board.attach(task.id, file);
+    setBusy(false);
+    // Clear the input, or picking the same file twice in a row fires no change
+    // event the second time and looks like the button stopped working.
+    if (input.current) input.current.value = '';
+  };
+
+  return (
+    <div className="board-field">
+      <span className="board-field-label">{t('board.files')}</span>
+
+      {files.length > 0 && (
+        <div className="board-card-files">
+          {files.map((a) => (
+            <span className="board-file" key={a.path} title={a.path}>
+              {fileIcon(a.type)} {a.name}
+              <span className="board-file-size">{Math.max(1, Math.round(a.size / 1024))} KB</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <input
+        ref={input}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => void pick(e.target.files)}
+      />
+      <button
+        type="button"
+        className="board-attach"
+        disabled={busy}
+        onClick={() => input.current?.click()}
+      >
+        {busy ? t('board.filesBusy') : `+ ${t('board.filesAdd')}`}
+      </button>
+      {/* Said once, here, because it is the thing that makes the feature make
+          sense: the agent opens the file itself rather than being handed bytes. */}
+      <p className="board-preset">{t('board.filesHint')}</p>
     </div>
   );
 }
@@ -123,6 +233,14 @@ function Tile({ task, board, busy, open, onToggle, onRun, t }: {
       </button>
 
       {task.notes && !open && <div className="board-card-detail">{task.notes}</div>}
+
+      {!open && !!task.attachments?.length && (
+        <div className="board-card-files">
+          {task.attachments.map((a) => (
+            <span className="board-file" key={a.path}>{fileIcon(a.type)} {a.name}</span>
+          ))}
+        </div>
+      )}
 
       {task.result && (
         <div className={`board-card-result${task.failed ? ' board-card-result-failed' : ''}`}>
@@ -191,6 +309,8 @@ function Tile({ task, board, busy, open, onToggle, onRun, t }: {
               }}
             />
           </label>
+
+          <Attachments task={task} board={board} t={t} />
 
           <button
             type="button"

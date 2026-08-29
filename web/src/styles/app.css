@@ -856,6 +856,17 @@
   font-size: var(--fs-micro);
   color: var(--faint);
 }
+/* The + that adds a job straight into this column. */
+.board-add {
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--fs-body);
+  line-height: 1;
+}
+.board-add:hover { background: var(--panel-raised); color: var(--terracotta); }
+
 .board-col-empty {
   padding: 10px 11px;
   margin: 0;
@@ -959,6 +970,43 @@
 .board-textarea { min-height: 54px; resize: vertical; }
 .board-preset { margin: 0; font-size: var(--fs-micro); color: var(--text-dim); }
 .board-delete { align-self: flex-start; font-size: var(--fs-micro); color: var(--err); }
+
+/* Attachments. Shown on the closed tile too, because a task with a screenshot
+   on it behaves differently from one without and that should not be hidden
+   behind a click. */
+.board-card-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+.board-card-edit .board-card-files { padding: 0; }
+.board-file {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-file-size { color: var(--faint); flex: none; }
+
+.board-attach {
+  align-self: flex-start;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text-dim);
+  font-size: var(--fs-micro);
+}
+.board-attach:hover { color: var(--text); }
+.board-attach:disabled { opacity: 0.5; cursor: progress; }
 
 .board-card-foot {
   display: flex;
