@@ -1,7 +1,7 @@
 {
   "name": "aura-code",
   "version": "0.16.0",
-  "description": "Aura Code \u2014 model-agnostic AI coding agent. Praktess framework.",
+  "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
   "bin": {
     "aura": "dist/cli/index.js",
     "dic": "dist/cli/dic.js",
@@ -43,6 +43,7 @@
     "openai": "^4.68.4",
     "pptxgenjs": "^4.0.1",
     "puppeteer-core": "^25.1.0",
+    "unpdf": "^1.8.1",
     "ws": "^8.21.0"
   },
   "devDependencies": {
@@ -85,7 +86,7 @@
   "directories": {
     "test": "tests"
   },
-  "author": "Du\u0161an Milosavljevi\u0107",
+  "author": "Dušan Milosavljević",
   "type": "commonjs",
   "types": "./dist/cli/index.d.ts",
   "allowScripts": {

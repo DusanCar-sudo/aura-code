@@ -15,32 +15,32 @@ describe('readFile', () => {
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
-  it('reads a small file with line numbers', () => {
+  it('reads a small file with line numbers', async () => {
     fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'one\ntwo\nthree');
-    const out = readFile({ path: 'a.txt' }, tmpDir);
+    const out = await readFile({ path: 'a.txt' }, tmpDir);
     expect(out).toContain('1: one');
     expect(out).toContain('2: two');
     expect(out).toContain('3: three');
     expect(out).toContain('(3 lines)');
   });
 
-  it('reads a range', () => {
+  it('reads a range', async () => {
     fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'a\nb\nc\nd\ne');
-    const out = readFile({ path: 'a.txt', start_line: 2, end_line: 4 }, tmpDir);
+    const out = await readFile({ path: 'a.txt', start_line: 2, end_line: 4 }, tmpDir);
     expect(out).toContain('2: b');
     expect(out).toContain('3: c');
     expect(out).toContain('4: d');
     expect(out).not.toContain('1: a');
   });
 
-  it('errors on missing file', () => {
-    expect(readFile({ path: 'nope.txt' }, tmpDir)).toMatch(/Error: File not found/);
+  it('errors on missing file', async () => {
+    expect(await readFile({ path: 'nope.txt' }, tmpDir)).toMatch(/Error: File not found/);
   });
 
-  it('truncates huge files with head + tail', () => {
+  it('truncates huge files with head + tail', async () => {
     const lines = Array.from({ length: 1000 }, (_, i) => `line ${i + 1}`).join('\n');
     fs.writeFileSync(path.join(tmpDir, 'big.txt'), lines);
-    const out = readFile({ path: 'big.txt' }, tmpDir);
+    const out = await readFile({ path: 'big.txt' }, tmpDir);
     expect(out).toContain('1: line 1');
     expect(out).toMatch(/lines omitted/);
     expect(out).toContain('1000: line 1000');

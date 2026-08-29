@@ -3,6 +3,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { BINARY_EXTENSIONS } from '../config/defaults.js';
 import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
+import { extractPdfText } from './pdf-text.js';
 
 export interface ReadFileInput {
   path: string;
@@ -10,7 +11,10 @@ export interface ReadFileInput {
   end_line?: number;
 }
 
-export function readFile(input: ReadFileInput, cwd: string): string {
+// Async only because a PDF may need the bundled parser, which is ESM and so
+// must be reached through a dynamic import. Every other path returns
+// immediately; executeTool already awaited this call.
+export async function readFile(input: ReadFileInput, cwd: string): Promise<string> {
   let filePath: string;
   try { filePath = resolveInRoot(cwd, input.path); }
   catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
@@ -65,31 +69,26 @@ export function readFile(input: ReadFileInput, cwd: string): string {
 }
 
 /**
- * Extract a PDF's text via poppler's pdftotext.
+ * Extract a PDF's text.
  *
- * `-layout` rather than raw order: the flag preserves columns, and without it
- * a two-column CV interleaves the sidebar into the body line by line, which
- * reads as corrupted text rather than as a document. Verified on a real
- * two-column resume — with -layout both columns come out cleanly separated.
+ * poppler's `pdftotext -layout` when it is available, and a bundled pdf.js
+ * when it is not — see tools/pdf-text.ts for why both. `-layout` preserves
+ * columns, and without it a two-column CV interleaves the sidebar into the
+ * body line by line, which reads as corrupted text rather than as a document.
  *
- * No fallback parser and no new dependency: poppler-utils is present on
- * essentially every Linux install and is a one-line apt on the rest, so the
- * honest failure is a message naming the package.
+ * This used to refuse outright when poppler was missing, which meant reading a
+ * PDF simply did not work for anyone who had installed Aura from npm onto a
+ * machine without it. A message naming an apt package is an honest failure,
+ * but it is still a failure, and this one was avoidable.
  */
-function readPdf(filePath: string, input: ReadFileInput): string {
+async function readPdf(filePath: string, input: ReadFileInput): Promise<string> {
   let text: string;
+  let via: string;
   try {
-    text = execFileSync('pdftotext', ['-layout', filePath, '-'], {
-      encoding: 'utf8',
-      maxBuffer: 32 * 1024 * 1024,
-      timeout: 60_000,
-    });
+    const extracted = await extractPdfText(filePath, true);
+    text = extracted.text;
+    via = extracted.via === 'pdftotext' ? 'pdftotext -layout' : 'bundled pdf.js';
   } catch (e) {
-    const err = e as { code?: string };
-    if (err.code === 'ENOENT') {
-      return `Error: reading PDFs needs pdftotext, which is not installed. `
-        + `Install poppler-utils (apt install poppler-utils / brew install poppler).`;
-    }
     return `Error extracting PDF text: ${String(e).slice(0, 200)}`;
   }
 
@@ -107,6 +106,6 @@ function readPdf(filePath: string, input: ReadFileInput): string {
     const end = Math.min(lines.length, input.end_line ?? lines.length);
     return lines.slice(start, end).map((l, i) => `${start + i + 1}\t${l}`).join('\n');
   }
-  return `PDF text (${lines.length} lines, via pdftotext -layout):\n`
+  return `PDF text (${lines.length} lines, via ${via}):\n`
     + lines.map((l, i) => `${i + 1}\t${l}`).join('\n');
 }

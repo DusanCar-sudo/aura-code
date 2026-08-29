@@ -20,7 +20,7 @@ const havePdftotext = (() => {
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-pdf-'));
 
 describe('read_file on a PDF', () => {
-  it.skipIf(!havePdftotext)('extracts text instead of reporting a byte count', () => {
+  it.skipIf(!havePdftotext)('extracts text instead of reporting a byte count', async () => {
     // Build a real PDF rather than mocking: the thing under test is the
     // interaction with poppler, which a mock would assert nothing about.
     const ps = path.join(tmp, 'src.ps');
@@ -33,19 +33,21 @@ describe('read_file on a PDF', () => {
     } catch {
       return;   // no ghostscript in this environment; the live check below covers it
     }
-    const out = readFile({ path: 'cv.pdf' }, tmp);
+    const out = await readFile({ path: 'cv.pdf' }, tmp);
     expect(out).not.toMatch(/^Binary file/);
     expect(out).toContain('Dusan Milosavljevic');
-    expect(out).toMatch(/pdftotext -layout/);
+    // Names whichever extractor produced it — poppler where present, the
+    // bundled pdf.js otherwise. Both are correct answers now.
+    expect(out).toMatch(/pdftotext -layout|bundled pdf\.js/);
   });
 
-  it('reports a missing file rather than a parser error', () => {
-    expect(readFile({ path: 'nope.pdf' }, tmp)).toMatch(/File not found/);
+  it('reports a missing file rather than a parser error', async () => {
+    expect(await readFile({ path: 'nope.pdf' }, tmp)).toMatch(/File not found/);
   });
 
-  it('still refuses genuinely binary formats', () => {
+  it('still refuses genuinely binary formats', async () => {
     // The PDF branch must not have opened the door to every binary extension.
     fs.writeFileSync(path.join(tmp, 'a.zip'), Buffer.from([0x50, 0x4b, 3, 4]));
-    expect(readFile({ path: 'a.zip' }, tmp)).toMatch(/^Binary file/);
+    expect(await readFile({ path: 'a.zip' }, tmp)).toMatch(/^Binary file/);
   });
 });

@@ -22,6 +22,7 @@ import { execFileSync } from 'child_process';
 import type { ToolDefinition } from '../providers/types.js';
 import { renderPdf, renderPng, countPdfPages, type PageFormat } from '../design/render.js';
 import { resolveInRoot, PathJailError } from '../safety/path-jail.js';
+import { extractPdfText } from './pdf-text.js';
 import { templateCss, templateNames, templateDescription, type TemplateName } from '../design/templates/index.js';
 
 export const DOCUMENT_DEFINITION: ToolDefinition = {
@@ -117,7 +118,7 @@ async function toPdf(input: DocumentInput, cwd: string, src: string): Promise<st
   const rel = path.relative(cwd, output) || path.basename(output);
   const lines = [
     `Rendered ${rel} — ${r.pages} page(s), ${kb(r.bytes)}.`,
-    verdict(output, r.pages ?? 0),
+    await verdict(output, r.pages ?? 0),
   ];
   // Reported unprompted: both are silent failures, so a caller that did not
   // think to ask is exactly the caller who needs to know.
@@ -150,24 +151,27 @@ async function toPng(input: DocumentInput, cwd: string, src: string): Promise<st
  * Verify a rendered PDF is a document rather than a well-formed blank.
  * Uses pdftotext, already relied on by read_file, so nothing new is required.
  */
-function inspect(src: string, shown: string): string {
+async function inspect(src: string, shown: string): Promise<string> {
   if (!src.toLowerCase().endsWith('.pdf')) {
     return `Error: inspect works on PDFs; ${shown} is not one.`;
   }
-  const pages = countPdfPages(src);
   const bytes = fs.statSync(src).size;
 
   let text = '';
+  let pages = countPdfPages(src);
   try {
-    text = execFileSync('pdftotext', [src, '-'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 30_000 });
-  } catch {
-    return `${shown}: ${pages} page(s), ${kb(bytes)}. Could not extract text (pdftotext missing?) — `
-      + 'install poppler-utils to verify the content is real.';
+    const extracted = await extractPdfText(src, false);
+    text = extracted.text;
+    // The bundled parser knows the page count too, so a missing pdfinfo no
+    // longer costs the count as well as the text.
+    if (!pages && extracted.pages) pages = extracted.pages;
+  } catch (e) {
+    return `${shown}: ${pages} page(s), ${kb(bytes)}. Could not extract text: ${String(e).slice(0, 160)}`;
   }
 
   const chars = text.replace(/\s+/g, '').length;
   const lines = [`${shown}: ${pages} page(s), ${kb(bytes)}, ${chars.toLocaleString()} characters of text.`];
-  lines.push(verdict(src, pages, chars));
+  lines.push(await verdict(src, pages, chars));
 
   let fonts: string[] = [];
   try {
@@ -182,14 +186,18 @@ function inspect(src: string, shown: string): string {
 }
 
 /** The judgement a page count alone cannot make. */
-function verdict(pdfPath: string, pages: number, knownChars?: number): string {
+async function verdict(pdfPath: string, pages: number, knownChars?: number): Promise<string> {
   if (pages === 0) return 'PROBLEM: no pages — the render failed. Do not ship this.';
   let chars = knownChars;
   if (chars === undefined) {
     try {
-      chars = execFileSync('pdftotext', [pdfPath, '-'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 30_000 })
-        .replace(/\s+/g, '').length;
-    } catch { return 'Content not verified (pdftotext unavailable).'; }
+      chars = (await extractPdfText(pdfPath, false)).text.replace(/\s+/g, '').length;
+    } catch (e) {
+      // Only a real extraction failure reaches here now: a missing poppler
+      // falls through to the bundled parser rather than giving up, so this no
+      // longer fires just because the machine lacks an apt package.
+      return `Content not verified (${String(e).slice(0, 80)}).`;
+    }
   }
   // A page of real prose is hundreds of characters. This threshold catches the
   // case that matters — a document that printed as empty pages — without
