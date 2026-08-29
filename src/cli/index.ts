@@ -85,6 +85,8 @@ import {
   type ReplMode,
 } from './repl-session-commands.js';
 import { handleModeCommand } from './repl-mode-commands.js';
+import { handleWebCommand } from './repl-web-command.js';
+import type { ChildProcess } from 'child_process';
 import { handleTurnCommand } from './repl-turn-commands.js';
 import { handleComputerCommand } from './repl-computer-commands.js';
 import { handleLessonCommand } from './repl-lesson-commands.js';
@@ -148,6 +150,10 @@ function makeStdinTunerIO(): TunerIO {
 // ─────────────────────────────────────────────────────────────────────────────
 // Parse args
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** The web client started by `:auraweb`, if any. One per REPL — see
+ *  repl-web-command.ts on why it is a child rather than detached. */
+const webServer: { child: ChildProcess | null; url: string | null } = { child: null, url: null };
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
@@ -2778,6 +2784,18 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (compResult) return compResult;
   }
 
+  // ── Web client ───────────────────────────────────────────────────────────
+  // :auraweb brings up the browser surface without leaving the TUI. The server
+  // is a child of this process, so it dies with the terminal rather than
+  // stranding a port and a session token behind it.
+  {
+    const webResult = handleWebCommand(input, {
+      print: (line: string) => console.log(chalk.hex(TEXT_DIM_HEX)(line)),
+      server: webServer,
+    });
+    if (webResult) return { handled: true } as ReplCommandResult;
+  }
+
   // ── Modes ────────────────────────────────────────────────────────────────
   // :coder / :gazelle. The REPL owns the switch itself (see enterMode); these
   // only report the intent. In repl-mode-commands.ts so they can be tested —
@@ -3524,6 +3542,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
   ${chalk.hex(FAINT_HEX)('Usage:')}
     aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
     aura ${chalk.hex(TEXT_DIM_HEX)('serve')}                              Start the HTTP API server
+    ${chalk.hex(TEXT_DIM_HEX)('webaura')}                                 Start the web client and open it
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --lan')}                        Also serve phones over Wi-Fi (TLS, pinned)
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --tailscale')}                  Also serve phones on any network, via Tailscale
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --allow-plugin-install')}        Let the web client install plugins and set API keys

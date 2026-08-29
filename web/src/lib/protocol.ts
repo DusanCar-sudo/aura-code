@@ -34,6 +34,10 @@ export const M = {
   turnCancel: 'turn.cancel',
   toolsList: 'tools.list',
   usageGet: 'usage.get',
+  boardGet: 'board.get',
+  boardAdd: 'board.add',
+  boardUpdate: 'board.update',
+  boardRemove: 'board.remove',
   approvalRequest: 'approval.request',
   engineReady: 'engine.ready',
   turnStarted: 'turn.started',
@@ -43,6 +47,7 @@ export const M = {
   turnToolBlocked: 'turn.tool_blocked',
   turnCompleted: 'turn.completed',
   turnError: 'turn.error',
+  boardChanged: 'board.changed',
   log: 'log',
 } as const;
 

@@ -1,10 +1,11 @@
 {
   "name": "aura-code",
   "version": "0.16.0",
-  "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
+  "description": "Aura Code \u2014 model-agnostic AI coding agent. Praktess framework.",
   "bin": {
     "aura": "dist/cli/index.js",
-    "dic": "dist/cli/dic.js"
+    "dic": "dist/cli/dic.js",
+    "webaura": "dist/cli/webaura.js"
   },
   "main": "./dist/cli/index.js",
   "files": [
@@ -84,7 +85,7 @@
   "directories": {
     "test": "tests"
   },
-  "author": "Dušan Milosavljević",
+  "author": "Du\u0161an Milosavljevi\u0107",
   "type": "commonjs",
   "types": "./dist/cli/index.d.ts",
   "allowScripts": {

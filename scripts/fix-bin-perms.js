@@ -18,9 +18,9 @@
  * Run from "postbuild", so it fires after every `npm run build` — including
  * the build inside prepublishOnly — without anyone having to remember it.
  *
- * Reads the "bin" map instead of hardcoding paths: this package ships two
- * binaries (aura and dic) and both have the same problem, and a future rename
- * should not silently reintroduce it.
+ * Reads the "bin" map instead of hardcoding paths: this package ships three
+ * binaries (aura, dic and webaura) and they all have the same problem, and a
+ * new one should not have to remember this file to be runnable.
  *
  * Node rather than `chmod` so a fresh clone builds on Windows too, where
  * chmod does not exist and the executable bit is meaningless. Missing files

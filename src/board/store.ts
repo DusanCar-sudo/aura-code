@@ -1,0 +1,189 @@
+/**
+ * Where the board lives.
+ *
+ * One JSON file per project, under the state directory rather than inside the
+ * project itself. Two reasons: AURA.md is explicit that only the package
+ * belongs in a checkout, and a board written into the working tree would show
+ * up in the user's `git status` as a file they did not create — which is how a
+ * tool loses trust.
+ *
+ * Every write is atomic (temp file, then rename) because the board is edited
+ * from a browser while an agent may be finishing a task in the same process. A
+ * torn write here loses the user's planning, which they cannot reconstruct.
+ */
+
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+
+import { auraPath } from '../util/aura-home.js';
+import {
+  EMPTY_BOARD, isBoardAgent, isBoardColumn,
+  type BoardAgent, type BoardColumn, type BoardState, type BoardTask,
+} from './types.js';
+
+/**
+ * The board file for a project root.
+ *
+ * Named by a hash of the resolved path, with a readable prefix so the
+ * directory can be browsed by a human. Two projects with the same basename —
+ * `~/work/api` and `~/scratch/api` — must not share a board, which a
+ * basename-only name would let happen.
+ */
+export function boardPath(projectRoot: string): string {
+  const resolved = path.resolve(projectRoot);
+  const hash = crypto.createHash('sha1').update(resolved).digest('hex').slice(0, 12);
+  const slug = path.basename(resolved).replace(/[^\w.-]+/g, '-').slice(0, 40) || 'project';
+  return auraPath('boards', `${slug}-${hash}.json`);
+}
+
+/**
+ * Read the board, or an empty one.
+ *
+ * Never throws. A corrupt or unreadable file yields an empty board rather than
+ * taking the server down — the board is a convenience, and refusing to start
+ * the web client over a bad JSON file would be a worse failure than losing
+ * some tiles. The bad file is left on disk untouched so it can be recovered by
+ * hand.
+ */
+export function loadBoard(projectRoot: string): BoardState {
+  try {
+    const raw = fs.readFileSync(boardPath(projectRoot), 'utf8');
+    const parsed = JSON.parse(raw) as BoardState;
+    if (!parsed || !Array.isArray(parsed.tasks)) return { ...EMPTY_BOARD };
+    // Filter rather than trust: the file is editable by hand, and one bad
+    // column value would otherwise render a task into no column at all —
+    // present in the data, invisible on screen.
+    return { version: 1, tasks: parsed.tasks.filter(isTask).map(normalize) };
+  } catch {
+    return { ...EMPTY_BOARD };
+  }
+}
+
+function isTask(t: unknown): t is BoardTask {
+  return !!t && typeof t === 'object'
+    && typeof (t as BoardTask).id === 'string'
+    && typeof (t as BoardTask).title === 'string';
+}
+
+function normalize(t: BoardTask): BoardTask {
+  return {
+    ...t,
+    column: isBoardColumn(t.column) ? t.column : 'planning',
+    agent: isBoardAgent(t.agent) ? t.agent : 'aura',
+    order: Number.isFinite(t.order) ? t.order : 0,
+    createdAt: t.createdAt ?? new Date().toISOString(),
+    updatedAt: t.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+/** Write the board atomically. */
+export function saveBoard(projectRoot: string, state: BoardState): void {
+  const file = boardPath(projectRoot);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Same directory as the target, so the rename is on one filesystem and is
+  // therefore atomic. A temp file in /tmp would make this a copy, which can
+  // tear exactly like the write it is meant to replace.
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+/** A short, collision-resistant task id. */
+export function newTaskId(): string {
+  return crypto.randomBytes(6).toString('hex');
+}
+
+export interface TaskPatch {
+  title?: string;
+  notes?: string;
+  column?: BoardColumn;
+  agent?: BoardAgent;
+  model?: string;
+  sessionId?: string;
+  result?: string;
+  failed?: boolean;
+  order?: number;
+}
+
+/**
+ * Create a task at the end of its column.
+ *
+ * Order is sparse (steps of 1000) so a task can later be dropped between two
+ * neighbours by averaging their orders, without renumbering the column. Dense
+ * integers would force a rewrite of every sibling on each move, which is both
+ * more code and more chances to lose one.
+ */
+export function addTask(state: BoardState, patch: TaskPatch & { title: string }): BoardTask {
+  const column = patch.column ?? 'planning';
+  const last = state.tasks
+    .filter((t) => t.column === column)
+    .reduce((max, t) => Math.max(max, t.order), 0);
+  const now = new Date().toISOString();
+  const task: BoardTask = {
+    id: newTaskId(),
+    title: patch.title,
+    notes: patch.notes,
+    column,
+    agent: patch.agent ?? 'aura',
+    model: patch.model,
+    order: last + 1000,
+    createdAt: now,
+    updatedAt: now,
+  };
+  state.tasks.push(task);
+  return task;
+}
+
+/**
+ * Apply a patch to one task. Returns the updated task, or null if the id is
+ * unknown — an unknown id is the client and server disagreeing about what
+ * exists, which the caller should report rather than silently create.
+ */
+export function updateTask(state: BoardState, id: string, patch: TaskPatch): BoardTask | null {
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return null;
+
+  // Only assign what was actually sent. Spreading the patch wholesale would
+  // let an absent key overwrite a present value with undefined — which is how
+  // moving a tile would silently erase its notes.
+  if (patch.title !== undefined) task.title = patch.title;
+  if (patch.notes !== undefined) task.notes = patch.notes;
+  if (patch.column !== undefined && isBoardColumn(patch.column)) task.column = patch.column;
+  if (patch.agent !== undefined && isBoardAgent(patch.agent)) task.agent = patch.agent;
+  if (patch.model !== undefined) task.model = patch.model || undefined;
+  if (patch.sessionId !== undefined) task.sessionId = patch.sessionId;
+  if (patch.result !== undefined) task.result = patch.result;
+  if (patch.failed !== undefined) task.failed = patch.failed;
+  if (patch.order !== undefined) task.order = patch.order;
+  task.updatedAt = new Date().toISOString();
+  return task;
+}
+
+/** Remove a task. Returns whether it was there. */
+export function removeTask(state: BoardState, id: string): boolean {
+  const at = state.tasks.findIndex((t) => t.id === id);
+  if (at < 0) return false;
+  state.tasks.splice(at, 1);
+  return true;
+}
+
+/** Tasks of one column, in display order. */
+export function tasksIn(state: BoardState, column: BoardColumn): BoardTask[] {
+  return state.tasks
+    .filter((t) => t.column === column)
+    .sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * The text sent to the agent when a task is dispatched.
+ *
+ * Title and notes joined, because the title alone is a label and the notes are
+ * where the actual instruction usually lives. The specialist is not named in
+ * the prompt — that is routing, and putting it in the text as well would let a
+ * task argue with its own dispatch.
+ */
+export function taskPrompt(task: BoardTask): string {
+  const notes = task.notes?.trim();
+  return notes ? `${task.title.trim()}\n\n${notes}` : task.title.trim();
+}

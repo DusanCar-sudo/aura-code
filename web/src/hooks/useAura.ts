@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ProtocolClient, M, type ConnectionState } from '../lib/protocol';
+import { useBoard, type BoardTask } from './useBoard';
 import type { Settings } from '../lib/settings';
 
 /**
@@ -77,6 +78,20 @@ export function useAura(settings: Settings) {
   // arrives — a changing identity there would restart the session flow.
   const toolNamesRef = useRef<string[]>([]);
 
+  // The project board. Declared here rather than in the component because the
+  // engine announces changes as events, and the event router lives in this
+  // hook — a board owned above it could not hear them.
+  const board = useBoard(clientRef, connection === 'open');
+  // The task currently dispatched, so its result can be written back when the
+  // turn ends. A ref, because the completion handler is long-lived and must
+  // not be rebuilt every time the board changes.
+  const runningTaskRef = useRef<BoardTask | null>(null);
+  // The event router is created once and keys the socket effect, so it must
+  // never close over a value that changes. Reading the board through a ref
+  // keeps the router stable while still reaching the current board.
+  const boardRef = useRef(board);
+  boardRef.current = board;
+
   /** Append text to the streaming assistant message, creating it if needed. */
   const appendDelta = useCallback((text: string) => {
     setMessages((prev) => {
@@ -145,8 +160,18 @@ export function useAura(settings: Settings) {
           blocked: String(p.reason ?? 'blocked'),
         }, 'blocked');
         break;
-      case M.turnCompleted:
+      case M.turnCompleted: {
         setBusy(false);
+        // A task dispatched from the board finishes here: the answer goes onto
+        // the tile and it moves to `finished`. Doing this on the event rather
+        // than at the call site is what makes it survive a page reload — the
+        // engine reports completion to whoever is listening.
+        const ran = runningTaskRef.current;
+        if (ran) {
+          runningTaskRef.current = null;
+          const summary = typeof p.summary === 'string' ? p.summary : '';
+          void boardRef.current.update(ran.id, { column: 'finished', result: summary, failed: false });
+        }
         setMessages((prev) => prev.map((m, i) => {
           if (i !== prev.length - 1 || !m.streaming) return m;
           // Some paths emit no deltas at all and deliver the whole answer in
@@ -162,14 +187,29 @@ export function useAura(settings: Settings) {
           });
         }
         break;
-      case M.turnError:
+      }
+      case M.boardChanged:
+        boardRef.current.applyChanged(p);
+        break;
+      case M.turnError: {
         setBusy(false);
         setError(String(p.message ?? 'turn failed'));
+        // A failed task still leaves the board: parking it in `execution`
+        // forever would be a lie, and the error is the result worth keeping.
+        const failed = runningTaskRef.current;
+        if (failed) {
+          runningTaskRef.current = null;
+          void boardRef.current.update(failed.id, {
+            column: 'finished', failed: true,
+            result: String(p.message ?? 'turn failed'),
+          });
+        }
         setMessages((prev) => prev.map((m, i) =>
           i === prev.length - 1 && m.streaming
             ? { ...m, streaming: false, error: String(p.message ?? 'turn failed') }
             : m));
         break;
+      }
       default:
         break;
     }
@@ -351,6 +391,61 @@ export function useAura(settings: Settings) {
     }
   }, [messages, busy, sessionId]);
 
+  /**
+   * Run a board task under its agent's preset.
+   *
+   * A fresh session per task, and deliberately so. The preset's permission and
+   * allowed tools are *session* properties, so reusing the chat session would
+   * either ignore the agent's limits or silently re-scope the conversation the
+   * user is having — and a "reviewer" that inherited an auto-approving chat
+   * session could edit the repo, which is exactly the theatre the presets
+   * exist to avoid.
+   */
+  const runTask = useCallback(async (task: BoardTask) => {
+    const client = clientRef.current;
+    if (!client || runningTaskRef.current) return;
+
+    const preset = board.presets.find((p) => p.id === task.agent);
+    const prompt = task.notes?.trim()
+      ? `${task.title.trim()}\n\n${task.notes.trim()}`
+      : task.title.trim();
+
+    try {
+      const created = await client.request<{ sessionId: string }>(M.sessionCreate, {
+        // '.' matches newChat: the engine resolves it against its own default
+        // project root, so board tasks land in the same project as the chat.
+        projectRoot: '.',
+        name: task.title.slice(0, 60),
+        // Per-task model override; empty falls back to the session's model.
+        ...(task.model ? { model: task.model } : settingsRef.current.model ? { model: settingsRef.current.model } : {}),
+        ...(preset ? { permission: preset.permission } : {}),
+        ...(preset?.allowedTools ? { allowedTools: preset.allowedTools } : {}),
+      });
+
+      runningTaskRef.current = task;
+      await board.update(task.id, { column: 'execution', sessionId: created.sessionId });
+
+      setSessionId(created.sessionId);
+      setMessages([{
+        id: `u${Date.now()}`, role: 'user', text: prompt, tools: [], at: Date.now(),
+      }]);
+      setBusy(true);
+      setError(null);
+      await client.request(M.turnSend, { sessionId: created.sessionId, message: prompt });
+      void refreshConversations();
+    } catch (e) {
+      runningTaskRef.current = null;
+      setBusy(false);
+      setError(e instanceof Error ? e.message : String(e));
+      // The tile must not sit in `execution` for a run that never started.
+      void board.update(task.id, {
+        column: 'preparation',
+        failed: true,
+        result: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }, [board, refreshConversations]);
+
   useEffect(() => {
     if (connection !== 'open') return;
     void refreshConversations();
@@ -367,8 +462,10 @@ export function useAura(settings: Settings) {
   return useMemo(() => ({
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
     send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations, systemNote,
+    board, runTask,
   }), [
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
     send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations, systemNote,
+    board, runTask,
   ]);
 }

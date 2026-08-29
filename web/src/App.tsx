@@ -148,8 +148,9 @@ export function App() {
           />
         ) : (
           <Board
-            messages={aura.messages}
-            awaitingApproval={aura.approval?.tool ?? null}
+            board={aura.board}
+            busy={aura.busy}
+            onRun={(task) => void aura.runTask(task)}
             t={t}
           />
         )}

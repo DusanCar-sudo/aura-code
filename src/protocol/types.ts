@@ -51,6 +51,7 @@ export type ErrorCode =
   | 'unknown_method'
   | 'bad_params'
   | 'no_such_session'
+  | 'no_such_task'       // a board task id the engine does not have
   | 'session_busy'       // a turn is already running on this session
   | 'budget_exhausted'
   | 'provider_error'
@@ -225,6 +226,10 @@ export const M = {
   turnCancel: 'turn.cancel',
   toolsList: 'tools.list',
   usageGet: 'usage.get',
+  boardGet: 'board.get',
+  boardAdd: 'board.add',
+  boardUpdate: 'board.update',
+  boardRemove: 'board.remove',
   // engine → client (request)
   approvalRequest: 'approval.request',
   // engine → client (events)
@@ -236,5 +241,7 @@ export const M = {
   turnToolBlocked: 'turn.tool_blocked',
   turnCompleted: 'turn.completed',
   turnError: 'turn.error',
+  /** The board changed — sent to every client so two open windows agree. */
+  boardChanged: 'board.changed',
   log: 'log',
 } as const;

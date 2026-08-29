@@ -52,6 +52,24 @@ describe('locales', () => {
     }
   });
 
+  it('defines every key the components build at runtime', () => {
+    // The check above can only see keys that already exist in `en`. A key the
+    // UI composes — `board.col.${column}` — is invisible to it, so a missing
+    // one ships and renders as the raw key on screen. That is exactly what
+    // happened to board.col.execution; this is the guard.
+    const dynamic = [
+      ...['planning', 'preparation', 'execution', 'finished'].map((c) => `board.col.${c}`),
+      ...['chat', 'board'].map((v) => `view.${v}`),
+    ];
+    const missing: string[] = [];
+    for (const code of CODES) {
+      for (const key of dynamic) {
+        if (translate(code, key) === key) missing.push(`${code}:${key}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
   it('falls back to English for an unknown key rather than throwing', () => {
     expect(() => translate('fr', 'no.such.key')).not.toThrow();
     expect(translate('fr', 'no.such.key')).toBe('no.such.key');

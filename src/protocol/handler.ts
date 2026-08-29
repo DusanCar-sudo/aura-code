@@ -5,6 +5,11 @@ import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setConfirmHandler, type ConfirmContext } from '../safety/permissions.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { TOOL_DEFINITIONS } from '../tools/index.js';
+import {
+  addTask, loadBoard, removeTask, saveBoard, updateTask,
+} from '../board/store.js';
+import { BOARD_AGENTS, BOARD_COLUMNS, type BoardColumn, type BoardAgent } from '../board/types.js';
+import { agentPresets } from '../board/agents.js';
 import type { Display } from '../cli/display.js';
 import type { HistoryMessage } from '../providers/types.js';
 import {
@@ -129,6 +134,10 @@ export class ProtocolHandler {
       case M.turnCancel:      return this.turnCancel(req, p);
       case M.toolsList:       return this.ok(req.id, { tools: this.listTools() });
       case M.usageGet:        return this.usageGet(req, p);
+      case M.boardGet:        return this.boardGet(req, p);
+      case M.boardAdd:        return this.boardAdd(req, p);
+      case M.boardUpdate:     return this.boardUpdate(req, p);
+      case M.boardRemove:     return this.boardRemove(req, p);
       default:
         return this.fail(req.id, { code: 'unknown_method', message: `Unknown method: ${req.method}` });
     }
@@ -470,6 +479,95 @@ export class ProtocolHandler {
       return null;
     }
     return s;
+  }
+
+
+  // ── Board ──────────────────────────────────────────────────────────────────
+  //
+  // The board is per project, not per session: a task outlives the chat it was
+  // planned in, and binding it to a session would delete the user's planning
+  // every time they started a new conversation.
+
+  /** The project root a board request applies to. */
+  private boardRoot(p: Record<string, unknown>): string {
+    return typeof p.projectRoot === 'string' && p.projectRoot
+      ? p.projectRoot
+      : this.opts.defaultProjectRoot;
+  }
+
+  /**
+   * Persist and announce in one step.
+   *
+   * Every mutation broadcasts `board.changed` with the whole board rather than
+   * a delta. The board is small, and two windows open on the same project
+   * reconciling deltas is a synchronisation problem worth more than it solves.
+   */
+  private boardCommit(root: string, state: ReturnType<typeof loadBoard>): void {
+    saveBoard(root, state);
+    this.emit(M.boardChanged, undefined, { projectRoot: root, tasks: state.tasks });
+  }
+
+  private boardGet(req: ReqFrame, p: Record<string, unknown>): void {
+    const root = this.boardRoot(p);
+    this.ok(req.id, {
+      projectRoot: root,
+      tasks: loadBoard(root).tasks,
+      // The client renders the pickers from these, so an agent added to the
+      // engine appears in the UI without a matching frontend release — and,
+      // more importantly, the client dispatches with the engine's own
+      // permission and tool set rather than a copy that can drift.
+      columns: BOARD_COLUMNS,
+      agents: BOARD_AGENTS,
+      presets: agentPresets(),
+    });
+  }
+
+  private boardAdd(req: ReqFrame, p: Record<string, unknown>): void {
+    const title = typeof p.title === 'string' ? p.title.trim() : '';
+    if (!title) {
+      return this.fail(req.id, { code: 'bad_params', message: 'A task needs a title.' });
+    }
+    const root = this.boardRoot(p);
+    const state = loadBoard(root);
+    const task = addTask(state, {
+      title,
+      notes: typeof p.notes === 'string' ? p.notes : undefined,
+      column: typeof p.column === 'string' ? p.column as BoardColumn : undefined,
+      agent: typeof p.agent === 'string' ? p.agent as BoardAgent : undefined,
+      model: typeof p.model === 'string' ? p.model : undefined,
+    });
+    this.boardCommit(root, state);
+    this.ok(req.id, { task });
+  }
+
+  private boardUpdate(req: ReqFrame, p: Record<string, unknown>): void {
+    const id = typeof p.id === 'string' ? p.id : '';
+    const root = this.boardRoot(p);
+    const state = loadBoard(root);
+    // Only forward keys the caller actually sent: an absent key must not
+    // overwrite a stored value with undefined, or moving a tile would erase
+    // its notes.
+    const patch: Record<string, unknown> = {};
+    for (const key of ['title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result', 'failed', 'order']) {
+      if (p[key] !== undefined) patch[key] = p[key];
+    }
+    const task = updateTask(state, id, patch);
+    if (!task) {
+      return this.fail(req.id, { code: 'no_such_task', message: `No task with id "${id}".` });
+    }
+    this.boardCommit(root, state);
+    this.ok(req.id, { task });
+  }
+
+  private boardRemove(req: ReqFrame, p: Record<string, unknown>): void {
+    const id = typeof p.id === 'string' ? p.id : '';
+    const root = this.boardRoot(p);
+    const state = loadBoard(root);
+    if (!removeTask(state, id)) {
+      return this.fail(req.id, { code: 'no_such_task', message: `No task with id "${id}".` });
+    }
+    this.boardCommit(root, state);
+    this.ok(req.id, { removed: id });
   }
 
   private ok(id: string, result: Record<string, unknown>): void {
