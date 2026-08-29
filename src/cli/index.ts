@@ -88,6 +88,7 @@ import { handleModeCommand } from './repl-mode-commands.js';
 import { handleWebCommand } from './repl-web-command.js';
 import { handleCatchCommand } from './repl-catch-command.js';
 import { startRecorder } from '../record/recorder.js';
+import { sidecarShots } from '../record/shots.js';
 import { checkComputerUseGate } from '../tools/screen/disclosure.js';
 import type { RecorderHandle } from '../record/recorder.js';
 import { pendingUpdateNotice, refreshUpdateCacheInBackground } from '../util/update-check.js';
@@ -161,8 +162,10 @@ function makeStdinTunerIO(): TunerIO {
 const webServer: { child: ChildProcess | null; url: string | null } = { child: null, url: null };
 
 /** The :catchthis recording in progress, if any. One per REPL. */
-const catchSession: { handle: RecorderHandle | null; startedAt: number; title?: string } =
-  { handle: null, startedAt: 0 };
+const catchSession: {
+  handle: RecorderHandle | null; startedAt: number; title?: string;
+  id?: string; shots?: import('../record/shots.js').ShotTaker;
+} = { handle: null, startedAt: 0 };
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
@@ -2812,15 +2815,18 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   // see repl-catch-command.ts.
   {
     let caughtTask: string | undefined;
+    const computerUseAllowed = checkComputerUseGate(isComputerUseEnabled()).allowed;
     const caught = await handleCatchCommand(input, {
       print: (line: string) => console.log(chalk.hex(TEXT_DIM_HEX)(line)),
       session: catchSession,
-      start: () => startRecorder(),
+      start: (o) => startRecorder(o),
+      // Photographing the screen goes through the same gate as moving the
+      // pointer: a click screenshot is exactly the disclosure computer use
+      // exists to make, so recording one without it would route around it.
+      shotsFor: computerUseAllowed ? (dir: string) => sidecarShots(dir) : undefined,
       // Replay drives the real pointer, so it goes through the same gate as
       // any other computer use rather than inventing a second way in.
-      run: checkComputerUseGate(isComputerUseEnabled()).allowed
-        ? (prompt: string) => { caughtTask = prompt; }
-        : undefined,
+      run: computerUseAllowed ? (prompt: string) => { caughtTask = prompt; } : undefined,
     });
     if (caught) return { handled: true, runTask: caughtTask } as ReplCommandResult;
   }

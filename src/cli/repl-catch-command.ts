@@ -18,14 +18,26 @@
 import type { RawEvent, Recording } from '../record/types.js';
 import type { RecorderHandle } from '../record/recorder.js';
 import { describe as describeStep } from '../record/compile.js';
-import { asTaskPrompt, buildRecording, deleteRecording, listRecordings, loadRecording, saveRecording } from '../record/store.js';
+import {
+  asTaskPrompt, buildRecording, deleteRecording, listRecordings, loadRecording,
+  newRecordingId, saveRecording, shotsDir,
+} from '../record/store.js';
+import type { ShotTaker } from '../record/shots.js';
 
 export interface CatchCommandCtx {
   print: (line: string) => void;
   /** The recording in progress, if any. Held by the REPL across commands. */
-  session: { handle: RecorderHandle | null; startedAt: number; title?: string };
+  session: {
+    handle: RecorderHandle | null; startedAt: number; title?: string;
+    /** The id is minted at start, so click screenshots can be written into the
+     *  recording's own directory while it is still being recorded. */
+    id?: string;
+    shots?: ShotTaker;
+  };
   /** Injected so tests do not spawn a real recorder. */
-  start?: () => RecorderHandle;
+  start?: (opts: { onClick?: (i: number) => Promise<string | null> }) => RecorderHandle;
+  /** Builds the screenshot taker for a recording. Absent means capture nothing. */
+  shotsFor?: (dir: string) => ShotTaker;
   /** Hand a prompt to the agent as a task. */
   run?: (prompt: string) => void;
 }
@@ -74,9 +86,15 @@ export async function handleCatchCommand(
 }
 
 async function begin(c: CatchCommandCtx, title: string): Promise<void> {
-  const handle = (c.start ?? (() => { throw new Error('no recorder'); }))();
+  const id = newRecordingId();
+  const shots = c.shotsFor?.(shotsDir(id));
+  const handle = (c.start ?? (() => { throw new Error('no recorder'); }))({
+    onClick: shots ? (i) => shots.take(i) : undefined,
+  });
   try {
     const { devices } = await handle.ready;
+    c.session.id = id;
+    c.session.shots = shots;
     c.session.handle = handle;
     c.session.startedAt = Date.now();
     // Kept on the session, because the name is given when you START — you know
@@ -91,6 +109,7 @@ async function begin(c: CatchCommandCtx, title: string): Promise<void> {
     c.print('    This reads the keyboard directly, so it captures every window —');
     c.print('    including anything you type outside Aura. Avoid passwords.');
     c.print('    Do the job now, then type :catchthis again to stop.');
+    if (shots) c.print('    A screenshot is taken at each click, to show what was clicked.');
     if (title) c.print(`    It will be saved as "${title}".`);
     c.print('');
   } catch (e) {
@@ -104,9 +123,17 @@ async function stop(c: CatchCommandCtx, title: string): Promise<void> {
   c.session.handle = null;
 
   const events: RawEvent[] = await handle.stop();
+  const shots = handle.shots();
+  await c.session.shots?.close();
   // A name given at stop wins, so an afterthought still lands.
-  const rec = buildRecording(events, { title: title || c.session.title });
+  const rec = buildRecording(events, {
+    id: c.session.id,
+    title: title || c.session.title,
+    shots,
+  });
   c.session.title = undefined;
+  c.session.id = undefined;
+  c.session.shots = undefined;
 
   if (rec.steps.length === 0) {
     c.print('  Nothing was recorded — no keys, clicks or scrolling. Not saved.');
@@ -115,7 +142,8 @@ async function stop(c: CatchCommandCtx, title: string): Promise<void> {
 
   saveRecording(rec);
   c.print('');
-  c.print(`  ■ Caught "${rec.title}" — ${rec.steps.length} steps, ${(rec.durationMs / 1000).toFixed(1)}s  [${rec.id}]`);
+  const shotNote = rec.shots.length ? `, ${rec.shots.length} screenshot${rec.shots.length === 1 ? '' : 's'}` : '';
+  c.print(`  ■ Caught "${rec.title}" — ${rec.steps.length} steps, ${(rec.durationMs / 1000).toFixed(1)}s${shotNote}  [${rec.id}]`);
   printSteps(c, rec);
 
   if (rec.typedText.length) {

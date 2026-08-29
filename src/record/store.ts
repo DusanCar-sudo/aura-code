@@ -24,6 +24,11 @@ export function recordingPath(id: string): string {
   return path.join(recordingsDir(), `${id}.json`);
 }
 
+/** Where a recording's click screenshots go. Beside the recording itself. */
+export function shotsDir(id: string): string {
+  return path.join(recordingsDir(), `${id}-shots`);
+}
+
 export function newRecordingId(): string {
   return crypto.randomBytes(5).toString('hex');
 }
@@ -98,6 +103,10 @@ export function listRecordings(): Recording[] {
 export function deleteRecording(id: string): boolean {
   try {
     fs.rmSync(recordingPath(id), { force: true });
+    // The screenshots go with it. They are pictures of the operator's desktop
+    // at the moment of a click, so leaving them behind after a delete would
+    // keep exactly the thing they asked to be rid of.
+    fs.rmSync(shotsDir(id), { recursive: true, force: true });
     return true;
   } catch {
     return false;

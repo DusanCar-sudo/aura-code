@@ -24,22 +24,24 @@ afterEach(() => {
   try { fs.rmSync(home, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 
-const fakeRecorder = (events: RawEvent[]): RecorderHandle => ({
+const fakeRecorder = (events: RawEvent[], shots: string[] = []): RecorderHandle => ({
   ready: Promise.resolve({ devices: 3 }),
   events: () => events,
   stop: async () => events,
+  shots: () => shots,
 });
 
-const ctx = (events: RawEvent[] = []) => {
+const ctx = (events: RawEvent[] = [], shots: string[] = []) => {
   const printed: string[] = [];
   const ran: string[] = [];
+  const clicks: number[] = [];
   const c: CatchCommandCtx = {
     print: (l) => printed.push(l),
     session: { handle: null, startedAt: 0 },
-    start: () => fakeRecorder(events),
+    start: () => fakeRecorder(events, shots),
     run: (p) => ran.push(p),
   };
-  return { c, printed, ran, out: () => printed.join('\n') };
+  return { c, printed, ran, clicks, out: () => printed.join('\n') };
 };
 
 const typed = (word: string): RawEvent[] => {
@@ -164,3 +166,52 @@ async function countSaved(): Promise<number> {
     return fs.readdirSync(path.join(home, 'recordings')).filter((f) => f.endsWith('.json')).length;
   } catch { return 0; }
 }
+
+describe('screenshots at each click', () => {
+  const clickEvents: RawEvent[] = [
+    { t: 10, kind: 'button', code: 'BTN_LEFT', value: 1 },
+    { t: 20, kind: 'button', code: 'BTN_LEFT', value: 0 },
+  ];
+
+  it('captures nothing when no taker is supplied', async () => {
+    // Computer use off: the step list is still worth having, so a recording
+    // without shots must remain a normal outcome rather than a failure.
+    const t = ctx(clickEvents);
+    await handleCatchCommand(':catchthis', t.c);
+    await handleCatchCommand(':catchthis', t.c);
+    expect(t.out()).not.toMatch(/screenshot/i);
+  });
+
+  it('tells the operator the screen is being captured too', async () => {
+    // Recording the keyboard is disclosed on every start; photographing the
+    // screen is at least as intrusive and gets the same treatment.
+    const t = ctx(clickEvents, ['shot-00.png']);
+    t.c.shotsFor = () => ({ take: async () => 'shot-00.png', close: async () => {} });
+    await handleCatchCommand(':catchthis', t.c);
+    expect(t.out()).toMatch(/screenshot is taken at each click/i);
+  });
+
+  it('counts the shots it kept and passes them to the agent', async () => {
+    const t = ctx(clickEvents, ['shot-00.png']);
+    t.c.shotsFor = () => ({ take: async () => 'shot-00.png', close: async () => {} });
+    await handleCatchCommand(':catchthis a job', t.c);
+    await handleCatchCommand(':catchthis', t.c);
+    expect(t.out()).toMatch(/1 screenshot/);
+
+    const id = /\[([0-9a-f]+)\]/.exec(t.out())?.[1] ?? '';
+    const r = ctx();
+    await handleCatchCommand(`:catchthis run ${id}`, r.c);
+    expect(r.ran[0]).toContain('shot-00.png');
+  });
+
+  it('closes the capture session when recording stops', async () => {
+    // The sidecar holds a portal stream; leaving it open would keep the screen
+    // being captured after the operator believes recording ended.
+    let closed = false;
+    const t = ctx(clickEvents, []);
+    t.c.shotsFor = () => ({ take: async () => null, close: async () => { closed = true; } });
+    await handleCatchCommand(':catchthis', t.c);
+    await handleCatchCommand(':catchthis', t.c);
+    expect(closed).toBe(true);
+  });
+});

@@ -28,6 +28,18 @@ export interface RecorderHandle {
   stop(): Promise<RawEvent[]>;
   /** Events so far — read live so a caller can show a running count. */
   events(): RawEvent[];
+  /** Screenshot paths, in click order. Only filled once `stop` has resolved. */
+  shots(): string[];
+}
+
+export interface RecorderOptions {
+  python?: string;
+  /**
+   * Capture the screen at a click. Called on the press, not the release, so
+   * the frame is as close as possible to what the operator was looking at when
+   * they decided to click.
+   */
+  onClick?: (index: number) => Promise<string | null>;
 }
 
 /**
@@ -37,8 +49,15 @@ export interface RecorderHandle {
  * through `ready`, because the caller wants to print that as a message rather
  * than handle an exception at the point of a keystroke.
  */
-export function startRecorder(python = process.env.AURA_PYTHON ?? 'python3'): RecorderHandle {
+export function startRecorder(opts: RecorderOptions = {}): RecorderHandle {
+  const python = opts.python ?? process.env.AURA_PYTHON ?? 'python3';
   const collected: RawEvent[] = [];
+  // Capture is slower than reading an event, so the shots are started as the
+  // clicks arrive and collected at the end. Awaiting one inside the stdout
+  // handler would stall the reader and lose whatever was typed meanwhile.
+  const pending: Promise<string | null>[] = [];
+  let taken: string[] = [];
+  let clicks = 0;
   let child: ChildProcess | null = null;
   // Captured out of the executor rather than declared as `let x = null` above
   // it: TypeScript narrows those to `never` at every later use, because it
@@ -55,7 +74,7 @@ export function startRecorder(python = process.env.AURA_PYTHON ?? 'python3'): Re
     child = spawn(python, [recorderScriptPath()], { stdio: ['pipe', 'pipe', 'pipe'] });
   } catch (e) {
     fail(e instanceof Error ? e : new Error(String(e)));
-    return { ready, stop: async () => collected, events: () => collected };
+    return { ready, stop: async () => collected, events: () => collected, shots: () => [] };
   }
 
   let buffer = '';
@@ -73,7 +92,11 @@ export function startRecorder(python = process.env.AURA_PYTHON ?? 'python3'): Re
       if (msg.ready) { settle({ devices: Number(msg.devices ?? 0) }); continue; }
       if (msg.done) continue;
       if (typeof msg.t === 'number' && typeof msg.kind === 'string') {
-        collected.push(msg as unknown as RawEvent);
+        const event = msg as unknown as RawEvent;
+        collected.push(event);
+        if (opts.onClick && event.kind === 'button' && event.value === 1) {
+          pending.push(opts.onClick(clicks++));
+        }
       }
     }
   });
@@ -86,6 +109,7 @@ export function startRecorder(python = process.env.AURA_PYTHON ?? 'python3'): Re
   return {
     ready,
     events: () => collected,
+    shots: () => taken,
     async stop() {
       if (!child || child.exitCode !== null) return collected;
       // A newline is the recorder's clean stop: it finishes the events already
@@ -96,6 +120,11 @@ export function startRecorder(python = process.env.AURA_PYTHON ?? 'python3'): Re
         child?.once('exit', done);
         setTimeout(() => { child?.kill('SIGTERM'); resolve(); }, 2000);
       });
+      // Settle the captures that were still in flight when recording stopped —
+      // the last click's shot is usually one of them, and it is the one most
+      // likely to matter.
+      const results = await Promise.all(pending);
+      taken = results.filter((p): p is string => typeof p === 'string');
       return collected;
     },
   };
