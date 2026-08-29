@@ -21,6 +21,14 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      # Same reason as in ci.yml: pdftotext and pdfinfo are how the render tests
+      # verify a PDF's content is really there, and this job runs `npm test`
+      # before publishing. Without them five tests fail and the release is
+      # blocked — the gate doing its job over a missing apt package rather than
+      # a real defect.
+      - name: Install PDF text extraction
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Install dependencies
         run: npm ci
 
