@@ -2,7 +2,116 @@
 
 All notable changes to Aura Code are documented here.
 
-## [Unreleased]
+## [0.17.0] — 2026-08-30
+
+npm goes straight from 0.15.5 to this. 0.16.0 was tagged but never published —
+the account's Actions were locked over a billing issue and the publish workflow
+could not run — so its notes are kept below and everything in them ships here
+too.
+
+### Added — a real boundary, on request
+- **`aura --sandboxed`.** Every other guard in `src/safety/` is TypeScript
+  running in the same process, with the same UID, as the agent it constrains —
+  SECURITY.md has always said so, including that Aura once edited its way past
+  the computer-use gate when asked firmly enough. On Linux with bubblewrap the
+  CLI now re-executes itself into an unprivileged user namespace first: the
+  installed tree is read-only, so tampering cannot persist into the next
+  session, and only the project, `~/.aura` and a private tmpfs are writable, so
+  writes elsewhere fail with `EROFS` rather than at a path check. It refuses
+  loudly where it cannot deliver that — no mechanism, on Aura's own checkout
+  (where the two guarantees contradict each other), or alongside `--computer`,
+  since a process that can drive the keyboard can open a terminal outside a
+  filesystem jail. It does not claim to contain an adversarial agent, and the
+  startup banner says so in the same breath as the guarantees.
+
+### Added — the Kanban board
+- **A board that runs the work, not a picture of it.** Four columns —
+  planning, preparation, execution, finished — with tiles you write, assign,
+  arrange and connect. Advancing a tile out of preparation dispatches it to its
+  agent and the answer comes back onto the tile. Aura's previous Kanban was
+  2855 lines deleted as dead code with the reason "no call sites"; a board that
+  cannot run anything is decoration, and decoration is what got deleted.
+- **Agents are capability presets, not labels.** Choosing Researcher or
+  Reviewer sets the session's `permission` and `allowedTools`, both enforced by
+  the engine — a read-only reviewer cannot rewrite the repo however it is
+  prompted. Per-tile model override too, so cheap work can go to a cheap model.
+- **Workflow links.** A tile names the task it runs next; finishing one starts
+  the other, with no button in between, and only on success. The chain refuses
+  to revisit a task it has already run, because a link back to an earlier one is
+  otherwise an infinite workflow that spends real money until somebody notices.
+- **Files and images on a tile**, written beside the board and passed to the
+  agent by path — it has `read_file` and `image_read`, so a 20MB screenshot
+  costs the prompt one line.
+- **Tasks run concurrently.** The engine's one-turn rule is per session and
+  each task gets its own, so the only thing serialising the board was a UI flag
+  meaning "the chat is streaming".
+
+### Added — `:catchthis`
+- **Demonstrate a job once, get it back as a repeatable task.** Records
+  keyboard and mouse through evdev, compiles the raw press/release stream into
+  the handful of steps a person would describe out loud, and hands it back to
+  the agent — optionally "and now do that twenty times". Replay is vision-guided
+  rather than coordinate-based, because row 2 of a list is not where row 1 was,
+  and a coordinate replay is wrong by the second repetition and wrong silently.
+  A screenshot is taken at each click, since Wayland will not report where the
+  pointer is. It announces on every start that it reads every window, and shows
+  everything typed before storing it.
+
+### Added
+- **`webaura` and `:auraweb`** start the web client and open it. A separate
+  binary because anything named `aura…` reads like "the TUI, but…".
+- **Update notice at startup.** One line when npm has a newer version, read
+  from a cache so nothing waits on the network to see a prompt.
+- **macOS readiness preflight for computer use** — not the backend, which does
+  not exist yet, but the checks that answer whether a Mac could run it, since
+  the failures there are silent: with TCC denied, capture returns the wallpaper
+  and posted events are dropped without erroring.
+
+### Changed
+- **`auto` is the default permission.** A prompt on every write is one people
+  say yes to almost every time, and a confirmation that is always approved
+  teaches them to approve without reading. The dangerous-command blocklist is
+  untouched, and both stricter levels are one click away.
+- **PDFs no longer need poppler.** `read_file` and the blank-render check
+  shelled out to `pdftotext`, so on a machine where somebody had just run
+  `npm install -g aura-code` the feature degraded to an apology naming an apt
+  package. poppler is still preferred where present — `-layout` keeps columns
+  apart — with a bundled pdf.js behind it.
+- **CLAUDE.md is now AGENTS.md**, the name the other tools already read.
+  AURA.md keeps its own job and its own truncation budget.
+- Third-party agent directories (`.agents`, `.qwen`, `.kilocode`, `.openclaude`
+  and the rest) are out of the repo and ignored.
+
+### Fixed
+- **Approvals could fall through to a terminal nobody was watching.**
+  `confirm()` is a global side channel and its handler was installed per turn,
+  so with two turns in flight the first to finish stripped routing from the
+  second. Now installed once and routed through AsyncLocalStorage.
+- **Choosing a provider reached a different provider.** BytePlus and FPT resell
+  other vendors' models under their own gateway, so FPT's catalogue lists plain
+  `GLM-5.2` — sent unprefixed that routes to Zhipu's API with a Zhipu key: the
+  wrong endpoint, the wrong bill, and an "insufficient balance" error naming an
+  account the user never chose. Writing the test for it found the same class of
+  bug for Hugging Face, whose `org/model` ids collide with routing prefixes.
+- **A turn that failed before producing anything rendered nothing at all** — no
+  answer, no error, no clue. A provider 429 or an auth failure produces neither
+  a delta nor a tool call, so there was no message to write the summary into.
+- **Setting an API key required enabling unsandboxed plugin installation**,
+  because both sat behind one flag, and the refusal talked about plugins. They
+  are now separate: keys are allowed on a loopback bind and refused once
+  `--lan` or `--tailscale` puts the server on a network.
+- Retry and fail over on real SDK errors rather than only `ApiError`; continue
+  past the turn cap instead of stopping dead; stop reporting success for a
+  reply that only *promises* the work.
+- Shell operators work through `rtkWrap`; a stalled SPA fetch loop; each
+  session gets its own loop-persistence file; Node's Happy Eyeballs disabled to
+  stop spurious "Connection error".
+
+## [0.16.0] — 2026-08-28 · tagged, never published
+
+Held back by the account lock described above, so npm users receive this as
+part of 0.17.0 rather than on its own. Kept as its own section because the work
+is distinct and the tag exists.
 
 Three loops the codebase already had every piece of, and nothing connecting
 them: a run could not be corrected without being cancelled, computer use could
