@@ -413,13 +413,16 @@ export function useAura(settings: Settings) {
       });
       // Follow the run in the chat view, so the tool calls are visible while it
       // works rather than only the answer at the end.
+      // Follow the newest run in the chat view so its tool calls are visible
+      // while it works. Deliberately does NOT set `busy`: a board task runs in
+      // its own session, so the chat's session is not busy — and marking it so
+      // was what stopped a second task from being started at all.
       setSessionId(res.sessionId);
       setMessages([{
         id: `u${Date.now()}`, role: 'user',
         text: task.notes?.trim() ? `${task.title}\n\n${task.notes}` : task.title,
         tools: [], at: Date.now(),
       }]);
-      setBusy(true);
       void refreshConversations();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

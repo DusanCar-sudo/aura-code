@@ -624,7 +624,13 @@ function Tile({
             <button
               type="button"
               className="board-run"
-              disabled={busy}
+              // A task is blocked only by its own run, never by somebody
+              // else's. Each board task gets its own engine session, and the
+              // engine's one-turn-at-a-time rule is per session — so the only
+              // thing that was serialising the board was this button reading a
+              // global "the chat is streaming" flag that has nothing to do
+              // with it.
+              disabled={task.column === 'execution'}
               title={t('board.runHint')}
               onClick={() => onRun(task)}
             >
