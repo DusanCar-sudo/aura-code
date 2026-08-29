@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Icon } from './Icon';
 
 type T = (key: string) => string;
 
@@ -178,7 +179,7 @@ export function Composer({
               <span key={a.id} className="attachment">
                 {a.type.startsWith('image/')
                   ? <img src={a.dataUrl} alt="" />
-                  : <span className="attachment-doc" aria-hidden="true">◫</span>}
+                  : <span className="attachment-doc" aria-hidden="true"><Icon name="file" /></span>}
                 <span className="attachment-name" title={a.name}>{a.name}</span>
                 <button
                   type="button"
@@ -186,7 +187,7 @@ export function Composer({
                   aria-label={t('app.delete')}
                   onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
                 >
-                  ✕
+                  <Icon name="close" size="0.9em" />
                 </button>
               </span>
             ))}
@@ -241,7 +242,7 @@ export function Composer({
               aria-label={t('composer.attachFile')}
               onClick={() => fileRef.current?.click()}
             >
-              ◫
+              <Icon name="paperclip" size="1.05em" />
             </button>
             <input
               ref={photoRef}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Sigil } from './Sigil';
+import { Icon } from './Icon';
 import type { Conversation } from '../hooks/useAura';
 
 type T = (key: string) => string;
@@ -37,7 +38,7 @@ export function Sidebar({
             <span className="brand-name">Aura</span>
           </div>
           <button type="button" className="icon-btn sidebar-close" onClick={onClose} aria-label={t('settings.close')}>
-            ✕
+            <Icon name="close" />
           </button>
         </div>
 
@@ -74,7 +75,7 @@ export function Sidebar({
                   aria-label={t('app.delete')}
                   onClick={() => { if (confirm(t('app.deleteConfirm'))) onDelete(c.sessionId); }}
                 >
-                  ✕
+                  <Icon name="trash" size="0.95em" />
                 </button>
               </div>
             ))
@@ -82,7 +83,7 @@ export function Sidebar({
         </div>
 
         <button type="button" className="sidebar-settings" onClick={onSettings}>
-          <span aria-hidden="true">⚙</span> {t('app.settings')}
+          <Icon name="settings" size="1.05em" /> {t('app.settings')}
         </button>
       </aside>
     </>

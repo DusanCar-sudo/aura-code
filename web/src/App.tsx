@@ -3,6 +3,7 @@ import { useAura } from './hooks/useAura';
 import { loadSettings, saveSettings, type Settings } from './lib/settings';
 import { LOCALES, translate } from './i18n';
 import { Sidebar } from './components/Sidebar';
+import { Icon } from './components/Icon';
 import { Chat } from './components/Chat';
 import { SettingsPanel } from './components/Settings';
 import { Board } from './components/Board';
@@ -92,7 +93,7 @@ export function App() {
             onClick={() => setSidebarOpen((v) => !v)}
             aria-label={t('app.conversations')}
           >
-            ☰
+            <Icon name="menu" size="1.15em" />
           </button>
 
           <div className="topbar-title">

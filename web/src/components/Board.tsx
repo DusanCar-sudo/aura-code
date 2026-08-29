@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Cables } from './Cables';
+import { Icon, type IconName } from './Icon';
 import {
   BOARD_COLUMNS, isOrderable, orderBetween, tasksIn,
   type BoardApi, type BoardColumn, type BoardTask,
@@ -154,7 +155,7 @@ export function Board({ board, busy, onRun, t }: {
                   aria-label={`${t('board.new')} — ${t(`board.col.${column}`)}`}
                   onClick={() => setAdding(adding === column ? null : column)}
                 >
-                  +
+                  <Icon name="plus" size="1.05em" />
                 </button>
               </header>
               <div className="board-col-cards">
@@ -287,9 +288,9 @@ function NewJob({ onAdd, onCancel, t }: {
 }
 
 
-/** 📷 for something the agent can look at, 📄 for something it can read. */
-function fileIcon(type: string): string {
-  return type.startsWith('image/') ? '📷' : '📄';
+/** Something the agent can look at, or something it can read. */
+function fileIcon(type: string): IconName {
+  return type.startsWith('image/') ? 'image' : 'file';
 }
 
 /**
@@ -323,7 +324,7 @@ function Attachments({ task, board, t }: { task: BoardTask; board: BoardApi; t: 
         <div className="board-card-files">
           {files.map((a) => (
             <span className="board-file" key={a.path} title={a.path}>
-              {fileIcon(a.type)} {a.name}
+              <Icon name={fileIcon(a.type)} size="0.9em" /> {a.name}
               <span className="board-file-size">{Math.max(1, Math.round(a.size / 1024))} KB</span>
             </span>
           ))}
@@ -343,7 +344,7 @@ function Attachments({ task, board, t }: { task: BoardTask; board: BoardApi; t: 
         disabled={busy}
         onClick={() => input.current?.click()}
       >
-        {busy ? t('board.filesBusy') : `+ ${t('board.filesAdd')}`}
+        <Icon name="paperclip" size="1em" /> {busy ? t('board.filesBusy') : t('board.filesAdd')}
       </button>
       {/* Said once, here, because it is the thing that makes the feature make
           sense: the agent opens the file itself rather than being handed bytes. */}
@@ -402,6 +403,11 @@ function Tile({
   ].filter(Boolean).join(' ');
 
   const linked = task.linkedTo ? board.tasks.find((x) => x.id === task.linkedTo) : undefined;
+  const state = task.failed ? 'failed'
+    : task.attention ? 'attention'
+    : task.column === 'execution' ? 'running'
+    : task.column === 'finished' ? 'done'
+    : 'idle';
 
   return (
     <article
@@ -440,7 +446,7 @@ function Tile({
           onGrab(task.id, e.clientX, e.clientY);
         }}
       >
-        ⠿
+        <Icon name="grip" size="1.05em" />
       </span>
 
       <button
@@ -452,6 +458,12 @@ function Tile({
         onClick={() => { if (!dragging) onToggle(); }}
         aria-expanded={open}
       >
+        {/* The state, as one small mark. It replaces a 2px coloured edge down
+            the side of the card: a stripe that size reads as a container being
+            decorated, and at four possible colours it turned every column into
+            a set of differently-trimmed boxes. A dot states the same thing and
+            leaves the card a card. */}
+        <span className={`board-dot board-dot-${state}`} aria-hidden="true" />
         <span className="board-card-title">{task.title}</span>
         <span className="board-card-agent">{preset?.label ?? task.agent}</span>
       </button>
@@ -478,7 +490,7 @@ function Tile({
 
       {linked && (
         <div className="board-card-link" title={t('board.linkHint')}>
-          ⤷ {linked.title}
+          <Icon name="link" size="0.9em" /> {linked.title}
         </div>
       )}
 
@@ -487,7 +499,9 @@ function Tile({
       {!open && !!task.attachments?.length && (
         <div className="board-card-files">
           {task.attachments.map((a) => (
-            <span className="board-file" key={a.path}>{fileIcon(a.type)} {a.name}</span>
+            <span className="board-file" key={a.path}>
+              <Icon name={fileIcon(a.type)} size="0.9em" /> {a.name}
+            </span>
           ))}
         </div>
       )}
@@ -616,7 +630,7 @@ function Tile({
             title={t(`board.col.${prev}`)}
             onClick={() => void board.update(task.id, { column: prev })}
           >
-            ←
+            <Icon name="arrow-left" size="1em" />
           </button>
         )}
         {next && (
@@ -643,7 +657,7 @@ function Tile({
               title={t(`board.col.${next}`)}
               onClick={() => void board.update(task.id, { column: next })}
             >
-              →
+              <Icon name="arrow-right" size="1em" />
             </button>
           )
         )}

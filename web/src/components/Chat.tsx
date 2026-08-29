@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { Icon } from './Icon';
 import { Markdown, CopyButton } from './Markdown';
 import { Sigil } from './Sigil';
 import { Composer, type Attachment } from './Composer';
@@ -17,7 +18,7 @@ function ToolRow({ tool, t }: { tool: ToolEvent; t: T }) {
     <div className={`tool tool-${state}`}>
       <button className="tool-head" type="button" onClick={() => setOpen((v) => !v)}>
         <span className="tool-glyph" aria-hidden="true">
-          {state === 'blocked' ? '⊘' : state === 'done' ? '✓' : '◆'}
+          <Icon name={state === 'blocked' ? 'blocked' : state === 'done' ? 'check' : 'diamond'} size="0.85em" />
         </span>
         <span className="tool-name">{tool.name}</span>
         <span className="tool-verb">

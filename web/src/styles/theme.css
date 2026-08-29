@@ -21,12 +21,63 @@
   --err: #b15439;
   --warn: #d4903a;
 
-  /* ── Derived surfaces ── */
+  /* ── Derived surfaces ──
+     A ramp, not three unrelated greys. Each step is a real elevation: sunken
+     holds content, base is the resting plane, raised is a card, floating is
+     something lifted off the page. Anything that needs "a slightly different
+     background" picks a step instead of inventing a hex. */
+  --surface-sunken: #151d2c;
   --panel-raised: #22304a;
+  --surface-float: #293954;
   --line: #243149;
   --line-soft: #1a2436;
+  --line-strong: #35476a;
   --overlay: rgba(15, 23, 36, 0.82);
   --selection: rgba(204, 120, 92, 0.26);
+
+  /* Terracotta, as a family. Flat accent colour on every surface is what makes
+     an interface look assigned rather than designed. */
+  --accent: #cc785c;
+  --accent-bright: #e08e6f;
+  --accent-dim: #a05c45;
+  --accent-wash: rgba(204, 120, 92, 0.10);
+  --accent-edge: rgba(204, 120, 92, 0.34);
+
+  /* ── Elevation ──
+     Offset and blur, always. A zero-offset halo is decoration, not depth: real
+     light comes from above, so every shadow falls below its object. The
+     ambient layer under each keeps edges from looking cut out. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.24), 0 6px 14px rgba(0, 0, 0, 0.30);
+  --shadow-3: 0 4px 8px rgba(0, 0, 0, 0.26), 0 14px 32px rgba(0, 0, 0, 0.38);
+  --shadow-4: 0 8px 16px rgba(0, 0, 0, 0.28), 0 28px 60px rgba(0, 0, 0, 0.46);
+
+  /* ── Spacing ──
+     One scale so gaps relate to each other. Tight values are close together
+     because small differences matter at small sizes; the top end is sparse
+     because 48 and 56 are the same gap to the eye. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* ── Weight ──
+     Three steps, used consistently: body, something that leads, and a heading.
+     A scale with no weight steps forces size to carry every distinction. */
+  --w-normal: 400;
+  --w-medium: 550;
+  --w-bold: 650;
+
+  /* ── Motion ──
+     Exponential ease-out: fast at the start, settling at the end, which is how
+     things move when something stops them rather than when a curve runs out. */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 120ms;
+  --base: 220ms;
+  --slow: 420ms;
 
   /* ── Type ── */
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
@@ -34,8 +85,9 @@
 
   /* ── Metrics ── */
   --sidebar-w: 264px;
-  --radius: 8px;
-  --radius-sm: 5px;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
   --gutter: 16px;
   --header-h: 48px;
 
@@ -45,6 +97,7 @@
      here in the px those point sizes actually are (12pt = 16px, 16pt ≈ 21px)
      because a browser's pt is a print unit and mixing the two makes every
      later change guesswork. Change these four and the whole app follows. */
+  --fs-display: 30px;
   --fs-title: 21px;
   --fs-body: 16px;
   --fs-small: 14px;
@@ -58,7 +111,18 @@
 :root[data-theme='light'] {
   --bg: #f4f2ef;
   --panel-bg: #e9e5e0;
+  --surface-sunken: #ebe7e1;
   --panel-raised: #ddd8d1;
+  --surface-float: #fffdfa;
+  --line-strong: #c2b9ad;
+  --accent-wash: rgba(204, 120, 92, 0.12);
+  --accent-edge: rgba(204, 120, 92, 0.40);
+  /* Shadows on a light ground are shorter and softer — the same physics, less
+     contrast between the object and what is behind it. */
+  --shadow-1: 0 1px 2px rgba(43, 34, 26, 0.10);
+  --shadow-2: 0 2px 4px rgba(43, 34, 26, 0.08), 0 6px 14px rgba(43, 34, 26, 0.10);
+  --shadow-3: 0 4px 8px rgba(43, 34, 26, 0.10), 0 14px 32px rgba(43, 34, 26, 0.12);
+  --shadow-4: 0 8px 16px rgba(43, 34, 26, 0.12), 0 28px 60px rgba(43, 34, 26, 0.16);
   --text: #1b2330;
   --text-dim: #5c6675;
   --faint: #9aa3b0;
@@ -109,14 +173,30 @@ button {
   border: none;
   cursor: pointer;
   color: var(--text-dim);
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
 }
 button:hover:not(:disabled) { color: var(--text); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 :focus-visible {
-  outline: 1px solid var(--terracotta);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Icons inherit the size and colour of whatever they label, so no icon needs a
+   rule of its own to sit correctly next to text. */
+/* inline-block, not block: an icon sits *in* a line of text as often as it sits
+   in a flex row, and `display: block` pushed it onto a line of its own
+   wherever it was used inline. */
+.icon {
+  flex: none;
+  display: inline-block;
+  vertical-align: -0.14em;
 }
 
 /* Respect the OS setting for anyone who asked for less motion. */

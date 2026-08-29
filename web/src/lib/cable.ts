@@ -44,8 +44,12 @@ const DEFAULTS: Required<SpringOptions> = { stiffness: 120, damping: 14 };
 export function restingSag(from: Point, to: Point): number {
   const dx = Math.abs(to.x - from.x);
   const dy = Math.abs(to.y - from.y);
-  const fromSpan = Math.min(dx * 0.22, 70);
-  return Math.max(10, fromSpan - dy * 0.06);
+  // Keeps growing across a long span rather than flattening out. Capped at 70
+  // the sag stopped being visible once a cable crossed the whole board: over
+  // 900px it read as a straight diagonal scratch, which is the one thing the
+  // curve exists to avoid. A real cable hangs further the further it reaches.
+  const fromSpan = Math.min(dx * 0.28, 190);
+  return Math.max(12, fromSpan - dy * 0.05);
 }
 
 /**

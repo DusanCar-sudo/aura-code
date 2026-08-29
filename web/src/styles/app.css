@@ -114,13 +114,23 @@
 .convo {
   display: flex;
   align-items: center;
+  position: relative;
   border-radius: var(--radius-sm);
-  border-inline-start: 2px solid transparent;
 }
 .convo:hover { background: var(--panel-raised); }
-.convo-active {
-  background: var(--panel-raised);
-  border-inline-start-color: var(--terracotta);
+.convo-active { background: var(--panel-raised); }
+/* The current conversation is marked by a short bar that reads as a pointer
+   into the list, not by trimming the whole item down its edge. */
+.convo-active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  width: 3px;
+  height: 15px;
+  transform: translateY(-50%);
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
 }
 .convo-open {
   flex: 1;
@@ -161,11 +171,14 @@
   flex: 0 0 var(--header-h);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(6px);
+  /* Translucent and blurred because content scrolls beneath it — the effect is
+     doing a job, not decorating a bar. */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  z-index: 5;
 }
 .menu-btn { display: none; }
 .icon-btn { padding: 5px 8px; border-radius: var(--radius-sm); font-size: var(--fs-body); }
@@ -242,10 +255,11 @@
   margin-bottom: 5px;
 }
 .msg-error {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-inline-start: 2px solid var(--err);
-  background: color-mix(in srgb, var(--err) 10%, transparent);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--err) 12%, transparent);
   color: var(--text);
   font-size: var(--fs-small);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -293,10 +307,12 @@
 
 /* ── Tool calls ───────────────────────────────────────────────────────────── */
 .tools { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.tool { border-inline-start: 2px solid var(--line); }
-.tool-done { border-inline-start-color: var(--ok); }
-.tool-blocked { border-inline-start-color: var(--warn); }
-.tool-running { border-inline-start-color: var(--terracotta); }
+/* The row already states itself with an icon and a name, so the rule down the
+   side is a hairline that groups the list — the colour lives on the icon. */
+.tool { border-inline-start: 1px solid var(--line); }
+.tool-done .tool-glyph { color: var(--ok); }
+.tool-blocked .tool-glyph { color: var(--warn); }
+.tool-running .tool-glyph { color: var(--accent); }
 .tool-head {
   display: flex;
   align-items: center;
@@ -308,7 +324,9 @@
   text-align: start;
 }
 .tool-head:hover { background: var(--panel-raised); }
-.tool-glyph { color: var(--terracotta); }
+/* No colour of its own: the state rules above own it, and a blanket value here
+   would silently win by coming later. */
+.tool-glyph { display: flex; align-items: center; }
 .tool-done .tool-glyph { color: var(--ok); }
 .tool-blocked .tool-glyph { color: var(--warn); }
 .tool-name { color: var(--text); }
@@ -570,7 +588,7 @@
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
-.modal-title { margin: 0; font-size: var(--fs-title); font-weight: 600; }
+.modal-title { margin: 0; font-size: var(--fs-title); font-weight: var(--w-bold); letter-spacing: -0.015em; }
 .modal-body { padding: 16px; overflow-y: auto; }
 .modal-foot {
   display: flex;
@@ -641,19 +659,19 @@
   background: color-mix(in srgb, var(--terracotta) 10%, transparent);
 }
 .install-note {
-  margin: 8px 0 0;
-  padding: 8px 10px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   font-size: var(--fs-small);
-  border-inline-start: 2px solid var(--line);
 }
 .install-err {
-  border-inline-start-color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
   background: color-mix(in srgb, var(--err) 12%, transparent);
   color: var(--text);
 }
 .install-ok {
-  border-inline-start-color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
   background: color-mix(in srgb, var(--ok) 12%, transparent);
   color: var(--text);
 }
@@ -861,7 +879,15 @@
   padding: 9px 11px;
   border-bottom: 1px solid var(--line);
 }
-.board-col-title { font-size: var(--fs-title); font-weight: 600; color: var(--text); margin: 0; }
+/* Column headings: the one place on the board where type leads. Tighter
+   tracking at this size stops the word looking spaced out next to the tiles. */
+.board-col-title {
+  font-size: var(--fs-title);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+}
 .board-col-count {
   margin-inline-start: auto;
   font-family: var(--mono);
@@ -909,33 +935,51 @@
   touch-action: none;
   background: var(--panel-bg);
   border: 1px solid var(--line);
-  /* The stripe is a second signal, never the only one — the agent name and the
-     result text below say the same thing in words. */
-  border-inline-start: 2px solid var(--faint);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
-/* A light lift, so a tile reads as an object on the column rather than a patch
-   of a different colour. Kept subtle: every tile glowing equally is the same as
-   none of them glowing. */
+/* A tile is an object resting on the column: it lifts on hover and lifts
+   further while carried. Depth does the work a coloured edge was doing. */
 .board-card {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
-  transition: box-shadow 120ms ease, transform 120ms ease;
+  box-shadow: var(--shadow-1);
+  transition:
+    box-shadow var(--fast) var(--ease),
+    transform var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.board-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36); }
+.board-card:hover {
+  box-shadow: var(--shadow-2);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
 
-.board-card-running {
-  border-inline-start-color: var(--warn);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--warn) 30%, transparent);
+/* The state dot. One mark, four meanings, same geometry — so a column scans as
+   a list of tasks rather than a set of differently-trimmed boxes. */
+.board-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 0.45em;
+  border-radius: 50%;
+  background: var(--faint);
 }
-.board-card-failed  { border-inline-start-color: var(--err); }
+.board-dot-done { background: var(--ok); }
+.board-dot-failed { background: var(--err); }
+.board-dot-running {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent);
+}
+.board-dot-attention { background: var(--warn); }
+
+.board-card-running { border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.board-card-failed  { border-color: color-mix(in srgb, var(--err) 40%, var(--line)); }
 
 /* Urgent is the operator's own judgement, so it is the loudest thing on the
    board: the whole tile, not a corner badge. */
 .board-card-urgent {
-  border-color: color-mix(in srgb, var(--err) 55%, var(--line));
-  border-inline-start-color: var(--err);
-  background: color-mix(in srgb, var(--err) 12%, var(--panel-bg));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--err) 28%, transparent);
+  border-color: color-mix(in srgb, var(--err) 50%, var(--line));
+  background:
+    linear-gradient(color-mix(in srgb, var(--err) 13%, transparent), transparent 70%),
+    var(--panel-bg);
 }
 
 /* Waiting on a person. It alternates rather than pulsing one colour, because a
@@ -943,14 +987,20 @@
    means. Held to a slow 1.6s: anything faster is an irritation people learn to
    look away from, and this is the one state that must not be ignored. */
 .board-card-attention { animation: board-attention 1.6s ease-in-out infinite; }
+.board-card-attention .board-dot { animation: board-attention-dot 1.6s ease-in-out infinite; }
 @keyframes board-attention {
-  0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--warn) 55%, transparent); border-inline-start-color: var(--warn); }
-  50%      { box-shadow: 0 0 12px color-mix(in srgb, #5b8dd6 55%, transparent);     border-inline-start-color: #5b8dd6; }
+  0%, 100% { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+  50%      { border-color: color-mix(in srgb, #5b8dd6 60%, var(--line)); }
 }
-/* Respect a stated preference not to see motion — the colour change alone
-   still distinguishes the state. */
+@keyframes board-attention-dot {
+  0%, 100% { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 26%, transparent); }
+  50%      { background: #5b8dd6;     box-shadow: 0 0 0 4px color-mix(in srgb, #5b8dd6 26%, transparent); }
+}
+/* Respect a stated preference not to see motion — the colour alone still
+   distinguishes the state. */
 @media (prefers-reduced-motion: reduce) {
-  .board-card-attention { animation: none; border-inline-start-color: var(--warn); }
+  .board-card-attention, .board-card-attention .board-dot { animation: none; }
+  .board-card-attention .board-dot { background: var(--warn); }
 }
 
 .board-card-dragging { opacity: 0.4; }
@@ -970,7 +1020,10 @@
 
 /* What this tile pulls in when it finishes. */
 .board-card-link {
-  padding: 0 10px 6px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-2);
   font-size: var(--fs-micro);
   color: var(--terracotta);
   overflow: hidden;
@@ -1081,8 +1134,8 @@
 .board-card-edit .board-card-files { padding: 0; }
 .board-file {
   display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
+  align-items: center;
+  gap: var(--space-2);
   max-width: 100%;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -1158,18 +1211,22 @@
 
 .cable-line {
   fill: none;
-  stroke: var(--terracotta);
+  stroke: var(--accent);
   stroke-width: 2;
   stroke-linecap: round;
+  /* A connection between two tiles, not a rule across the board. Held back so
+     a cable spanning four columns supports the layout instead of cutting it in
+     half. */
+  opacity: 0.55;
 }
 .cable-glow {
   fill: none;
-  stroke: var(--terracotta);
-  stroke-width: 7;
+  stroke: var(--accent);
+  stroke-width: 8;
   stroke-linecap: round;
-  opacity: 0.16;
+  opacity: 0.10;
 }
-.cable-bead { fill: var(--terracotta); opacity: 0.9; }
+.cable-bead { fill: var(--accent); opacity: 0.8; }
 .cable-urgent .cable-line, .cable-urgent .cable-bead { stroke: var(--err); fill: var(--err); }
 .cable-urgent .cable-glow { stroke: var(--err); }
 

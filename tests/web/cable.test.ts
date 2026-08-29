@@ -59,7 +59,13 @@ describe('how far it hangs', () => {
 
   it('stops growing, so a board-wide cable stays on the board', () => {
     const huge = restingSag({ x: 0, y: 0 }, { x: 5000, y: 0 });
-    expect(huge).toBeLessThanOrEqual(70);
+    expect(huge).toBeLessThanOrEqual(190);
+  });
+
+  it('hangs visibly even across the whole board', () => {
+    // Capped too low, a cable spanning four columns reads as a straight
+    // diagonal scratch — the exact thing the curve exists to avoid.
+    expect(restingSag({ x: 0, y: 0 }, { x: 900, y: 0 })).toBeGreaterThan(90);
   });
 
   it('hangs less when strung steeply downhill, like a real one', () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Icon } from './Icon';
 import { LOCALES, type Locale } from '../i18n';
 import type { PermissionLevel, Settings as S } from '../lib/settings';
 
@@ -49,7 +50,7 @@ export function SettingsPanel({
       <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <h2 className="modal-title">{t('settings.title')}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('settings.close')}>✕</button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('settings.close')}><Icon name="close" /></button>
         </header>
 
         <nav className="tabs">
@@ -267,7 +268,7 @@ function ProviderTab({
               <p className="field-hint">{t('settings.keyLocked')}</p>
             ) : current.keySet ? (
               <div className="key-row">
-                <span className="key-ok">✓ {t('settings.keySet')} <code>{current.envKey}</code></span>
+                <span className="key-ok"><Icon name="check" /> {t('settings.keySet')} <code>{current.envKey}</code></span>
                 <button
                   type="button"
                   className="btn btn-ghost"
