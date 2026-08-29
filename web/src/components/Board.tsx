@@ -44,9 +44,13 @@ export function Board({ board, busy, onRun, t }: {
    * move the boxes" twice before this was replaced. Pointer events are what
    * every kanban that works actually uses.
    */
-  const [drag, setDrag] = useState<
-    { id: string; x: number; y: number; mode: 'move' | 'wire' } | null
-  >(null);
+  const [drag, setDrag] = useState<{
+    id: string; x: number; y: number; mode: 'move' | 'wire';
+    /** Where inside the tile it was grabbed, so the ghost does not jump to its
+     *  own corner the moment it appears. */
+    dx?: number; dy?: number;
+    w?: number;
+  } | null>(null);
   /**
    * A pointer is down on a tile, but it is not a drag yet.
    *
@@ -55,7 +59,9 @@ export function Board({ board, busy, onRun, t }: {
    * until it moves. Under the threshold it is a click and opens the editor;
    * over it, the tile comes with you.
    */
-  const pending = useRef<{ id: string; x: number; y: number } | null>(null);
+  const pending = useRef<
+    { id: string; x: number; y: number; dx: number; dy: number; w: number } | null
+  >(null);
   const dragging = drag?.mode === 'move' ? drag.id : null;
   /** The tile a cable is being pulled from, if any. Separate from `dragging`
    *  because dropping a cable links two tasks and dropping a tile moves one —
@@ -115,7 +121,10 @@ export function Board({ board, busy, onRun, t }: {
           // 5px, so a slightly unsteady click is still a click.
           if (Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y) < 5) return;
           pending.current = null;
-          setDrag({ id: p.id, x: e.clientX, y: e.clientY, mode: 'move' });
+          setDrag({
+            id: p.id, x: e.clientX, y: e.clientY, mode: 'move',
+            dx: p.dx, dy: p.dy, w: p.w,
+          });
         }}
         onPointerUp={(e) => { pending.current = null; endDrag(e.clientX, e.clientY); }}
         // A pointer that leaves the window mid-drag must not leave the board
@@ -166,7 +175,7 @@ export function Board({ board, busy, onRun, t }: {
                     onToggle={() => setEditing(editing === task.id ? null : task.id)}
                     onRun={onRun}
                     dragging={dragging}
-                    onPress={(id, x, y) => { pending.current = { id, x, y }; }}
+                    onPress={(id, x, y, dx, dy, w) => { pending.current = { id, x, y, dx, dy, w }; }}
                     onGrab={(id, x, y) => setDrag({ id, x, y, mode: 'move' })}
                     onWire={(id, x, y) => setDrag({ id, x, y, mode: 'wire' })}
                     wiring={wiring}
@@ -181,6 +190,29 @@ export function Board({ board, busy, onRun, t }: {
           );
         })}
       </div>
+
+      {/* The tile under the pointer.
+          Without this the gesture worked and looked like nothing was
+          happening: the reorder only landed on release, so a drag in progress
+          showed no movement at all and the board read as frozen. A drag has to
+          be visible while it is a drag. */}
+      {drag?.mode === 'move' && (() => {
+        const held = board.tasks.find((x) => x.id === drag.id);
+        if (!held) return null;
+        return (
+          <div
+            className="board-ghost"
+            style={{
+              left: drag.x - (drag.dx ?? 0),
+              top: drag.y - (drag.dy ?? 0),
+              width: drag.w,
+            }}
+          >
+            <div className="board-ghost-title">{held.title}</div>
+            {held.notes && <div className="board-ghost-notes">{held.notes}</div>}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -343,7 +375,7 @@ function Tile({
   onRun: (task: BoardTask) => void;
   dragging: string | null;
   /** A press anywhere on the tile — becomes a drag if it moves. */
-  onPress: (id: string, x: number, y: number) => void;
+  onPress: (id: string, x: number, y: number, dx: number, dy: number, w: number) => void;
   onGrab: (id: string, x: number, y: number) => void;
   onWire: (id: string, x: number, y: number) => void;
   wiring: string | null;
@@ -384,7 +416,11 @@ function Tile({
         const el = e.target as HTMLElement;
         if (el.closest('input, textarea, select, .board-port')) return;
         if (el.closest('button') && !el.closest('.board-card-face')) return;
-        onPress(task.id, e.clientX, e.clientY);
+        const box = e.currentTarget.getBoundingClientRect();
+        onPress(
+          task.id, e.clientX, e.clientY,
+          e.clientX - box.left, e.clientY - box.top, box.width,
+        );
       }}
     >
       {/* The drag handle is its own element, and has to be. The whole tile was
