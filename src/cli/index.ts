@@ -157,7 +157,7 @@ const webServer: { child: ChildProcess | null; url: string | null } = { child: n
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
-  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed'],
+  boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed', 'allow-plugin-install', 'allow-api-keys', 'no-api-keys'],
   alias:   { m: 'model', h: 'help', v: 'version' },
   default: {
     model: process.env.AURA_MODEL,
@@ -3545,7 +3545,9 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     ${chalk.hex(TEXT_DIM_HEX)('webaura')}                                 Start the web client and open it
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --lan')}                        Also serve phones over Wi-Fi (TLS, pinned)
     aura ${chalk.hex(TEXT_DIM_HEX)('serve --tailscale')}                  Also serve phones on any network, via Tailscale
-    aura ${chalk.hex(TEXT_DIM_HEX)('serve --allow-plugin-install')}        Let the web client install plugins and set API keys
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve --allow-plugin-install')}        Let the web client install plugins (unsandboxed)
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve --allow-api-keys')}             Let it set API keys even over --lan/--tailscale
+    aura ${chalk.hex(TEXT_DIM_HEX)('serve --no-api-keys')}                Refuse API-key changes even on localhost
                                             (off by default: plugins run unsandboxed)
     aura ${chalk.hex(TEXT_DIM_HEX)('sidecar')}                            Engine over stdio (NDJSON) — see docs/PROTOCOL.md
     aura ${chalk.hex(TEXT_DIM_HEX)('devices')}                            List phones paired to this desktop
@@ -3776,6 +3778,11 @@ if (require.main !== module) {
     lanAddress: typeof argv.lan === 'string' ? argv.lan : undefined,
     tailscale: argv.tailscale === true || argv.remote === true,
     allowPluginInstall: argv['allow-plugin-install'] === true,
+    // Undefined unless asked for either way, so the server applies its own
+    // default: allowed on loopback, refused once --lan/--tailscale exposes it.
+    allowApiKeys: argv['allow-api-keys'] === true ? true
+      : argv['no-api-keys'] === true ? false
+      : undefined,
   }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {
   main().catch(e => { console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`)); process.exit(1); });

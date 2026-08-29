@@ -5,7 +5,7 @@ import * as https from 'https';
 import * as crypto from 'crypto';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createProvider, KNOWN_MODELS } from '../providers/factory.js';
+import { createProvider, KNOWN_MODELS, apiKeyEnvVarForModel } from '../providers/factory.js';
 import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -50,6 +50,42 @@ export interface ServeOptions {
    * which is fine for a local convenience and not enough for a standing one.
    */
   allowPluginInstall?: boolean;
+  /**
+   * Allow the web client to set provider API keys over HTTP.
+   *
+   * Split from `allowPluginInstall` because the two are not remotely the same
+   * risk, and bundling them made the safe one unusable: to type an API key
+   * into the settings panel you had to enable arbitrary unsandboxed plugin
+   * installation, and the refusal you got talked about plugins rather than
+   * keys. Setting a key writes one `process.env` entry, only for a name
+   * PROVIDER_REGISTRY declares, never to disk and never readable back.
+   *
+   * Undefined means the honest default: allowed on a loopback-only bind, where
+   * whoever can reach the port is already the person running the server, and
+   * refused once `--lan` or `--tailscale` puts it on a network, where the
+   * pairing token becomes the only thing in front of a secret-shaped field.
+   * `true` and `false` override that either way.
+   */
+  allowApiKeys?: boolean;
+}
+
+/**
+ * Whether a bind with these options may accept an API key over HTTP.
+ *
+ * Extracted from the request handler so the policy can be tested without
+ * standing up a server — the decision is the part worth pinning, and it is the
+ * part that would silently loosen if someone reordered the conditions.
+ */
+export function apiKeysAllowedFor(
+  opts: Pick<ServeOptions, 'allowApiKeys' | 'lan' | 'tailscale'>,
+): boolean {
+  // An explicit answer wins in both directions: an operator who typed the flag
+  // has made the call, including the paranoid direction on localhost.
+  if (opts.allowApiKeys !== undefined) return opts.allowApiKeys;
+  // Otherwise: fine on loopback, where reaching the port already means being
+  // the user running the server; refused once it is on a network, where the
+  // pairing token would be the only thing in front of a secret-shaped field.
+  return !opts.lan && !opts.tailscale;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
@@ -365,6 +401,15 @@ export async function startServer(opts: ServeOptions): Promise<void> {
           id: m.id, label: m.label, speed: m.speed, contextWindow: m.contextWindow,
         })),
       })),
+      // So the panel can say why the field is unavailable instead of offering
+      // an input that answers every save with a 403.
+      apiKeysWritable: apiKeysAllowed(),
+      // Which registry entry the model this server is actually running belongs
+      // to. Without it the settings panel could not identify the provider in
+      // use — it matched on model-id suffix, which fails for any routed id
+      // like `fpt/Z.ai:GLM-5.3`, so it showed no provider selected and hid the
+      // API-key field entirely on a perfectly working setup.
+      activeEnvKey: apiKeyEnvVarForModel(opts.model) ?? null,
     });
   });
 
@@ -384,15 +429,27 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   function requireMutationsAllowed(res: express.Response): boolean {
     if (opts.allowPluginInstall) return true;
     res.status(403).json({
-      error: 'Plugin install/remove and API-key changes are disabled. '
+      error: 'Plugin install and removal are disabled. '
         + 'Restart with `aura serve --allow-plugin-install` to enable them. '
         + 'Plugins run unsandboxed with full privileges, so this is off by default.',
     });
     return false;
   }
 
+  const apiKeysAllowed = () => apiKeysAllowedFor(opts);
+
+  function requireApiKeysAllowed(res: express.Response): boolean {
+    if (apiKeysAllowed()) return true;
+    res.status(403).json({
+      error: 'Setting API keys over HTTP is disabled while the server is reachable '
+        + 'from the network. Restart with `aura serve --allow-api-keys` to allow it, '
+        + 'or set the key in the environment before starting the server.',
+    });
+    return false;
+  }
+
   app.post('/api/apikey', (req, res) => {
-    if (!requireMutationsAllowed(res)) return;
+    if (!requireApiKeysAllowed(res)) return;
     const body = (req.body ?? {}) as { envKey?: unknown; value?: unknown };
     const envKey = typeof body.envKey === 'string' ? body.envKey.trim() : '';
     const value = typeof body.value === 'string' ? body.value.trim() : '';

@@ -23,6 +23,7 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'settings.keyLocked': 'Set this key in the environment before starting the server — key changes are disabled while it is reachable from the network.',
   'board.col.planning': 'Planning',
   'board.col.preparation': 'Preparation',
   'board.col.execution': 'Execution',
@@ -166,6 +167,7 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'settings.keyLocked': 'Поставите овај кључ у окружењу пре покретања сервера — измене кључа су онемогућене док је доступан са мреже.',
   'board.col.planning': 'Планирање',
   'board.col.preparation': 'Припрема',
   'board.col.execution': 'Извршавање',
@@ -303,6 +305,7 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'settings.keyLocked': 'Définissez cette clé dans l\'environnement avant de démarrer le serveur — les modifications de clé sont désactivées tant qu\'il est accessible depuis le réseau.',
   'board.col.planning': 'Planification',
   'board.col.preparation': 'Préparation',
   'board.col.execution': 'Exécution',
@@ -440,6 +443,7 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'settings.keyLocked': 'Imposta questa chiave nell\'ambiente prima di avviare il server — le modifiche alla chiave sono disabilitate finché è raggiungibile dalla rete.',
   'board.col.planning': 'Pianificazione',
   'board.col.preparation': 'Preparazione',
   'board.col.finished': 'Completato',
@@ -577,6 +581,7 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'settings.keyLocked': 'Define esta clave en el entorno antes de iniciar el servidor — los cambios de clave están deshabilitados mientras sea accesible desde la red.',
   'board.col.planning': 'Planificación',
   'board.col.preparation': 'Preparación',
   'board.col.execution': 'Ejecución',
@@ -714,6 +719,7 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'settings.keyLocked': 'اضبط هذا المفتاح في البيئة قبل تشغيل الخادم — تعديل المفاتيح معطّل ما دام الخادم متاحًا عبر الشبكة.',
   'board.col.planning': 'التخطيط',
   'board.col.preparation': 'التحضير',
   'board.col.execution': 'التنفيذ',
@@ -851,6 +857,7 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'settings.keyLocked': 'Задайте этот ключ в окружении до запуска сервера — изменение ключей отключено, пока сервер доступен из сети.',
   'board.col.planning': 'Планирование',
   'board.col.preparation': 'Подготовка',
   'board.col.execution': 'Выполнение',

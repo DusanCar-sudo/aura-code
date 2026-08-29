@@ -161,6 +161,12 @@ function ProviderTab({
   settings: S; tools: ToolInfo[]; t: T; onChange: (patch: Partial<S>) => void;
 }) {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
+  // Whether this bind will accept a key at all. Offering an input that answers
+  // every save with a 403 is worse than saying so up front.
+  const [keysWritable, setKeysWritable] = useState(true);
+  // The env key of the model the server is actually running, so the panel can
+  // show the provider in use rather than nothing at all.
+  const [activeEnvKey, setActiveEnvKey] = useState<string | null>(null);
   const [keyDraft, setKeyDraft] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyNote, setKeyNote] = useState<string | null>(null);
@@ -168,7 +174,11 @@ function ProviderTab({
   const load = useCallback(() => {
     void fetch('./api/providers')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setProviders(Array.isArray(d?.providers) ? d.providers : []))
+      .then((d) => {
+        setProviders(Array.isArray(d?.providers) ? d.providers : []);
+        if (d && typeof d.apiKeysWritable === 'boolean') setKeysWritable(d.apiKeysWritable);
+        setActiveEnvKey(typeof d?.activeEnvKey === 'string' ? d.activeEnvKey : null);
+      })
       .catch(() => setProviders([]));
   }, []);
   useEffect(load, [load]);
@@ -176,7 +186,12 @@ function ProviderTab({
   const current = providers?.find((p) => p.name === settings.provider)
     // Fall back to whichever provider owns the configured model, so an existing
     // setup shows the right provider instead of an empty box.
-    ?? providers?.find((p) => p.models.some((m) => settings.model.endsWith(m.id)));
+    ?? providers?.find((p) => p.models.some((m) => settings.model.endsWith(m.id)))
+    // Last: the provider the *server* is running. Suffix matching cannot see
+    // a routed id like `fpt/Z.ai:GLM-5.3`, which left a working setup showing
+    // no provider — and with no provider, no model picker and no API-key
+    // field, which reads as "the settings panel is empty".
+    ?? (activeEnvKey ? providers?.find((p) => p.envKey === activeEnvKey) : undefined);
 
   const saveKey = async () => {
     if (!current?.envKey || !keyDraft.trim()) return;
@@ -248,6 +263,8 @@ function ProviderTab({
           <Field label={t('settings.apiKey')}>
             {current.envKey === null ? (
               <p className="field-hint">{t('settings.keyNotNeeded')}</p>
+            ) : !keysWritable && !current.keySet ? (
+              <p className="field-hint">{t('settings.keyLocked')}</p>
             ) : current.keySet ? (
               <div className="key-row">
                 <span className="key-ok">✓ {t('settings.keySet')} <code>{current.envKey}</code></span>
