@@ -91,6 +91,27 @@ export function apiKeysAllowedFor(
   return !opts.lan && !opts.tailscale;
 }
 
+/**
+ * The global JSON body parser, with the one exception the board needs.
+ *
+ * express.json() caps bodies at 100kb by default, and any screenshot exceeds
+ * that. /api/board/attach carries base64 files and mounts its own 25mb parser
+ * on the route itself — but a global `app.use(express.json())` runs first and
+ * rejects the body as a 413 before the route's limit is ever consulted, so the
+ * upload dies silently and the task runs without the file the user attached.
+ * The attach route is therefore skipped here and parsed only by its own,
+ * larger parser.
+ *
+ * Exported so a test can stand up a real Express app and pin the ordering —
+ * the failure is invisible to unit tests that only look at the route handler.
+ */
+export function jsonBodyParser(): express.RequestHandler {
+  return (req, res, next) => {
+    if (req.path === '/api/board/attach') { next(); return; }
+    express.json()(req, res, next);
+  };
+}
+
 export async function startServer(opts: ServeOptions): Promise<void> {
   // Nothing is running the instant the engine starts, so any board task found
   // in `execution` was cut off by whatever ended the last process. Put it back
@@ -217,7 +238,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   server.on('upgrade', onUpgrade);
   for (const l of lanServers) l.server.on('upgrade', onUpgrade);
 
-  app.use(express.json());
+  app.use(jsonBodyParser());
 
   // Auth gate for all HTTP routes \u2014 token via ?token= (initial navigation)
   // or the X-Aura-Token header (API calls from the page).
