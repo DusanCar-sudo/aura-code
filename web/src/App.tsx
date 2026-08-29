@@ -5,6 +5,7 @@ import { LOCALES, translate } from './i18n';
 import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
 import { SettingsPanel } from './components/Settings';
+import { Board } from './components/Board';
 import { SigilWatermark, Sigil } from './components/Sigil';
 import { runCommand } from './lib/commands';
 
@@ -14,6 +15,10 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'general' | 'provider' | 'skills' | 'about'>('general');
   const [openMenuAt, setOpenMenuAt] = useState(0);
+  // Which surface the main column is showing. Chat and Board are two views of
+  // the same live session, not two places — switching keeps the turn running
+  // and loses nothing, because the board is derived from the same messages.
+  const [view, setView] = useState<'chat' | 'board'>('chat');
 
   const t = useCallback((key: string) => translate(settings.locale, key), [settings.locale]);
 
@@ -95,6 +100,21 @@ export function App() {
             <span>{settings.model || 'Aura'}</span>
           </div>
 
+          <div className="view-tabs" role="tablist" aria-label={t('view.board')}>
+            {(['chat', 'board'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                className="view-tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+              >
+                {t(`view.${v}`)}
+              </button>
+            ))}
+          </div>
+
           <div className="topbar-right">
             {totalTokens > 0 && (
               <span className="meter" title={t('usage.tokens')}>
@@ -115,16 +135,24 @@ export function App() {
           </div>
         </header>
 
-        <Chat
-          messages={aura.messages}
-          busy={aura.busy}
-          error={aura.error}
-          t={t}
-          openMenuAt={openMenuAt}
-          onSend={submit}
-          onStop={() => void aura.stop()}
-          onRegenerate={() => void aura.regenerate()}
-        />
+        {view === 'chat' ? (
+          <Chat
+            messages={aura.messages}
+            busy={aura.busy}
+            error={aura.error}
+            t={t}
+            openMenuAt={openMenuAt}
+            onSend={submit}
+            onStop={() => void aura.stop()}
+            onRegenerate={() => void aura.regenerate()}
+          />
+        ) : (
+          <Board
+            messages={aura.messages}
+            awaitingApproval={aura.approval?.tool ?? null}
+            t={t}
+          />
+        )}
       </main>
 
       {aura.approval && (

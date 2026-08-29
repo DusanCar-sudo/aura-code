@@ -776,3 +776,161 @@
   .thread { padding: 18px 14px 4px; }
   .status-text { display: none; }
 }
+
+/* ── Kanban board ──────────────────────────────────────────────────────────
+   A read-only projection of the run (see lib/board.ts), so nothing here is a
+   drop target and no cursor suggests otherwise.
+
+   The row scrolls horizontally and each column scrolls on its own: a long
+   execute column must not squash the other four, and a narrow window must keep
+   every phase reachable rather than hiding the ones that did not fit. */
+
+.view-tabs { display: flex; gap: 2px; }
+.view-tab {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+  background: transparent;
+}
+.view-tab:hover { background: var(--panel-raised); color: var(--text); }
+.view-tab[aria-selected='true'] {
+  background: var(--panel-raised);
+  color: var(--terracotta);
+}
+
+.board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Stretch, not flex-start: equal lanes read as a board, whereas
+     content-height columns make the empty stages look broken rather than
+     empty. */
+  align-items: stretch;
+}
+
+.board-empty { align-items: center; justify-content: center; overflow: hidden; }
+.board-empty-text { color: var(--text-dim); font-size: var(--fs-small); text-align: center; }
+
+.board-col {
+  /* Shrinkable, so all four stages fit on a normal window at once — the whole
+     point of the board is seeing the shape of a run in one glance, and a
+     Result column parked off the right edge defeats that. Below ~900px they
+     stop shrinking and the row scrolls instead of becoming unreadable. */
+  flex: 1 1 220px;
+  min-width: 190px;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.board-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--line);
+}
+.board-col-title {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.board-col-count {
+  margin-inline-start: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  color: var(--faint);
+}
+
+.board-col-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.board-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  /* The status stripe carries the same meaning as the badge below it. Colour
+     is never the only signal — the badge says the word. */
+  border-inline-start: 2px solid var(--faint);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.board-card-pending { border-inline-start-color: var(--text-dim); }
+.board-card-running { border-inline-start-color: var(--warn); }
+.board-card-done    { border-inline-start-color: var(--ok); }
+.board-card-blocked { border-inline-start-color: var(--terracotta); }
+.board-card-failed  { border-inline-start-color: var(--err); }
+
+/* The turn's own card — the work the tool calls belong to. Raised rather than
+   recoloured, so it reads as the parent without competing with the status
+   stripe that carries meaning. */
+.board-card-task { background: var(--panel-raised); }
+.board-card-task .board-card-title { font-family: var(--sans); font-weight: 600; }
+
+.board-card-head { display: flex; align-items: baseline; gap: 8px; }
+.board-card-title {
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-card-turn {
+  margin-inline-start: auto;
+  font-size: var(--fs-micro);
+  color: var(--faint);
+  flex: none;
+}
+
+.board-card-detail {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+  /* Two lines, then clipped: a card is a glance, and a shell one-liner can run
+     to hundreds of characters. The full text is in the title attribute. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.board-card-foot {
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.board-badge { font-size: var(--fs-micro); color: var(--text-dim); }
+.board-badge-pending { color: var(--text-dim); }
+.board-badge-running { color: var(--warn); }
+.board-badge-done    { color: var(--ok); }
+.board-badge-blocked { color: var(--terracotta); }
+.board-badge-failed  { color: var(--err); }
+.board-card-time {
+  margin-inline-start: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  color: var(--faint);
+}
+
+@media (max-width: 860px) {
+  .board { padding: 10px; gap: 8px; }
+  .board-col { flex-basis: 200px; }
+}

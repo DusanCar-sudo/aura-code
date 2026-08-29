@@ -23,6 +23,19 @@ export type Locale = keyof typeof LOCALES;
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'board.col.planned': 'Planned',
+  'board.col.ready': 'Ready to execute',
+  'board.col.execution': 'Execution',
+  'board.col.result': 'Result',
+  'board.status.pending': 'waiting',
+  'view.chat': 'Chat',
+  'view.board': 'Board',
+  'board.empty': 'Nothing yet — the board fills as the agent works.',
+  'board.turn': 'Turn',
+  'board.status.running': 'running',
+  'board.status.done': 'done',
+  'board.status.blocked': 'blocked',
+  'board.status.failed': 'unfinished',
   'settings.toolsOn': 'enabled',
   'settings.toolsAll': 'All',
   'settings.toolsNone': 'None',
@@ -148,6 +161,19 @@ const en: Dict = {
 };
 
 const sr: Dict = {
+  'board.col.planned': 'Планирано',
+  'board.col.ready': 'Спремно за извршење',
+  'board.col.execution': 'Извршавање',
+  'board.col.result': 'Резултат',
+  'board.status.pending': 'чека',
+  'view.chat': 'Ћаскање',
+  'view.board': 'Табла',
+  'board.empty': 'Још ништа — табла се пуни док агент ради.',
+  'board.turn': 'Круг',
+  'board.status.running': 'у току',
+  'board.status.done': 'готово',
+  'board.status.blocked': 'блокирано',
+  'board.status.failed': 'недовршено',
   'settings.toolsOn': 'укључено',
   'settings.toolsAll': 'Све',
   'settings.toolsNone': 'Ништа',
@@ -267,6 +293,19 @@ const sr: Dict = {
 };
 
 const fr: Dict = {
+  'board.col.planned': 'Planifié',
+  'board.col.ready': 'Prêt à exécuter',
+  'board.col.execution': 'Exécution',
+  'board.col.result': 'Résultat',
+  'board.status.pending': 'en attente',
+  'view.chat': 'Discussion',
+  'view.board': 'Tableau',
+  'board.empty': 'Rien pour l\'instant — le tableau se remplit à mesure que l\'agent travaille.',
+  'board.turn': 'Tour',
+  'board.status.running': 'en cours',
+  'board.status.done': 'terminé',
+  'board.status.blocked': 'bloqué',
+  'board.status.failed': 'inachevé',
   'settings.toolsOn': 'activés',
   'settings.toolsAll': 'Tous',
   'settings.toolsNone': 'Aucun',
@@ -386,6 +425,19 @@ const fr: Dict = {
 };
 
 const it: Dict = {
+  'board.col.planned': 'Pianificato',
+  'board.col.ready': 'Pronto da eseguire',
+  'board.col.execution': 'Esecuzione',
+  'board.col.result': 'Risultato',
+  'board.status.pending': 'in attesa',
+  'view.chat': 'Chat',
+  'view.board': 'Lavagna',
+  'board.empty': 'Ancora nulla — la lavagna si riempie mentre l\'agente lavora.',
+  'board.turn': 'Turno',
+  'board.status.running': 'in corso',
+  'board.status.done': 'completato',
+  'board.status.blocked': 'bloccato',
+  'board.status.failed': 'incompiuto',
   'settings.toolsOn': 'attivi',
   'settings.toolsAll': 'Tutti',
   'settings.toolsNone': 'Nessuno',
@@ -505,6 +557,19 @@ const it: Dict = {
 };
 
 const es: Dict = {
+  'board.col.planned': 'Planificado',
+  'board.col.ready': 'Listo para ejecutar',
+  'board.col.execution': 'Ejecución',
+  'board.col.result': 'Resultado',
+  'board.status.pending': 'en espera',
+  'view.chat': 'Conversación',
+  'view.board': 'Tablero',
+  'board.empty': 'Nada todavía — el tablero se llena mientras el agente trabaja.',
+  'board.turn': 'Turno',
+  'board.status.running': 'en curso',
+  'board.status.done': 'hecho',
+  'board.status.blocked': 'bloqueado',
+  'board.status.failed': 'sin terminar',
   'settings.toolsOn': 'activas',
   'settings.toolsAll': 'Todas',
   'settings.toolsNone': 'Ninguna',
@@ -624,6 +689,19 @@ const es: Dict = {
 };
 
 const ar: Dict = {
+  'board.col.planned': 'مخطط',
+  'board.col.ready': 'جاهز للتنفيذ',
+  'board.col.execution': 'قيد التنفيذ',
+  'board.col.result': 'النتيجة',
+  'board.status.pending': 'في الانتظار',
+  'view.chat': 'المحادثة',
+  'view.board': 'اللوحة',
+  'board.empty': 'لا شيء بعد — تمتلئ اللوحة أثناء عمل الوكيل.',
+  'board.turn': 'الدور',
+  'board.status.running': 'قيد التشغيل',
+  'board.status.done': 'تم',
+  'board.status.blocked': 'محجوب',
+  'board.status.failed': 'غير مكتمل',
   'settings.toolsOn': 'مُفعّلة',
   'settings.toolsAll': 'الكل',
   'settings.toolsNone': 'لا شيء',
@@ -743,6 +821,19 @@ const ar: Dict = {
 };
 
 const ru: Dict = {
+  'board.col.planned': 'Запланировано',
+  'board.col.ready': 'Готово к выполнению',
+  'board.col.execution': 'Выполнение',
+  'board.col.result': 'Результат',
+  'board.status.pending': 'ожидает',
+  'view.chat': 'Чат',
+  'view.board': 'Доска',
+  'board.empty': 'Пока ничего — доска заполняется по мере работы агента.',
+  'board.turn': 'Ход',
+  'board.status.running': 'выполняется',
+  'board.status.done': 'готово',
+  'board.status.blocked': 'заблокировано',
+  'board.status.failed': 'не завершено',
   'settings.toolsOn': 'включено',
   'settings.toolsAll': 'Все',
   'settings.toolsNone': 'Ничего',
