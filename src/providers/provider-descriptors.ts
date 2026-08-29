@@ -353,6 +353,35 @@ export function routingPrefixFor(
   return matchedPrefix(descriptor, modelId.toLowerCase());
 }
 
+/**
+ * A catalogue model id, prefixed so it routes to the provider it was listed
+ * under (view 6).
+ *
+ * Resellers are why this exists. BytePlus and FPT serve other vendors' models
+ * through their own gateway, so their catalogue entries are bare vendor names —
+ * FPT lists plain "GLM-5.2". Sent unprefixed, that routes to Zhipu's own API
+ * with a Zhipu key: the wrong endpoint, the wrong bill, and an "insufficient
+ * balance" error naming an account the user never chose to use. Observed
+ * exactly that way from the web client's provider picker.
+ *
+ * Matched on displayName because that is what the setup registry and the
+ * /api/providers response both carry.
+ *
+ * The input is always a *catalogue* id from PROVIDER_REGISTRY, never something
+ * a user typed, so the only thing that stops a prefix being added is the
+ * provider's own prefix already being there. An earlier version also skipped
+ * ids beginning with any known routing prefix, which broke Hugging Face:
+ * its ids are `org/model`, and several orgs collide with routing prefixes —
+ * "Qwen/Qwen2.5-Coder-32B-Instruct" looked pre-routed and went to Alibaba's
+ * DashScope key instead of Hugging Face's.
+ */
+export function routeCatalogueId(displayName: string, modelId: string): string {
+  const descriptor = PROVIDER_DESCRIPTORS.find(d => d.displayName === displayName);
+  const prefix = descriptor?.prefixes.find(p => p.endsWith('/'));
+  if (!prefix || modelId.startsWith(prefix)) return modelId;
+  return prefix + modelId;
+}
+
 /** Every slash-terminated routing prefix, longest first (view 1). */
 export function slashPrefixes(): string[] {
   return PROVIDER_DESCRIPTORS

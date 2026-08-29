@@ -159,13 +159,30 @@ export function useAura(settings: Settings) {
       case M.turnCompleted: {
         setBusy(false);
 
-        setMessages((prev) => prev.map((m, i) => {
-          if (i !== prev.length - 1 || !m.streaming) return m;
-          // Some paths emit no deltas at all and deliver the whole answer in
-          // `summary`. Falling back to it stops those turns rendering blank.
+        setMessages((prev) => {
           const summary = typeof p.summary === 'string' ? p.summary : '';
-          return { ...m, streaming: false, text: m.text.trim() ? m.text : summary };
-        }));
+          const last = prev[prev.length - 1];
+          if (last?.streaming) {
+            // Some paths emit no deltas at all and deliver the whole answer in
+            // `summary`. Falling back to it stops those turns rendering blank.
+            return prev.map((m, i) => (i !== prev.length - 1 ? m : {
+              ...m, streaming: false, text: m.text.trim() ? m.text : summary,
+            }));
+          }
+          // No assistant message exists at all. The only thing that creates one
+          // is a delta or a tool call, and a turn that fails before either —
+          // a provider 429, an auth error, a budget stop — produces neither. The
+          // summary was then dropped on the floor and the user saw *nothing*
+          // come back from their message, with no error and no clue why.
+          if (!summary.trim()) return prev;
+          return [...prev, {
+            id: `a${Date.now()}`, role: 'assistant', text: summary, tools: [],
+            at: Date.now(),
+            // Reported as an error when the engine says the turn failed, so a
+            // provider refusal does not read as Aura's considered answer.
+            ...(p.success === false ? { error: summary } : {}),
+          }];
+        });
         if (p.usage) {
           setUsage({
             inputTokens: Number(p.usage.inputTokens ?? 0),

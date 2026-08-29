@@ -26,6 +26,7 @@ import { loadAllPlugins } from '../plugins/loader.js';
 import { installPlugin, removePlugin } from '../plugins/market.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
+import { routeCatalogueId } from '../providers/provider-descriptors.js';
 import {
   loadBoard, reclaimStrandedTasks, saveAttachment, saveBoard, updateTask,
 } from '../board/store.js';
@@ -505,8 +506,17 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         envKey: entry.envKey,
         signupUrl: entry.signupUrl,
         keySet: entry.envKey ? Boolean(process.env[entry.envKey]?.trim()) : true,
+        // Routed ids, not catalogue ids. BytePlus and FPT resell other
+        // vendors' models under their own gateway, so their catalogue entries
+        // are bare vendor names — FPT lists "GLM-5.2". Sent unprefixed that
+        // routes to Zhipu's own API with a Zhipu key: the wrong endpoint, the
+        // wrong bill, and an "insufficient balance" error naming an account the
+        // user never chose to use. The TUI has always applied this; the web
+        // picker did not, so choosing a provider there silently reached a
+        // different one.
         models: entry.models.map((m) => ({
-          id: m.id, label: m.label, speed: m.speed, contextWindow: m.contextWindow,
+          id: routeCatalogueId(entry.name, m.id),
+          label: m.label, speed: m.speed, contextWindow: m.contextWindow,
         })),
       })),
       // So the panel can say why the field is unavailable instead of offering
