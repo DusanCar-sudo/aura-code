@@ -34,7 +34,17 @@ describe('the permission a task runs under', () => {
   });
 
   it('falls back to the preset when nothing was chosen', () => {
-    expect(effectivePermission(AGENT_PRESETS.aura, undefined)).toBe('normal');
+    // And the working agents' own default is auto: a prompt on every write is
+    // one the operator says yes to almost every time, and a confirmation that
+    // is always approved teaches people to approve without reading.
+    expect(effectivePermission(AGENT_PRESETS.aura, undefined)).toBe('auto');
+    expect(effectivePermission(AGENT_PRESETS.coder, undefined)).toBe('auto');
     expect(effectivePermission(AGENT_PRESETS.reviewer, undefined)).toBe('read-only');
+  });
+
+  it('still lets the operator turn auto off', () => {
+    // The whole ask: auto is the default, not the only option.
+    expect(effectivePermission(AGENT_PRESETS.aura, 'normal')).toBe('normal');
+    expect(effectivePermission(AGENT_PRESETS.aura, 'read-only')).toBe('read-only');
   });
 });

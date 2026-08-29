@@ -39,7 +39,14 @@ export interface Settings {
 export const DEFAULTS: Settings = {
   locale: 'en',
   theme: 'dark',
-  permission: 'normal',
+  // Auto by default, matching PermissionSystem's own default and the way the
+  // agent is actually used: a prompt on every write and every shell command is
+  // one the operator answers "yes" to almost every time, and a confirmation
+  // that is always approved teaches people to approve without reading — which
+  // is worse than not asking. `auto` still refuses the known-dangerous command
+  // list; it removes the routine prompt, not the guard. Both stricter levels
+  // are one click away in Settings ▸ Permission.
+  permission: 'auto',
   sandbox: false,
   provider: '',
   model: '',

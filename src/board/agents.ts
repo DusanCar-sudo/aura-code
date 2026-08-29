@@ -42,8 +42,8 @@ export const AGENT_PRESETS: Record<BoardAgent, AgentPreset> = {
   aura: {
     id: 'aura',
     label: 'Aura',
-    description: 'The full agent — every tool, ordinary confirmations.',
-    permission: 'normal',
+    description: 'The full agent — every tool, no prompt for routine work.',
+    permission: 'auto',
   },
   researcher: {
     id: 'researcher',
@@ -56,7 +56,7 @@ export const AGENT_PRESETS: Record<BoardAgent, AgentPreset> = {
     id: 'coder',
     label: 'Coder',
     description: 'Edits files, runs commands and tests.',
-    permission: 'normal',
+    permission: 'auto',
     allowedTools: [...OBSERVE, 'edit_file', 'write_file', 'run_shell', 'run_tests'],
   },
   reviewer: {
