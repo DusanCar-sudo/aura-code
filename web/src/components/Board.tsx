@@ -47,6 +47,15 @@ export function Board({ board, busy, onRun, t }: {
   const [drag, setDrag] = useState<
     { id: string; x: number; y: number; mode: 'move' | 'wire' } | null
   >(null);
+  /**
+   * A pointer is down on a tile, but it is not a drag yet.
+   *
+   * The whole tile is grabbable — asking someone to find a ten-pixel handle is
+   * how "I can't move the boxes" happens — so a press has to stay ambiguous
+   * until it moves. Under the threshold it is a click and opens the editor;
+   * over it, the tile comes with you.
+   */
+  const pending = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragging = drag?.mode === 'move' ? drag.id : null;
   /** The tile a cable is being pulled from, if any. Separate from `dragging`
    *  because dropping a cable links two tasks and dropping a tile moves one —
@@ -99,11 +108,19 @@ export function Board({ board, busy, onRun, t }: {
       <div
         className={`board${drag ? ' board-dragging' : ''}`}
         ref={boardRef}
-        onPointerMove={(e) => { if (drag) setDrag({ ...drag, x: e.clientX, y: e.clientY }); }}
-        onPointerUp={(e) => endDrag(e.clientX, e.clientY)}
+        onPointerMove={(e) => {
+          if (drag) { setDrag({ ...drag, x: e.clientX, y: e.clientY }); return; }
+          const p = pending.current;
+          if (!p) return;
+          // 5px, so a slightly unsteady click is still a click.
+          if (Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y) < 5) return;
+          pending.current = null;
+          setDrag({ id: p.id, x: e.clientX, y: e.clientY, mode: 'move' });
+        }}
+        onPointerUp={(e) => { pending.current = null; endDrag(e.clientX, e.clientY); }}
         // A pointer that leaves the window mid-drag must not leave the board
         // stuck holding a tile that no longer follows it.
-        onPointerCancel={() => setDrag(null)}
+        onPointerCancel={() => { pending.current = null; setDrag(null); }}
       >
         <Cables tasks={board.tasks} container={boardRef} />
         {BOARD_COLUMNS.map((column) => {
@@ -149,6 +166,7 @@ export function Board({ board, busy, onRun, t }: {
                     onToggle={() => setEditing(editing === task.id ? null : task.id)}
                     onRun={onRun}
                     dragging={dragging}
+                    onPress={(id, x, y) => { pending.current = { id, x, y }; }}
                     onGrab={(id, x, y) => setDrag({ id, x, y, mode: 'move' })}
                     onWire={(id, x, y) => setDrag({ id, x, y, mode: 'wire' })}
                     wiring={wiring}
@@ -315,7 +333,7 @@ function prevColumn(column: BoardColumn): BoardColumn | null {
 
 function Tile({
   task, board, busy, open, onToggle, onRun,
-  dragging, onGrab, onWire, wiring, t,
+  dragging, onPress, onGrab, onWire, wiring, t,
 }: {
   task: BoardTask;
   board: BoardApi;
@@ -324,6 +342,8 @@ function Tile({
   onToggle: () => void;
   onRun: (task: BoardTask) => void;
   dragging: string | null;
+  /** A press anywhere on the tile — becomes a drag if it moves. */
+  onPress: (id: string, x: number, y: number) => void;
   onGrab: (id: string, x: number, y: number) => void;
   onWire: (id: string, x: number, y: number) => void;
   wiring: string | null;
@@ -355,6 +375,14 @@ function Tile({
     <article
       className={classes}
       data-task-id={task.id}
+      onPointerDown={(e) => {
+        // Controls keep their own behaviour: a press on a button, a field or
+        // the connector port is that thing being used, not the tile being
+        // picked up.
+        const el = e.target as HTMLElement;
+        if (el.closest('button, input, textarea, select, .board-port')) return;
+        onPress(task.id, e.clientX, e.clientY);
+      }}
     >
       {/* The drag handle is its own element, and has to be. The whole tile was
           draggable at first, but the face below it is a <button> covering most
@@ -376,7 +404,15 @@ function Tile({
         ⠿
       </span>
 
-      <button type="button" className="board-card-face" onClick={onToggle} aria-expanded={open}>
+      <button
+        type="button"
+        className="board-card-face"
+        // A drag that ends over this tile would otherwise also register as a
+        // click and flip the editor open, so the press that moved something
+        // does two things at once.
+        onClick={() => { if (!dragging) onToggle(); }}
+        aria-expanded={open}
+      >
         <span className="board-card-title">{task.title}</span>
         <span className="board-card-agent">{preset?.label ?? task.agent}</span>
       </button>

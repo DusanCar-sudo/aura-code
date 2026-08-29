@@ -900,6 +900,9 @@
 }
 
 .board-card {
+  /* The whole tile is the handle, so the whole tile shows the hand. A grip
+     nobody can find is the same as no drag at all. */
+  cursor: grab;
   background: var(--panel-bg);
   border: 1px solid var(--line);
   /* The stripe is a second signal, never the only one — the agent name and the
@@ -950,6 +953,10 @@
 /* While a tile is being carried, the columns must not fight the pointer for
    it — a text selection starting mid-drag makes the whole board feel broken. */
 .board-dragging { user-select: none; cursor: grabbing; }
+.board-dragging .board-card { cursor: grabbing; }
+/* The controls on a tile are still controls, not part of the handle. */
+.board-card button, .board-card select, .board-card input, .board-card textarea { cursor: pointer; }
+.board-card input, .board-card textarea { cursor: text; }
 
 /* What this tile pulls in when it finishes. */
 .board-card-link {
