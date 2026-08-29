@@ -47,6 +47,9 @@ export interface ReplCommandResult {
   /** Computer use was toggled — the REPL redraws its status line so a feature
    *  that can move the real pointer is never on without being visible. */
   newComputerUse?: boolean;
+  /** A task the command wants the agent to carry out — `:catchthis run` hands
+   *  a recorded procedure back this way rather than reaching into the REPL. */
+  runTask?: string;
 }
 
 /** The slice of ReplCtx these commands touch. Declared structurally rather

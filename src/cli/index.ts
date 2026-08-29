@@ -86,6 +86,10 @@ import {
 } from './repl-session-commands.js';
 import { handleModeCommand } from './repl-mode-commands.js';
 import { handleWebCommand } from './repl-web-command.js';
+import { handleCatchCommand } from './repl-catch-command.js';
+import { startRecorder } from '../record/recorder.js';
+import { checkComputerUseGate } from '../tools/screen/disclosure.js';
+import type { RecorderHandle } from '../record/recorder.js';
 import { pendingUpdateNotice, refreshUpdateCacheInBackground } from '../util/update-check.js';
 import type { ChildProcess } from 'child_process';
 import { handleTurnCommand } from './repl-turn-commands.js';
@@ -155,6 +159,10 @@ function makeStdinTunerIO(): TunerIO {
 /** The web client started by `:auraweb`, if any. One per REPL — see
  *  repl-web-command.ts on why it is a child rather than detached. */
 const webServer: { child: ChildProcess | null; url: string | null } = { child: null, url: null };
+
+/** The :catchthis recording in progress, if any. One per REPL. */
+const catchSession: { handle: RecorderHandle | null; startedAt: number; title?: string } =
+  { handle: null, startedAt: 0 };
 
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
@@ -1706,7 +1714,12 @@ let abortController: AbortController | null = null;
         gazelleChat = makeGazelleChat();
       }
       if (activeChatId) setChatId(activeChatId);
-      return;
+      // A command that produced work — `:catchthis run` hands back a recorded
+      // procedure — falls through as if the user had typed it, so replay uses
+      // exactly the same path, budget and verification as any other task
+      // rather than a private one that drifts from it.
+      if (cmdResult.runTask) input = cmdResult.runTask;
+      else return;
     }
 
     // In gazelle mode a plain line is conversation, not a task — none of the
@@ -2791,6 +2804,25 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       write: (text: string) => console.log(text),
     });
     if (compResult) return compResult;
+  }
+
+  // ── :catchthis ───────────────────────────────────────────────────────────
+  // Demonstrate a job once, get it back as a repeatable task. Records the
+  // keyboard at the kernel level, so the command says so every time it starts —
+  // see repl-catch-command.ts.
+  {
+    let caughtTask: string | undefined;
+    const caught = await handleCatchCommand(input, {
+      print: (line: string) => console.log(chalk.hex(TEXT_DIM_HEX)(line)),
+      session: catchSession,
+      start: () => startRecorder(),
+      // Replay drives the real pointer, so it goes through the same gate as
+      // any other computer use rather than inventing a second way in.
+      run: checkComputerUseGate(isComputerUseEnabled()).allowed
+        ? (prompt: string) => { caughtTask = prompt; }
+        : undefined,
+    });
+    if (caught) return { handled: true, runTask: caughtTask } as ReplCommandResult;
   }
 
   // ── Web client ───────────────────────────────────────────────────────────

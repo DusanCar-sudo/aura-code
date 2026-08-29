@@ -8,7 +8,8 @@
  * is invisible in development: a source checkout resolves the asset from src/
  * via __dirname and works perfectly, so it breaks only for installed users.
  *
- * Currently one asset: tools/screen/aura_screen.py, the computer-use sidecar.
+ * Two assets: tools/screen/aura_screen.py (the computer-use sidecar) and
+ * tools/screen/aura_record.py (the :catchthis input recorder).
  * It is spawned as a child process rather than imported, which is exactly the
  * shape tsc cannot see.
  *
@@ -18,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ASSETS = ['tools/screen/aura_screen.py'];
+const ASSETS = ['tools/screen/aura_screen.py', 'tools/screen/aura_record.py'];
 
 const root = path.join(__dirname, '..');
 let copied = 0;

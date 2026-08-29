@@ -66,6 +66,7 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':compoff', label: 'Computer use off', description: 'Turn it off and release the input device', category: 'Safety' },
   { id: ':comp', label: 'Computer use status', description: 'Is it on, and what is holding it there', category: 'Safety' },
   { id: ':auraweb', label: 'Open the web client', description: 'Starts the browser surface and opens it (also `webaura` from a terminal)', category: 'Session' },
+  { id: ':catchthis', label: 'Catch a job', description: 'Record what you do once, then have the agent repeat it', category: 'Safety' },
   // System
   { id: ':help', label: 'Help', description: 'Show all commands', category: 'System' },
   { id: ':archon', label: 'Archimedes On', description: 'Enable Archimedes Alternator for this session', category: 'System' },
