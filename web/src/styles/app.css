@@ -903,6 +903,10 @@
   /* The whole tile is the handle, so the whole tile shows the hand. A grip
      nobody can find is the same as no drag at all. */
   cursor: grab;
+  /* The browser must not claim the gesture for scrolling or text selection
+     before the drag decides what it is — on a trackpad or a touchscreen that
+     is what makes a tile feel nailed down. */
+  touch-action: none;
   background: var(--panel-bg);
   border: 1px solid var(--line);
   /* The stripe is a second signal, never the only one — the agent name and the
@@ -956,6 +960,12 @@
 .board-dragging .board-card { cursor: grabbing; }
 /* The controls on a tile are still controls, not part of the handle. */
 .board-card button, .board-card select, .board-card input, .board-card textarea { cursor: pointer; }
+/* The face is part of the handle, not a control that opts out of it. Written
+   with the card in the selector so it beats `.board-card button` above, which
+   is more specific and would otherwise leave a pointer cursor over the exact
+   area people grab. */
+.board-card button.board-card-face { cursor: grab; }
+.board-dragging .board-card button.board-card-face { cursor: grabbing; }
 .board-card input, .board-card textarea { cursor: text; }
 
 /* What this tile pulls in when it finishes. */

@@ -376,11 +376,14 @@ function Tile({
       className={classes}
       data-task-id={task.id}
       onPointerDown={(e) => {
-        // Controls keep their own behaviour: a press on a button, a field or
-        // the connector port is that thing being used, not the tile being
-        // picked up.
+        // Everything except the real controls. The face is deliberately NOT
+        // excluded even though it is a <button>: it covers the title, which is
+        // exactly where a person grabs a card, so skipping buttons wholesale
+        // left only the thin margins draggable and the tile felt stuck. The
+        // 5px threshold already tells a click on it from a drag.
         const el = e.target as HTMLElement;
-        if (el.closest('button, input, textarea, select, .board-port')) return;
+        if (el.closest('input, textarea, select, .board-port')) return;
+        if (el.closest('button') && !el.closest('.board-card-face')) return;
         onPress(task.id, e.clientX, e.clientY);
       }}
     >
