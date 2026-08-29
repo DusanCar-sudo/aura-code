@@ -82,10 +82,6 @@ export function useAura(settings: Settings) {
   // engine announces changes as events, and the event router lives in this
   // hook — a board owned above it could not hear them.
   const board = useBoard(clientRef, connection === 'open');
-  // The task currently dispatched, so its result can be written back when the
-  // turn ends. A ref, because the completion handler is long-lived and must
-  // not be rebuilt every time the board changes.
-  const runningTaskRef = useRef<BoardTask | null>(null);
   // The event router is created once and keys the socket effect, so it must
   // never close over a value that changes. Reading the board through a ref
   // keeps the router stable while still reaching the current board.
@@ -162,16 +158,7 @@ export function useAura(settings: Settings) {
         break;
       case M.turnCompleted: {
         setBusy(false);
-        // A task dispatched from the board finishes here: the answer goes onto
-        // the tile and it moves to `finished`. Doing this on the event rather
-        // than at the call site is what makes it survive a page reload — the
-        // engine reports completion to whoever is listening.
-        const ran = runningTaskRef.current;
-        if (ran) {
-          runningTaskRef.current = null;
-          const summary = typeof p.summary === 'string' ? p.summary : '';
-          void boardRef.current.update(ran.id, { column: 'finished', result: summary, failed: false });
-        }
+
         setMessages((prev) => prev.map((m, i) => {
           if (i !== prev.length - 1 || !m.streaming) return m;
           // Some paths emit no deltas at all and deliver the whole answer in
@@ -194,16 +181,7 @@ export function useAura(settings: Settings) {
       case M.turnError: {
         setBusy(false);
         setError(String(p.message ?? 'turn failed'));
-        // A failed task still leaves the board: parking it in `execution`
-        // forever would be a lie, and the error is the result worth keeping.
-        const failed = runningTaskRef.current;
-        if (failed) {
-          runningTaskRef.current = null;
-          void boardRef.current.update(failed.id, {
-            column: 'finished', failed: true,
-            result: String(p.message ?? 'turn failed'),
-          });
-        }
+
         setMessages((prev) => prev.map((m, i) =>
           i === prev.length - 1 && m.streaming
             ? { ...m, streaming: false, error: String(p.message ?? 'turn failed') }
@@ -392,59 +370,44 @@ export function useAura(settings: Settings) {
   }, [messages, busy, sessionId]);
 
   /**
-   * Run a board task under its agent's preset.
+   * Ask the engine to run a board task.
    *
-   * A fresh session per task, and deliberately so. The preset's permission and
-   * allowed tools are *session* properties, so reusing the chat session would
-   * either ignore the agent's limits or silently re-scope the conversation the
-   * user is having — and a "reviewer" that inherited an auto-approving chat
-   * session could edit the repo, which is exactly the theatre the presets
-   * exist to avoid.
+   * One call, and the engine does the rest: it builds the session from the
+   * agent's preset, moves the tile to Execution, runs the turn, and writes the
+   * answer back onto the tile.
+   *
+   * It used to be done here — session.create, turn.send, and a ref remembering
+   * which task the turn belonged to. That ref does not survive a page reload or
+   * an engine restart, so a tile could sit in Execution for ever with nothing
+   * able to move it. Completion has to belong to the side that outlives the
+   * browser tab.
    */
   const runTask = useCallback(async (task: BoardTask) => {
     const client = clientRef.current;
-    if (!client || runningTaskRef.current) return;
-
-    const preset = board.presets.find((p) => p.id === task.agent);
-    const prompt = task.notes?.trim()
-      ? `${task.title.trim()}\n\n${task.notes.trim()}`
-      : task.title.trim();
-
+    if (!client) return;
+    setError(null);
     try {
-      const created = await client.request<{ sessionId: string }>(M.sessionCreate, {
-        // '.' matches newChat: the engine resolves it against its own default
-        // project root, so board tasks land in the same project as the chat.
-        projectRoot: '.',
-        name: task.title.slice(0, 60),
-        // Per-task model override; empty falls back to the session's model.
-        ...(task.model ? { model: task.model } : settingsRef.current.model ? { model: settingsRef.current.model } : {}),
-        ...(preset ? { permission: preset.permission } : {}),
-        ...(preset?.allowedTools ? { allowedTools: preset.allowedTools } : {}),
+      const res = await client.request<{ sessionId: string }>(M.boardRun, {
+        id: task.id,
+        // The operator's own level. The engine caps it by the agent's preset,
+        // so a read-only reviewer stays read-only, but "auto" stops the
+        // prompting for the agents that can be trusted with it.
+        permission: settingsRef.current.permission,
       });
-
-      runningTaskRef.current = task;
-      await board.update(task.id, { column: 'execution', sessionId: created.sessionId });
-
-      setSessionId(created.sessionId);
+      // Follow the run in the chat view, so the tool calls are visible while it
+      // works rather than only the answer at the end.
+      setSessionId(res.sessionId);
       setMessages([{
-        id: `u${Date.now()}`, role: 'user', text: prompt, tools: [], at: Date.now(),
+        id: `u${Date.now()}`, role: 'user',
+        text: task.notes?.trim() ? `${task.title}\n\n${task.notes}` : task.title,
+        tools: [], at: Date.now(),
       }]);
       setBusy(true);
-      setError(null);
-      await client.request(M.turnSend, { sessionId: created.sessionId, message: prompt });
       void refreshConversations();
     } catch (e) {
-      runningTaskRef.current = null;
-      setBusy(false);
       setError(e instanceof Error ? e.message : String(e));
-      // The tile must not sit in `execution` for a run that never started.
-      void board.update(task.id, {
-        column: 'preparation',
-        failed: true,
-        result: e instanceof Error ? e.message : String(e),
-      });
     }
-  }, [board, refreshConversations]);
+  }, [refreshConversations]);
 
   useEffect(() => {
     if (connection !== 'open') return;

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
 import { createProvider } from '../providers/factory.js';
 import { loadProjectContext, type ProjectContext } from '../agent/context.js';
@@ -6,10 +7,10 @@ import { PermissionSystem, setConfirmHandler, type ConfirmContext } from '../saf
 import { SessionBudget } from '../agent/session-budget.js';
 import { TOOL_DEFINITIONS } from '../tools/index.js';
 import {
-  addTask, loadBoard, removeAttachments, removeTask, saveBoard, updateTask,
+  addTask, loadBoard, removeAttachments, removeTask, saveBoard, taskPrompt, updateTask,
 } from '../board/store.js';
 import { BOARD_AGENTS, BOARD_COLUMNS, type BoardColumn, type BoardAgent } from '../board/types.js';
-import { agentPresets } from '../board/agents.js';
+import { agentPresets, effectivePermission, AGENT_PRESETS } from '../board/agents.js';
 import type { Display } from '../cli/display.js';
 import type { HistoryMessage } from '../providers/types.js';
 import {
@@ -23,6 +24,39 @@ import {
   type SessionSummary,
   type ToolInfo,
 } from './types.js';
+
+/** Answers one approval, for one turn. */
+type Ask = (message: string, ctx?: ConfirmContext) => Promise<boolean>;
+
+/**
+ * Which turn the approval currently being asked about belongs to.
+ *
+ * `confirm()` is a global side channel — the tool layer calls it with no way to
+ * say which session it is running for — so the routing was previously "whichever
+ * turn installed the handler last". With two turns in flight that is wrong twice
+ * over: the second turn's approvals were attributed to the first, and whichever
+ * turn finished first ran `setConfirmHandler(null)` in its `finally` and left
+ * the other one with no handler at all. Its next approval then fell through to
+ * the terminal `[Y/n]` prompt, where nobody is watching a server, and the turn
+ * blocked until it timed out.
+ *
+ * AsyncLocalStorage fixes it properly: the agent loop runs inside the store, so
+ * a confirm raised anywhere beneath it finds its own turn no matter how many
+ * others are running.
+ */
+const currentTurn = new AsyncLocalStorage<Ask>();
+
+/**
+ * Installed once for the process, not once per turn.
+ *
+ * With no owning turn the answer is "no". A server has no terminal anyone is
+ * reading, so the alternative is a prompt that hangs for ever — and silence
+ * must never read as consent.
+ */
+setConfirmHandler((message: string, ctx?: ConfirmContext) => {
+  const ask = currentTurn.getStore();
+  return ask ? ask(message, ctx) : Promise.resolve(false);
+});
 
 /**
  * Transport-agnostic protocol handler.
@@ -92,7 +126,10 @@ export class ProtocolHandler {
     for (const resolve of this.pendingApprovals.values()) resolve('deny');
     this.pendingApprovals.clear();
     for (const s of this.sessions.values()) s.activeTurn?.abort.abort();
-    setConfirmHandler(null);
+    // The confirm handler is deliberately NOT cleared. `aura serve` builds one
+    // ProtocolHandler per socket, so one browser tab closing would otherwise
+    // strip approval routing from every other tab's running turn — the same
+    // fault the per-turn install had, just with a different trigger.
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -138,6 +175,7 @@ export class ProtocolHandler {
       case M.boardAdd:        return this.boardAdd(req, p);
       case M.boardUpdate:     return this.boardUpdate(req, p);
       case M.boardRemove:     return this.boardRemove(req, p);
+      case M.boardRun:        return this.boardRun(req, p);
       default:
         return this.fail(req.id, { code: 'unknown_method', message: `Unknown method: ${req.method}` });
     }
@@ -272,16 +310,30 @@ export class ProtocolHandler {
     }
 
     const turnId = randomUUID();
+    this.ok(req.id, { turnId });
+    await this.runTurn(s, turnId, p.message, p.images);
+  }
+
+  /**
+   * Run one turn on a session and announce how it went.
+   *
+   * Split out of turnSend so `board.run` can drive the same machinery. The
+   * caller has already replied to its own request by the time this starts —
+   * a turn takes minutes, and holding the response open for it would time out
+   * every client.
+   */
+  private async runTurn(
+    s: Session,
+    turnId: string,
+    message: string,
+    rawImages?: unknown,
+  ): Promise<{ success: boolean; summary: string }> {
+    const p = { images: rawImages } as Record<string, unknown>;
     const abort = new AbortController();
     s.activeTurn = { turnId, abort };
-    this.ok(req.id, { turnId });
     this.emit(M.turnStarted, s.id, { turnId });
 
-    // Approvals are routed per-session for the duration of the turn. The
-    // handler is single-flight per session, but two SESSIONS can run turns
-    // concurrently, so this is set immediately before the loop rather than
-    // once at construction.
-    setConfirmHandler((message: string, ctx?: ConfirmContext) => this.askApproval(s, turnId, message, ctx));
+    const ask: Ask = (message, ctx) => this.askApproval(s, turnId, message, ctx);
 
     try {
       const provider = createProvider({
@@ -298,9 +350,11 @@ export class ProtocolHandler {
         )
         : undefined;
 
-      const result = await runAgentLoop({
+      // Inside the store, so every confirm raised beneath this loop routes back
+      // to *this* turn's client even while other turns are running.
+      const result = await currentTurn.run(ask, () => runAgentLoop({
         provider,
-        task: p.message,
+        task: message,
         ...(images && images.length > 0 ? { images } : {}),
         context: s.context,
         permissions: s.permissions,
@@ -309,7 +363,7 @@ export class ProtocolHandler {
         budget: s.budget,
         initialHistory: s.history,
         abortSignal: abort.signal,
-      });
+      }));
 
       s.history = result.history;
       this.emit(M.turnCompleted, s.id, {
@@ -326,6 +380,7 @@ export class ProtocolHandler {
         },
         budgetStopped: /budget/i.test(result.summary) && !result.success,
       });
+      return { success: result.success, summary: result.summary };
     } catch (e) {
       this.emit(M.turnError, s.id, {
         turnId,
@@ -337,9 +392,12 @@ export class ProtocolHandler {
         turns: 0, toolCount: 0,
         usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0, costUsd: 0 },
       });
+      return { success: false, summary: e instanceof Error ? e.message : String(e) };
     } finally {
+      // Only the turn's own state is cleared. The confirm handler is
+      // process-wide and must outlive any single turn — clearing it here is
+      // what stranded concurrent turns.
       s.activeTurn = null;
-      setConfirmHandler(null);
     }
   }
 
@@ -571,6 +629,96 @@ export class ProtocolHandler {
     removeAttachments(root, id);
     this.boardCommit(root, state);
     this.ok(req.id, { removed: id });
+  }
+
+
+  /**
+   * Run a board task, and put the answer back on it.
+   *
+   * The engine owns this from end to end, and that is the whole point. The
+   * first version dispatched from the browser — session.create, turn.send, and
+   * a React ref remembering which task the turn belonged to. Reload the page or
+   * restart the server and that link was gone, so the tile sat in `execution`
+   * for ever with no way back. Completion has to be owned by the thing that
+   * survives a refresh.
+   *
+   * The response returns as soon as the task is moved and the turn is started.
+   * A run takes minutes; holding the request open for it would time out every
+   * client, and the board updates over board.changed anyway.
+   */
+  private async boardRun(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
+    const id = typeof p.id === 'string' ? p.id : '';
+    const root = this.boardRoot(p);
+    const state = loadBoard(root);
+    const task = state.tasks.find((t) => t.id === id);
+    if (!task) {
+      return this.fail(req.id, { code: 'no_such_task', message: `No task with id "${id}".` });
+    }
+    if (task.column === 'execution') {
+      return this.fail(req.id, { code: 'session_busy', message: `Task "${task.title}" is already running.` });
+    }
+
+    const preset = AGENT_PRESETS[task.agent] ?? AGENT_PRESETS.aura;
+    // The caller's own permission level, capped by the agent's preset — see
+    // effectivePermission. Without it "auto" in Settings did nothing here and
+    // every shell command still asked.
+    const chosen = p.permission === 'read-only' || p.permission === 'normal' || p.permission === 'auto'
+      ? p.permission
+      : undefined;
+    const permission = effectivePermission(preset, chosen);
+    const model = task.model || this.opts.defaultModel;
+    if (!model) {
+      return this.fail(req.id, { code: 'bad_params', message: 'No model configured for this task.' });
+    }
+
+    let context: ProjectContext;
+    try {
+      context = await loadProjectContext(root);
+    } catch (e) {
+      return this.fail(req.id, {
+        code: 'bad_params',
+        message: `Cannot load project root "${root}": ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+
+    const sessionId = randomUUID();
+    const session: Session = {
+      id: sessionId,
+      name: task.title.slice(0, 60),
+      projectRoot: root,
+      model,
+      apiKey: this.opts.defaultApiKey,
+      baseUrl: this.opts.defaultBaseUrl,
+      context,
+      // The agent's preset, enforced by the engine rather than suggested to the
+      // model — a read-only reviewer cannot edit however it is prompted.
+      permissions: new PermissionSystem(permission),
+      allowedTools: preset.allowedTools ?? null,
+      budget: new SessionBudget({}),
+      history: [],
+      createdAt: Date.now(),
+      activeTurn: null,
+      alwaysAllow: new Set(),
+    };
+    this.sessions.set(sessionId, session);
+
+    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false });
+    this.boardCommit(root, state);
+
+    const turnId = randomUUID();
+    this.ok(req.id, { sessionId, turnId });
+
+    const outcome = await this.runTurn(session, turnId, taskPrompt(task));
+
+    // Re-read rather than mutating the copy captured above: minutes have
+    // passed, and the user may have edited the tile while it ran.
+    const after = loadBoard(root);
+    updateTask(after, id, {
+      column: 'finished',
+      result: outcome.summary,
+      failed: !outcome.success,
+    });
+    this.boardCommit(root, after);
   }
 
   private ok(id: string, result: Record<string, unknown>): void {

@@ -26,7 +26,9 @@ import { loadAllPlugins } from '../plugins/loader.js';
 import { installPlugin, removePlugin } from '../plugins/market.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
-import { loadBoard, saveAttachment, saveBoard, updateTask } from '../board/store.js';
+import {
+  loadBoard, reclaimStrandedTasks, saveAttachment, saveBoard, updateTask,
+} from '../board/store.js';
 
 /** Name of the session cookie the browser client authenticates with. */
 const AUTH_COOKIE = 'aura_token';
@@ -90,6 +92,15 @@ export function apiKeysAllowedFor(
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
+  // Nothing is running the instant the engine starts, so any board task found
+  // in `execution` was cut off by whatever ended the last process. Put it back
+  // where the user can run it again instead of leaving a tile parked in a
+  // column with no control that moves it.
+  {
+    const state = loadBoard(opts.cwd);
+    if (reclaimStrandedTasks(state) > 0) saveBoard(opts.cwd, state);
+  }
+
   const app = express();
   const server = http.createServer(app);
 

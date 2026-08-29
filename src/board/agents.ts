@@ -79,3 +79,33 @@ export const AGENT_PRESETS: Record<BoardAgent, AgentPreset> = {
 export function agentPresets(): AgentPreset[] {
   return Object.values(AGENT_PRESETS);
 }
+
+/**
+ * The permission a task actually runs under.
+ *
+ * The two settings are not the same kind of thing, and treating them as one
+ * scale gets this wrong:
+ *
+ *   read-only    a *capability* limit. The tools that change anything are not
+ *                offered and would be refused anyway. A reviewer must stay
+ *                read-only however the session is configured — that is the
+ *                whole promise of the preset, and one that can be talked out
+ *                of is not read-only, it is read-only-by-default.
+ *
+ *   normal/auto  only about *asking*. Both allow exactly the same actions;
+ *                auto stops the confirmation prompt. Raising normal to auto
+ *                grants no new capability, so there is nothing to protect the
+ *                operator from — they are the one being prompted.
+ *
+ * So a read-only preset is a ceiling, and above it the operator decides,
+ * including deciding to be stricter. An earlier version capped auto down to
+ * the preset's `normal`, which meant someone who had chosen auto in Settings
+ * was still asked to approve every shell command and nothing explained why.
+ */
+export function effectivePermission(
+  preset: AgentPreset,
+  chosen: AgentPreset['permission'] | undefined,
+): AgentPreset['permission'] {
+  if (preset.permission === 'read-only') return 'read-only';
+  return chosen ?? preset.permission;
+}

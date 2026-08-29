@@ -209,6 +209,32 @@ export function removeTask(state: BoardState, id: string): boolean {
   return true;
 }
 
+/**
+ * Return tasks stranded mid-run to `preparation`, and say how many.
+ *
+ * A task in `execution` means a turn is running for it. Nothing is running the
+ * instant the engine starts, so any task found there was cut off — by a
+ * restart, a crash, or a Ctrl+C. Leaving it would park the tile in Execution
+ * for ever with no control that moves it, which is exactly the state a user
+ * cannot get out of.
+ *
+ * It goes back to `preparation` rather than `finished` because the work did
+ * not happen: the next thing the user wants is the Run button, not a result
+ * that does not exist.
+ */
+export function reclaimStrandedTasks(state: BoardState): number {
+  let found = 0;
+  for (const task of state.tasks) {
+    if (task.column !== 'execution') continue;
+    task.column = 'preparation';
+    task.failed = true;
+    task.result = 'The run was interrupted before it finished — the engine restarted while this task was in flight. Run it again.';
+    task.updatedAt = new Date().toISOString();
+    found++;
+  }
+  return found;
+}
+
 /** Tasks of one column, in display order. */
 export function tasksIn(state: BoardState, column: BoardColumn): BoardTask[] {
   return state.tasks

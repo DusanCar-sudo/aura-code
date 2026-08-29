@@ -230,6 +230,7 @@ export const M = {
   boardAdd: 'board.add',
   boardUpdate: 'board.update',
   boardRemove: 'board.remove',
+  boardRun: 'board.run',
   // engine → client (request)
   approvalRequest: 'approval.request',
   // engine → client (events)

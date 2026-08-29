@@ -38,6 +38,7 @@ export const M = {
   boardAdd: 'board.add',
   boardUpdate: 'board.update',
   boardRemove: 'board.remove',
+  boardRun: 'board.run',
   approvalRequest: 'approval.request',
   engineReady: 'engine.ready',
   turnStarted: 'turn.started',

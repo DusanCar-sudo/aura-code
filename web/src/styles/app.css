@@ -62,7 +62,7 @@
 .brand { display: flex; align-items: center; gap: 8px; color: var(--terracotta); }
 .brand-name {
   font-family: var(--mono);
-  font-size: 17px;
+  font-size: var(--fs-title);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text);
@@ -132,7 +132,7 @@
 }
 .convo-active .convo-open { color: var(--text); }
 .convo-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.convo-del { padding: 6px 8px; font-size: 11px; opacity: 0; }
+.convo-del { padding: 6px 8px; font-size: var(--fs-micro); opacity: 0; }
 .convo:hover .convo-del { opacity: 1; }
 .convo-del:hover { color: var(--err); }
 
@@ -494,7 +494,7 @@
 .markdown { font-size: var(--fs-body); line-height: 1.7; overflow-wrap: anywhere; }
 .markdown > *:first-child { margin-top: 0 }
 .markdown > *:last-child { margin-bottom: 0 }
-.markdown h1, .markdown h2, .markdown h3 { font-size: 15px; margin: 18px 0 8px; font-weight: 600; }
+.markdown h1, .markdown h2, .markdown h3 { font-size: var(--fs-title); margin: 18px 0 8px; font-weight: 600; }
 .markdown p { margin: 0 0 11px; }
 .markdown ul, .markdown ol { margin: 0 0 11px; padding-inline-start: 22px; }
 .markdown li { margin: 3px 0; }
@@ -570,7 +570,7 @@
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
-.modal-title { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-title { margin: 0; font-size: var(--fs-title); font-weight: 600; }
 .modal-body { padding: 16px; overflow-y: auto; }
 .modal-foot {
   display: flex;
@@ -738,7 +738,7 @@
 }
 .about-mark {
   font-family: var(--mono);
-  font-size: 16px;
+  font-size: var(--fs-title);
   letter-spacing: 0.1em;
   color: var(--terracotta);
 }
@@ -849,7 +849,7 @@
   padding: 9px 11px;
   border-bottom: 1px solid var(--line);
 }
-.board-col-title { font-size: var(--fs-small); font-weight: 600; color: var(--text); margin: 0; }
+.board-col-title { font-size: var(--fs-title); font-weight: 600; color: var(--text); margin: 0; }
 .board-col-count {
   margin-inline-start: auto;
   font-family: var(--mono);

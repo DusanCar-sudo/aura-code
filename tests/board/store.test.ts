@@ -4,8 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import {
-  addTask, attachmentsDir, boardPath, loadBoard, removeAttachments, removeTask,
-  saveAttachment, saveBoard, tasksIn, taskPrompt, updateTask,
+  addTask, attachmentsDir, boardPath, loadBoard, reclaimStrandedTasks,
+  removeAttachments, removeTask, saveAttachment, saveBoard, tasksIn, taskPrompt, updateTask,
 } from '../../src/board/store.js';
 import { EMPTY_BOARD, type BoardState } from '../../src/board/types.js';
 
@@ -264,5 +264,32 @@ describe('attachments', () => {
     const state: BoardState = { version: 1, tasks: [] };
     const task = addTask(state, { title: 'Plain' });
     expect(taskPrompt(task)).toBe('Plain');
+  });
+});
+
+describe('a run that was cut off', () => {
+  it('returns a stranded task to preparation, not to finished', () => {
+    // Nothing is running the instant the engine starts, so a task found in
+    // `execution` was interrupted. Left there it would sit in a column with no
+    // control that moves it — the one state a user cannot get out of. And it
+    // goes back to `preparation`, not `finished`, because the work did not
+    // happen: what they want next is the Run button, not a result that does
+    // not exist.
+    const state: BoardState = { version: 1, tasks: [] };
+    const task = addTask(state, { title: 'Interrupted', column: 'execution' });
+    expect(reclaimStrandedTasks(state)).toBe(1);
+    expect(state.tasks[0].column).toBe('preparation');
+    expect(state.tasks[0].failed).toBe(true);
+    expect(state.tasks[0].result).toMatch(/interrupted/i);
+    expect(task.id).toBe(state.tasks[0].id);
+  });
+
+  it('leaves every other column alone', () => {
+    const state: BoardState = { version: 1, tasks: [] };
+    addTask(state, { title: 'a', column: 'planning' });
+    addTask(state, { title: 'b', column: 'preparation' });
+    addTask(state, { title: 'c', column: 'finished' });
+    expect(reclaimStrandedTasks(state)).toBe(0);
+    expect(state.tasks.map((t) => t.column)).toEqual(['planning', 'preparation', 'finished']);
   });
 });

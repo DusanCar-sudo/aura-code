@@ -40,11 +40,15 @@
   --header-h: 48px;
 
   /* Type scale. Terminal-flavoured but not cramped: 11-12px measured well on
-     paper and badly on a real screen, so the scale sits a step up. Change
-     these three and the whole app follows. */
-  --fs-body: 14px;
-  --fs-small: 12.5px;
-  --fs-micro: 11px;
+     paper and badly on a real screen, so the scale sits a step up — and then
+     another, on the owner's third pass. Body is 12pt and titles 16pt, given
+     here in the px those point sizes actually are (12pt = 16px, 16pt ≈ 21px)
+     because a browser's pt is a print unit and mixing the two makes every
+     later change guesswork. Change these four and the whole app follows. */
+  --fs-title: 21px;
+  --fs-body: 16px;
+  --fs-small: 14px;
+  --fs-micro: 12.5px;
   /* Chat column width, and the measure the thread reads at. */
   --col-w: 820px;
 }
