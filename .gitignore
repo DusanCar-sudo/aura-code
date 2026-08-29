@@ -102,87 +102,33 @@ aura-analysis-video/
 aura-token-video/
 hyperframes/
 
-# Third-party skills vendored by the skills installer, not Aura source.
-# Listed by name rather than ignoring .agents/skills/ wholesale, because 24
-# skills in that directory ARE tracked deliberately — a blanket rule would
-# leave no way to tell which absences are intentional. A new skill that
-# belongs in the repo is added normally; one installed by the tool goes here.
-.agents/skills/ask-matt/
-.agents/skills/claude-handoff/
-.agents/skills/code-review/
-.agents/skills/codebase-design/
-.agents/skills/diagnosing-bugs/
-.agents/skills/domain-modeling/
-.agents/skills/git-guardrails-claude-code/
-.agents/skills/grill-me/
-.agents/skills/grill-with-docs/
-.agents/skills/grilling/
-.agents/skills/handoff/
-.agents/skills/implement/
-.agents/skills/improve-codebase-architecture/
-.agents/skills/loop-me/
-.agents/skills/migrate-to-shoehorn/
-.agents/skills/prototype/
-.agents/skills/resolving-merge-conflicts/
-.agents/skills/scaffold-exercises/
-.agents/skills/setup-matt-pocock-skills/
-.agents/skills/setup-pre-commit/
-.agents/skills/setup-ts-deep-modules/
-.agents/skills/tdd/
-.agents/skills/teach/
-.agents/skills/to-questionnaire/
-.agents/skills/to-spec/
-.agents/skills/to-tickets/
-.agents/skills/triage/
-.agents/skills/wait-what/
-.agents/skills/wayfinder/
-.agents/skills/wizard/
-.agents/skills/writing-beats/
-.agents/skills/writing-for-agents/
-.agents/skills/writing-fragments/
-.agents/skills/writing-shape/
-
-# Same vendored skills, mirrored by the installer into the other agent dirs.
-# .claude/skills and .grok/skills have nothing tracked, so they go wholesale;
-# .qwen/skills is listed by name because 23 skills there are tracked, and
-# without a trailing slash because those entries are symlinks into
-# .agents/skills — a `dir/` pattern matches only real directories.
+# Agent-tool config directories, ignored wholesale.
+#
+# These used to be listed skill by skill, because some of .agents/skills was
+# tracked deliberately and a blanket rule would have hidden which absences were
+# intentional. That reasoning expired when the vendored directories were
+# removed from the repo entirely: nothing under them is tracked now, so there
+# is nothing for a blanket rule to obscure.
+#
+# Every one of these is written by a third-party agent tool into a checkout of
+# whatever project it is pointed at. None of it is Aura source, none of it
+# should ship in the npm package, and none of it should reappear in the repo
+# because a tool happened to run here. Note that `.agents/skills` is still a
+# supported location at *runtime* — src/plugins/project-skills.ts reads it in
+# the user's project. Ignoring it here only stops Aura's own checkout from
+# carrying someone else's skills.
+.agents/
+.qwen/
+.kilocode/
+.openclaude/
 .claude/skills/
-.grok/skills/
+.grok/
+.codex/
+.cursor/
+.crush/
+.rubycode/
+.impeccable/
+.windsurf/
+
 # Personal, per Claude Code's own convention (settings.json is the shared one).
 .claude/settings.local.json
-.qwen/skills/ask-matt
-.qwen/skills/claude-handoff
-.qwen/skills/code-review
-.qwen/skills/codebase-design
-.qwen/skills/diagnosing-bugs
-.qwen/skills/domain-modeling
-.qwen/skills/git-guardrails-claude-code
-.qwen/skills/grill-me
-.qwen/skills/grill-with-docs
-.qwen/skills/grilling
-.qwen/skills/handoff
-.qwen/skills/implement
-.qwen/skills/improve-codebase-architecture
-.qwen/skills/loop-me
-.qwen/skills/migrate-to-shoehorn
-.qwen/skills/prototype
-.qwen/skills/research
-.qwen/skills/resolving-merge-conflicts
-.qwen/skills/scaffold-exercises
-.qwen/skills/setup-matt-pocock-skills
-.qwen/skills/setup-pre-commit
-.qwen/skills/setup-ts-deep-modules
-.qwen/skills/tdd
-.qwen/skills/teach
-.qwen/skills/to-questionnaire
-.qwen/skills/to-spec
-.qwen/skills/to-tickets
-.qwen/skills/triage
-.qwen/skills/wait-what
-.qwen/skills/wayfinder
-.qwen/skills/wizard
-.qwen/skills/writing-beats
-.qwen/skills/writing-for-agents
-.qwen/skills/writing-fragments
-.qwen/skills/writing-shape
