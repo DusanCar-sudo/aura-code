@@ -149,6 +149,7 @@ export interface TaskPatch {
   order?: number;
   files?: string[];
   workflow?: WorkflowDef;
+  waiting?: boolean;
 }
 
 /**
@@ -211,6 +212,7 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   // as it was made.
   if (patch.linkedTo !== undefined) task.linkedTo = patch.linkedTo || undefined;
   if (patch.workflow !== undefined) task.workflow = patch.workflow;
+  if (patch.waiting !== undefined) task.waiting = patch.waiting;
   task.updatedAt = new Date().toISOString();
   return task;
 }
@@ -241,8 +243,13 @@ export function reclaimStrandedTasks(state: BoardState): number {
   for (const task of state.tasks) {
     if (task.column !== 'execution') continue;
     task.column = 'preparation';
-    task.failed = true;
-    task.result = 'The run was interrupted before it finished — the engine restarted while this task was in flight. Run it again.';
+    if (task.waiting) {
+      task.waiting = undefined;
+      task.result = 'The run queue was cleared because the engine restarted. Run it again.';
+    } else {
+      task.failed = true;
+      task.result = 'The run was interrupted before it finished — the engine restarted while this task was in flight. Run it again.';
+    }
     task.updatedAt = new Date().toISOString();
     found++;
   }

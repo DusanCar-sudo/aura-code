@@ -686,8 +686,9 @@ export function Board({
                 <div className="kanban-column-cards">
                   {laneTasks.map((tItem, cardIdx) => {
                     const isExecution = tItem.column === 'execution';
-                    const isPrimaryExecution = isExecution && cardIdx % 2 === 0;
-                    const isParallelExecution = isExecution && cardIdx % 2 === 1;
+                    const isPrimaryExecution = isExecution && !tItem.waiting && cardIdx % 2 === 0;
+                    const isParallelExecution = isExecution && !tItem.waiting && cardIdx % 2 === 1;
+                    const isWaiting = isExecution && tItem.waiting;
 
                     const extra = tItem as unknown as {
                       tools?: string[];
@@ -707,6 +708,7 @@ export function Board({
                     let executionClass = '';
                     if (isPrimaryExecution) executionClass = 'execution-card-primary';
                     else if (isParallelExecution) executionClass = 'execution-card-parallel';
+                    else if (isWaiting) executionClass = 'execution-card-waiting';
 
                     return (
                       <div
@@ -763,6 +765,12 @@ export function Board({
                               <span className="card-running-pill teal">
                                 <span className="running-pulse-dot teal" />
                                 Parallel 2
+                              </span>
+                            )}
+                            {isWaiting && (
+                              <span className="card-running-pill yellow" style={{ background: 'rgba(240, 173, 78, 0.15)', borderColor: '#f0ad4e', color: '#f0ad4e' }}>
+                                <span className="running-pulse-dot yellow" style={{ background: '#f0ad4e', animation: 'none' }} />
+                                Waiting
                               </span>
                             )}
                             <button
@@ -862,8 +870,8 @@ export function Board({
                           )}
 
                           <div className="card-meta-line">
-                            <span style={{ color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : extra.verifyColor || 'var(--mut)' }}>
-                              {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isExecution ? '⟳ running' : '◯ pending')}
+                            <span style={{ color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)' }}>
+                              {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isWaiting ? '⧖ waiting' : isExecution ? '⟳ running' : '◯ pending')}
                             </span>
                             <span className="card-model-name">{tItem.model || activeModel}</span>
                           </div>

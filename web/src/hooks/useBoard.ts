@@ -73,6 +73,7 @@ export interface BoardTask {
     strategy: string;
     agents: Array<{ id: string; name: string; role: string; icon: string }>;
   };
+  waiting?: boolean;
   createdAt: string;
   updatedAt: string;
 }

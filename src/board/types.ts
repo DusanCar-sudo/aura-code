@@ -168,6 +168,10 @@ export interface BoardTask {
    * editing the steps appeared to work and was gone on reload.
    */
   workflow?: WorkflowDef;
+  /**
+   * The task is waiting in the queue because another write-capable task is running.
+   */
+  waiting?: boolean;
   /** Ordering within a column. Sparse, so a move never rewrites its neighbours. */
   order: number;
   createdAt: string;

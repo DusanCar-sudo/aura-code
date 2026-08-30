@@ -9,7 +9,7 @@ import { TOOL_DEFINITIONS } from '../tools/index.js';
 import {
   addTask, loadBoard, removeAttachments, removeTask, saveBoard, taskPrompt, updateTask,
 } from '../board/store.js';
-import { BOARD_AGENTS, BOARD_COLUMNS, isWorkflowDef, type BoardColumn, type BoardAgent } from '../board/types.js';
+import { BOARD_AGENTS, BOARD_COLUMNS, isWorkflowDef, type BoardColumn, type BoardAgent, type BoardTask } from '../board/types.js';
 import { agentPresets, effectivePermission, AGENT_PRESETS } from '../board/agents.js';
 import type { Display } from '../cli/display.js';
 import type { HistoryMessage } from '../providers/types.js';
@@ -697,7 +697,7 @@ export class ProtocolHandler {
     // TaskPatch is the list to keep this in step with.
     for (const key of [
       'title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result',
-      'failed', 'order', 'priority', 'attention', 'linkedTo', 'files',
+      'failed', 'order', 'priority', 'attention', 'linkedTo', 'files', 'waiting',
     ]) {
       if (p[key] !== undefined) patch[key] = p[key];
     }
@@ -767,6 +767,28 @@ export class ProtocolHandler {
       ? p.permission
       : undefined;
     const permission = effectivePermission(preset, chosen);
+
+    // Queue mechanism: allow only one write-capable task in execution at a time.
+    const isWriter = permission !== 'read-only';
+    if (isWriter) {
+      const activeWriter = state.tasks.find((t) => {
+        if (t.column !== 'execution') return false;
+        if (t.waiting) return false;
+        const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
+        return tPreset.permission !== 'read-only';
+      });
+
+      if (activeWriter) {
+        updateTask(state, id, {
+          column: 'execution',
+          waiting: true,
+          model: (typeof p.model === 'string' && p.model ? p.model : undefined) || task.model,
+        });
+        this.boardCommit(root, state);
+        return this.ok(req.id, { queued: true });
+      }
+    }
+
     const model = (typeof p.model === 'string' && p.model ? p.model : '') || task.model || this.opts.defaultModel;
     if (!model) {
       return this.fail(req.id, { code: 'bad_params', message: 'No model configured for this task.' });
@@ -807,7 +829,7 @@ export class ProtocolHandler {
     };
     this.sessions.set(sessionId, session);
 
-    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false });
+    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false, waiting: undefined });
     this.boardCommit(root, state);
 
     const turnId = randomUUID();
@@ -827,6 +849,9 @@ export class ProtocolHandler {
     });
 
     this.boardCommit(root, after);
+
+    // Try to trigger any other waiting tasks if we just finished
+    await this.processQueue(root);
 
     // The link is a workflow, so it runs the next task rather than tidying it
     // into the next column and waiting for someone to press the button. Only
@@ -864,6 +889,26 @@ export class ProtocolHandler {
     const model = task.model || this.opts.defaultModel;
     if (!model) return;
 
+    // Queue mechanism: allow only one write-capable task in execution at a time.
+    const isWriter = effectivePermission(preset, permission) !== 'read-only';
+    if (isWriter) {
+      const activeWriter = state.tasks.find((t) => {
+        if (t.column !== 'execution') return false;
+        if (t.waiting) return false;
+        const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
+        return tPreset.permission !== 'read-only';
+      });
+
+      if (activeWriter) {
+        updateTask(state, id, {
+          column: 'execution',
+          waiting: true,
+        });
+        this.boardCommit(root, state);
+        return;
+      }
+    }
+
     let context: ProjectContext;
     try { context = await loadProjectContext(root); } catch { return; }
 
@@ -886,7 +931,7 @@ export class ProtocolHandler {
     };
     this.sessions.set(sessionId, session);
 
-    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false });
+    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false, waiting: undefined });
     this.boardCommit(root, state);
 
     const outcome = await this.runTurn(session, randomUUID(), taskPrompt(task));
@@ -900,8 +945,114 @@ export class ProtocolHandler {
     });
     this.boardCommit(root, after);
 
+    // Try to trigger any other waiting tasks if we just finished
+    await this.processQueue(root);
+
     if (done?.linkedTo && outcome.success) {
       await this.runLinked(root, done.linkedTo, permission, seen);
+    }
+  }
+
+  private async processQueue(root: string): Promise<void> {
+    const state = loadBoard(root);
+    
+    // Check if there is already an active (non-waiting) writer task in execution
+    const activeWriter = state.tasks.find((t) => {
+      if (t.column !== 'execution') return false;
+      if (t.waiting) return false;
+      const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
+      return tPreset.permission !== 'read-only';
+    });
+
+    if (activeWriter) {
+      // Still busy!
+      return;
+    }
+
+    // Find the next waiting writer task (sorted by order, then by createdAt)
+    const nextWaiting = state.tasks
+      .filter((t) => {
+        if (t.column !== 'execution') return false;
+        if (!t.waiting) return false;
+        const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
+        return tPreset.permission !== 'read-only';
+      })
+      .sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt))[0];
+
+    if (!nextWaiting) {
+      // No more waiting tasks!
+      return;
+    }
+
+    // Start nextWaiting!
+    await this.startQueuedTask(root, nextWaiting.id);
+  }
+
+  private async startQueuedTask(root: string, id: string): Promise<void> {
+    const state = loadBoard(root);
+    const task = state.tasks.find((t) => t.id === id);
+    if (!task) return;
+
+    // Clear waiting, generate sessionId
+    const sessionId = randomUUID();
+    updateTask(state, id, { waiting: undefined, sessionId, result: undefined, failed: false });
+    this.boardCommit(root, state);
+
+    // Resolve model, preset, permission
+    const preset = AGENT_PRESETS[task.agent] ?? AGENT_PRESETS.aura;
+    const permission = effectivePermission(preset, undefined);
+    const model = task.model || this.opts.defaultModel;
+    if (!model) return;
+
+    let context: ProjectContext;
+    try {
+      context = await loadProjectContext(root);
+    } catch {
+      return;
+    }
+
+    const apiKey = getApiKeyForModel(model) || this.opts.defaultApiKey;
+
+    const session: Session = {
+      id: sessionId,
+      name: task.title.slice(0, 60),
+      projectRoot: root,
+      model,
+      apiKey,
+      baseUrl: this.opts.defaultBaseUrl,
+      context,
+      permissions: new PermissionSystem(permission),
+      allowedTools: preset.allowedTools ?? null,
+      budget: new SessionBudget({}),
+      history: [],
+      createdAt: Date.now(),
+      activeTurn: null,
+      alwaysAllow: new Set(),
+    };
+    this.sessions.set(sessionId, session);
+
+    // Notify client that board state has changed (task is now active)
+    this.emit('board.changed', undefined, {});
+
+    const turnId = randomUUID();
+    const outcome = await this.runTurn(session, turnId, taskPrompt(task));
+
+    // When done, update task and process the queue again!
+    const after = loadBoard(root);
+    const done = updateTask(after, id, {
+      column: 'finished',
+      result: outcome.summary,
+      failed: !outcome.success,
+      attention: false,
+      files: outcome.files && outcome.files.length > 0 ? outcome.files : (task.files ?? []),
+    });
+    this.boardCommit(root, after);
+
+    // Process next in queue
+    await this.processQueue(root);
+
+    if (done?.linkedTo && outcome.success) {
+      await this.runLinked(root, done.linkedTo, permission, new Set([id]));
     }
   }
 
