@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { type WorkflowStepNode, type WorkflowEdge, type WorkflowDef, type BoardTask } from '../hooks/useBoard';
 import { getAuthTokenSync } from '../lib/auth';
 
@@ -444,6 +444,7 @@ export function Canvas({
   // ── Workflow graph (mode: 'graph') ────────────────────────────────────────
   const [workflowNodes, setWorkflowNodes] = useState<WorkflowStepNode[]>(INITIAL_WORKFLOW_NODES);
   const [workflowEdges, setWorkflowEdges] = useState<WorkflowEdge[]>(INITIAL_WORKFLOW_EDGES);
+  const [workflowSubMode, setWorkflowSubMode] = useState<'visual' | 'linear' | 'integration'>('visual');
   /** Node a wire is currently being dragged out of, if any. */
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   /** Loose end of that wire, in stage coordinates. */
@@ -877,13 +878,21 @@ export function Canvas({
       name: titles[type],
       type,
       x: 100 + (workflowNodes.length % 5) * 60,
-      y: 120 + (workflowNodes.length % 4) * 45,
+      y: 120 + (workflowNodes.length * 120),
       tool: type === 'tool' ? 'run_tests' : undefined,
       // Left empty on purpose: the placeholder asks what the step should do,
       // which is a prompt to write. Canned filler has to be deleted first and
       // reads as finished when it is not.
       desc: '',
     };
+
+    // Auto-connect new node to the last node
+    const lastNode = workflowNodes[workflowNodes.length - 1];
+    if (lastNode) {
+      const newEdge: WorkflowEdge = { from: lastNode.id, to: newId };
+      setWorkflowEdges((prev) => [...prev, newEdge]);
+    }
+
     setWorkflowNodes((prev) => [...prev, newNode]);
   };
 
@@ -898,6 +907,42 @@ export function Canvas({
   const updateWorkflowNode = (id: string, patch: Partial<WorkflowStepNode>) => {
     setWorkflowNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
   };
+
+  // Get nodes in sequential order for linear view
+  const linearNodes = useMemo(() => {
+    const ordered: WorkflowStepNode[] = [];
+    const visited = new Set<string>();
+
+    const incomingCount = new Map<string, number>();
+    for (const edge of workflowEdges) {
+      incomingCount.set(edge.to, (incomingCount.get(edge.to) || 0) + 1);
+    }
+
+    const roots = workflowNodes.filter(n => !incomingCount.get(n.id));
+    roots.sort((a, b) => a.y - b.y);
+
+    const queue = [...roots];
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      if (visited.has(node.id)) continue;
+      visited.add(node.id);
+      ordered.push(node);
+
+      const children = workflowEdges
+        .filter(e => e.from === node.id)
+        .map(e => workflowNodes.find(n => n.id === e.to))
+        .filter((n): n is WorkflowStepNode => Boolean(n));
+      
+      children.sort((a, b) => a.y - b.y);
+      queue.push(...children);
+    }
+
+    const orphans = workflowNodes.filter(n => !visited.has(n.id));
+    orphans.sort((a, b) => a.y - b.y);
+    ordered.push(...orphans);
+
+    return ordered;
+  }, [workflowNodes, workflowEdges]);
 
   const handleDeleteNode = (id: string) => {
     setWorkflowNodes((prev) => prev.filter((n) => n.id !== id));
@@ -1496,35 +1541,62 @@ export function Canvas({
           >
             {/* Toolbar */}
             <div className="workflow-toolbar">
-              <div className="workflow-node-palette">
-                <span className="palette-label">+ Add Node:</span>
+              {workflowSubMode !== 'integration' && (
+                <div className="workflow-node-palette">
+                  <span className="palette-label">+ Add Node:</span>
+                  <button
+                    type="button"
+                    className="btn-palette-node node-tool"
+                    onClick={() => handleAddNode('tool')}
+                  >
+                    ⚡ Tool Action
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-palette-node node-llm"
+                    onClick={() => handleAddNode('llm')}
+                  >
+                    🧠 LLM Reasoning
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-palette-node node-gate"
+                    onClick={() => handleAddNode('gate')}
+                  >
+                    ⚠️ Approval Gate
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-palette-node node-verify"
+                    onClick={() => handleAddNode('verify')}
+                  >
+                    🧪 Verify Step
+                  </button>
+                </div>
+              )}
+
+              {/* Sub-mode switcher */}
+              <div className="tab-mode-pills" style={{ marginInlineStart: '24px' }}>
                 <button
                   type="button"
-                  className="btn-palette-node node-tool"
-                  onClick={() => handleAddNode('tool')}
+                  className={`btn-mode-pill ${workflowSubMode === 'visual' ? 'active' : ''}`}
+                  onClick={() => setWorkflowSubMode('visual')}
                 >
-                  ⚡ Tool Action
+                  ⚡ Visual Graph
                 </button>
                 <button
                   type="button"
-                  className="btn-palette-node node-llm"
-                  onClick={() => handleAddNode('llm')}
+                  className={`btn-mode-pill ${workflowSubMode === 'linear' ? 'active' : ''}`}
+                  onClick={() => setWorkflowSubMode('linear')}
                 >
-                  🧠 LLM Reasoning
+                  ☰ Linear Steps
                 </button>
                 <button
                   type="button"
-                  className="btn-palette-node node-gate"
-                  onClick={() => handleAddNode('gate')}
+                  className={`btn-mode-pill ${workflowSubMode === 'integration' ? 'active' : ''}`}
+                  onClick={() => setWorkflowSubMode('integration')}
                 >
-                  ⚠️ Approval Gate
-                </button>
-                <button
-                  type="button"
-                  className="btn-palette-node node-verify"
-                  onClick={() => handleAddNode('verify')}
-                >
-                  🧪 Verify Step
+                  🔌 Zapier Integration
                 </button>
               </div>
 
@@ -1565,10 +1637,11 @@ export function Canvas({
             </div>
 
             {/* Interactive SVG Canvas */}
-            <div
-              ref={stageAreaRef}
-              className={`workflow-stage-area ${connectingFrom ? 'is-connecting-mode' : ''}`}
-            >
+            {workflowSubMode === 'visual' && (
+              <div
+                ref={stageAreaRef}
+                className={`workflow-stage-area ${connectingFrom ? 'is-connecting-mode' : ''}`}
+              >
               <svg className="workflow-svg-edges">
                 {/* Render Existing Connected Edges */}
                 {workflowEdges.map((e, idx) => {
@@ -1785,7 +1858,346 @@ export function Canvas({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
+
+            {/* Linear Zapier-style Workflow Steps View */}
+            {workflowSubMode === 'linear' && (
+              <div className="linear-workflow-container" style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '40px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                background: 'rgba(11, 14, 23, 0.4)',
+                width: '100%',
+                height: 'calc(100% - 60px)'
+              }}>
+                <div style={{ maxWidth: '600px', width: '100%', display: 'flex', flexDirection: 'column', gap: '0' }}>
+                  {linearNodes.length === 0 ? (
+                    <div style={{
+                      padding: '40px',
+                      textAlign: 'center',
+                      background: 'var(--panel-bg)',
+                      borderRadius: 'var(--radius)',
+                      border: '1px dashed var(--line)',
+                      color: 'var(--txt-dim)'
+                    }}>
+                      <div style={{ fontSize: '24px', marginBottom: '12px' }}>⚡</div>
+                      <div>No steps in this workflow yet. Click the buttons above to add your first trigger or action!</div>
+                    </div>
+                  ) : (
+                    linearNodes.map((node: WorkflowStepNode, index: number) => {
+                      const isLast = index === linearNodes.length - 1;
+                      const nodeTypeLabel = 
+                        node.type === 'tool' ? '⚡ Tool Action' :
+                        node.type === 'llm' ? '🧠 LLM Reasoning' :
+                        node.type === 'gate' ? '⚠️ Approval Gate' :
+                        node.type === 'verify' ? '🧪 Verify Step' : 'Step';
+
+                      return (
+                        <div key={node.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                          {/* Step Card */}
+                          <div style={{
+                            width: '100%',
+                            background: 'var(--panel-bg)',
+                            border: '1px solid var(--line-strong)',
+                            padding: '16px 20px',
+                            borderRadius: 'var(--radius)',
+                            position: 'relative',
+                            boxShadow: 'var(--shadow-1)'
+                          }}>
+                            {/* Step Badge */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '-10px',
+                              left: '20px',
+                              background: node.type === 'gate' ? '#e08e6f' : '#6ed0ea',
+                              color: '#0f1724',
+                              fontSize: '9px',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 650,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              textTransform: 'uppercase'
+                            }}>
+                              {nodeTypeLabel}
+                            </div>
+
+                            {/* Step Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{
+                                  background: 'rgba(255,255,255,0.06)',
+                                  width: '24px',
+                                  height: '24px',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  color: 'var(--acc2)'
+                                }}>
+                                  {index + 1}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={node.name}
+                                  onChange={(e) => {
+                                    const updatedName = e.target.value;
+                                    setWorkflowNodes(prev => prev.map(n => n.id === node.id ? { ...n, name: updatedName } : n));
+                                  }}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    borderBottom: '1px solid transparent',
+                                    color: 'var(--txt)',
+                                    fontSize: '15px',
+                                    fontWeight: 600,
+                                    padding: '2px 4px',
+                                    width: '280px'
+                                  }}
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#ff6b6b',
+                                  cursor: 'pointer',
+                                  fontSize: '11px'
+                                }}
+                                onClick={() => {
+                                  // Remove node and its associated edges
+                                  setWorkflowNodes(prev => prev.filter(n => n.id !== node.id));
+                                  setWorkflowEdges(prev => prev.filter(e => e.from !== node.id && e.to !== node.id));
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+
+                            {/* Node Configuration Details */}
+                            <div style={{ marginTop: '14px', fontSize: '13px', color: 'var(--txt-dim)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {node.type === 'tool' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontWeight: 500 }}>Tool type:</span>
+                                  <select
+                                    value={node.tool || 'read_file'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setWorkflowNodes(prev => prev.map(n => n.id === node.id ? { ...n, tool: val } : n));
+                                    }}
+                                    style={{
+                                      background: 'var(--bg)',
+                                      color: 'var(--txt)',
+                                      border: '1px solid var(--line)',
+                                      borderRadius: '4px',
+                                      padding: '3px 8px',
+                                      fontSize: '12px'
+                                    }}
+                                  >
+                                    <option value="read_file">read_file (Read File)</option>
+                                    <option value="edit_file">edit_file (Edit File)</option>
+                                    <option value="write_file">write_file (Write File)</option>
+                                    <option value="run_shell">run_shell (Run Command)</option>
+                                    <option value="run_tests">run_tests (Run Tests)</option>
+                                  </select>
+                                </div>
+                              )}
+                              <div>
+                                <span style={{ fontWeight: 500 }}>Description:</span>
+                                <input
+                                  type="text"
+                                  value={node.desc || ''}
+                                  placeholder="Describe what this step does..."
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setWorkflowNodes(prev => prev.map(n => n.id === node.id ? { ...n, desc: val } : n));
+                                  }}
+                                  style={{
+                                    background: 'var(--bg)',
+                                    color: 'var(--txt)',
+                                    border: '1px solid var(--line)',
+                                    borderRadius: '4px',
+                                    padding: '5px 10px',
+                                    width: '100%',
+                                    marginTop: '4px',
+                                    fontSize: '12px'
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Connecting arrow/connector if not the last step */}
+                          {!isLast && (
+                            <div style={{
+                              height: '40px',
+                              width: '2px',
+                              borderLeft: '2px dashed var(--line)',
+                              position: 'relative',
+                              margin: '4px 0'
+                            }}>
+                              <div style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                background: '#1c2739',
+                                color: 'var(--dim)',
+                                border: '1px solid var(--line)',
+                                borderRadius: '50%',
+                                width: '20px',
+                                height: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '12px',
+                                fontWeight: 'bold'
+                              }}>
+                                ↓
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Zapier Outbound/Inbound Webhook Settings Panel */}
+            {workflowSubMode === 'integration' && (
+              <div className="zapier-integration-container" style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '40px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                background: 'rgba(11, 14, 23, 0.4)',
+                width: '100%',
+                height: 'calc(100% - 60px)'
+              }}>
+                <div style={{ maxWidth: '650px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Integration Info Banner */}
+                  <div style={{
+                    background: 'rgba(232, 118, 54, 0.08)',
+                    border: '1px solid rgba(232, 118, 54, 0.3)',
+                    borderRadius: 'var(--radius)',
+                    padding: '20px',
+                    color: 'var(--txt)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '24px' }}>🔌</span>
+                      <h4 style={{ margin: 0, fontSize: '18px', color: '#ff8c42' }}>Zapier & Inbound Webhooks</h4>
+                    </div>
+                    <p style={{ fontSize: '13.5px', margin: 0, lineHeight: 1.5, color: 'var(--txt-dim)' }}>
+                      Connect Aura Web with your external Zapier webhooks to trigger local coding tasks automatically or post completion reports back to Slack, Google Sheets, or email when they finish.
+                    </p>
+                  </div>
+
+                  {/* Incoming Trigger */}
+                  <div style={{
+                    background: 'var(--panel-bg)',
+                    border: '1px solid var(--line)',
+                    padding: '20px',
+                    borderRadius: 'var(--radius)'
+                  }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '15px', color: 'var(--acc2)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      📥 Inbound Webhook (Trigger Aura from Zapier)
+                    </h5>
+                    <p style={{ fontSize: '12.5px', color: 'var(--txt-dim)', margin: '0 0 16px 0' }}>
+                      Configure your Zapier Catch Webhook action to post to this secure local URL. Aura will automatically instantiate and execute this workflow pipeline.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value="http://127.0.0.1:7399/api/webhooks/trigger/canvas-pipeline"
+                        style={{
+                          background: 'var(--bg)',
+                          color: 'var(--txt-dim)',
+                          border: '1px solid var(--line)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '8px 12px',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '12px',
+                          flex: 1
+                        }}
+                      />
+                      <button
+                        type="button"
+                        style={{ background: 'var(--line)', color: 'var(--txt)', border: '1px solid var(--line-strong)', padding: '0 16px', borderRadius: '4px', cursor: 'pointer' }}
+                        onClick={() => {
+                          navigator.clipboard.writeText("http://127.0.0.1:7399/api/webhooks/trigger/canvas-pipeline");
+                          alert("Inbound webhook URL copied to clipboard!");
+                        }}
+                      >
+                        Copy URL
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--dim)', fontStyle: 'italic' }}>
+                      💡 Make sure Aura is running in server mode (`aura serve`) to receive webhook signals.
+                    </div>
+                  </div>
+
+                  {/* Outgoing Webhook */}
+                  <div style={{
+                    background: 'var(--panel-bg)',
+                    border: '1px solid var(--line)',
+                    padding: '20px',
+                    borderRadius: 'var(--radius)'
+                  }}>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '15px', color: 'var(--acc2)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      📤 Outbound Webhook (Trigger Zapier from Aura)
+                    </h5>
+                    <p style={{ fontSize: '12.5px', color: 'var(--txt-dim)', margin: '0 0 16px 0' }}>
+                      Provide your custom Zapier Webhook URL here. Aura will post status and evidence payloads to it in real-time.
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div>
+                        <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>Zapier Webhook URL:</label>
+                        <input
+                          type="text"
+                          placeholder="https://hooks.zapier.com/hooks/catch/12345/abcde/"
+                          style={{
+                            background: 'var(--bg)',
+                            color: 'var(--txt)',
+                            border: '1px solid var(--line)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '10px',
+                            width: '100%',
+                            fontSize: '13px'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>Notify on event(s):</label>
+                        <div style={{ display: 'flex', gap: '16px', fontSize: '12.5px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                            <input type="checkbox" defaultChecked /> Task Completed
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                            <input type="checkbox" defaultChecked /> Task Failed
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                            <input type="checkbox" /> Gate Approval Required
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
