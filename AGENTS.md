@@ -133,3 +133,9 @@ Tests in `tests/`, run under Vitest (`vitest.config.ts`).
 - Keep model-agnostic abstraction: add providers through `src/providers/`
   and factory, not ad-hoc SDK calls elsewhere.
 - Respect permission/safety layer (`src/safety/`) for filesystem/shell ops.
+- **Touching `web/`? Read `DESIGN.md` first.** It is the design system for the
+  web client — tokens, type scale, elevation, icons, and the rules that keep it
+  coherent. The tokens themselves live in `web/src/styles/theme.css`; DESIGN.md
+  explains how to apply them and records the mistakes worth not repeating.
+  Three surfaces, three sets of rules: `web/` follows DESIGN.md, `src/cli/` is
+  the TUI, and `site/` is the marketing site (see AURA.md).
