@@ -2,6 +2,16 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.17.6] — 2026-08-30
+
+### Added & Fixed — Web Studio, Zapier Workflows & Kanban Enhancements
+
+- **Zapier-style Linear Workflows**: Added toggleable linear step-by-step Zapier execution list view in `Canvas.tsx` alongside visual graph views.
+- **Kanban Execution List & Third-Party Integration Hub**: Added `📊 Execution List` high-density table and `🔌 Third-Party Providers` integration dashboard for n8n, Zapier, Make, Pipedream, Activepieces, Telegram, Slack, and REST Webhooks.
+- **Kanban Free Dragging & Stacking Fixes**: Restored free pointer drag positioning across column boundaries with elevated `z-index` stacking order and non-clipping overflow rules.
+- **Direct Task Box Editing**: Implemented 4px pointer drag threshold and added `✏️ Edit` chip on task cards for immediate inspection and field editing.
+- **Visual Showcase Gallery**: Added comprehensive UI screenshot gallery to `README.md`.
+
 ## [0.17.5] — 2026-08-30
 
 npm goes straight from 0.15.5 to this. Two versions in between were prepared and
