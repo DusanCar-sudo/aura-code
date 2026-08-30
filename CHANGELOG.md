@@ -2,12 +2,84 @@
 
 All notable changes to Aura Code are documented here.
 
-## [0.17.0] — 2026-08-30
+## [0.17.5] — 2026-08-30
 
-npm goes straight from 0.15.5 to this. 0.16.0 was tagged but never published —
-the account's Actions were locked over a billing issue and the publish workflow
-could not run — so its notes are kept below and everything in them ships here
-too.
+npm goes straight from 0.15.5 to this. Two versions in between were prepared and
+never published: 0.16.0 was tagged while the account's Actions were locked over
+a billing issue and the publish workflow could not run, and 0.17.0 was bumped
+and changelogged but overtaken by a day of fixes before it could ship. Both sets
+of notes are kept below and everything in them ships here.
+
+### Fixed — the web client rendered nothing at all
+
+**The browser client showed an empty page and no error.** A `ReferenceError` for
+an undeclared `saveModalOpen` was thrown during React's first render, which
+unmounts the whole tree, and React's scheduler swallowed it so the console stayed
+clean. Behind it, `Canvas.tsx` carried an entire workflow-graph and sticky-note
+feature whose JSX and handlers were written but whose state declarations were
+not — the tell being three `INITIAL_*` seed constants sitting declared and
+unused. 154 typecheck errors, 108 of them undefined names, now zero.
+
+The reason a bundle referencing variables that do not exist could ship at all is
+that `vite build` does not typecheck. It does now: `build:web` runs `tsc` first,
+against a config that keeps `strict` and drops only `noUnusedLocals`, because an
+unused local is untidy but never broken and blocking a release on one teaches
+people to route around the gate.
+
+**Desktop authentication failed permanently once it failed once.** The token was
+read from web storage before the Tauri IPC that owns it. The server mints a fresh
+token per run while storage survives runs, so the app replayed the previous run's
+token and returned 401 until site data was cleared by hand. IPC is authoritative
+under Tauri now, with a single retry on rejection and re-resolution before
+retrying a socket that never opened.
+
+**Kanban edits were discarded by every exit except Save.** Closing the task modal
+any other way silently dropped them. Every exit flushes now, fields commit on
+blur, and the modal reads the task from the board instead of a snapshot taken
+when it opened.
+
+**Attached pipelines were never persisted.** `BoardTask` had no `workflow` field,
+so a graph built in Canvas lived only in the browser and was gone on reload. It
+now round-trips through the engine behind a validator that rejects a malformed
+graph before it can reach the board file.
+
+### Added — authoring, naming, and one writer at a time
+
+- **Workflow steps are writable.** Node name, description and tool are fields on
+  the card. They were read-only text filled from a canned table, so every
+  pipeline described the same four generic steps and there was no way to say
+  what a step should actually do. New nodes start empty and ask.
+- **`:nerds [topic]`.** Read-only work runs in parallel; only one writer at a
+  time, the rest queue. Aura ran board tasks concurrently with no coordination
+  at all — two agents editing one file was last-write-wins, silently. Chosen
+  over git worktrees: an agent cannot declare which files it will touch before
+  it runs, so per-path locking can only be taken after the first write, which is
+  after the collision. The lease is live; wiring it into board runs is next.
+- **Chat rename**, because "Untitled" for every conversation is no handle at all.
+  Pencil or double-click in the sidebar; Enter commits, Escape abandons.
+- **Terminal height is yours.** It was capped at 75% of the viewport, which is
+  not the space actually available; it measures its container and can cover the
+  editor entirely.
+
+### Changed — say only what the code does
+
+- **`:marathon` no longer announces work it does not do.** It claimed a parallel
+  coordination loop, exponential backoffs and a context compactor; none were
+  wired to anything. What remains is a flag with a real 24-hour expiry, plus
+  `off` and `status`. Its shared-environment module went with it — a mutex that
+  resolved a file path and then ignored it, and a syntax gate that rejected
+  `const closing = "}"`, neither of which was imported anywhere.
+- **`:marathon <task>` obeyed no limits.** It returned before the busy-session
+  and budget checks, making it a way to start a second concurrent turn and to
+  keep spending after the budget was exhausted. It obeys both now.
+- **Telegram `/provider` is a menu again.** It listed every model with a
+  configured key — some 57 undifferentiated lines in a chat message. Five
+  families now, grouped and ordered by how often they are reached for: Google,
+  NVIDIA, OpenCode Zen, OpenCode Go, OpenRouter. Switching to anything else by
+  id still works.
+- **The composer follows the theme.** A hardcoded dark gradient meant near-black
+  text on near-black in light mode. It is four lines tall now, derived from
+  line-height rather than a pixel count.
 
 ### Added — a real boundary, on request
 - **`aura --sandboxed`.** Every other guard in `src/safety/` is TypeScript
