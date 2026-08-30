@@ -72,28 +72,109 @@ export const SWARM_AGENT_PRESETS: SwarmAgentPreset[] = [
 export interface ThirdPartyProviderItem {
   id: string;
   name: string;
-  envKey?: string;
+  category: 'automation' | 'chat' | 'webhook';
+  icon: string;
   role: string;
   desc: string;
-  defaultModel: string;
-  endpoint: string;
-  models: string[];
-  icon: string;
+  envKey?: string;
+  inboundUrl: string;
+  outboundUrl?: string;
+  capabilities: string[];
 }
 
 export const THIRD_PARTY_PROVIDERS_LIST: ThirdPartyProviderItem[] = [
-  { id: 'anthropic', name: 'Anthropic (Claude)', envKey: 'ANTHROPIC_API_KEY', role: 'Primary', desc: 'Opus, Sonnet 4.5, Haiku 3.5 — Deep reasoning and surgical code editing', defaultModel: 'claude-sonnet-4-5-20251001', endpoint: 'https://api.anthropic.com/v1', models: ['claude-sonnet-4-5-20251001', 'claude-3-5-haiku-latest', 'claude-3-opus-20240229'], icon: '🟧' },
-  { id: 'opencode', name: 'OpenCode Zen / Go', envKey: 'OPENCODE_API_KEY', role: 'Free Mesh', desc: 'Free model tier including Big Pickle, Nemotron Ultra, and MiMo free models', defaultModel: 'opencode/big-pickle', endpoint: 'https://opencode.ai/zen/v1', models: ['opencode/big-pickle', 'opencode/mimo-v2.5-free', 'opencode/nemotron-3-ultra-free'], icon: '⚡' },
-  { id: 'openrouter', name: 'OpenRouter Gateway', envKey: 'OPENROUTER_API_KEY', role: 'Gateway Mesh', desc: 'Access 200+ models via single unified OpenRouter API key', defaultModel: 'openrouter/deepseek/deepseek-v4-pro', endpoint: 'https://openrouter.ai/api/v1', models: ['openrouter/deepseek/deepseek-v4-pro', 'openrouter/anthropic/claude-3.5-sonnet', 'openrouter/google/gemini-2.5-pro'], icon: '🌐' },
-  { id: 'nvidia', name: 'NVIDIA NIM (Nemotron)', envKey: 'NVIDIA_API_KEY', role: 'GPU Mesh', desc: 'High-speed NVIDIA hosted Llama 3.1 Nemotron 70B & 405B models', defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct', endpoint: 'https://integrate.api.nvidia.com/v1', models: ['nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/nemotron-4-340b-instruct'], icon: '💚' },
-  { id: 'google', name: 'Google Gemini', envKey: 'GOOGLE_API_KEY', role: 'Review / Fast', desc: 'Gemini 2.5 Pro and Gemini 2.5 Flash with multi-million token context window', defaultModel: 'gemini-2.5-pro', endpoint: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'], icon: '✨' },
-  { id: 'openai', name: 'OpenAI (GPT-4o)', envKey: 'OPENAI_API_KEY', role: 'Primary', desc: 'GPT-4o, GPT-4o-mini, and o3-mini reasoning models', defaultModel: 'gpt-4o', endpoint: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'], icon: '🤖' },
-  { id: 'xiaomi', name: 'Xiaomi MiMo', envKey: 'XIAOMI_API_KEY', role: 'Mesh', desc: 'Xiaomi MiMo v2.5 Pro high-speed coding and instruction tuned models', defaultModel: 'mimo-v2.5-pro', endpoint: 'https://token-plan-sgp.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'], icon: '📱' },
-  { id: 'zhipu', name: 'Zhipu GLM (Z.ai)', envKey: 'ZHIPU_API_KEY', role: 'Mesh', desc: 'GLM 5.2 and GLM Coding Plan specialized software development models', defaultModel: 'glm-5.2', endpoint: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-5.2', 'glm-5.1', 'zhipu-coding/glm-5'], icon: '🇨🇳' },
-  { id: 'deepseek', name: 'DeepSeek AI', envKey: 'DEEPSEEK_API_KEY', role: 'Mesh', desc: 'DeepSeek-V3 & DeepSeek-R1 open weights models', defaultModel: 'deepseek-coder', endpoint: 'https://api.deepseek.com/v1', models: ['deepseek-coder', 'deepseek-chat', 'deepseek-r1'], icon: '🐳' },
-  { id: 'fpt', name: 'FPT Cloud AI', envKey: 'FPT_API_KEY', role: 'Regional Mesh', desc: 'FPT Cloud AI hosted regional models for high availability', defaultModel: 'fpt/DeepSeek-V4-Flash', endpoint: 'https://mkp-api.fptcloud.com/v1', models: ['fpt/DeepSeek-V4-Flash'], icon: '☁️' },
-  { id: 'byteplus', name: 'BytePlus ModelArk', envKey: 'ARK_API_KEY', role: 'Regional Mesh', desc: 'BytePlus ModelArk enterprise high-throughput endpoints', defaultModel: 'byteplus/deepseek-v4-flash', endpoint: 'https://ark.ap-southeast.bytepluses.com/api/v3', models: ['byteplus/deepseek-v4-flash'], icon: '🔺' },
-  { id: 'ollama', name: 'Ollama (Local Offline)', envKey: undefined, role: 'Archimedes Local', desc: 'Local air-gapped zero-latency execution via Ollama CLI', defaultModel: 'qwen3-coder:30b', endpoint: 'http://127.0.0.1:11434/v1', models: ['qwen3-coder:30b', 'llama3.3:70b', 'deepseek-r1:14b'], icon: '🦙' },
+  {
+    id: 'n8n',
+    name: 'n8n Workflow Automation',
+    category: 'automation',
+    icon: '🪢',
+    role: 'Node-Based Flow Engine',
+    desc: 'Self-hosted n8n workflows. Receive webhook payloads from n8n nodes to execute tasks and send status back to n8n webhook targets.',
+    envKey: 'N8N_WEBHOOK_SECRET',
+    inboundUrl: 'http://localhost:7399/api/webhooks/n8n/inbound',
+    outboundUrl: 'http://localhost:5678/webhook/aura-callback',
+    capabilities: ['Webhook Node', 'Task Execution Trigger', 'HMAC SHA-256 Auth', 'Structured Result Callback']
+  },
+  {
+    id: 'zapier',
+    name: 'Zapier Automation',
+    category: 'automation',
+    icon: '⚡',
+    role: 'Zap Webhook Integration',
+    desc: 'Connect 6,000+ Zapier apps to Aura tasks. Trigger workflows via Webhooks by Zapier and post agent progress back to Zapier actions.',
+    envKey: 'ZAPIER_WEBHOOK_SECRET',
+    inboundUrl: 'http://localhost:7399/api/webhooks/zapier/inbound',
+    outboundUrl: 'https://hooks.zapier.com/hooks/catch/aura-target/',
+    capabilities: ['Catch Hook Trigger', 'Outbound Webhook Action', 'JSON Body Payload', 'Real-time Event Dispatch']
+  },
+  {
+    id: 'make',
+    name: 'Make.com (Integromat)',
+    category: 'automation',
+    icon: '🧩',
+    role: 'Scenario Visual Builder',
+    desc: 'Integrate with Make.com visual scenarios. Receive execution hooks and trigger downstream HTTP modules upon task verification.',
+    envKey: 'MAKE_API_TOKEN',
+    inboundUrl: 'http://localhost:7399/api/webhooks/make/inbound',
+    outboundUrl: 'https://hook.eu1.make.com/aura-scenario-target',
+    capabilities: ['Custom Webhook Module', 'Scenario Dataflow', 'JSON Data Structures', 'Execution Status Polling']
+  },
+  {
+    id: 'pipedream',
+    name: 'Pipedream Serverless',
+    category: 'automation',
+    icon: '💧',
+    role: 'Serverless Code Steps',
+    desc: 'Run serverless Node.js / Python code steps that trigger Aura tasks and process async verification events.',
+    envKey: 'PIPEDREAM_API_KEY',
+    inboundUrl: 'http://localhost:7399/api/webhooks/pipedream/inbound',
+    outboundUrl: 'https://eo12345678.m.pipedream.net',
+    capabilities: ['Node.js & Python SDK', 'Serverless Triggers', 'Sub-second Event Stream', 'Built-in Key Store']
+  },
+  {
+    id: 'activepieces',
+    name: 'Activepieces',
+    category: 'automation',
+    icon: '🧩',
+    role: 'Open-Source Flow Engine',
+    desc: 'Self-hosted open-source automation alternative for enterprise stacks with native Webhook piece triggers.',
+    envKey: 'ACTIVEPIECES_API_KEY',
+    inboundUrl: 'http://localhost:7399/api/webhooks/activepieces/inbound',
+    capabilities: ['Self-Hosted Engine', 'Custom Piece Connector', 'Flow Execution Hook', 'OAuth2 / API Key Auth']
+  },
+  {
+    id: 'telegram',
+    name: 'Telegram Bot & Service',
+    category: 'chat',
+    icon: '✈️',
+    role: 'Telegram ChatOps',
+    desc: 'Control Aura agent loops, trigger task runs, and receive real-time execution logs directly in Telegram channels.',
+    envKey: 'TELEGRAM_BOT_TOKEN',
+    inboundUrl: 'http://localhost:7399/api/webhooks/telegram',
+    capabilities: ['Chat Commands (/run, /status)', 'Real-time Progress Stream', 'Interactive Inline Keyboards', 'Multi-user Permission Gating']
+  },
+  {
+    id: 'slack_discord',
+    name: 'Slack & Discord Webhooks',
+    category: 'chat',
+    icon: '💬',
+    role: 'Chat Alerts & Notifications',
+    desc: 'Broadcast task execution starts, completion summaries, and verification results directly into Slack or Discord channels.',
+    envKey: 'SLACK_WEBHOOK_URL',
+    inboundUrl: 'http://localhost:7399/api/webhooks/slack',
+    capabilities: ['Rich BlockKit Formatting', 'Discord Embed Support', 'Task Failure Alerts', 'Interactive Action Buttons']
+  },
+  {
+    id: 'generic_webhook',
+    name: 'Generic REST Webhook',
+    category: 'webhook',
+    icon: '🔔',
+    role: 'Universal HTTP REST Connector',
+    desc: 'Universal HTTP POST/PUT inbound and outbound REST webhooks with configurable Bearer Token, Basic Auth, or HMAC SHA-256 signatures.',
+    envKey: 'WEBHOOK_SECRET_KEY',
+    inboundUrl: 'http://localhost:7399/api/webhooks/generic/inbound',
+    capabilities: ['Bearer Token Auth', 'HMAC SHA-256 Verification', 'Custom Headers', 'JSON Schema Validation']
+  }
 ];
 
 const DEFAULT_MOCK_CARDS: Array<Partial<BoardTask> & {
@@ -1218,9 +1299,9 @@ export function Board({
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                 <span style={{ fontSize: '28px' }}>🔌</span>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--acc2)' }}>Third-Party LLM Providers & Resilient Mesh</h3>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--acc2)' }}>⚡ Third-Party Integration & Automation Hub</h3>
                   <div style={{ fontSize: '13px', color: 'var(--txt-dim)', marginTop: '4px' }}>
-                    Model-agnostic architecture supports all major providers and local open-weights engines with automated circuit breakers and fallback chains.
+                    Connect n8n, Zapier, Make.com, Pipedream, Activepieces, Telegram, Slack, and REST Webhooks with zero-code HTTP triggers.
                   </div>
                 </div>
               </div>
@@ -1255,7 +1336,7 @@ export function Board({
                         <span style={{ fontSize: '22px' }}>{prov.icon}</span>
                         <div>
                           <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--txt)' }}>{prov.name}</h4>
-                          <span style={{ fontSize: '11px', color: 'var(--txt-dim)', fontFamily: 'var(--font-mono)' }}>{prov.envKey || 'Local / No Key Required'}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--txt-dim)', fontFamily: 'var(--font-mono)' }}>{prov.role}</span>
                         </div>
                       </div>
                       <span style={{
@@ -1267,7 +1348,7 @@ export function Board({
                         color: isKeySet ? 'var(--ok)' : '#ff8c42',
                         border: isKeySet ? '1px solid rgba(90, 158, 110, 0.3)' : '1px solid rgba(232, 118, 54, 0.3)'
                       }}>
-                        {isKeySet ? '✓ Key Configured' : '⚠️ No Key Set'}
+                        {isKeySet ? '✓ Configured' : '⚠️ Setup Key'}
                       </span>
                     </div>
 
@@ -1275,16 +1356,24 @@ export function Board({
                       {prov.desc}
                     </p>
 
-                    {/* Default Model & Endpoint */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px', color: 'var(--txt-dim)' }}>
-                      <div><strong style={{ color: 'var(--txt)' }}>Default Model:</strong> <code style={{ color: 'var(--acc2)' }}>{prov.defaultModel}</code></div>
-                      <div><strong style={{ color: 'var(--txt)' }}>Endpoint:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{prov.endpoint}</span></div>
+                    {/* Webhook URLs */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11.5px', color: 'var(--txt-dim)', background: 'var(--bg)', padding: '10px', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                      <div>
+                        <strong style={{ color: 'var(--txt)' }}>Inbound Webhook Target:</strong><br />
+                        <code style={{ color: 'var(--acc2)', wordBreak: 'break-all', fontSize: '11px' }}>{prov.inboundUrl}</code>
+                      </div>
+                      {prov.outboundUrl && (
+                        <div style={{ marginTop: '2px' }}>
+                          <strong style={{ color: 'var(--txt)' }}>Outbound Target URL:</strong><br />
+                          <code style={{ color: 'var(--ok)', wordBreak: 'break-all', fontSize: '11px' }}>{prov.outboundUrl}</code>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Supported Models Tag List */}
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      {prov.models.map((m) => (
-                        <span key={m} style={{
+                    {/* Capabilities Tags */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                      {prov.capabilities.map((cap) => (
+                        <span key={cap} style={{
                           fontSize: '10.5px',
                           background: 'var(--bg)',
                           border: '1px solid var(--line)',
@@ -1293,7 +1382,7 @@ export function Board({
                           color: 'var(--txt-dim)',
                           fontFamily: 'var(--font-mono)'
                         }}>
-                          {m}
+                          ⚡ {cap}
                         </span>
                       ))}
                     </div>
