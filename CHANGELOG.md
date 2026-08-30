@@ -2,6 +2,13 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.17.7] — 2026-08-30
+
+### Fixed — Kanban Stacking & Inter-Column Drag-and-Drop Re-parenting
+
+- **Elevated Drag Stacking Context**: Set `z-index: 999999` on dragged cards, elevated `z-index: 99999` on target column containers, and forced `overflow: visible !important` across stage containers so dragged cards float completely on top of all sibling columns.
+- **Inter-Column Drag-and-Drop Re-parenting**: Added automatic column drop target detection via `document.elementsFromPoint`. Releasing a task box over another column (`planning`, `preparation`, `execution`, `finished`) instantly re-parents the task to the target column and snaps it neatly into position.
+
 ## [0.17.6] — 2026-08-30
 
 ### Added & Fixed — Web Studio, Zapier Workflows & Kanban Enhancements

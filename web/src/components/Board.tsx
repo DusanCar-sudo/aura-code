@@ -625,6 +625,42 @@ export function Board({
         // ignore
       }
     }
+
+    if (dragCard && e) {
+      const dropX = e.clientX;
+      const dropY = e.clientY;
+      const elements = document.elementsFromPoint(dropX, dropY);
+      let foundColumn: BoardColumn | null = null;
+
+      for (const el of elements) {
+        if (el.classList.contains('lane-planning')) {
+          foundColumn = 'planning';
+          break;
+        } else if (el.classList.contains('lane-preparation')) {
+          foundColumn = 'preparation';
+          break;
+        } else if (el.classList.contains('lane-execution')) {
+          foundColumn = 'execution';
+          break;
+        } else if (el.classList.contains('lane-finished')) {
+          foundColumn = 'finished';
+          break;
+        }
+      }
+
+      if (foundColumn) {
+        const draggedTask = allTasks.find((t) => t.id === dragCard.id);
+        if (draggedTask && draggedTask.column !== foundColumn) {
+          void board.update(dragCard.id, { column: foundColumn });
+        }
+      }
+
+      setCardPositions((prev) => ({
+        ...prev,
+        [dragCard.id]: { x: 0, y: 0 },
+      }));
+    }
+
     setPointerStart(null);
     setDragCard(null);
   };

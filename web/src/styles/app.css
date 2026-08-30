@@ -1136,7 +1136,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible !important;
 }
 
 .kanban-stage-columns {
@@ -1160,8 +1160,15 @@
   min-height: 0;
   overflow: visible !important;
   position: relative;
+  z-index: 1;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   box-sizing: border-box;
+}
+
+.kanban-column-lane:hover,
+.kanban-column-lane:focus-within,
+.kanban-column-lane.drag-active {
+  z-index: 99999 !important;
 }
 
 .kanban-column-lane.lane-planning {
@@ -1260,6 +1267,10 @@
   gap: 12px;
 }
 
+.kanban-column-cards:has(.dragging) {
+  overflow: visible !important;
+}
+
 .kanban-card {
   position: relative !important;
   width: 100% !important;
@@ -1276,8 +1287,10 @@
 }
 
 .kanban-card.dragging {
-  z-index: 99999 !important;
+  z-index: 999999 !important;
   position: relative !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 0 2px var(--acc2) !important;
+  opacity: 0.96;
 }
 
 .kanban-card:hover {

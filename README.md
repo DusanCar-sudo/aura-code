@@ -5,7 +5,7 @@
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Website](https://img.shields.io/badge/website-aura--website-6ed0ea?style=flat-square)](https://dusancar-sudo.github.io/aura-website/)
-[![Version](https://img.shields.io/badge/version-v0.17.6-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.17.7-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
