@@ -111,6 +111,36 @@ run the bare command exactly as before. `AURA_RTK=0` opts out.
 
 ---
 
+## Visual Showcase & Aura Web Studio
+
+Aura features a web client interface (`web/`) with visual drag-and-drop Kanban execution, n8n/Zapier automation integration hubs, visual workflow builders, and interactive canvas previews.
+
+| Visual Kanban Board | Execution List Manager |
+|---|---|
+| ![Kanban Board](assets/screenshots/01-kanban-board.png) | ![Execution List](assets/screenshots/02-execution-list.png) |
+
+| Third-Party Automation Hub (n8n, Zapier, Make) | Linear Zapier Workflow Builder |
+|---|---|
+| ![Third-Party Providers](assets/screenshots/03-third-party-providers.png) | ![Zapier Workflow](assets/screenshots/04-workflow-zapier-visual.png) |
+
+| Interactive Web & Canvas Preview | Archimedes Competence Engine |
+|---|---|
+| ![Canvas Preview](assets/screenshots/05-canvas-web-preview.png) | ![Archimedes Competence](assets/screenshots/06-archimedes-competence.png) |
+
+| Resilient Provider Mesh Settings | Swarm Multi-Agent Orchestrator |
+|---|---|
+| ![Provider Settings](assets/screenshots/07-model-mesh-settings.png) | ![Swarm Orchestrator](assets/screenshots/08-swarm-orchestrator.png) |
+
+| DAG Workflow Architecture | Retro Task Detail Inspector |
+|---|---|
+| ![System Architecture](assets/screenshots/09-system-architecture.png) | ![Task Detail Modal](assets/screenshots/10-task-detail-modal.png) |
+
+| Code Editor & Canvas | Multi-Agent TUI Terminal |
+|---|---|
+| ![Code Editor Canvas](assets/screenshots/11-code-editor-canvas.png) | ![Multi Agent TUI](assets/screenshots/12-multi-agent-tui.png) |
+
+---
+
 ## Gazelle — conversational mode
 
 Most of what you say to a coding agent isn't a coding task. "What did we decide
