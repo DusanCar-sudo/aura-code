@@ -24,11 +24,16 @@ export type IconName =
 const PATHS: Record<IconName, string> = {
   close: 'M6 6l12 12M18 6L6 18',
   menu: 'M3.5 7h17M3.5 12h17M3.5 17h17',
+  // A hub, a ring, and eight teeth outside it. The ring is what makes it read
+  // as a cog: the previous attempt had the teeth but no ring and rendered as an
+  // asterisk at 17px, and the one before that transcribed a gear outline by
+  // hand whose arcs collapsed at small sizes into something visibly lopsided.
+  // The teeth are generated on a circle, so they are symmetric by construction
+  // rather than by careful typing.
   settings: 'M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z'
-    + 'M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-2.72 1.13V21a2 2 0 1 1-4 0v-.1'
-    + 'A1.6 1.6 0 0 0 7.1 19.4a1.6 1.6 0 0 0-1.77.32l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.6 1.6 0 0 0 3 15.1H3a2 2 0 1 1 0-4h.1'
-    + 'A1.6 1.6 0 0 0 4.6 7.1a1.6 1.6 0 0 0-.32-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.6 1.6 0 0 0 8.9 3H9a2 2 0 1 1 4 0v.1'
-    + 'a1.6 1.6 0 0 0 2.72 1.13l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.6 1.6 0 0 0 21 8.9V9a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.1z',
+    + 'M12 19.6a7.6 7.6 0 1 0 0-15.2 7.6 7.6 0 0 0 0 15.2z'
+    + 'M19.6 12L22.4 12M17.4 17.4L19.4 19.4M12 19.6L12 22.4M6.6 17.4L4.6 19.4'
+    + 'M4.4 12L1.6 12M6.6 6.6L4.6 4.6M12 4.4L12 1.6M17.4 6.6L19.4 4.6',
   plus: 'M12 5v14M5 12h14',
   paperclip: 'M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9',
   send: 'M21 3L10.5 13.5M21 3l-6.8 18-3.7-7.5L3 9.8 21 3z',

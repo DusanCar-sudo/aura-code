@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { Cables } from './Cables';
 import { Icon, type IconName } from './Icon';
 import {
   BOARD_COLUMNS, isOrderable, orderBetween, tasksIn,
@@ -46,7 +45,7 @@ export function Board({ board, busy, onRun, t }: {
    * every kanban that works actually uses.
    */
   const [drag, setDrag] = useState<{
-    id: string; x: number; y: number; mode: 'move' | 'wire';
+    id: string; x: number; y: number;
     /** Where inside the tile it was grabbed, so the ghost does not jump to its
      *  own corner the moment it appears. */
     dx?: number; dy?: number;
@@ -63,12 +62,11 @@ export function Board({ board, busy, onRun, t }: {
   const pending = useRef<
     { id: string; x: number; y: number; dx: number; dy: number; w: number } | null
   >(null);
-  const dragging = drag?.mode === 'move' ? drag.id : null;
+  const dragging = drag?.id ?? null;
   /** The tile a cable is being pulled from, if any. Separate from `dragging`
    *  because dropping a cable links two tasks and dropping a tile moves one —
    *  the same gesture on the same element meaning two things would be a coin
    *  toss for the user. */
-  const wiring = drag?.mode === 'wire' ? drag.id : null;
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   /** Where a drop at this point would land: the column, and the index in it. */
@@ -94,16 +92,6 @@ export function Board({ board, busy, onRun, t }: {
     const held = drag;
     setDrag(null);
     if (!held) return;
-
-    if (held.mode === 'wire') {
-      // The cable runs from the tile it was pulled off to the one under the
-      // pointer: the source is what pulls that task in when it finishes.
-      const over = document.elementFromPoint(x, y)?.closest<HTMLElement>('.board-card');
-      const onto = over?.dataset.taskId;
-      if (onto && onto !== held.id) void board.update(held.id, { linkedTo: onto });
-      return;
-    }
-
     const target = targetAt(x, y);
     if (target) void drop(board, held.id, target.column, target.at);
   };
@@ -122,17 +110,13 @@ export function Board({ board, busy, onRun, t }: {
           // 5px, so a slightly unsteady click is still a click.
           if (Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y) < 5) return;
           pending.current = null;
-          setDrag({
-            id: p.id, x: e.clientX, y: e.clientY, mode: 'move',
-            dx: p.dx, dy: p.dy, w: p.w,
-          });
+          setDrag({ id: p.id, x: e.clientX, y: e.clientY, dx: p.dx, dy: p.dy, w: p.w });
         }}
         onPointerUp={(e) => { pending.current = null; endDrag(e.clientX, e.clientY); }}
         // A pointer that leaves the window mid-drag must not leave the board
         // stuck holding a tile that no longer follows it.
         onPointerCancel={() => { pending.current = null; setDrag(null); }}
       >
-        <Cables tasks={board.tasks} container={boardRef} />
         {BOARD_COLUMNS.map((column) => {
           const cards = tasksIn(board.tasks, column);
           return (
@@ -177,9 +161,7 @@ export function Board({ board, busy, onRun, t }: {
                     onRun={onRun}
                     dragging={dragging}
                     onPress={(id, x, y, dx, dy, w) => { pending.current = { id, x, y, dx, dy, w }; }}
-                    onGrab={(id, x, y) => setDrag({ id, x, y, mode: 'move' })}
-                    onWire={(id, x, y) => setDrag({ id, x, y, mode: 'wire' })}
-                    wiring={wiring}
+                    onGrab={(id, x, y) => setDrag({ id, x, y })}
                     t={t}
                   />
                 ))}
@@ -197,7 +179,7 @@ export function Board({ board, busy, onRun, t }: {
           happening: the reorder only landed on release, so a drag in progress
           showed no movement at all and the board read as frozen. A drag has to
           be visible while it is a drag. */}
-      {drag?.mode === 'move' && (() => {
+      {drag && (() => {
         const held = board.tasks.find((x) => x.id === drag.id);
         if (!held) return null;
         return (
@@ -366,7 +348,7 @@ function prevColumn(column: BoardColumn): BoardColumn | null {
 
 function Tile({
   task, board, busy, open, onToggle, onRun,
-  dragging, onPress, onGrab, onWire, wiring, t,
+  dragging, onPress, onGrab, t,
 }: {
   task: BoardTask;
   board: BoardApi;
@@ -378,8 +360,6 @@ function Tile({
   /** A press anywhere on the tile — becomes a drag if it moves. */
   onPress: (id: string, x: number, y: number, dx: number, dy: number, w: number) => void;
   onGrab: (id: string, x: number, y: number) => void;
-  onWire: (id: string, x: number, y: number) => void;
-  wiring: string | null;
   t: T;
 }) {
   const preset = board.presets.find((p) => p.id === task.agent);
@@ -397,9 +377,6 @@ function Tile({
     task.priority === 'urgent' ? 'board-card-urgent' : '',
     task.attention ? 'board-card-attention' : '',
     dragging === task.id ? 'board-card-dragging' : '',
-    // Somewhere to drop a cable that is currently being pulled — but not onto
-    // itself, which would be a task that runs itself for ever.
-    wiring && wiring !== task.id ? 'board-card-wirable' : '',
   ].filter(Boolean).join(' ');
 
   const linked = task.linkedTo ? board.tasks.find((x) => x.id === task.linkedTo) : undefined;
@@ -420,7 +397,7 @@ function Tile({
         // left only the thin margins draggable and the tile felt stuck. The
         // 5px threshold already tells a click on it from a drag.
         const el = e.target as HTMLElement;
-        if (el.closest('input, textarea, select, .board-port')) return;
+        if (el.closest('input, textarea, select')) return;
         if (el.closest('button') && !el.closest('.board-card-face')) return;
         const box = e.currentTarget.getBoundingClientRect();
         onPress(
@@ -468,25 +445,6 @@ function Tile({
         <span className="board-card-agent">{preset?.label ?? task.agent}</span>
       </button>
 
-      {/* The connector port. Cables attach here, and the overlay measures this
-          element to know where to draw — hence data-task-port. */}
-      <span
-        className={`board-port${task.linkedTo ? ' board-port-wired' : ''}`}
-        data-task-port={task.id}
-        title={t('board.linkDrag')}
-        onPointerDown={(e) => {
-          // Wiring, not moving — a separate gesture from the grip.
-          e.preventDefault();
-          e.stopPropagation();
-          onWire(task.id, e.clientX, e.clientY);
-        }}
-        onClick={(e) => {
-          // Clicking a wired port unhooks it — the cable has to be removable
-          // by the thing that draws it, not only from a dropdown.
-          e.stopPropagation();
-          if (task.linkedTo) void board.update(task.id, { linkedTo: '' });
-        }}
-      />
 
       {linked && (
         <div className="board-card-link" title={t('board.linkHint')}>

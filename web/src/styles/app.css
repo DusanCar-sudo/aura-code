@@ -1190,72 +1190,8 @@
   .board-col { flex-basis: 200px; }
 }
 
-/* ── Workflow cables ───────────────────────────────────────────────────────
-   The link between two tiles, drawn as something that hangs. A straight line
-   would say the same thing and read as a border; slack makes it obviously a
-   connection between two objects, and makes it move when a tile does. */
-
+/* The board is the positioning context for the tile being carried. */
 .board { position: relative; }
-
-.board-cables {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  /* Above the columns so a cable is never clipped by one, and transparent to
-     the mouse so it cannot swallow a click meant for a tile underneath. */
-  z-index: 2;
-  pointer-events: none;
-  overflow: visible;
-}
-
-.cable-line {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2;
-  stroke-linecap: round;
-  /* A connection between two tiles, not a rule across the board. Held back so
-     a cable spanning four columns supports the layout instead of cutting it in
-     half. */
-  opacity: 0.55;
-}
-.cable-glow {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 8;
-  stroke-linecap: round;
-  opacity: 0.10;
-}
-.cable-bead { fill: var(--accent); opacity: 0.8; }
-.cable-urgent .cable-line, .cable-urgent .cable-bead { stroke: var(--err); fill: var(--err); }
-.cable-urgent .cable-glow { stroke: var(--err); }
-
-/* The port a cable is pulled from. Sits on the tile's trailing edge, where a
-   connector belongs on a node. */
-.board-port {
-  position: absolute;
-  inset-inline-end: -6px;
-  top: 14px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  background: var(--panel-raised);
-  cursor: crosshair;
-  z-index: 3;
-  transition: transform 120ms ease, border-color 120ms ease;
-}
-.board-card { position: relative; }
-.board-port:hover { transform: scale(1.35); border-color: var(--terracotta); }
-.board-port-wired {
-  background: var(--terracotta);
-  border-color: var(--terracotta);
-}
-/* While a cable is being pulled, every tile that could receive it says so. */
-.board-card-wirable {
-  outline: 1px dashed color-mix(in srgb, var(--terracotta) 60%, transparent);
-  outline-offset: 2px;
-}
 
 /* The drag handle. Its own element because the tile's face is a button, and a
    browser will not begin a drag from one — with the whole card draggable the
