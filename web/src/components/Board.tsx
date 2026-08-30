@@ -1171,14 +1171,17 @@ export function Board({
       {kanbanSubTab === 'list' && (
         <div style={{
           flex: 1,
+          minHeight: 0,
+          maxHeight: '100%',
           overflowY: 'auto',
+          overflowX: 'hidden',
           padding: '24px 32px',
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
           background: 'rgba(11, 14, 23, 0.4)',
           width: '100%',
-          height: 'calc(100% - 60px)'
+          boxSizing: 'border-box'
         }}>
           {/* Search & Filter Bar */}
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
@@ -1409,14 +1412,17 @@ export function Board({
       {kanbanSubTab === 'providers' && (
         <div style={{
           flex: 1,
+          minHeight: 0,
+          maxHeight: '100%',
           overflowY: 'auto',
+          overflowX: 'hidden',
           padding: '32px 24px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           background: 'rgba(11, 14, 23, 0.4)',
           width: '100%',
-          height: 'calc(100% - 60px)'
+          boxSizing: 'border-box'
         }}>
           <div style={{ maxWidth: '900px', width: '100%', display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Banner */}
@@ -1588,13 +1594,15 @@ export function Board({
       {kanbanSubTab === 'dag' && (
         <div style={{
           flex: 1,
+          minHeight: 0,
+          maxHeight: '100%',
           display: 'flex',
           flexDirection: 'column',
           width: '100%',
-          height: 'calc(100% - 60px)',
           background: 'rgba(9, 11, 18, 0.6)',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          boxSizing: 'border-box'
         }}>
           {/* DAG Toolbar */}
           <div style={{

@@ -2,6 +2,12 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.17.9] — 2026-08-31
+
+### Fixed — Kanban Sub-Tab Containers Scroll Overflow
+
+- **Execution List & Sub-Tab Scrolling**: Updated sub-tab container styles (`kanbanSubTab === 'list'`, `providers`, `dag`) with `minHeight: 0`, `maxHeight: '100%'`, and `overflowY: 'auto'` to ensure long task lists scroll smoothly in the flexbox column container.
+
 ## [0.17.8] — 2026-08-30
 
 ### Added — Integrated Workflow DAG into Kanban View
