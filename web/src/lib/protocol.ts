@@ -27,6 +27,7 @@ export type Frame = ReqFrame | ResFrame | EvtFrame;
 export const M = {
   sessionCreate: 'session.create',
   sessionDestroy: 'session.destroy',
+  sessionRename: 'session.rename',
   sessionList: 'session.list',
   sessionHistory: 'session.history',
   sessionState: 'session.state',
@@ -66,6 +67,8 @@ export interface ProtocolClientOptions {
   onState?: (state: ConnectionState) => void;
 }
 
+import { getAuthToken, getAuthTokenSync, refreshAuthToken } from './auth';
+
 export class ProtocolClient {
   private ws: WebSocket | null = null;
   private seq = 0;
@@ -78,12 +81,19 @@ export class ProtocolClient {
   private outbox: string[] = [];
   private reconnectMs = 500;
   private closedByUs = false;
+  /** Did this attempt ever reach `open`? */
+  private everOpened = false;
 
   constructor(private readonly opts: ProtocolClientOptions) {}
 
-  connect(): void {
+  async connect(): Promise<void> {
     this.closedByUs = false;
-    const url = this.opts.url ?? defaultSocketUrl(this.opts.token);
+    this.everOpened = false;
+    let tok = this.opts.token;
+    if (!tok) {
+      tok = await getAuthToken();
+    }
+    const url = this.opts.url ?? defaultSocketUrl(tok);
     this.opts.onState?.('connecting');
 
     let ws: WebSocket;
@@ -96,6 +106,7 @@ export class ProtocolClient {
     this.ws = ws;
 
     ws.onopen = () => {
+      this.everOpened = true;
       this.reconnectMs = 500;
       this.opts.onState?.('open');
       for (const frame of this.outbox.splice(0)) ws.send(frame);
@@ -113,7 +124,7 @@ export class ProtocolClient {
       // leaving them hanging is not.
       for (const [, p] of this.pending) p.reject(new Error('connection closed'));
       this.pending.clear();
-      if (!this.closedByUs) this.scheduleReconnect();
+      if (!this.closedByUs) this.scheduleReconnect(!this.everOpened);
     };
 
     ws.onerror = () => { /* onclose does the work; this keeps it off the console */ };
@@ -150,10 +161,22 @@ export class ProtocolClient {
     }
   }
 
-  private scheduleReconnect(): void {
+  /**
+   * @param rejected the socket closed without ever opening, which for this
+   *   server means the handshake was refused — almost always a stale token.
+   *   Re-resolving it from source is the only thing that can change the
+   *   outcome, so retrying with the same one is just a slower failure.
+   */
+  private scheduleReconnect(rejected = false): void {
     const delay = this.reconnectMs;
     this.reconnectMs = Math.min(this.reconnectMs * 2, 10_000);
-    setTimeout(() => { if (!this.closedByUs) this.connect(); }, delay);
+    setTimeout(() => {
+      if (this.closedByUs) return;
+      void (async () => {
+        if (rejected && !this.opts.token) await refreshAuthToken();
+        await this.connect();
+      })();
+    }, delay);
   }
 
   private raw(frame: Frame): void {
@@ -179,13 +202,15 @@ export class ProtocolClient {
 }
 
 /**
- * The socket lives on the same origin that served the page, so the LAN and
- * Tailscale modes work with no configuration. The pairing token `aura serve`
- * issues is placed in the query string, which is where the existing server
- * looks for it.
+ * The socket lives on the same origin that served the page, or on 127.0.0.1:7337
+ * when running in desktop/Tauri environments.
  */
 export function defaultSocketUrl(token?: string): string {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const t = token ?? new URLSearchParams(location.search).get('token') ?? '';
-  return `${proto}//${location.host}/${t ? `?token=${encodeURIComponent(t)}` : ''}`;
+  const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+  const proto = typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = isTauri || (typeof location !== 'undefined' && (location.port === '5173' || !location.port))
+    ? '127.0.0.1:7337'
+    : (typeof location !== 'undefined' && location.host ? location.host : '127.0.0.1:7337');
+  const t = token || getAuthTokenSync();
+  return `${proto}//${host}/${t ? `?token=${encodeURIComponent(t)}` : ''}`;
 }

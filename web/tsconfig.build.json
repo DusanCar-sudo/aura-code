@@ -1,0 +1,17 @@
+// The gate the build runs, as opposed to the one an editor runs.
+//
+// `vite build` does not typecheck, so without this a bundle referencing a
+// variable that does not exist compiles cleanly and then throws
+// `ReferenceError` on first render — which unmounts React and leaves a blank
+// page with nothing in the console. That shipped once; this is what stops it.
+//
+// It keeps `strict` and every correctness check, and drops only
+// `noUnusedLocals`: an unused local is untidy, never broken, and half-built
+// scaffolding routinely has some. Blocking a release on it would just teach
+// people to bypass the gate.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUnusedLocals": false
+  }
+}

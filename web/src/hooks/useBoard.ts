@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { M, type ProtocolClient } from '../lib/protocol';
+import { authFetch } from '../lib/auth';
 
 /**
  * The project board, over the protocol.
@@ -30,6 +31,26 @@ export interface BoardAttachment {
   path: string;
 }
 
+export interface WorkflowStepNode {
+  id: string;
+  name: string;
+  type: 'tool' | 'llm' | 'gate' | 'condition' | 'verify';
+  tool?: string;
+  desc?: string;
+  x: number;
+  y: number;
+}
+
+export interface WorkflowEdge {
+  from: string;
+  to: string;
+}
+
+export interface WorkflowDef {
+  nodes: WorkflowStepNode[];
+  edges: WorkflowEdge[];
+}
+
 export interface BoardTask {
   id: string;
   title: string;
@@ -45,6 +66,13 @@ export interface BoardTask {
   attention?: boolean;
   linkedTo?: string;
   order: number;
+  tools?: string[];
+  gated?: boolean;
+  workflow?: WorkflowDef;
+  swarm?: {
+    strategy: string;
+    agents: Array<{ id: string; name: string; role: string; icon: string }>;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +83,13 @@ export interface NewTask {
   column?: BoardColumn;
   agent?: string;
   model?: string;
+  tools?: string[];
+  gated?: boolean;
+  workflow?: WorkflowDef;
+  swarm?: {
+    strategy: string;
+    agents: Array<{ id: string; name: string; role: string; icon: string }>;
+  };
 }
 
 export interface AgentPreset {
@@ -72,7 +107,8 @@ export interface BoardApi {
   /** What each agent may touch — the engine's own copy, never a local guess. */
   presets: AgentPreset[];
   error: string | null;
-  add: (patch: NewTask) => Promise<void>;
+  /** Resolves with the created task, or null if the engine refused it. */
+  add: (patch: NewTask) => Promise<BoardTask | null>;
   update: (id: string, patch: Partial<BoardTask>) => Promise<void>;
   remove: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
@@ -119,17 +155,19 @@ export function useBoard(
   // the next mutation.
   useEffect(() => { if (connected) void refresh(); }, [connected, refresh]);
 
-  const call = useCallback(async (method: string, params: Record<string, unknown>) => {
+  const call = useCallback(async (method: string, params: Record<string, unknown>): Promise<unknown> => {
     const client = clientRef.current;
-    if (!client) return;
+    if (!client) return null;
     try {
-      await client.request(method, params);
+      const res = await client.request(method, params);
       setError(null);
+      return res;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'the board rejected that change');
       // Re-read rather than guess: after a failed write the screen and the file
       // disagree, and the file is the one that is right.
       void refresh();
+      return null;
     }
   }, [clientRef, refresh]);
 
@@ -138,22 +176,24 @@ export function useBoard(
     if (Array.isArray(p.tasks)) setTasks(p.tasks as BoardTask[]);
   }, []);
 
-  const add = useCallback((patch: NewTask) => call(M.boardAdd, { ...patch }), [call]);
+  /** Resolves with the created task so a caller can act on it — run it, for
+   *  instance — without re-finding it by title. Null if the write failed. */
+  const add = useCallback(async (patch: NewTask): Promise<BoardTask | null> => {
+    const res = (await call(M.boardAdd, { ...patch })) as { task?: BoardTask } | null;
+    return res?.task ?? null;
+  }, [call]);
   const update = useCallback(
-    (id: string, patch: Partial<BoardTask>) => call(M.boardUpdate, { id, ...patch }),
+    async (id: string, patch: Partial<BoardTask>) => {
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+      await call(M.boardUpdate, { id, ...patch });
+    },
     [call],
   );
-  const remove = useCallback((id: string) => call(M.boardRemove, { id }), [call]);
+  const remove = useCallback(async (id: string): Promise<void> => { await call(M.boardRemove, { id }); }, [call]);
 
   /**
    * Send a picked file to the engine, which writes it beside the board and
    * puts the path on the task.
-   *
-   * Over HTTP rather than the socket: the protocol frames are JSON on a
-   * WebSocket, and pushing a 20MB base64 screenshot through the same channel
-   * the agent is streaming its answer on would stall the conversation while it
-   * transfers. The engine announces the result on `board.changed`, so the
-   * board still updates from one place.
    */
   const attach = useCallback(async (taskId: string, file: File) => {
     try {
@@ -163,7 +203,7 @@ export function useBoard(
         reader.onerror = () => reject(reader.error ?? new Error('could not read the file'));
         reader.readAsDataURL(file);
       });
-      const res = await fetch('./api/board/attach', {
+      const res = await authFetch('/api/board/attach', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ taskId, name: file.name, type: file.type, dataUrl }),

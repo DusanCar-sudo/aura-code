@@ -18,18 +18,14 @@
 export type IconName =
   | 'close' | 'menu' | 'settings' | 'plus' | 'paperclip' | 'send'
   | 'arrow-left' | 'arrow-right' | 'play' | 'trash' | 'link' | 'grip'
-  | 'image' | 'file' | 'check' | 'alert' | 'blocked' | 'diamond' | 'search';
+  | 'image' | 'file' | 'check' | 'alert' | 'blocked' | 'diamond' | 'search'
+  | 'terminal' | 'code' | 'branch' | 'edit' | 'list' | 'flask' | 'zap'
+  | 'eye' | 'diff' | 'refresh';
 
 /** Path geometry, in a 24×24 box. */
 const PATHS: Record<IconName, string> = {
   close: 'M6 6l12 12M18 6L6 18',
   menu: 'M3.5 7h17M3.5 12h17M3.5 17h17',
-  // A hub, a ring, and eight teeth outside it. The ring is what makes it read
-  // as a cog: the previous attempt had the teeth but no ring and rendered as an
-  // asterisk at 17px, and the one before that transcribed a gear outline by
-  // hand whose arcs collapsed at small sizes into something visibly lopsided.
-  // The teeth are generated on a circle, so they are symmetric by construction
-  // rather than by careful typing.
   settings: 'M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z'
     + 'M12 19.6a7.6 7.6 0 1 0 0-15.2 7.6 7.6 0 0 0 0 15.2z'
     + 'M19.6 12L22.4 12M17.4 17.4L19.4 19.4M12 19.6L12 22.4M6.6 17.4L4.6 19.4'
@@ -42,8 +38,6 @@ const PATHS: Record<IconName, string> = {
   play: 'M7 4.8v14.4L19.5 12 7 4.8z',
   trash: 'M4 7h16M9.5 7V4.8h5V7M6.5 7l.9 12.2a1.6 1.6 0 0 0 1.6 1.5h6a1.6 1.6 0 0 0 1.6-1.5L17.5 7',
   link: 'M9.5 14.5l5-5M11 6.5l1.8-1.8a4.2 4.2 0 0 1 6 6L17 12.5M13 17.5l-1.8 1.8a4.2 4.2 0 0 1-6-6L7 11.5',
-  // Six dots, drawn as very short strokes so they inherit the same cap and
-  // weight as every other icon instead of being punctuation.
   grip: 'M9.5 6.5v.01M9.5 12v.01M9.5 17.5v.01M14.5 6.5v.01M14.5 12v.01M14.5 17.5v.01',
   image: 'M3.5 5.5h17v13h-17zM3.5 15.5l4.5-4.5 4 4 3-3 5.5 5.5M9 9.8v.01',
   file: 'M13.5 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5zM13.5 3.5V8.5h5',
@@ -52,6 +46,16 @@ const PATHS: Record<IconName, string> = {
   blocked: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8',
   diamond: 'M12 2.8L21.2 12 12 21.2 2.8 12 12 2.8z',
   search: 'M11 18.5a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM16.5 16.5L21 21',
+  terminal: 'M4 17l6-5-6-5M12 19h8',
+  code: 'M16 18l6-6-6-6M8 6l-6 6 6 6',
+  branch: 'M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9a9 9 0 0 1 9 9',
+  edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  flask: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3',
+  zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  diff: 'M12 3v18M3 12h18',
+  refresh: 'M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15',
 };
 
 /** Icons that read as a shape rather than an outline. */

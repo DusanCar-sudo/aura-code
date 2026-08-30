@@ -58,6 +58,39 @@ export interface Usage {
   contextWindow?: number;
 }
 
+const MAX_MESSAGES_BUFFER = 200;
+const MAX_TOOLS_PER_MESSAGE = 500;
+const MAX_TEXT_LENGTH = 200_000;
+
+export function pruneMessages(msgs: Message[]): Message[] {
+  let changed = false;
+  let result = msgs;
+  if (result.length > MAX_MESSAGES_BUFFER) {
+    result = result.slice(result.length - MAX_MESSAGES_BUFFER);
+    changed = true;
+  }
+  const mapped = result.map((m) => {
+    let text = m.text;
+    let textChanged = false;
+    if (text.length > MAX_TEXT_LENGTH) {
+      text = '... [Truncated due to extreme length for UI stability] ...\n' + text.slice(text.length - MAX_TEXT_LENGTH);
+      textChanged = true;
+    }
+    let tools = m.tools;
+    let toolsChanged = false;
+    if (tools.length > MAX_TOOLS_PER_MESSAGE) {
+      tools = tools.slice(tools.length - MAX_TOOLS_PER_MESSAGE);
+      toolsChanged = true;
+    }
+    if (textChanged || toolsChanged) {
+      changed = true;
+      return { ...m, text, tools };
+    }
+    return m;
+  });
+  return changed ? mapped : msgs;
+}
+
 export function useAura(settings: Settings) {
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -68,6 +101,10 @@ export function useAura(settings: Settings) {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [tools, setTools] = useState<Array<{ name: string; description: string }>>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMessages((prev) => pruneMessages(prev));
+  }, [messages]);
 
   const clientRef = useRef<ProtocolClient | null>(null);
   // Settings are read inside long-lived callbacks; a ref keeps those current
@@ -305,6 +342,13 @@ export function useAura(settings: Settings) {
     }
   }, []);
 
+  /** Give a conversation a name. Empty clears it back to the placeholder. */
+  const renameChat = useCallback(async (id: string, title: string) => {
+    try { await clientRef.current?.request(M.sessionRename, { sessionId: id, name: title }); }
+    catch { /* the refresh below re-reads the truth either way */ }
+    void refreshConversations();
+  }, [refreshConversations]);
+
   const deleteChat = useCallback(async (id: string) => {
     try { await clientRef.current?.request(M.sessionDestroy, { sessionId: id }); } catch { /* */ }
     if (sessionId === id) { setSessionId(null); setMessages([]); }
@@ -404,8 +448,10 @@ export function useAura(settings: Settings) {
     if (!client) return;
     setError(null);
     try {
+      const activeModel = settingsRef.current.model;
       const res = await client.request<{ sessionId: string }>(M.boardRun, {
         id: task.id,
+        model: activeModel || task.model || undefined,
         // The operator's own level. The engine caps it by the agent's preset,
         // so a read-only reviewer stays read-only, but "auto" stops the
         // prompting for the agents that can be trusted with it.
@@ -444,11 +490,11 @@ export function useAura(settings: Settings) {
 
   return useMemo(() => ({
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
-    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations, systemNote,
+    send, stop, regenerate, newChat, openChat, deleteChat, renameChat, refreshConversations, systemNote,
     board, runTask,
   }), [
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
-    send, stop, regenerate, newChat, openChat, deleteChat, refreshConversations, systemNote,
+    send, stop, regenerate, newChat, openChat, deleteChat, renameChat, refreshConversations, systemNote,
     board, runTask,
   ]);
 }

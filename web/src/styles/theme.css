@@ -7,55 +7,59 @@
    ───────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* ── Palette, from src/cli/diamond.ts ── */
+  /* ── Palette, from src/cli/diamond.ts & AuraWebapp ── */
   --ruby: #9b1b30;
-  --bg: #0f1724;
-  --panel-bg: #1c2739;
-  --terracotta: #cc785c;
+  --bg: #0c1322;
+  --panel-bg: #101a2c;
+  --panel: #101a2c;
+  --recess: #0a1020;
+  --terracotta: #c2674c;
   --text: #e8e6e3;
+  --text-primary: #f3ece4;
   --text-dim: #8a94a6;
-  --faint: #4a5568;
+  --ink: #f3ece4;
+  --txt: #aebccd;
+  --mut: #73849a;
+  --dim: #56657a;
+  --faint: #56657a;
 
   /* ── Status, from src/cli/display.ts ── */
   --ok: #5a9e6e;
+  --status-success: #5a9e6e;
   --err: #b15439;
+  --status-error: #b15439;
   --warn: #d4903a;
+  --status-warning: #d4903a;
 
-  /* ── Derived surfaces ──
-     A ramp, not three unrelated greys. Each step is a real elevation: sunken
-     holds content, base is the resting plane, raised is a card, floating is
-     something lifted off the page. Anything that needs "a slightly different
-     background" picks a step instead of inventing a hex. */
-  --surface-sunken: #151d2c;
-  --panel-raised: #22304a;
-  --surface-float: #293954;
-  --line: #243149;
-  --line-soft: #1a2436;
-  --line-strong: #35476a;
-  --overlay: rgba(15, 23, 36, 0.82);
-  --selection: rgba(204, 120, 92, 0.26);
+  /* ── Derived surfaces ── */
+  --surface-sunken: #0a1020;
+  --panel-raised: #1c2739;
+  --surface-float: #22304a;
+  --line: rgba(110, 208, 234, 0.16);
+  --line2: rgba(110, 208, 234, 0.34);
+  --line-soft: rgba(110, 208, 234, 0.10);
+  --line-strong: rgba(110, 208, 234, 0.34);
+  --overlay: rgba(12, 19, 34, 0.82);
+  --selection: rgba(194, 103, 76, 0.26);
 
-  /* Terracotta, as a family. Flat accent colour on every surface is what makes
-     an interface look assigned rather than designed. */
-  --accent: #cc785c;
-  --accent-bright: #e08e6f;
-  --accent-dim: #a05c45;
-  --accent-wash: rgba(204, 120, 92, 0.10);
-  --accent-edge: rgba(204, 120, 92, 0.34);
+  /* Accents */
+  --acc: #c2674c;
+  --accent: #c2674c;
+  --acc2: #6ed0ea;
+  --accent2: #6ed0ea;
+  --onacc: #411e13;
+  --accent-bright: #d9785c;
+  --accent-dim: #a8543c;
+  --accent-wash: rgba(194, 103, 76, 0.10);
+  --accent-edge: rgba(194, 103, 76, 0.34);
 
-  /* ── Elevation ──
-     Offset and blur, always. A zero-offset halo is decoration, not depth: real
-     light comes from above, so every shadow falls below its object. The
-     ambient layer under each keeps edges from looking cut out. */
+  /* ── Elevation ── */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.30);
   --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.24), 0 6px 14px rgba(0, 0, 0, 0.30);
   --shadow-3: 0 4px 8px rgba(0, 0, 0, 0.26), 0 14px 32px rgba(0, 0, 0, 0.38);
   --shadow-4: 0 8px 16px rgba(0, 0, 0, 0.28), 0 28px 60px rgba(0, 0, 0, 0.46);
 
-  /* ── Spacing ──
-     One scale so gaps relate to each other. Tight values are close together
-     because small differences matter at small sizes; the top end is sparse
-     because 48 and 56 are the same gap to the eye. */
+  /* ── Spacing ── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -64,72 +68,115 @@
   --space-6: 32px;
   --space-7: 48px;
 
-  /* ── Weight ──
-     Three steps, used consistently: body, something that leads, and a heading.
-     A scale with no weight steps forces size to carry every distinction. */
+  /* ── Weight ── */
   --w-normal: 400;
   --w-medium: 550;
   --w-bold: 650;
 
-  /* ── Motion ──
-     Exponential ease-out: fast at the start, settling at the end, which is how
-     things move when something stops them rather than when a curve runs out. */
+  /* ── Motion ── */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --fast: 120ms;
   --base: 220ms;
   --slow: 420ms;
 
   /* ── Type ── */
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
-  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --font-sans: 'Space Grotesk', ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif;
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
+  --serif: var(--font-serif);
 
   /* ── Metrics ── */
-  --sidebar-w: 264px;
+  --sidebar-w: 240px;
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 14px;
   --gutter: 16px;
-  --header-h: 48px;
+  --header-h: 54px;
 
-  /* Type scale. Terminal-flavoured but not cramped: 11-12px measured well on
-     paper and badly on a real screen, so the scale sits a step up — and then
-     another, on the owner's third pass. Body is 12pt and titles 16pt, given
-     here in the px those point sizes actually are (12pt = 16px, 16pt ≈ 21px)
-     because a browser's pt is a print unit and mixing the two makes every
-     later change guesswork. Change these four and the whole app follows. */
-  --fs-display: 30px;
-  --fs-title: 21px;
-  --fs-body: 16px;
-  --fs-small: 14px;
+  /* Type scale - Scaled Up for Maximum Readability */
+  --fs-display: 34px;
+  --fs-title: 25px;
+  --fs-body: 16.5px;
+  --fs-small: 14.5px;
   --fs-micro: 12.5px;
-  /* Chat column width, and the measure the thread reads at. */
-  --col-w: 820px;
+  --col-w: 920px;
+
+  /* Raised control faces — the composer bar and the buttons sitting in it.
+     These are gradients, not flat fills, so they cannot be expressed with the
+     surface ramp alone; they get their own tokens so the tactile look survives
+     a theme switch instead of being baked to one. */
+  --ctl-top: #1b1c25;
+  --ctl-bottom: #14151b;
+  --ctl2-top: #242633;
+  --ctl2-bottom: #1a1b24;
+  --ctl2-hover-top: #2d3040;
+  --ctl2-hover-bottom: #20222e;
+  --ctl-edge: rgba(255, 255, 255, 0.12);
+  --ctl-edge-top: rgba(255, 255, 255, 0.2);
+  --ctl-hi: rgba(255, 255, 255, 0.08);
+
 }
 
-/* Light theme — the same hues, inverted in role rather than replaced, so the
-   product still reads as Aura rather than as a generic light app. */
-:root[data-theme='light'] {
-  --bg: #f4f2ef;
-  --panel-bg: #e9e5e0;
-  --surface-sunken: #ebe7e1;
-  --panel-raised: #ddd8d1;
-  --surface-float: #fffdfa;
-  --line-strong: #c2b9ad;
-  --accent-wash: rgba(204, 120, 92, 0.12);
-  --accent-edge: rgba(204, 120, 92, 0.40);
-  /* Shadows on a light ground are shorter and softer — the same physics, less
-     contrast between the object and what is behind it. */
-  --shadow-1: 0 1px 2px rgba(43, 34, 26, 0.10);
-  --shadow-2: 0 2px 4px rgba(43, 34, 26, 0.08), 0 6px 14px rgba(43, 34, 26, 0.10);
-  --shadow-3: 0 4px 8px rgba(43, 34, 26, 0.10), 0 14px 32px rgba(43, 34, 26, 0.12);
-  --shadow-4: 0 8px 16px rgba(43, 34, 26, 0.12), 0 28px 60px rgba(43, 34, 26, 0.16);
-  --text: #1b2330;
-  --text-dim: #5c6675;
-  --faint: #9aa3b0;
-  --line: #d3ccc3;
-  --line-soft: #e2ddd6;
-  --overlay: rgba(244, 242, 239, 0.86);
-  --selection: rgba(204, 120, 92, 0.22);
+@keyframes auraPulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes auraFade {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Light theme — crisp, high-contrast, polished light palette */
+:root[data-theme='light'],
+html[data-theme='light'],
+body.theme-light {
+  --bg: #f5f4f0;
+  --panel-bg: #ffffff;
+  --panel: #ffffff;
+  --recess: #ece8e1;
+  --surface-sunken: #ece8e1;
+  --panel-raised: #fbf9f6;
+  --surface-float: #ffffff;
+  --line: rgba(0, 0, 0, 0.12);
+  --line2: rgba(0, 0, 0, 0.22);
+  --line-soft: rgba(0, 0, 0, 0.07);
+  --line-strong: rgba(0, 0, 0, 0.28);
+  
+  --text: #121826;
+  --ink: #0f172a;
+  --txt: #2c384e;
+  --text-dim: #5c6c82;
+  --mut: #5c6c82;
+  --dim: #8494a8;
+  --faint: #b4c0d0;
+
+  --accent-wash: rgba(194, 103, 76, 0.14);
+  --accent-edge: rgba(194, 103, 76, 0.45);
+
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-2: 0 3px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-3: 0 6px 18px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  --overlay: rgba(245, 244, 240, 0.90);
+  --selection: rgba(194, 103, 76, 0.22);
+
+  /* Light: the face is lighter than the page rather than darker, and the top
+     highlight becomes near-opaque white — a lit edge reads as raised under a
+     light background too, where a white glaze at 8% would vanish. */
+  --ctl-top: #ffffff;
+  --ctl-bottom: #f4f1ec;
+  --ctl2-top: #ffffff;
+  --ctl2-bottom: #ece8e1;
+  --ctl2-hover-top: #ffffff;
+  --ctl2-hover-bottom: #e2ddd4;
+  --ctl-edge: rgba(0, 0, 0, 0.14);
+  --ctl-edge-top: rgba(0, 0, 0, 0.10);
+  --ctl-hi: rgba(255, 255, 255, 0.9);
+
 }
 
 * { box-sizing: border-box; }
