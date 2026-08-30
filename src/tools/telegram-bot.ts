@@ -534,6 +534,19 @@ const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
 const CHAT_HISTORY_MAX = 50; // keep last N messages per chat for context
 function SESSION_DIR(): string { return auraPath('sessions', 'telegram'); }
 
+/**
+ * The providers `/provider` offers, in the order they are offered.
+ *
+ * Aura itself knows every provider it has a key for; this is the shortlist the
+ * bot puts in a chat message, where a wall of options is worse than a few good
+ * ones. Gemini first because it is the one nearly everyone already has a key
+ * for. Nemotron ships under both NVIDIA and OpenCode Zen, so both are here.
+ *
+ * Not a restriction: `/provider <model_id>` still switches to anything Aura has
+ * configured, listed or not.
+ */
+const TELEGRAM_PROVIDERS = ['Google', 'NVIDIA', 'OpenCode Zen', 'OpenCode Go', 'OpenRouter'];
+
 // Per-chat provider instances — one Telegram user's /provider switch MUST NOT
 // affect another user's messages. Map<chatId, provider>.
 const chatProviders = new Map<string, LLMProvider>();
@@ -1308,19 +1321,35 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     if (!arg) {
       const currentProvider = chatProviders.get(String(chatId));
       const currentModel = currentProvider ? currentProvider.name : DEFAULT_CHAT_MODEL;
-      const allModels = getAllModels().filter(m => isModelConfigured(m.id));
+      const configured = getAllModels().filter(m => isModelConfigured(m.id));
 
-      const lines: string[] = [
-        `🤖 Current: ${currentModel}`,
-        ``,
-        `Available models (configured with API keys):`,
-      ];
+      // Curated, and grouped by provider. Aura knows 135 models across ~28
+      // providers; listing every configured one put ~57 undifferentiated lines
+      // in a chat message, most of them for providers nobody here uses. These
+      // are the families that get used, in the order they get reached for.
+      const featured = configured.filter(m => TELEGRAM_PROVIDERS.includes(m.provider));
+      // Fall back to the full list rather than an empty one: a bot with keys
+      // for something unlisted should still be switchable.
+      const shown = featured.length > 0 ? featured : configured;
 
-      for (const m of allModels) {
-        lines.push(`• ${m.id} — ${m.provider} (${m.speed})`);
+      const lines: string[] = [`🤖 Current: ${currentModel}`, ``];
+
+      const order = featured.length > 0
+        ? TELEGRAM_PROVIDERS
+        : [...new Set(shown.map(m => m.provider))];
+
+      for (const providerName of order) {
+        const models = shown.filter(m => m.provider === providerName);
+        if (models.length === 0) continue;
+        lines.push(`${providerName}`);
+        for (const m of models) lines.push(`  • ${m.id} (${m.speed})`);
+        lines.push(``);
       }
 
-      lines.push(``, `💡 Use /provider <model_id> to switch (session-scoped to this chat)`);
+      if (featured.length > 0 && configured.length > featured.length) {
+        lines.push(`${configured.length - featured.length} more configured elsewhere — /provider <model_id> switches to any of them.`);
+      }
+      lines.push(`💡 /provider <model_id> to switch (this chat only)`);
       return lines.join('\n');
     }
 
