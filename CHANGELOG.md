@@ -2,6 +2,13 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.17.8] — 2026-08-30
+
+### Added — Integrated Workflow DAG into Kanban View
+
+- **`⚡ Workflow DAG` Sub-Tab in Kanban**: Integrated the full interactive Workflow DAG graph editor directly into Kanban sub-tab navigation (`📌 Board View`, `⚡ Workflow DAG`, `📊 Execution List`, `🔌 Third-Party Providers`).
+- **Interactive Graph & Zapier Modes**: Supports switching between interactive node graph canvas (drag nodes, connect ports, tool configurations) and linear step-by-step list (Zapier mode).
+
 ## [0.17.7] — 2026-08-30
 
 ### Fixed — Kanban Stacking & Inter-Column Drag-and-Drop Re-parenting

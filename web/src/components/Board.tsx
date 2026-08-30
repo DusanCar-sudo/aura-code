@@ -5,6 +5,8 @@ import {
   type BoardColumn,
   type BoardTask,
   type WorkflowDef,
+  type WorkflowStepNode,
+  type WorkflowEdge,
 } from '../hooks/useBoard';
 
 type T = (key: string) => string;
@@ -472,8 +474,31 @@ export function Board({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
 
-  // Sub-Tab Navigation inside Kanban ('board' | 'list' | 'providers')
-  const [kanbanSubTab, setKanbanSubTab] = useState<'board' | 'list' | 'providers'>('board');
+  // Sub-Tab Navigation inside Kanban ('board' | 'dag' | 'list' | 'providers')
+  const [kanbanSubTab, setKanbanSubTab] = useState<'board' | 'dag' | 'list' | 'providers'>('board');
+
+  // Workflow DAG State inside Kanban
+  const [dagNodes, setDagNodes] = useState<WorkflowStepNode[]>([
+    { id: 'node-1', name: 'Reproduce Bug', type: 'tool', tool: 'run_tests', desc: 'Run vitest 20x to capture failure rate', x: 40, y: 50 },
+    { id: 'node-2', name: 'Inspect Source', type: 'tool', tool: 'read_file', desc: 'Read src/agent/loop.ts around clock line', x: 280, y: 50 },
+    { id: 'node-3', name: 'Reason & Diagnose', type: 'llm', desc: 'Synthesize cause and design injected clock fix', x: 520, y: 50 },
+    { id: 'node-4', name: 'Write Clock Module', type: 'tool', tool: 'write_file', desc: 'Generate src/agent/clock.ts', x: 160, y: 220 },
+    { id: 'node-5', name: 'Edit Loop Gate', type: 'gate', desc: 'Require approval before patching loop.ts', x: 400, y: 220 },
+    { id: 'node-6', name: 'Verify Stability', type: 'verify', tool: 'run_tests', desc: 'Run 40x repeat to confirm 0 regressions', x: 280, y: 390 },
+  ]);
+
+  const [dagEdges, setDagEdges] = useState<WorkflowEdge[]>([
+    { from: 'node-1', to: 'node-2' },
+    { from: 'node-2', to: 'node-3' },
+    { from: 'node-3', to: 'node-4' },
+    { from: 'node-4', to: 'node-5' },
+    { from: 'node-5', to: 'node-6' },
+  ]);
+
+  const [dagSubMode, setDagSubMode] = useState<'graph' | 'linear'>('graph');
+  const [dagConnectingFrom, setDagConnectingFrom] = useState<string | null>(null);
+  const [dagDragNodeId, setDagDragNodeId] = useState<string | null>(null);
+  const [dagDragOffset, setDagDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Execution List View Filters & Search
   const [listSearch, setListSearch] = useState('');
@@ -883,6 +908,13 @@ export function Board({
               onClick={() => setKanbanSubTab('board')}
             >
               📌 Board View
+            </button>
+            <button
+              type="button"
+              className={`btn-mode-pill ${kanbanSubTab === 'dag' ? 'active' : ''}`}
+              onClick={() => setKanbanSubTab('dag')}
+            >
+              ⚡ Workflow DAG
             </button>
             <button
               type="button"
@@ -1550,6 +1582,410 @@ export function Board({
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {kanbanSubTab === 'dag' && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: 'calc(100% - 60px)',
+          background: 'rgba(9, 11, 18, 0.6)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          {/* DAG Toolbar */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 20px',
+            background: 'var(--bg)',
+            borderBottom: '1px solid var(--line)',
+            gap: '16px',
+            zIndex: 10
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="tab-mode-pills">
+                <button
+                  type="button"
+                  className={`btn-mode-pill ${dagSubMode === 'graph' ? 'active' : ''}`}
+                  onClick={() => setDagSubMode('graph')}
+                >
+                  📊 Visual Graph View
+                </button>
+                <button
+                  type="button"
+                  className={`btn-mode-pill ${dagSubMode === 'linear' ? 'active' : ''}`}
+                  onClick={() => setDagSubMode('linear')}
+                >
+                  ⚡ Step-by-Step List (Zapier Mode)
+                </button>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn-sm btn-ghost"
+                onClick={() => {
+                  const id = `node-${Date.now()}`;
+                  setDagNodes((prev) => [
+                    ...prev,
+                    { id, name: 'New Tool Step', type: 'tool', tool: 'read_file', desc: 'Inspect codebase file', x: 200, y: 150 },
+                  ]);
+                }}
+              >
+                + Tool Action
+              </button>
+              <button
+                type="button"
+                className="btn-sm btn-ghost"
+                onClick={() => {
+                  const id = `node-${Date.now()}`;
+                  setDagNodes((prev) => [
+                    ...prev,
+                    { id, name: 'LLM Reasoning', type: 'llm', desc: 'Synthesize architecture plan', x: 240, y: 180 },
+                  ]);
+                }}
+              >
+                + LLM Step
+              </button>
+              <button
+                type="button"
+                className="btn-sm btn-ghost"
+                onClick={() => {
+                  const id = `node-${Date.now()}`;
+                  setDagNodes((prev) => [
+                    ...prev,
+                    { id, name: 'Approval Gate', type: 'gate', desc: 'Require human confirmation before write', x: 280, y: 210 },
+                  ]);
+                }}
+              >
+                + Approval Gate
+              </button>
+              <button
+                type="button"
+                className="btn-sm btn-ghost"
+                onClick={() => {
+                  const id = `node-${Date.now()}`;
+                  setDagNodes((prev) => [
+                    ...prev,
+                    { id, name: 'Verify Step', type: 'verify', tool: 'run_tests', desc: 'Execute test suite', x: 320, y: 240 },
+                  ]);
+                }}
+              >
+                + Verify Step
+              </button>
+            </div>
+          </div>
+
+          {/* Visual Graph View */}
+          {dagSubMode === 'graph' && (
+            <div style={{
+              flex: 1,
+              position: 'relative',
+              overflow: 'auto',
+              backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px)',
+              backgroundSize: '24px 24px'
+            }}>
+              <svg style={{ position: 'absolute', top: 0, left: 0, width: '2400px', height: '1600px', pointerEvents: 'none', zIndex: 1 }}>
+                <defs>
+                  <marker id="dag-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--acc2)" />
+                  </marker>
+                </defs>
+                {dagEdges.map((edge) => {
+                  const fromNode = dagNodes.find((n) => n.id === edge.from);
+                  const toNode = dagNodes.find((n) => n.id === edge.to);
+                  if (!fromNode || !toNode) return null;
+                  const x1 = fromNode.x + 220;
+                  const y1 = fromNode.y + 40;
+                  const x2 = toNode.x;
+                  const y2 = toNode.y + 40;
+                  const dx = Math.abs(x2 - x1) * 0.5;
+                  const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+                  return (
+                    <path
+                      key={`${edge.from}-${edge.to}`}
+                      d={path}
+                      fill="none"
+                      stroke="var(--acc2)"
+                      strokeWidth="2"
+                      markerEnd="url(#dag-arrow)"
+                      opacity="0.8"
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* Node Cards */}
+              <div style={{ position: 'relative', width: '2400px', height: '1600px' }}>
+                {dagNodes.map((node) => {
+                  const isTool = node.type === 'tool' || node.type === 'verify';
+                  const badgeColor =
+                    node.type === 'gate' ? '#e08e6f' :
+                    node.type === 'llm' ? '#b48ead' :
+                    node.type === 'verify' ? '#a3be8c' : '#6ed0ea';
+
+                  return (
+                    <div
+                      key={node.id}
+                      style={{
+                        position: 'absolute',
+                        left: `${node.x}px`,
+                        top: `${node.y}px`,
+                        width: '220px',
+                        background: 'var(--panel-bg)',
+                        border: '1px solid var(--line-strong)',
+                        borderRadius: 'var(--radius)',
+                        boxShadow: 'var(--shadow-2)',
+                        zIndex: 2,
+                        padding: '12px'
+                      }}
+                    >
+                      {/* Node Header */}
+                      <div
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab', marginBottom: '8px' }}
+                        onPointerDown={(e) => {
+                          const startX = e.clientX - node.x;
+                          const startY = e.clientY - node.y;
+                          const onMove = (me: PointerEvent) => {
+                            setDagNodes((prev) =>
+                              prev.map((n) => (n.id === node.id ? { ...n, x: me.clientX - startX, y: me.clientY - startY } : n))
+                            );
+                          };
+                          const onUp = () => {
+                            window.removeEventListener('pointermove', onMove);
+                            window.removeEventListener('pointerup', onUp);
+                          };
+                          window.addEventListener('pointermove', onMove);
+                          window.addEventListener('pointerup', onUp);
+                        }}
+                      >
+                        <span style={{
+                          fontSize: '9px',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          background: badgeColor,
+                          color: '#0f1724',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          textTransform: 'uppercase'
+                        }}>
+                          {node.type}
+                        </span>
+                        <button
+                          type="button"
+                          style={{ background: 'transparent', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontSize: '12px' }}
+                          onClick={() => {
+                            setDagNodes((prev) => prev.filter((n) => n.id !== node.id));
+                            setDagEdges((prev) => prev.filter((ed) => ed.from !== node.id && ed.to !== node.id));
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Title & Desc Inputs */}
+                      <input
+                        type="text"
+                        value={node.name}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDagNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, name: val } : n)));
+                        }}
+                        style={{
+                          width: '100%',
+                          background: 'var(--bg)',
+                          border: '1px solid var(--line)',
+                          borderRadius: '4px',
+                          color: 'var(--txt)',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          padding: '4px 6px',
+                          marginBottom: '6px',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <textarea
+                        value={node.desc || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDagNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, desc: val } : n)));
+                        }}
+                        rows={2}
+                        style={{
+                          width: '100%',
+                          background: 'var(--bg)',
+                          border: '1px solid var(--line)',
+                          borderRadius: '4px',
+                          color: 'var(--txt-dim)',
+                          fontSize: '11.5px',
+                          padding: '4px 6px',
+                          resize: 'vertical',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+
+                      {/* Tool Select */}
+                      {isTool && (
+                        <select
+                          value={node.tool || 'read_file'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDagNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, tool: val } : n)));
+                          }}
+                          style={{
+                            width: '100%',
+                            marginTop: '6px',
+                            background: 'var(--bg)',
+                            border: '1px solid var(--line)',
+                            borderRadius: '4px',
+                            color: 'var(--acc2)',
+                            fontSize: '11px',
+                            fontFamily: 'var(--font-mono)',
+                            padding: '3px 6px'
+                          }}
+                        >
+                          <option value="read_file">read_file</option>
+                          <option value="run_tests">run_tests</option>
+                          <option value="write_file">write_file</option>
+                          <option value="search_code">search_code</option>
+                          <option value="git">git</option>
+                          <option value="run_shell">run_shell</option>
+                        </select>
+                      )}
+
+                      {/* Connection Ports */}
+                      <button
+                        type="button"
+                        style={{
+                          position: 'absolute',
+                          right: '-10px',
+                          top: '36px',
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: dagConnectingFrom === node.id ? '#ff9e64' : 'var(--acc2)',
+                          border: '2px solid var(--bg)',
+                          cursor: 'pointer'
+                        }}
+                        title="Click to connect output to another node"
+                        onClick={() => {
+                          if (!dagConnectingFrom) {
+                            setDagConnectingFrom(node.id);
+                          } else if (dagConnectingFrom === node.id) {
+                            setDagConnectingFrom(null);
+                          } else {
+                            setDagEdges((prev) => [...prev, { from: dagConnectingFrom, to: node.id }]);
+                            setDagConnectingFrom(null);
+                          }
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Linear Zapier-style Step List Mode */}
+          {dagSubMode === 'linear' && (
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '40px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              width: '100%'
+            }}>
+              <div style={{ maxWidth: '640px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {dagNodes.map((node, index) => (
+                  <div
+                    key={node.id}
+                    style={{
+                      background: 'var(--panel-bg)',
+                      border: '1px solid var(--line-strong)',
+                      borderRadius: 'var(--radius)',
+                      padding: '16px 20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      boxShadow: 'var(--shadow-1)',
+                      position: 'relative'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          color: 'var(--acc2)',
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}>
+                          {index + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={node.name}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDagNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, name: val } : n)));
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--txt)',
+                            fontSize: '15px',
+                            fontWeight: 650
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        style={{ background: 'transparent', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontSize: '12px' }}
+                        onClick={() => {
+                          setDagNodes((prev) => prev.filter((n) => n.id !== node.id));
+                          setDagEdges((prev) => prev.filter((ed) => ed.from !== node.id && ed.to !== node.id));
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    <textarea
+                      value={node.desc || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDagNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, desc: val } : n)));
+                      }}
+                      placeholder="Step instructions..."
+                      rows={2}
+                      style={{
+                        background: 'var(--bg)',
+                        border: '1px solid var(--line)',
+                        borderRadius: '6px',
+                        color: 'var(--txt-dim)',
+                        fontSize: '12.5px',
+                        padding: '8px'
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
