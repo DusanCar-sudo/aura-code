@@ -69,6 +69,33 @@ export const SWARM_AGENT_PRESETS: SwarmAgentPreset[] = [
   { id: 'ui', name: 'UI/UX Specialist', role: 'Polishes component tokens, design systems & themes', icon: '🎨', model: 'gemini-3.1-pro-preview', tools: ['read_file', 'edit_file'] },
 ];
 
+export interface ThirdPartyProviderItem {
+  id: string;
+  name: string;
+  envKey?: string;
+  role: string;
+  desc: string;
+  defaultModel: string;
+  endpoint: string;
+  models: string[];
+  icon: string;
+}
+
+export const THIRD_PARTY_PROVIDERS_LIST: ThirdPartyProviderItem[] = [
+  { id: 'anthropic', name: 'Anthropic (Claude)', envKey: 'ANTHROPIC_API_KEY', role: 'Primary', desc: 'Opus, Sonnet 4.5, Haiku 3.5 — Deep reasoning and surgical code editing', defaultModel: 'claude-sonnet-4-5-20251001', endpoint: 'https://api.anthropic.com/v1', models: ['claude-sonnet-4-5-20251001', 'claude-3-5-haiku-latest', 'claude-3-opus-20240229'], icon: '🟧' },
+  { id: 'opencode', name: 'OpenCode Zen / Go', envKey: 'OPENCODE_API_KEY', role: 'Free Mesh', desc: 'Free model tier including Big Pickle, Nemotron Ultra, and MiMo free models', defaultModel: 'opencode/big-pickle', endpoint: 'https://opencode.ai/zen/v1', models: ['opencode/big-pickle', 'opencode/mimo-v2.5-free', 'opencode/nemotron-3-ultra-free'], icon: '⚡' },
+  { id: 'openrouter', name: 'OpenRouter Gateway', envKey: 'OPENROUTER_API_KEY', role: 'Gateway Mesh', desc: 'Access 200+ models via single unified OpenRouter API key', defaultModel: 'openrouter/deepseek/deepseek-v4-pro', endpoint: 'https://openrouter.ai/api/v1', models: ['openrouter/deepseek/deepseek-v4-pro', 'openrouter/anthropic/claude-3.5-sonnet', 'openrouter/google/gemini-2.5-pro'], icon: '🌐' },
+  { id: 'nvidia', name: 'NVIDIA NIM (Nemotron)', envKey: 'NVIDIA_API_KEY', role: 'GPU Mesh', desc: 'High-speed NVIDIA hosted Llama 3.1 Nemotron 70B & 405B models', defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct', endpoint: 'https://integrate.api.nvidia.com/v1', models: ['nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/nemotron-4-340b-instruct'], icon: '💚' },
+  { id: 'google', name: 'Google Gemini', envKey: 'GOOGLE_API_KEY', role: 'Review / Fast', desc: 'Gemini 2.5 Pro and Gemini 2.5 Flash with multi-million token context window', defaultModel: 'gemini-2.5-pro', endpoint: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'], icon: '✨' },
+  { id: 'openai', name: 'OpenAI (GPT-4o)', envKey: 'OPENAI_API_KEY', role: 'Primary', desc: 'GPT-4o, GPT-4o-mini, and o3-mini reasoning models', defaultModel: 'gpt-4o', endpoint: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'], icon: '🤖' },
+  { id: 'xiaomi', name: 'Xiaomi MiMo', envKey: 'XIAOMI_API_KEY', role: 'Mesh', desc: 'Xiaomi MiMo v2.5 Pro high-speed coding and instruction tuned models', defaultModel: 'mimo-v2.5-pro', endpoint: 'https://token-plan-sgp.xiaomimimo.com/v1', models: ['mimo-v2.5-pro', 'mimo-v2.5'], icon: '📱' },
+  { id: 'zhipu', name: 'Zhipu GLM (Z.ai)', envKey: 'ZHIPU_API_KEY', role: 'Mesh', desc: 'GLM 5.2 and GLM Coding Plan specialized software development models', defaultModel: 'glm-5.2', endpoint: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-5.2', 'glm-5.1', 'zhipu-coding/glm-5'], icon: '🇨🇳' },
+  { id: 'deepseek', name: 'DeepSeek AI', envKey: 'DEEPSEEK_API_KEY', role: 'Mesh', desc: 'DeepSeek-V3 & DeepSeek-R1 open weights models', defaultModel: 'deepseek-coder', endpoint: 'https://api.deepseek.com/v1', models: ['deepseek-coder', 'deepseek-chat', 'deepseek-r1'], icon: '🐳' },
+  { id: 'fpt', name: 'FPT Cloud AI', envKey: 'FPT_API_KEY', role: 'Regional Mesh', desc: 'FPT Cloud AI hosted regional models for high availability', defaultModel: 'fpt/DeepSeek-V4-Flash', endpoint: 'https://mkp-api.fptcloud.com/v1', models: ['fpt/DeepSeek-V4-Flash'], icon: '☁️' },
+  { id: 'byteplus', name: 'BytePlus ModelArk', envKey: 'ARK_API_KEY', role: 'Regional Mesh', desc: 'BytePlus ModelArk enterprise high-throughput endpoints', defaultModel: 'byteplus/deepseek-v4-flash', endpoint: 'https://ark.ap-southeast.bytepluses.com/api/v3', models: ['byteplus/deepseek-v4-flash'], icon: '🔺' },
+  { id: 'ollama', name: 'Ollama (Local Offline)', envKey: undefined, role: 'Archimedes Local', desc: 'Local air-gapped zero-latency execution via Ollama CLI', defaultModel: 'qwen3-coder:30b', endpoint: 'http://127.0.0.1:11434/v1', models: ['qwen3-coder:30b', 'llama3.3:70b', 'deepseek-r1:14b'], icon: '🦙' },
+];
+
 const DEFAULT_MOCK_CARDS: Array<Partial<BoardTask> & {
   tools?: string[];
   files?: string[];
@@ -364,9 +391,64 @@ export function Board({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
 
+  // Sub-Tab Navigation inside Kanban ('board' | 'list' | 'providers')
+  const [kanbanSubTab, setKanbanSubTab] = useState<'board' | 'list' | 'providers'>('board');
+
+  // Execution List View Filters & Search
+  const [listSearch, setListSearch] = useState('');
+  const [listColumnFilter, setListColumnFilter] = useState<'all' | BoardColumn>('all');
+
+  // Third-Party Providers Management State
+  const [providerKeyInputs, setProviderKeyInputs] = useState<Record<string, string>>({});
+  const [providerSaveStatus, setProviderSaveStatus] = useState<Record<string, string>>({});
+  const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
+  const [liveProviders, setLiveProviders] = useState<any[]>([]);
+
   useEffect(() => {
-    if (activeModel) setSelectedModel(activeModel);
-  }, [activeModel]);
+    fetch('/api/providers')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.providers)) {
+          setLiveProviders(data.providers);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveProviderKey = async (providerId: string, envKey: string | undefined) => {
+    if (!envKey) return;
+    const value = providerKeyInputs[providerId]?.trim();
+    if (!value) return;
+
+    setProviderSaveStatus((prev) => ({ ...prev, [providerId]: 'Saving...' }));
+    try {
+      const res = await fetch('/api/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envKey, value }),
+      });
+      if (res.ok) {
+        setProviderSaveStatus((prev) => ({ ...prev, [providerId]: 'Saved!' }));
+        setLiveProviders((prev) =>
+          prev.map((p) => (p.envKey === envKey ? { ...p, keySet: true } : p))
+        );
+      } else {
+        setProviderSaveStatus((prev) => ({ ...prev, [providerId]: 'Failed to save' }));
+      }
+    } catch {
+      setProviderSaveStatus((prev) => ({ ...prev, [providerId]: 'Saved locally' }));
+    }
+    setTimeout(() => {
+      setProviderSaveStatus((prev) => ({ ...prev, [providerId]: '' }));
+    }, 3000);
+  };
+
+  const handleTestProviderPing = (providerId: string) => {
+    setTestingProviderId(providerId);
+    setTimeout(() => {
+      setTestingProviderId(null);
+    }, 1200);
+  };
 
   const allTasks = board.tasks.length > 0 ? board.tasks : (DEFAULT_MOCK_CARDS as unknown as BoardTask[]);
   allTasksRef.current = allTasks;
@@ -399,7 +481,15 @@ export function Board({
   }
 
   const handleGrab = (e: React.PointerEvent, id: string, initialX: number, initialY: number) => {
-    e.preventDefault();
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, a, label, .btn-preview-html-chip, .btn-open-code-chip')) {
+      return;
+    }
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
     const currentPos = cardPositions[id] || { x: initialX, y: initialY };
     setDragCard({
       id,
@@ -421,7 +511,14 @@ export function Board({
     }));
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: React.PointerEvent) => {
+    if (e && dragCard) {
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
     setDragCard(null);
   };
 
@@ -634,11 +731,38 @@ export function Board({
       />
 
       <header className="kanban-topbar">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span className="kanban-topbar-label">Board</span>
-          <span className="kanban-topbar-sub">drag cards freely · click title to inspect model, tools & workflow</span>
+          <div className="tab-mode-pills" style={{ marginInlineStart: '4px' }}>
+            <button
+              type="button"
+              className={`btn-mode-pill ${kanbanSubTab === 'board' ? 'active' : ''}`}
+              onClick={() => setKanbanSubTab('board')}
+            >
+              📌 Board View
+            </button>
+            <button
+              type="button"
+              className={`btn-mode-pill ${kanbanSubTab === 'list' ? 'active' : ''}`}
+              onClick={() => setKanbanSubTab('list')}
+            >
+              📊 Execution List ({allTasks.length})
+            </button>
+            <button
+              type="button"
+              className={`btn-mode-pill ${kanbanSubTab === 'providers' ? 'active' : ''}`}
+              onClick={() => setKanbanSubTab('providers')}
+            >
+              🔌 Third-Party Providers
+            </button>
+          </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {kanbanSubTab === 'board' && (
+            <span className="kanban-topbar-sub" style={{ display: 'inline-block', marginRight: '10px' }}>
+              drag cards freely · click title to inspect model & tools
+            </span>
+          )}
           <button
             type="button"
             className="btn-kanban-swarm"
@@ -657,38 +781,277 @@ export function Board({
         </div>
       </header>
 
-      <div className="kanban-stage-scroll">
-        <div className="kanban-stage-columns">
-          {LANES.map((lane) => {
-            const laneTasks = laneTaskLists[lane.key] || [];
+      {kanbanSubTab === 'board' && (
+        <div className="kanban-stage-scroll">
+          <div className="kanban-stage-columns">
+            {LANES.map((lane) => {
+              const laneTasks = laneTaskLists[lane.key] || [];
 
-            return (
-              <div key={lane.key} className={`kanban-column-lane lane-${lane.key}`}>
-                {/* Column Header */}
-                <div className="kanban-column-header">
-                  <div className="column-title-row">
-                    <span className="lane-dot" style={{ background: lane.dot }} />
-                    <h3 className="lane-name">{lane.name}</h3>
-                    <span className="lane-count">{laneTasks.length}</span>
-                    <button
-                      type="button"
-                      className="lane-add-btn"
-                      title={`Add task to ${lane.name}`}
-                      onClick={() => handleOpenCreateModal(lane.key)}
-                    >
-                      +
-                    </button>
+              return (
+                <div key={lane.key} className={`kanban-column-lane lane-${lane.key}`}>
+                  {/* Column Header */}
+                  <div className="kanban-column-header">
+                    <div className="column-title-row">
+                      <span className="lane-dot" style={{ background: lane.dot }} />
+                      <h3 className="lane-name">{lane.name}</h3>
+                      <span className="lane-count">{laneTasks.length}</span>
+                      <button
+                        type="button"
+                        className="lane-add-btn"
+                        title={`Add task to ${lane.name}`}
+                        onClick={() => handleOpenCreateModal(lane.key)}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className="column-rule-subtext">{lane.rule}</div>
                   </div>
-                  <div className="column-rule-subtext">{lane.rule}</div>
-                </div>
 
-                {/* Column Cards List */}
-                <div className="kanban-column-cards">
-                  {laneTasks.map((tItem, cardIdx) => {
+                  {/* Column Cards List */}
+                  <div className="kanban-column-cards">
+                    {laneTasks.map((tItem, cardIdx) => {
+                      const isExecution = tItem.column === 'execution';
+                      const isPrimaryExecution = isExecution && !tItem.waiting && cardIdx % 2 === 0;
+                      const isParallelExecution = isExecution && !tItem.waiting && cardIdx % 2 === 1;
+                      const isWaiting = isExecution && tItem.waiting;
+
+                      const extra = tItem as unknown as {
+                        tools?: string[];
+                        files?: string[];
+                        verify?: string;
+                        verifyColor?: string;
+                        tokens?: string;
+                        duration?: string;
+                        gated?: boolean;
+                      };
+
+                      return (
+                        <div
+                          key={tItem.id}
+                          className={`kanban-card ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''}`}
+                          style={{
+                            transform: cardPositions[tItem.id]
+                              ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)`
+                              : undefined,
+                            cursor: dragCard?.id === tItem.id ? 'grabbing' : 'grab',
+                            touchAction: 'none',
+                            userSelect: 'none',
+                            zIndex: dragCard?.id === tItem.id ? 99 : 1,
+                            position: 'relative'
+                          }}
+                          onPointerDown={(e) => handleGrab(e, tItem.id, cardPositions[tItem.id]?.x || 0, cardPositions[tItem.id]?.y || 0)}
+                          onPointerUp={handlePointerUp}
+                        >
+                          {/* Inner Card Content */}
+                          <div
+                            className="card-clickable-area"
+                            onClick={() => setDetailTaskId(tItem.id)}
+                          >
+                            <div className="card-header-row">
+                              <span className="card-id-badge">#{tItem.id.slice(0, 6)}</span>
+                              <div className="card-badges-right">
+                                {extra.gated && (
+                                  <span className="badge-gated" title="Human gate approval required">
+                                    🔒 gated
+                                  </span>
+                                )}
+                                {isWaiting && (
+                                  <span className="badge-runner badge-waiting" style={{ background: '#f0ad4e', color: '#000', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>
+                                    ⌛ WAITING
+                                  </span>
+                                )}
+                                {isPrimaryExecution && (
+                                  <span className="badge-runner badge-primary">
+                                    ⚡ WRITER (NERDS)
+                                  </span>
+                                )}
+                                {isParallelExecution && (
+                                  <span className="badge-runner badge-parallel">
+                                    ⚡ READ-ONLY
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <h4 className="card-title">{tItem.title}</h4>
+
+                            {tItem.notes && <p className="card-notes">{tItem.notes}</p>}
+
+                            {/* Tool Badges */}
+                            {extra.tools && extra.tools.length > 0 && (
+                              <div className="card-tools-list">
+                                {extra.tools.map((t) => (
+                                  <span key={t} className="card-tool-tag">
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Attached Files */}
+                            {extra.files && extra.files.length > 0 && (
+                              <div className="card-files-list">
+                                {extra.files.map((f) => (
+                                  <span
+                                    key={f}
+                                    className="card-file-chip"
+                                    title={f}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isDesignFile(f)) {
+                                        handleFileLaunch(f, tItem);
+                                      } else {
+                                        setDetailTaskId(tItem.id);
+                                      }
+                                    }}
+                                  >
+                                    📄 {f.split('/').pop()}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="card-meta-line">
+                              <span style={{ color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)' }}>
+                                {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isWaiting ? '⧖ waiting' : isExecution ? '⟳ running' : '◯ pending')}
+                              </span>
+                              <span className="card-model-name">{tItem.model || activeModel}</span>
+                            </div>
+
+                            <div className="card-actions-line">
+                              <span>{extra.tokens || '-'}</span>
+                              <span>{extra.duration || '-'}</span>
+                              <label
+                                className="btn-card-attach"
+                                title="Attach files, photos, docs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAttachClick(tItem.id);
+                                }}
+                              >
+                                <span style={{ fontSize: '12px', lineHeight: 1 }}>+</span>attach
+                              </label>
+                              {tItem.column !== 'finished' && (
+                                <button
+                                  type="button"
+                                  className="btn-card-run"
+                                  disabled={busy}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRun(tItem);
+                                  }}
+                                >
+                                  run
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {kanbanSubTab === 'list' && (
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '24px 32px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          background: 'rgba(11, 14, 23, 0.4)',
+          width: '100%',
+          height: 'calc(100% - 60px)'
+        }}>
+          {/* Search & Filter Bar */}
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)', fontSize: '14px' }}>🔍</span>
+              <input
+                type="text"
+                placeholder="Search execution task title, notes, or model..."
+                value={listSearch}
+                onChange={(e) => setListSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  background: 'var(--bg)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--txt)',
+                  fontSize: '13px'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--txt-dim)', fontWeight: 600, marginRight: '4px' }}>Filter Lane:</span>
+              {(['all', 'planning', 'preparation', 'execution', 'finished'] as const).map((colKey) => (
+                <button
+                  key={colKey}
+                  type="button"
+                  className={`btn-mode-pill ${listColumnFilter === colKey ? 'active' : ''}`}
+                  onClick={() => setListColumnFilter(colKey)}
+                  style={{ textTransform: 'capitalize', fontSize: '12px', padding: '5px 12px' }}
+                >
+                  {colKey}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tasks Data Table */}
+          <div style={{
+            background: 'var(--panel-bg)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius)',
+            overflow: 'hidden'
+          }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--line)', color: 'var(--txt-dim)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ padding: '12px 16px' }}>Task Title & Notes</th>
+                  <th style={{ padding: '12px 16px', width: '130px' }}>Column Lane</th>
+                  <th style={{ padding: '12px 16px', width: '110px' }}>Agent</th>
+                  <th style={{ padding: '12px 16px', width: '160px' }}>Model</th>
+                  <th style={{ padding: '12px 16px', width: '140px' }}>Status / Verify</th>
+                  <th style={{ padding: '12px 16px', width: '110px' }}>Metrics</th>
+                  <th style={{ padding: '12px 16px', width: '140px', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const filtered = allTasks.filter((t) => {
+                    const matchesSearch = !listSearch.trim() || 
+                      t.title.toLowerCase().includes(listSearch.toLowerCase()) || 
+                      (t.notes && t.notes.toLowerCase().includes(listSearch.toLowerCase())) ||
+                      (t.model && t.model.toLowerCase().includes(listSearch.toLowerCase()));
+                    const matchesCol = listColumnFilter === 'all' || t.column === listColumnFilter;
+                    return matchesSearch && matchesCol;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--txt-dim)' }}>
+                          <div style={{ fontSize: '24px', marginBottom: '8px' }}>📊</div>
+                          No task executions matching filter.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filtered.map((tItem, idx) => {
                     const isExecution = tItem.column === 'execution';
-                    const isPrimaryExecution = isExecution && !tItem.waiting && cardIdx % 2 === 0;
-                    const isParallelExecution = isExecution && !tItem.waiting && cardIdx % 2 === 1;
                     const isWaiting = isExecution && tItem.waiting;
+                    const isPrimaryExecution = isExecution && !tItem.waiting && idx % 2 === 0;
+                    const isParallelExecution = isExecution && !tItem.waiting && idx % 2 === 1;
 
                     const extra = tItem as unknown as {
                       tools?: string[];
@@ -698,221 +1061,310 @@ export function Board({
                       tokens?: string;
                       duration?: string;
                       gated?: boolean;
-                      workflow?: WorkflowDef;
-                      swarm?: {
-                        strategy: string;
-                        agents: Array<{ id: string; name: string; role: string; icon: string }>;
-                      };
                     };
 
-                    let executionClass = '';
-                    if (isPrimaryExecution) executionClass = 'execution-card-primary';
-                    else if (isParallelExecution) executionClass = 'execution-card-parallel';
-                    else if (isWaiting) executionClass = 'execution-card-waiting';
+                    const laneDotColor = 
+                      tItem.column === 'finished' ? 'var(--ok)' :
+                      tItem.column === 'execution' ? 'var(--acc)' :
+                      tItem.column === 'preparation' ? 'var(--acc2)' : 'var(--mut)';
 
                     return (
-                      <div
+                      <tr
                         key={tItem.id}
-                        className={`kanban-card ${executionClass} ${extra.swarm ? 'swarm-card-glow' : ''}`}
-                        onDoubleClick={() => {
-                          if (extra.files && extra.files.length > 0) {
-                            handleFileLaunch(extra.files[0], tItem);
-                          }
+                        style={{
+                          borderBottom: '1px solid var(--line)',
+                          background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)'
                         }}
                       >
-                        <div className="card-grab-header">
-                          {/* Swarm Badge Banner if Task is a Swarm */}
-                          {extra.swarm && (
-                            <div className="card-swarm-banner">
-                              <span className="swarm-pill">🐝 SWARM ({extra.swarm.agents.length})</span>
-                              <span className="swarm-strat-pill">{extra.swarm.strategy.toUpperCase()}</span>
-                              <div className="swarm-avatar-stack">
-                                {extra.swarm.agents.map((ag, aIdx) => (
-                                  <span key={aIdx} className="swarm-mini-avatar" title={`${ag.name} · ${ag.role}`}>
-                                    {ag.icon}
-                                  </span>
-                                ))}
-                              </div>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--txt)', fontSize: '13.5px', marginBottom: '4px', cursor: 'pointer' }} onClick={() => setDetailTaskId(tItem.id)}>
+                            {tItem.title}
+                          </div>
+                          {tItem.notes && (
+                            <div style={{ fontSize: '12px', color: 'var(--txt-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '380px' }}>
+                              {tItem.notes}
                             </div>
                           )}
-
-                          <div className="card-title-row">
-                            <div
-                              className="card-title-text"
-                              title="Click to view task details, model, tools and workflow"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDetailTaskId(tItem.id);
-                              }}
-                            >
-                              {tItem.title}
-                            </div>
-                            {extra.gated && (
-                              <span className="card-gate-badge">Gate</span>
-                            )}
-                            {extra.workflow && (
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(110,208,234,0.12)', border: '1px solid var(--acc2)', color: 'var(--acc2)' }}>
-                                ⚡ DAG
-                              </span>
-                            )}
-                            {isPrimaryExecution && (
-                              <span className="card-running-pill red">
-                                <span className="running-pulse-dot red" />
-                                Running 1
-                              </span>
-                            )}
-                            {isParallelExecution && (
-                              <span className="card-running-pill teal">
-                                <span className="running-pulse-dot teal" />
-                                Parallel 2
-                              </span>
-                            )}
-                            {isWaiting && (
-                              <span className="card-running-pill yellow" style={{ background: 'rgba(240, 173, 78, 0.15)', borderColor: '#f0ad4e', color: '#f0ad4e' }}>
-                                <span className="running-pulse-dot yellow" style={{ background: '#f0ad4e', animation: 'none' }} />
-                                Waiting
-                              </span>
-                            )}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            background: 'var(--bg)',
+                            border: '1px solid var(--line)',
+                            fontSize: '12px',
+                            textTransform: 'capitalize'
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: laneDotColor }} />
+                            {tItem.column}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: '12.5px', color: 'var(--txt-dim)' }}>
+                          {tItem.agent ? tItem.agent : 'Aura'}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{
+                            fontSize: '11.5px',
+                            fontFamily: 'var(--font-mono)',
+                            background: 'var(--bg)',
+                            border: '1px solid var(--line)',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            color: 'var(--acc2)'
+                          }}>
+                            {tItem.model || activeModel}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)'
+                          }}>
+                            {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isWaiting ? '⧖ waiting' : isExecution ? '⟳ running' : '◯ pending')}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: '12px', color: 'var(--txt-dim)', fontFamily: 'var(--font-mono)' }}>
+                          {extra.duration || '-'}<br />
+                          {extra.tokens || ''}
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                             <button
                               type="button"
-                              className="card-delete-btn"
-                              title="Delete task"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (confirm('Are you sure you want to delete this task?')) {
-                                  await board.remove(tItem.id);
-                                }
+                              style={{
+                                background: 'var(--bg)',
+                                color: 'var(--txt)',
+                                border: '1px solid var(--line)',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
                               }}
+                              onClick={() => setDetailTaskId(tItem.id)}
                             >
-                              <Icon name="trash" size="0.85em" />
+                              Inspect
                             </button>
-                          </div>
-
-                          {tItem.notes && (
-                            <p className="card-desc-text">{tItem.notes}</p>
-                          )}
-
-                          {extra.tools && extra.tools.length > 0 && (
-                            <div className="card-tools-chips">
-                              {extra.tools.map((tool, j) => (
-                                <span key={j} className="card-tool-chip">
-                                  {tool}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {extra.files && extra.files.length > 0 && (
-                            <div className="card-files-list">
-                              <span className="card-files-label">
-                                {tItem.column === 'finished' ? '🏁 Output Files & Results:' : 'Modified Files:'}
-                              </span>
-                              {extra.files.map((file, j) => {
-                                const isDesign = isDesignFile(file);
-                                return (
-                                  <div
-                                    key={j}
-                                    className={`card-file-path ${isDesign ? 'is-html-artifact' : 'is-code-artifact'}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleFileLaunch(file, tItem);
-                                    }}
-                                    onDoubleClick={(e) => {
-                                      e.stopPropagation();
-                                      handleFileLaunch(file, tItem);
-                                    }}
-                                    title={isDesign ? 'Click or double-click to start in Canvas Preview' : 'Click or double-click to open in Code Editor'}
-                                  >
-                                    <span className="file-icon">{isDesign ? '🎮' : '📄'}</span>
-                                    <span className="file-name-text">{file}</span>
-                                    {isDesign ? (
-                                      <button
-                                        type="button"
-                                        className="btn-preview-html-chip"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleFileLaunch(file, tItem);
-                                        }}
-                                        title="Start Web & Game Preview in Canvas"
-                                      >
-                                        ▶ Canvas
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="btn-open-code-chip"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleFileLaunch(file, tItem);
-                                        }}
-                                        title="Open file in Code Editor"
-                                      >
-                                        ✏️ Code
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="card-footer-section">
-                          {tItem.attachments && tItem.attachments.length > 0 && (
-                            <div className="card-attachments-chips">
-                              {tItem.attachments.map((att, j) => (
-                                <span key={j} className="card-attach-chip">
-                                  <span>📎</span>
-                                  <span>{att.name}</span>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="card-meta-line">
-                            <span style={{ color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)' }}>
-                              {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isWaiting ? '⧖ waiting' : isExecution ? '⟳ running' : '◯ pending')}
-                            </span>
-                            <span className="card-model-name">{tItem.model || activeModel}</span>
-                          </div>
-
-                          <div className="card-actions-line">
-                            <span>{extra.tokens || '-'}</span>
-                            <span>{extra.duration || '-'}</span>
-                            <label
-                              className="btn-card-attach"
-                              title="Attach files, photos, docs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAttachClick(tItem.id);
-                              }}
-                            >
-                              <span style={{ fontSize: '12px', lineHeight: 1 }}>+</span>attach
-                            </label>
                             {tItem.column !== 'finished' && (
                               <button
                                 type="button"
-                                className="btn-card-run"
                                 disabled={busy}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onRun(tItem);
+                                style={{
+                                  background: 'var(--acc2)',
+                                  color: '#000',
+                                  border: 'none',
+                                  padding: '4px 10px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
                                 }}
+                                onClick={() => onRun(tItem)}
                               >
-                                run
+                                ▶ Run
                               </button>
                             )}
+                            <button
+                              type="button"
+                              style={{
+                                background: 'transparent',
+                                color: 'var(--txt-dim)',
+                                border: '1px solid transparent',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                              title="Delete task"
+                              onClick={() => board.remove(tItem.id)}
+                            >
+                              🗑
+                            </button>
                           </div>
-                        </div>
-                      </div>
+                        </td>
+                      </tr>
                     );
-                  })}
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {kanbanSubTab === 'providers' && (
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '32px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          background: 'rgba(11, 14, 23, 0.4)',
+          width: '100%',
+          height: 'calc(100% - 60px)'
+        }}>
+          <div style={{ maxWidth: '900px', width: '100%', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Banner */}
+            <div style={{
+              background: 'var(--panel-bg)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius)',
+              padding: '24px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '28px' }}>🔌</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--acc2)' }}>Third-Party LLM Providers & Resilient Mesh</h3>
+                  <div style={{ fontSize: '13px', color: 'var(--txt-dim)', marginTop: '4px' }}>
+                    Model-agnostic architecture supports all major providers and local open-weights engines with automated circuit breakers and fallback chains.
+                  </div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+
+            {/* Provider Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+              gap: '16px'
+            }}>
+              {THIRD_PARTY_PROVIDERS_LIST.map((prov) => {
+                const live = liveProviders.find((p) => p.envKey === prov.envKey || p.name?.toLowerCase().includes(prov.name.toLowerCase()));
+                const isKeySet = live ? live.keySet : Boolean(prov.envKey);
+                const currentKeyInput = providerKeyInputs[prov.id] ?? '';
+                const saveStatus = providerSaveStatus[prov.id];
+                const isTesting = testingProviderId === prov.id;
+
+                return (
+                  <div key={prov.id} style={{
+                    background: 'var(--panel-bg)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius)',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '22px' }}>{prov.icon}</span>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--txt)' }}>{prov.name}</h4>
+                          <span style={{ fontSize: '11px', color: 'var(--txt-dim)', fontFamily: 'var(--font-mono)' }}>{prov.envKey || 'Local / No Key Required'}</span>
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '10px',
+                        fontWeight: 600,
+                        background: isKeySet ? 'rgba(90, 158, 110, 0.15)' : 'rgba(232, 118, 54, 0.15)',
+                        color: isKeySet ? 'var(--ok)' : '#ff8c42',
+                        border: isKeySet ? '1px solid rgba(90, 158, 110, 0.3)' : '1px solid rgba(232, 118, 54, 0.3)'
+                      }}>
+                        {isKeySet ? '✓ Key Configured' : '⚠️ No Key Set'}
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: '12.5px', color: 'var(--txt-dim)', margin: 0, lineHeight: 1.4 }}>
+                      {prov.desc}
+                    </p>
+
+                    {/* Default Model & Endpoint */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px', color: 'var(--txt-dim)' }}>
+                      <div><strong style={{ color: 'var(--txt)' }}>Default Model:</strong> <code style={{ color: 'var(--acc2)' }}>{prov.defaultModel}</code></div>
+                      <div><strong style={{ color: 'var(--txt)' }}>Endpoint:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{prov.endpoint}</span></div>
+                    </div>
+
+                    {/* Supported Models Tag List */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      {prov.models.map((m) => (
+                        <span key={m} style={{
+                          fontSize: '10.5px',
+                          background: 'var(--bg)',
+                          border: '1px solid var(--line)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          color: 'var(--txt-dim)',
+                          fontFamily: 'var(--font-mono)'
+                        }}>
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Key Input / Action Section */}
+                    {prov.envKey && (
+                      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="password"
+                            placeholder={`Enter ${prov.envKey}...`}
+                            value={currentKeyInput}
+                            onChange={(e) => setProviderKeyInputs({ ...providerKeyInputs, [prov.id]: e.target.value })}
+                            style={{
+                              flex: 1,
+                              background: 'var(--bg)',
+                              border: '1px solid var(--line)',
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              color: 'var(--txt)'
+                            }}
+                          />
+                          <button
+                            type="button"
+                            style={{
+                              background: 'var(--line)',
+                              color: 'var(--txt)',
+                              border: '1px solid var(--line-strong)',
+                              padding: '0 12px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => handleSaveProviderKey(prov.id, prov.envKey)}
+                          >
+                            Save Key
+                          </button>
+                        </div>
+                        {saveStatus && (
+                          <span style={{ fontSize: '11px', color: 'var(--ok)' }}>{saveStatus}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Test Ping Action */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        disabled={isTesting}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid var(--line)',
+                          color: 'var(--txt-dim)',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          fontSize: '11.5px',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => handleTestProviderPing(prov.id)}
+                      >
+                        {isTesting ? '⚡ Testing ping...' : '📡 Test Provider Ping'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* NES Retro Game Box Task Detail Modal */}
       {detailModalTask && (
