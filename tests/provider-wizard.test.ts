@@ -105,7 +105,7 @@ describe('PROVIDER_REGISTRY', () => {
     );
     for (const p of cloudProviders) {
       expect(p.envKey).toBeTruthy();
-      expect(p.envKey).toMatch(/_API_KEY$/);
+      expect(p.envKey).toMatch(/_API_KEY|_ACCESS_TOKEN$/);
     }
   });
 });

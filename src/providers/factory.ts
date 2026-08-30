@@ -61,7 +61,7 @@ export function vertexBaseUrl(project: string, location = VERTEX_DEFAULT_LOCATIO
  * ("google/gemini-3.6-flash"). Accept either form from the user.
  */
 export function vertexModelId(model: string): string {
-  const bare = model.replace(/^vertex\//i, '');
+  const bare = model.replace(/^(vertex|vertex-google|google-vertex)\//i, '');
   return bare.includes('/') ? bare : `google/${bare}`;
 }
 
@@ -611,13 +611,24 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'alibaba/qwen3-coder-plus', name: 'Qwen3 Coder Plus (Alibaba Plan)', provider: 'Alibaba', speed: 'Powerful · Coding Tier' },
   { id: 'alibaba/qwen-max',          name: 'Qwen Max (Alibaba Plan)',          provider: 'Alibaba', speed: 'Powerful · Coding Tier' },
 
+  // ── OpenCode Zen (Free & paid tiers) ───────────────────────────────────
+  { id: 'opencode/big-pickle',             name: 'Big Pickle (free)',       provider: 'OpenCode Zen', speed: 'Powerful · free' },
+  { id: 'opencode/mimo-v2.5-free',         name: 'MiMo V2.5 (free)',        provider: 'OpenCode Zen', speed: 'Fast · free' },
+  { id: 'opencode/nemotron-3-ultra-free',  name: 'Nemotron 3 Ultra (free)', provider: 'OpenCode Zen', speed: 'Powerful · free' },
+  { id: 'opencode/hy3-free',               name: 'HY3 (free)',              provider: 'OpenCode Zen', speed: 'Fast · free' },
+  { id: 'opencode/gpt-5.4',                name: 'GPT-5.4',                 provider: 'OpenCode Zen', speed: 'Powerful · paid' },
+  { id: 'opencode/claude-sonnet-5',        name: 'Claude Sonnet 5',         provider: 'OpenCode Zen', speed: 'Powerful · paid' },
+
   // ── OpenCode Go (Anthropic-style models — use go-anthropic/ prefix) ──────
-  { id: 'go-anthropic/minimax-m3',   name: 'MiniMax M3 (Go)',    provider: 'OpenCode Go', speed: 'Anthropic API · agentic' },
-  { id: 'go-anthropic/minimax-m2.7', name: 'MiniMax M2.7 (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · fast' },
-  { id: 'go-anthropic/minimax-m2.5', name: 'MiniMax M2.5 (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · budget' },
-  { id: 'go-anthropic/qwen3.7-max',  name: 'Qwen3.7 Max (Go)',   provider: 'OpenCode Go', speed: 'Anthropic API · powerful' },
-  { id: 'go-anthropic/qwen3.7-plus', name: 'Qwen3.7 Plus (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
-  { id: 'go-anthropic/qwen3.6-plus', name: 'Qwen3.6 Plus (Go)',  provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
+  { id: 'go-anthropic/claude-sonnet-5',    name: 'Claude Sonnet 5 (Go)',    provider: 'OpenCode Go', speed: 'Powerful' },
+  { id: 'go-anthropic/claude-haiku-4-5',   name: 'Claude Haiku 4.5 (Go)',   provider: 'OpenCode Go', speed: 'Fast' },
+  { id: 'go-anthropic/claude-opus-5',      name: 'Claude Opus 5 (Go)',      provider: 'OpenCode Go', speed: 'Powerful' },
+  { id: 'go-anthropic/minimax-m3',         name: 'MiniMax M3 (Go)',         provider: 'OpenCode Go', speed: 'Anthropic API · agentic' },
+  { id: 'go-anthropic/minimax-m2.7',       name: 'MiniMax M2.7 (Go)',       provider: 'OpenCode Go', speed: 'Anthropic API · fast' },
+  { id: 'go-anthropic/minimax-m2.5',       name: 'MiniMax M2.5 (Go)',       provider: 'OpenCode Go', speed: 'Anthropic API · budget' },
+  { id: 'go-anthropic/qwen3.7-max',        name: 'Qwen3.7 Max (Go)',        provider: 'OpenCode Go', speed: 'Anthropic API · powerful' },
+  { id: 'go-anthropic/qwen3.7-plus',       name: 'Qwen3.7 Plus (Go)',       provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
+  { id: 'go-anthropic/qwen3.6-plus',       name: 'Qwen3.6 Plus (Go)',       provider: 'OpenCode Go', speed: 'Anthropic API · balanced' },
 
   // ── OpenRouter (offline fallback — prefer live fetch, see note above) ────
   { id: 'openrouter/anthropic/claude-3.5-sonnet',            name: 'Claude 3.5 Sonnet (OR)',   provider: 'OpenRouter', speed: 'Fast' },

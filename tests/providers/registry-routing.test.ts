@@ -62,6 +62,8 @@ describe('catalogue → routing', () => {
   });
 
   it('every listed model constructs a provider without throwing', () => {
+    const origVertexProj = process.env.VERTEX_PROJECT_ID;
+    process.env.VERTEX_PROJECT_ID = 'test-vertex-project';
     const failures: string[] = [];
     for (const entry of PROVIDER_REGISTRY) {
       const pid = pickerIdFor(entry.name);
@@ -74,5 +76,7 @@ describe('catalogue → routing', () => {
       }
     }
     expect(failures).toEqual([]);
+    if (origVertexProj === undefined) delete process.env.VERTEX_PROJECT_ID;
+    else process.env.VERTEX_PROJECT_ID = origVertexProj;
   });
 });

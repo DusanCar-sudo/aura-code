@@ -1,7 +1,7 @@
 {
   "name": "aura-code",
   "version": "0.17.0",
-  "description": "Aura Code \u2014 model-agnostic AI coding agent. Praktess framework.",
+  "description": "Aura Code — model-agnostic AI coding agent. Praktess framework.",
   "bin": {
     "aura": "dist/cli/index.js",
     "dic": "dist/cli/dic.js",
@@ -26,13 +26,21 @@
     "repair-anchors": "npm run build && node dist/machina/repair.js",
     "fixtures:capture": "ts-node scripts/capture-provider-fixtures.ts",
     "eval:gazelle": "node benchmark/gazelle-eval/run.mjs",
-    "build:web": "vite build --config web/vite.config.ts",
-    "dev:web": "vite --config web/vite.config.ts"
+    "typecheck:web": "tsc --noEmit -p web/tsconfig.build.json",
+    "build:web": "npm run typecheck:web && vite build --config web/vite.config.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@vercel/connect": "^0.4.3",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "chalk": "^4.1.2",
     "express": "^5.2.1",
     "glob": "^10.4.5",
@@ -40,11 +48,14 @@
     "jsonrepair": "^3.15.0",
     "marked": "^18.0.5",
     "minimist": "^1.2.8",
+    "node-pty": "^1.1.0",
     "openai": "^4.68.4",
     "pptxgenjs": "^4.0.1",
     "puppeteer-core": "^25.1.0",
     "unpdf": "^1.8.1",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
@@ -86,10 +97,12 @@
   "directories": {
     "test": "tests"
   },
-  "author": "Du\u0161an Milosavljevi\u0107",
+  "author": "Dušan Milosavljević",
   "type": "commonjs",
   "types": "./dist/cli/index.d.ts",
   "allowScripts": {
-    "esbuild@0.21.5": true
+    "esbuild@0.21.5": true,
+    "node-pty": true,
+    "node-pty@1.1.0": true
   }
 }

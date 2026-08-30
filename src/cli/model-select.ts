@@ -430,7 +430,7 @@ export function applyRoutePrefix(providerId: string, id: string): string {
   const prefix = ROUTE_PREFIX[providerId];
   if (!prefix || id.startsWith(prefix)) return id;
   // Already carries some other known routing prefix (user typed it fully) — leave alone.
-  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|vertex)\//.test(id)) return id;
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|vertex|vertex-google|google-vertex)\//.test(id)) return id;
   return prefix + id;
 }
 

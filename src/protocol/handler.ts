@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
-import { createProvider } from '../providers/factory.js';
+import { createProvider, getApiKeyForModel } from '../providers/factory.js';
 import { loadProjectContext, type ProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem, setConfirmHandler, type ConfirmContext } from '../safety/permissions.js';
@@ -9,7 +9,7 @@ import { TOOL_DEFINITIONS } from '../tools/index.js';
 import {
   addTask, loadBoard, removeAttachments, removeTask, saveBoard, taskPrompt, updateTask,
 } from '../board/store.js';
-import { BOARD_AGENTS, BOARD_COLUMNS, type BoardColumn, type BoardAgent } from '../board/types.js';
+import { BOARD_AGENTS, BOARD_COLUMNS, isWorkflowDef, type BoardColumn, type BoardAgent } from '../board/types.js';
 import { agentPresets, effectivePermission, AGENT_PRESETS } from '../board/agents.js';
 import type { Display } from '../cli/display.js';
 import type { HistoryMessage } from '../providers/types.js';
@@ -164,6 +164,7 @@ export class ProtocolHandler {
     switch (req.method) {
       case M.sessionCreate:   return this.sessionCreate(req, p);
       case M.sessionDestroy:  return this.sessionDestroy(req, p);
+      case M.sessionRename:   return this.sessionRename(req, p);
       case M.sessionList:     return this.ok(req.id, { sessions: this.listSessions() });
       case M.sessionHistory:  return this.sessionHistory(req, p);
       case M.sessionState:    return this.sessionState(req, p);
@@ -184,6 +185,27 @@ export class ProtocolHandler {
   // ───────────────────────────────────────────────────────────────────────────
   // Methods
   // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Rename a chat.
+   *
+   * The name is the only handle a person has on a conversation once there are
+   * a dozen of them, and "Untitled" for all of them is no handle at all.
+   * Trimmed and length-capped: a name is a label, and an unbounded one would
+   * be echoed into every session listing.
+   */
+  private sessionRename(req: ReqFrame, p: Record<string, unknown>): void {
+    const s = this.lookup(req, p);
+    if (!s) return;
+    if (typeof p.name !== 'string') {
+      return this.fail(req.id, { code: 'bad_params', message: 'params.name must be a string.' });
+    }
+    const name = p.name.trim().slice(0, 200);
+    // An empty name clears it rather than storing "", so the client falls back
+    // to its own placeholder instead of rendering a blank row.
+    s.name = name || undefined;
+    this.ok(req.id, { sessionId: s.id, name: s.name });
+  }
 
   private async sessionCreate(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
     const projectRoot = typeof p.projectRoot === 'string' && p.projectRoot
@@ -224,7 +246,7 @@ export class ProtocolHandler {
       name: typeof p.name === 'string' ? p.name : undefined,
       projectRoot,
       model,
-      apiKey: typeof p.apiKey === 'string' ? p.apiKey : this.opts.defaultApiKey,
+      apiKey: typeof p.apiKey === 'string' && p.apiKey ? p.apiKey : (getApiKeyForModel(model) || this.opts.defaultApiKey),
       baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl : this.opts.defaultBaseUrl,
       context,
       permissions: new PermissionSystem(permission),
@@ -297,6 +319,58 @@ export class ProtocolHandler {
     if (typeof p.message !== 'string' || !p.message.trim()) {
       return this.fail(req.id, { code: 'bad_params', message: 'params.message must be a non-empty string.' });
     }
+
+    const msg = p.message.trim();
+    if (msg === ':marathon' || msg.startsWith(':marathon ')) {
+      const { MarathonManager } = await import('../orchestration/marathon.js');
+      const arg = msg.slice(':marathon'.length).trim();
+
+      // `off` and `status` are subcommands on both surfaces. Without this the
+      // web client would switch marathon ON and then run the word "off" as a
+      // task — the opposite of what was typed, and billed for.
+      if (arg === 'off') {
+        MarathonManager.deactivate();
+        this.emit('marathon.activated', s.id, { enabled: false, activatedAt: null });
+        return this.ok(req.id, { success: true, marathon: false, state: MarathonManager.getState() });
+      }
+      if (arg === 'status') {
+        return this.ok(req.id, { success: true, state: MarathonManager.getState() });
+      }
+
+      MarathonManager.activate();
+      const marathonState = MarathonManager.getState();
+      this.emit('marathon.activated', s.id, { ...marathonState });
+
+      const task = arg;
+      if (!task) {
+        // A bare toggle touches nothing that a running turn or a spent budget
+        // could be harmed by, so it is always allowed.
+        return this.ok(req.id, { success: true, marathon: true, state: marathonState });
+      }
+
+      // A task is a turn, and a turn obeys the same two guards as any other.
+      // This branch used to return before both of them, so `:marathon <task>`
+      // would start a second concurrent turn on a session that already had one
+      // and keep spending after the budget was exhausted — turning the command
+      // into a way around the limits rather than a mode switch.
+      if (s.activeTurn) {
+        return this.fail(req.id, { code: 'session_busy', message: `Session ${s.id} already has a turn running.` });
+      }
+      const marathonBudgetStop = s.budget.exhausted();
+      if (marathonBudgetStop) {
+        return this.fail(req.id, {
+          code: 'budget_exhausted',
+          message: `Session budget exhausted (${marathonBudgetStop.used}/${marathonBudgetStop.limit} ${marathonBudgetStop.kind}).`,
+        });
+      }
+
+      const turnId = randomUUID();
+      // Answer before the turn finishes; the turn reports through events.
+      this.ok(req.id, { success: true, marathon: true, turnId });
+      void this.runTurn(s, turnId, task, p.images);
+      return;
+    }
+
     if (s.activeTurn) {
       return this.fail(req.id, { code: 'session_busy', message: `Session ${s.id} already has a turn running.` });
     }
@@ -327,7 +401,7 @@ export class ProtocolHandler {
     turnId: string,
     message: string,
     rawImages?: unknown,
-  ): Promise<{ success: boolean; summary: string }> {
+  ): Promise<{ success: boolean; summary: string; files: string[] }> {
     const p = { images: rawImages } as Record<string, unknown>;
     const abort = new AbortController();
     s.activeTurn = { turnId, abort };
@@ -380,7 +454,12 @@ export class ProtocolHandler {
         },
         budgetStopped: /budget/i.test(result.summary) && !result.success,
       });
-      return { success: result.success, summary: result.summary };
+      const modifiedFiles = Array.from(new Set(
+        result.toolCallLog
+          .filter((t) => (t.name === 'write_file' || t.name === 'edit_file') && typeof t.input?.path === 'string')
+          .map((t) => String(t.input.path))
+      ));
+      return { success: result.success, summary: result.summary, files: modifiedFiles };
     } catch (e) {
       this.emit(M.turnError, s.id, {
         turnId,
@@ -392,7 +471,7 @@ export class ProtocolHandler {
         turns: 0, toolCount: 0,
         usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0, costUsd: 0 },
       });
-      return { success: false, summary: e instanceof Error ? e.message : String(e) };
+      return { success: false, summary: e instanceof Error ? e.message : String(e), files: [] };
     } finally {
       // Only the turn's own state is cleared. The confirm handler is
       // process-wide and must outlive any single turn — clearing it here is
@@ -593,6 +672,11 @@ export class ProtocolHandler {
       column: typeof p.column === 'string' ? p.column as BoardColumn : undefined,
       agent: typeof p.agent === 'string' ? p.agent as BoardAgent : undefined,
       model: typeof p.model === 'string' ? p.model : undefined,
+      files: Array.isArray(p.files) ? (p.files as string[]) : undefined,
+      // Carried through on create as well as update: a pipeline saved from the
+      // graph editor arrives with the task that is being created, and dropping
+      // it here would lose the steps the moment they were saved.
+      workflow: isWorkflowDef(p.workflow) ? p.workflow : undefined,
     });
     this.boardCommit(root, state);
     this.ok(req.id, { task });
@@ -613,9 +697,18 @@ export class ProtocolHandler {
     // TaskPatch is the list to keep this in step with.
     for (const key of [
       'title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result',
-      'failed', 'order', 'priority', 'attention', 'linkedTo',
+      'failed', 'order', 'priority', 'attention', 'linkedTo', 'files',
     ]) {
       if (p[key] !== undefined) patch[key] = p[key];
+    }
+    // Validated rather than passed through: it is the one patch field with
+    // internal structure, and a malformed graph would persist to the board
+    // file and fail on every later load.
+    if (p.workflow !== undefined) {
+      if (!isWorkflowDef(p.workflow)) {
+        return this.fail(req.id, { code: 'bad_params', message: 'Malformed workflow.' });
+      }
+      patch.workflow = p.workflow;
     }
     const task = updateTask(state, id, patch);
     if (!task) {
@@ -674,7 +767,7 @@ export class ProtocolHandler {
       ? p.permission
       : undefined;
     const permission = effectivePermission(preset, chosen);
-    const model = task.model || this.opts.defaultModel;
+    const model = (typeof p.model === 'string' && p.model ? p.model : '') || task.model || this.opts.defaultModel;
     if (!model) {
       return this.fail(req.id, { code: 'bad_params', message: 'No model configured for this task.' });
     }
@@ -689,14 +782,18 @@ export class ProtocolHandler {
       });
     }
 
+    const apiKey = typeof p.apiKey === 'string' && p.apiKey
+      ? p.apiKey
+      : (getApiKeyForModel(model) || this.opts.defaultApiKey);
+
     const sessionId = randomUUID();
     const session: Session = {
       id: sessionId,
       name: task.title.slice(0, 60),
       projectRoot: root,
       model,
-      apiKey: this.opts.defaultApiKey,
-      baseUrl: this.opts.defaultBaseUrl,
+      apiKey,
+      baseUrl: typeof p.baseUrl === 'string' && p.baseUrl ? p.baseUrl : this.opts.defaultBaseUrl,
       context,
       // The agent's preset, enforced by the engine rather than suggested to the
       // model — a read-only reviewer cannot edit however it is prompted.
@@ -726,6 +823,7 @@ export class ProtocolHandler {
       result: outcome.summary,
       failed: !outcome.success,
       attention: false,
+      files: outcome.files && outcome.files.length > 0 ? outcome.files : (task.files ?? []),
     });
 
     this.boardCommit(root, after);

@@ -3,9 +3,25 @@ import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
+import { exec, spawn, type ChildProcess } from 'child_process';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createProvider, KNOWN_MODELS, apiKeyEnvVarForModel } from '../providers/factory.js';
+
+// Native OS pseudoterminal via node-pty
+let ptyModule: typeof import('node-pty') | null = null;
+try {
+  ptyModule = require('node-pty');
+} catch {
+  ptyModule = null;
+}
+import {
+  createProvider,
+  KNOWN_MODELS,
+  apiKeyEnvVarForModel,
+  getAllModels,
+  getApiKeyForModel,
+} from '../providers/factory.js';
+import type { ProviderConfig } from '../providers/types.js';
 import { loadProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
@@ -20,9 +36,9 @@ import { ProtocolHandler } from '../protocol/handler.js';
 import type { Frame } from '../protocol/types.js';
 import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
-import type { ProviderConfig } from '../providers/types.js';
 import { openExternal } from '../util/open.js';
 import { loadAllPlugins } from '../plugins/loader.js';
+import { auraHome, auraPath } from '../util/aura-home.js';
 import { installPlugin, removePlugin } from '../plugins/market.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
 import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
@@ -133,10 +149,26 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   // per-run bearer token on every route + the WS handshake, and validate the
   // WS Origin so a browser tab on another site can't connect.
   const token = process.env.AURA_SERVER_TOKEN || crypto.randomBytes(24).toString('hex');
+  try {
+    const home = auraHome();
+    if (!fs.existsSync(home)) fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(auraPath('active_token'), token, { mode: 0o600 });
+  } catch {}
+  try {
+    const localAura = path.join(process.cwd(), '.aura');
+    if (!fs.existsSync(localAura)) fs.mkdirSync(localAura, { recursive: true });
+    fs.writeFileSync(path.join(localAura, 'active_token'), token, { mode: 0o600 });
+  } catch {}
+
   const host = '127.0.0.1';
   const allowedOrigins = new Set([
     `http://localhost:${opts.port}`,
     `http://127.0.0.1:${opts.port}`,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'tauri://localhost',
+    'https://tauri.localhost',
+    'http://tauri.localhost',
   ]);
   const tokenizedUrl = `http://${host}:${opts.port}/?token=${token}`;
 
@@ -210,16 +242,120 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   // noServer, because the same WebSocket layer has to serve two listeners:
   // the loopback HTTP server and, when enabled, the TLS LAN server.
   const wss = new WebSocketServer({ noServer: true });
+  const ptyWss = new WebSocketServer({ noServer: true });
+
+  // Native PTY WebSocket connection handler
+  ptyWss.on('connection', (ws) => {
+    const shell = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : '/bin/bash');
+    let ptyProc: any = null;
+
+    if (ptyModule) {
+      try {
+        ptyProc = ptyModule.spawn(shell, [], {
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 24,
+          cwd: opts.cwd || process.cwd(),
+          env: {
+            ...process.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+          } as Record<string, string>,
+        });
+      } catch (e) {
+        console.error('[Terminal PTY] Failed to spawn node-pty process:', e);
+      }
+    }
+
+    if (ptyProc) {
+      ptyProc.onData((data: string) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pty_output', data }));
+        }
+      });
+
+      ptyProc.onExit((event: { exitCode: number; signal?: number }) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pty_exit', exitCode: event.exitCode, signal: event.signal }));
+        }
+      });
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'pty_input' && typeof msg.data === 'string') {
+            ptyProc.write(msg.data);
+          } else if (msg.type === 'pty_resize' && typeof msg.cols === 'number' && typeof msg.rows === 'number') {
+            ptyProc.resize(Math.max(10, msg.cols), Math.max(5, msg.rows));
+          }
+        } catch {
+          ptyProc.write(raw.toString());
+        }
+      });
+
+      ws.on('close', () => {
+        try { ptyProc.kill(); } catch { /* ignore */ }
+      });
+
+      ws.send(JSON.stringify({ type: 'pty_ready', shell, cwd: opts.cwd || process.cwd() }));
+    } else {
+      // Fallback to bash child_process
+      const fallbackProc = spawn(shell, ['-i'], {
+        cwd: opts.cwd || process.cwd(),
+        env: { ...process.env, TERM: 'xterm-256color' },
+      });
+
+      fallbackProc.stdout.on('data', (d: Buffer) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pty_output', data: d.toString('utf8') }));
+        }
+      });
+
+      fallbackProc.stderr.on('data', (d: Buffer) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pty_output', data: d.toString('utf8') }));
+        }
+      });
+
+      fallbackProc.on('close', (code, signal) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pty_exit', exitCode: code ?? 0, signal }));
+        }
+      });
+
+      ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'pty_input' && typeof msg.data === 'string') {
+            fallbackProc.stdin.write(msg.data);
+          }
+        } catch {
+          fallbackProc.stdin.write(raw.toString());
+        }
+      });
+
+      ws.on('close', () => {
+        try { fallbackProc.kill(); } catch { /* ignore */ }
+      });
+
+      ws.send(JSON.stringify({ type: 'pty_ready', shell, cwd: opts.cwd || process.cwd() }));
+    }
+  });
 
   function handshakeAllowed(req: http.IncomingMessage): boolean {
     // Reject unless the token names a known client and (for browser clients
-    // that send one) the Origin is our own page.
+    // that send one) the Origin is our own page or a desktop client.
     try {
       const reqUrl = new URL(req.url ?? '/', `http://${host}:${opts.port}`);
-      if (!identify(reqUrl.searchParams.get('token') ?? undefined)) return false;
+      const tok = reqUrl.searchParams.get('token')
+        ?? (req.headers['x-aura-token'] as string | undefined)
+        ?? (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : undefined);
+      if (!identify(tok ?? undefined)) return false;
     } catch { return false; }
     const origin = req.headers.origin;
-    if (origin && !allowedOrigins.has(origin)) return false;
+    if (origin && !allowedOrigins.has(origin) && !origin.startsWith('tauri://') && !origin.includes('tauri.localhost')) {
+      return false;
+    }
     return true;
   }
 
@@ -233,6 +369,17 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       socket.destroy();
       return;
     }
+
+    let reqUrl: URL | null = null;
+    try {
+      reqUrl = new URL(req.url ?? '/', `http://${host}:${opts.port}`);
+    } catch {}
+
+    if (reqUrl && (reqUrl.pathname === '/api/terminal/pty' || reqUrl.pathname === '/ws/terminal')) {
+      ptyWss.handleUpgrade(req, socket, head, ws => ptyWss.emit('connection', ws, req));
+      return;
+    }
+
     wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
   };
 
@@ -285,7 +432,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   }
 
   app.use((req, res, next) => {
-    const explicit = (req.query.token as string | undefined) ?? req.header('x-aura-token');
+    const authHeader = req.header('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
+    const explicit = (req.query.token as string | undefined) ?? req.header('x-aura-token') ?? bearerToken;
     const provided = explicit ?? cookieToken(req);
     const who = identify(provided);
     if (!who) {
@@ -498,6 +647,376 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     }
   });
 
+  app.get('/api/file/read', (req, res) => {
+    try {
+      const relPath = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+      if (!relPath) {
+        res.status(400).json({ error: 'Missing path parameter.' });
+        return;
+      }
+      const safePath = path.resolve(opts.cwd, relPath);
+      if (!safePath.startsWith(path.resolve(opts.cwd))) {
+        res.status(403).json({ error: 'Path outside project directory.' });
+        return;
+      }
+      if (!fs.existsSync(safePath)) {
+        res.status(404).json({ error: 'File not found.' });
+        return;
+      }
+      const content = fs.readFileSync(safePath, 'utf8');
+      res.json({ ok: true, path: relPath, content });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/api/file/write', (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { path?: string; content?: string };
+      const relPath = typeof body.path === 'string' ? body.path.trim() : '';
+      const content = typeof body.content === 'string' ? body.content : '';
+      if (!relPath) {
+        res.status(400).json({ error: 'Missing path parameter.' });
+        return;
+      }
+      const safePath = path.resolve(opts.cwd, relPath);
+      if (!safePath.startsWith(path.resolve(opts.cwd))) {
+        res.status(403).json({ error: 'Path outside project directory.' });
+        return;
+      }
+      const dir = path.dirname(safePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(safePath, content, 'utf8');
+      res.json({ ok: true, path: relPath });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  /**
+   * YouTube and Media URL Transformer
+   * Transforms standard watch/share URLs into embed URLs suitable for iframe embedding.
+   */
+  function transformMediaUrl(rawUrl: string): string {
+    let url = rawUrl.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      if (url.startsWith('localhost') || url.startsWith('127.0.0.1')) {
+        url = 'http://' + url;
+      } else {
+        url = 'https://' + url;
+      }
+    }
+
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+
+      // YouTube watch URLs: youtube.com/watch?v=XYZ or m.youtube.com/watch?v=XYZ
+      if (hostname === 'youtube.com' || hostname === 'm.youtube.com') {
+        if (parsed.pathname === '/watch') {
+          const v = parsed.searchParams.get('v');
+          if (v) {
+            const t = parsed.searchParams.get('t') || parsed.searchParams.get('start');
+            const list = parsed.searchParams.get('list');
+            let embed = `https://www.youtube.com/embed/${encodeURIComponent(v)}?autoplay=1&enablejsapi=1`;
+            if (t) embed += `&start=${encodeURIComponent(t.replace('s', ''))}`;
+            if (list) embed += `&list=${encodeURIComponent(list)}`;
+            return embed;
+          }
+        } else if (parsed.pathname.startsWith('/shorts/')) {
+          const id = parsed.pathname.split('/shorts/')[1]?.split('/')[0]?.split('?')[0];
+          if (id) return `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&enablejsapi=1`;
+        }
+      }
+
+      // YouTube short URLs: youtu.be/XYZ
+      if (hostname === 'youtu.be') {
+        const id = parsed.pathname.replace(/^\//, '').split('?')[0];
+        if (id) {
+          const t = parsed.searchParams.get('t') || parsed.searchParams.get('start');
+          let embed = `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&enablejsapi=1`;
+          if (t) embed += `&start=${encodeURIComponent(t.replace('s', ''))}`;
+          return embed;
+        }
+      }
+
+      // Vimeo: vimeo.com/123456
+      if (hostname === 'vimeo.com' && /^\/\d+/.test(parsed.pathname)) {
+        const id = parsed.pathname.split('/')[1]?.split('?')[0];
+        if (id) return `https://player.vimeo.com/video/${id}?autoplay=1`;
+      }
+    } catch {}
+
+    return url;
+  }
+
+  /**
+   * Reverse Proxy Middleware (Canvas Web & Dev Server Preview)
+   *
+   * Bypasses X-Frame-Options and Content-Security-Policy (CSP frame-ancestors)
+   * headers on external websites (like YouTube, Wikipedia, docs, local dev servers)
+   * so they can be embedded directly in the Canvas multi-tab iframe.
+   *
+   * Injects <base href="..."> into HTML responses so relative assets (CSS, JS,
+   * images) resolve correctly against the target host.
+   */
+  const proxyHandler = async (req: express.Request, res: express.Response) => {
+    // Handle CORS preflight
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Expose-Headers', '*');
+
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+
+    try {
+      let rawTargetUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+      if (!rawTargetUrl) {
+        res.status(400).send(`
+          <!DOCTYPE html>
+          <html>
+            <body style="background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:30px;text-align:center;">
+              <h3>⚠️ Missing Target URL</h3>
+              <p style="color:#94a3b8;">Please provide a URL to preview (e.g. <code>https://www.youtube.com</code> or <code>http://localhost:5173</code>).</p>
+            </body>
+          </html>
+        `);
+        return;
+      }
+
+      // Automatically transform YouTube / Media URLs to embed formats
+      const targetUrl = transformMediaUrl(rawTargetUrl);
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(targetUrl);
+      } catch {
+        res.status(400).send(`
+          <!DOCTYPE html>
+          <html>
+            <body style="background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:30px;text-align:center;">
+              <h3>⚠️ Invalid URL Format</h3>
+              <p style="color:#94a3b8;">Could not parse <code>${targetUrl}</code> as a valid HTTP/HTTPS URL.</p>
+            </body>
+          </html>
+        `);
+        return;
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(parsedUrl.toString(), {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        redirect: 'follow',
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      const finalUrl = response.url || parsedUrl.toString();
+      const contentType = response.headers.get('content-type') || 'text/html; charset=utf-8';
+
+      // Explicitly delete and strip all frame-blocking headers
+      res.removeHeader('X-Frame-Options');
+      res.removeHeader('x-frame-options');
+      res.removeHeader('Content-Security-Policy');
+      res.removeHeader('content-security-policy');
+      res.removeHeader('Content-Security-Policy-Report-Only');
+      res.removeHeader('content-security-policy-report-only');
+      res.removeHeader('Cross-Origin-Opener-Policy');
+      res.removeHeader('cross-origin-opener-policy');
+      res.removeHeader('Cross-Origin-Embedder-Policy');
+      res.removeHeader('cross-origin-embedder-policy');
+      res.removeHeader('Cross-Origin-Resource-Policy');
+      res.removeHeader('cross-origin-resource-policy');
+
+      // Set permissive framing & CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Content-Type', contentType);
+      res.status(response.status);
+
+      if (contentType.includes('text/html') || contentType.includes('application/xhtml+xml')) {
+        let html = await response.text();
+
+        // Strip HTML-embedded CSP and X-Frame-Options meta tags
+        html = html.replace(/<meta\s+http-equiv=["']?(?:X-Frame-Options|Content-Security-Policy|Content-Security-Policy-Report-Only)["']?[^>]*>/gi, '');
+
+        // Inject <base href="..."> so relative links, styles, scripts and images resolve correctly
+        const baseTag = `<base href="${finalUrl}">`;
+        if (/<head[^>]*>/i.test(html)) {
+          html = html.replace(/<head([^>]*)>/i, `<head$1>\n    ${baseTag}`);
+        } else if (/<html[^>]*>/i.test(html)) {
+          html = html.replace(/<html([^>]*)>/i, `<html$1>\n<head>${baseTag}</head>`);
+        } else {
+          html = `${baseTag}\n` + html;
+        }
+
+        res.send(html);
+      } else {
+        const arrayBuffer = await response.arrayBuffer();
+        res.send(Buffer.from(arrayBuffer));
+      }
+    } catch (err: any) {
+      res.status(502).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Preview Proxy Notice</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; margin: 0; box-sizing: border-box; text-align: center; }
+              .err-card { background: #1e293b; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 28px 36px; max-width: 560px; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+              h2 { color: #f87171; margin-top: 0; font-size: 20px; }
+              p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 10px 0; }
+              code { background: #0f172a; padding: 3px 8px; border-radius: 4px; color: #38bdf8; font-family: monospace; font-size: 13px; word-break: break-all; }
+            </style>
+          </head>
+          <body>
+            <div class="err-card">
+              <h2>⚠️ Unable to Connect to Web Target</h2>
+              <p>The preview proxy could not reach the requested address:</p>
+              <p><code>${err?.message || String(err)}</code></p>
+              <p>Please ensure the local development server is running or that your internet connection has access to the destination.</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+  };
+
+  // Register both /api/proxy and /api/preview-proxy for compatibility
+  app.get('/api/proxy', proxyHandler);
+  app.options('/api/proxy', proxyHandler);
+  app.get('/api/preview-proxy', proxyHandler);
+  app.options('/api/preview-proxy', proxyHandler);
+
+  const activeTerminalProcesses = new Map<string, ChildProcess>();
+
+  app.get('/api/terminal/info', (_req, res) => {
+    res.json({
+      cwd: opts.cwd,
+      shell: process.env.SHELL || '/bin/bash',
+      user: process.env.USER || 'aura',
+      platform: process.platform,
+    });
+  });
+
+  app.post('/api/terminal/stream', (req, res) => {
+    const body = (req.body ?? {}) as { command?: string; cwd?: string; processId?: string };
+    const command = typeof body.command === 'string' ? body.command.trim() : '';
+    if (!command) {
+      res.status(400).json({ error: 'Missing command' });
+      return;
+    }
+    const targetCwd = typeof body.cwd === 'string' && body.cwd.trim()
+      ? path.resolve(opts.cwd, body.cwd.trim())
+      : opts.cwd;
+    const procId = typeof body.processId === 'string' && body.processId ? body.processId : crypto.randomUUID();
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const child = spawn(command, {
+      shell: true,
+      cwd: targetCwd,
+      env: { ...process.env, FORCE_COLOR: '1' },
+    });
+
+    activeTerminalProcesses.set(procId, child);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      res.write(`data: ${JSON.stringify({ type: 'stdout', data: chunk.toString('utf8'), procId })}\n\n`);
+    });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      res.write(`data: ${JSON.stringify({ type: 'stderr', data: chunk.toString('utf8'), procId })}\n\n`);
+    });
+
+    let isFinished = false;
+
+    child.on('close', (code: number | null, signal: string | null) => {
+      isFinished = true;
+      activeTerminalProcesses.delete(procId);
+      res.write(`data: ${JSON.stringify({ type: 'exit', exitCode: code ?? 0, signal, procId })}\n\n`);
+      res.end();
+    });
+
+    child.on('error', (err: Error) => {
+      isFinished = true;
+      activeTerminalProcesses.delete(procId);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message, procId })}\n\n`);
+      res.end();
+    });
+
+    res.on('close', () => {
+      if (!isFinished && activeTerminalProcesses.has(procId)) {
+        try { child.kill('SIGINT'); } catch { /* best effort */ }
+        activeTerminalProcesses.delete(procId);
+      }
+    });
+  });
+
+  app.post('/api/terminal/kill', (req, res) => {
+    const body = (req.body ?? {}) as { processId?: string };
+    const procId = typeof body.processId === 'string' ? body.processId : '';
+    let killed = 0;
+    if (procId && activeTerminalProcesses.has(procId)) {
+      try {
+        activeTerminalProcesses.get(procId)?.kill('SIGINT');
+        activeTerminalProcesses.delete(procId);
+        killed++;
+      } catch { /* best effort */ }
+    } else {
+      for (const [id, child] of activeTerminalProcesses.entries()) {
+        try { child.kill('SIGINT'); killed++; } catch { /* best effort */ }
+        activeTerminalProcesses.delete(id);
+      }
+    }
+    res.json({ ok: true, killed });
+  });
+
+  app.post('/api/terminal/exec', (req, res) => {
+    const body = (req.body ?? {}) as { command?: string; cwd?: string; timeout?: number };
+    const command = typeof body.command === 'string' ? body.command.trim() : '';
+    if (!command) {
+      res.status(400).json({ error: 'Missing command' });
+      return;
+    }
+    const targetCwd = typeof body.cwd === 'string' && body.cwd.trim()
+      ? path.resolve(opts.cwd, body.cwd.trim())
+      : opts.cwd;
+    const timeout = typeof body.timeout === 'number' && body.timeout > 0 ? body.timeout : 60_000;
+    const startTime = Date.now();
+
+    exec(command, {
+      cwd: targetCwd,
+      timeout,
+      maxBuffer: 5 * 1024 * 1024,
+      env: { ...process.env, FORCE_COLOR: '1' },
+    }, (error, stdout, stderr) => {
+      const durationMs = Date.now() - startTime;
+      const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+      res.json({
+        ok: !error,
+        exitCode,
+        stdout: stdout || '',
+        stderr: stderr || (error && !stderr ? error.message : ''),
+        durationMs,
+      });
+    });
+  });
+
   app.get('/api/providers', (_req, res) => {
     res.json({
       providers: PROVIDER_REGISTRY.map((entry) => ({
@@ -529,6 +1048,42 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       // API-key field entirely on a perfectly working setup.
       activeEnvKey: apiKeyEnvVarForModel(opts.model) ?? null,
     });
+  });
+
+  app.get('/api/models', (_req, res) => {
+    try {
+      const all = getAllModels();
+      const models = all.map((m) => {
+        const key = getApiKeyForModel(m.id);
+        const isLocal = m.provider === 'Ollama' || m.provider === 'Local' || m.id.startsWith('ollama/');
+        return {
+          id: m.id,
+          name: m.name,
+          provider: m.provider,
+          speed: m.speed,
+          hasKey: isLocal || Boolean(key),
+        };
+      });
+      res.json({
+        activeModel: opts.model,
+        models,
+        configured: models.filter((m) => m.hasKey),
+      });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post('/api/model', (req, res) => {
+    const body = (req.body ?? {}) as { model?: unknown };
+    const nextModel = typeof body.model === 'string' ? body.model.trim() : '';
+    if (!nextModel) {
+      res.status(400).json({ error: 'Missing model ID' });
+      return;
+    }
+    opts.model = nextModel;
+    broadcast({ type: 'model_changed', model: nextModel });
+    res.json({ ok: true, activeModel: nextModel });
   });
 
   /**

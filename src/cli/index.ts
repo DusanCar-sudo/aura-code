@@ -2727,6 +2727,73 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     }
     return { handled: true };
   }
+
+  // ── :nerds — one writer at a time, readers unrestricted ─────────────────
+  if (input === ':nerds' || input.startsWith(':nerds ')) {
+    const { NerdsPolicy } = await import('../orchestration/nerds.js');
+    const arg = input.slice(':nerds'.length).trim();
+
+    if (arg === 'off') {
+      NerdsPolicy.disable();
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Nerds off — parallel tasks write without coordination again.\n'));
+      return { handled: true };
+    }
+
+    if (arg === 'status') {
+      const st = NerdsPolicy.getState();
+      console.log(st.enabled
+        ? chalk.hex('#6ed0ea')(`\n  Nerds on — writer: ${st.holder ?? 'none'}${st.waiting.length ? `, waiting: ${st.waiting.join(', ')}` : ''}\n`)
+        : chalk.hex(TEXT_DIM_HEX)('\n  Nerds off.\n'));
+      return { handled: true };
+    }
+
+    NerdsPolicy.enable();
+    console.log(chalk.hex('#6ed0ea').bold('\n  🤓 Nerds on'));
+    console.log(chalk.hex(TEXT_DIM_HEX)('  Read-only work runs in parallel; only one writer at a time, the rest queue.'));
+    console.log(chalk.hex(TEXT_DIM_HEX)("  The lease is live — board runs do not consult it yet. ':nerds off' ends it.\n"));
+
+    if (arg) {
+      return { handled: true, runTask: arg };
+    }
+    return { handled: true };
+  }
+
+  // ── :marathon — long-haul flag, with the task it was given ──────────────
+  //
+  // The banner says only what the code does. It used to announce a
+  // coordination loop, exponential backoffs and a context compactor; none of
+  // those were wired to anything, and an operator who believes a banner is an
+  // operator who debugs the difference later.
+  if (input === ':marathon' || input.startsWith(':marathon ')) {
+    const { MarathonManager, formatRemaining } = await import('../orchestration/marathon.js');
+    const arg = input.slice(':marathon'.length).trim();
+
+    if (arg === 'off') {
+      MarathonManager.deactivate();
+      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Marathon mode off.\n'));
+      return { handled: true };
+    }
+
+    if (arg === 'status') {
+      const st = MarathonManager.getState();
+      console.log(st.enabled
+        ? chalk.hex('#6ed0ea')(`\n  Marathon mode on — ${formatRemaining(st.remainingMs)} left.\n`)
+        : chalk.hex(TEXT_DIM_HEX)('\n  Marathon mode off.\n'));
+      return { handled: true };
+    }
+
+    MarathonManager.activate();
+    const { remainingMs } = MarathonManager.getState();
+    console.log(chalk.hex('#6ed0ea').bold('\n  🏃 Marathon mode on'));
+    console.log(chalk.hex(TEXT_DIM_HEX)(`  Lapses on its own in ${formatRemaining(remainingMs)}. ':marathon off' ends it sooner.`));
+    console.log(chalk.hex(TEXT_DIM_HEX)('  It is a flag: nothing in the run loop reads it yet, so turns behave as usual.\n'));
+
+    if (arg) {
+      return { handled: true, runTask: arg };
+    }
+    return { handled: true };
+  }
+
   // ── :btw — Side channel question (read-only, no history) ────────────────
   if (input.startsWith(':btw ')) {
     const question = input.slice(5).trim();

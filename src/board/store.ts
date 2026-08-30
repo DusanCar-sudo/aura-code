@@ -19,7 +19,7 @@ import * as path from 'path';
 import { auraPath } from '../util/aura-home.js';
 import {
   EMPTY_BOARD, isBoardAgent, isBoardColumn,
-  type BoardAgent, type BoardAttachment, type BoardColumn, type BoardState, type BoardTask,
+  type BoardAgent, type BoardAttachment, type BoardColumn, type BoardState, type BoardTask, type WorkflowDef,
 } from './types.js';
 
 /**
@@ -147,6 +147,8 @@ export interface TaskPatch {
   result?: string;
   failed?: boolean;
   order?: number;
+  files?: string[];
+  workflow?: WorkflowDef;
 }
 
 /**
@@ -171,6 +173,8 @@ export function addTask(state: BoardState, patch: TaskPatch & { title: string })
     agent: patch.agent ?? 'aura',
     model: patch.model,
     order: last + 1000,
+    files: patch.files,
+    workflow: patch.workflow,
     createdAt: now,
     updatedAt: now,
   };
@@ -202,9 +206,11 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   if (patch.attachments !== undefined) task.attachments = patch.attachments;
   if (patch.priority !== undefined) task.priority = patch.priority;
   if (patch.attention !== undefined) task.attention = patch.attention;
+  if (patch.files !== undefined) task.files = patch.files;
   // An empty string clears the link, so a connector can be removed as easily
   // as it was made.
   if (patch.linkedTo !== undefined) task.linkedTo = patch.linkedTo || undefined;
+  if (patch.workflow !== undefined) task.workflow = patch.workflow;
   task.updatedAt = new Date().toISOString();
   return task;
 }

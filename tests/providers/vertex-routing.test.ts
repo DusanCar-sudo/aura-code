@@ -50,6 +50,8 @@ describe('Vertex AI routing', () => {
 
   it('vendor-qualifies a bare model id, and leaves a qualified one alone', () => {
     expect(vertexModelId('vertex/gemini-3.6-flash')).toBe('google/gemini-3.6-flash');
+    expect(vertexModelId('vertex-google/gemini-3.6-flash')).toBe('google/gemini-3.6-flash');
+    expect(vertexModelId('google-vertex/gemini-3.6-flash')).toBe('google/gemini-3.6-flash');
     expect(vertexModelId('vertex/meta/llama-4')).toBe('meta/llama-4');
   });
 
@@ -80,6 +82,8 @@ describe('Vertex AI routing', () => {
 
   it('strips vertex/ alongside the other routing prefixes', () => {
     expect(stripRoutingPrefix('vertex/gemini-3.6-flash')).toBe('gemini-3.6-flash');
+    expect(stripRoutingPrefix('vertex-google/gemini-3.6-flash')).toBe('gemini-3.6-flash');
+    expect(stripRoutingPrefix('google-vertex/gemini-3.6-flash')).toBe('gemini-3.6-flash');
   });
 
   it('resolves the token from GOOGLE_VERTEX_ACCESS_TOKEN, not GOOGLE_API_KEY', () => {

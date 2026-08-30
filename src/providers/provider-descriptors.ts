@@ -114,7 +114,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
   },
   {
     family: 'vertex', displayName: 'Google Vertex AI',
-    prefixes: ['vertex/'],
+    prefixes: ['vertex/', 'vertex-google/', 'google-vertex/'],
     apiKeyEnv: ['GOOGLE_VERTEX_ACCESS_TOKEN'],
     transport: 'vertex',
     // Endpoint embeds the GCP project and region, so there is no fixed URL.

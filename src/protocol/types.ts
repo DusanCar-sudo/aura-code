@@ -219,6 +219,7 @@ export const M = {
   // client → engine
   sessionCreate: 'session.create',
   sessionDestroy: 'session.destroy',
+  sessionRename: 'session.rename',
   sessionList: 'session.list',
   sessionHistory: 'session.history',
   sessionState: 'session.state',

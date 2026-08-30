@@ -89,6 +89,12 @@ describe('the fields a client is allowed to set', () => {
     const listed = /for \(const key of \[([\s\S]*?)\]\)/.exec(src)?.[1] ?? '';
     const allowed = new Set([...listed.matchAll(/'([^']+)'/g)].map((m) => m[1]));
 
+    // A field with internal structure is validated on its own rather than
+    // copied by the loop, so `patch.<name> = ...` counts as handled too.
+    // Without this the test would push such a field back into the blind loop,
+    // which is the opposite of what it is guarding.
+    for (const m of src.matchAll(/\bpatch\.(\w+) = /g)) allowed.add(m[1]);
+
     const storeSrc = fs.readFileSync('src/board/store.ts', 'utf8');
     const patch = /export interface TaskPatch \{([\s\S]*?)\n\}/.exec(storeSrc)?.[1] ?? '';
     const fields = [...patch.matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
@@ -97,5 +103,24 @@ describe('the fields a client is allowed to set', () => {
     // attachments is set through the upload route, not over the socket.
     const missing = fields.filter((f) => f !== 'attachments' && !allowed.has(f));
     expect(missing).toEqual([]);
+  });
+
+  it('assigns every field TaskPatch declares', async () => {
+    // The allowlist above only proves a field survives the wire. It still has
+    // to be written to the task, and updateTask assigns field by field on
+    // purpose — so a new one is dropped in silence there too. That is not
+    // hypothetical: `workflow` passed the handler, reached updateTask, and
+    // vanished, so removing a pipeline step appeared to work and did not.
+    const fs = await import('fs');
+    const storeSrc = fs.readFileSync('src/board/store.ts', 'utf8');
+
+    const body = /export function updateTask\([\s\S]*?\n\}/.exec(storeSrc)?.[0] ?? '';
+    const assigned = new Set([...body.matchAll(/patch\.(\w+) !== undefined/g)].map((m) => m[1]));
+
+    const patch = /export interface TaskPatch \{([\s\S]*?)\n\}/.exec(storeSrc)?.[1] ?? '';
+    const fields = [...patch.matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
+
+    expect(fields.length).toBeGreaterThan(5);
+    expect(fields.filter((f) => !assigned.has(f))).toEqual([]);
   });
 });

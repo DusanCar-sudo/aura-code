@@ -69,10 +69,24 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     // is not an entitlement. Every id below was confirmed with a live
     // generateContent call on an AI Studio key.
     models: [
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (preview)', speed: 'Powerful · reasoning', contextWindow: 1_000_000 },
       { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', speed: 'Fast', contextWindow: 1_000_000 },
       { id: 'gemini-pro-latest', label: 'Gemini Pro (latest)', speed: 'Powerful', contextWindow: 1_000_000 },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', speed: 'Fast', contextWindow: 1_000_000 },
       { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', speed: 'Fastest · cheap', contextWindow: 1_000_000 },
       { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', speed: 'Fast · cheap', contextWindow: 1_000_000 },
+    ],
+  },
+  {
+    name: 'Google Vertex AI',
+    baseUrl: 'https://aiplatform.googleapis.com',
+    envKey: 'GOOGLE_VERTEX_ACCESS_TOKEN',
+    signupUrl: 'https://console.cloud.google.com/vertex-ai',
+    models: [
+      { id: 'vertex/gemini-3.6-flash', label: 'Gemini 3.6 Flash (Vertex)', speed: 'Fast', contextWindow: 1_000_000 },
+      { id: 'vertex/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Vertex)', speed: 'Powerful · reasoning', contextWindow: 1_000_000 },
+      { id: 'vertex/gemini-pro-latest', label: 'Gemini Pro (Vertex)', speed: 'Powerful', contextWindow: 1_000_000 },
+      { id: 'vertex/gemini-3.5-flash', label: 'Gemini 3.5 Flash (Vertex)', speed: 'Fast', contextWindow: 1_000_000 },
     ],
   },
   {
