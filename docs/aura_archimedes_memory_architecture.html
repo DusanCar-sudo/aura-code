@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Code Architecture — Archimedes, Memory & :designx (2026)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fbfbf9;
+    --card-bg: #ffffff;
+    --border: #222222;
+    --text: #1a1a1a;
+    --muted: #5f6368;
+    --font-hand: 'Caveat', cursive, sans-serif;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Pastel colors matching reference */
+    --green-fill: #e3f7ed;
+    --green-border: #2ea44f;
+    --green-text: #134e29;
+
+    --yellow-fill: #fef4db;
+    --yellow-border: #d97706;
+    --yellow-text: #78350f;
+
+    --blue-fill: #e1f0ff;
+    --blue-border: #2563eb;
+    --blue-text: #1e3a8a;
+
+    --purple-fill: #f3e8ff;
+    --purple-border: #9333ea;
+    --purple-text: #581c87;
+
+    --red-fill: #fee2e2;
+    --red-border: #dc2626;
+    --red-text: #7f1d1d;
+
+    --coral-fill: #ffedd5;
+    --coral-border: #ea580c;
+    --coral-text: #9a3412;
+
+    --gray-fill: #f3f4f6;
+    --gray-border: #64748b;
+    --gray-text: #334155;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    padding: 30px 20px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .title-main {
+    font-family: var(--font-hand);
+    font-size: 2.8rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #111827;
+    position: relative;
+    display: inline-block;
+  }
+
+  .title-main::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 5%;
+    width: 90%;
+    height: 3px;
+    background: #1e293b;
+    border-radius: 2px;
+  }
+
+  .subtitle {
+    font-size: 0.95rem;
+    color: var(--muted);
+    margin-top: 10px;
+    font-family: var(--font-sans);
+  }
+
+  .nav-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin: 20px 0 30px;
+    background: #e5e7eb;
+    padding: 6px;
+    border-radius: 30px;
+  }
+
+  .tab-btn {
+    border: none;
+    background: transparent;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #4b5563;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .tab-btn.active {
+    background: #ffffff;
+    color: #111827;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  .diagram-board {
+    width: 100%;
+    max-width: 1320px;
+    background: #ffffff;
+    border: 2px solid #222;
+    border-radius: 18px;
+    padding: 28px 24px;
+    box-shadow: 6px 6px 0px rgba(0,0,0,0.06);
+    position: relative;
+  }
+
+  .tab-pane {
+    display: none;
+  }
+  .tab-pane.active {
+    display: block;
+  }
+
+  /* SVG & Layout styles */
+  svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .subsystem-box {
+    stroke: #222222;
+    stroke-width: 1.6;
+    rx: 14;
+  }
+
+  .dashed-box {
+    stroke-dasharray: 6 5;
+  }
+
+  .node-rect {
+    stroke-width: 1.5;
+    rx: 8;
+  }
+
+  .node-title {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 13px;
+    dominant-baseline: middle;
+  }
+
+  .node-sub {
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    fill: #4b5563;
+    dominant-baseline: middle;
+  }
+
+  .box-label {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 15px;
+    fill: #111827;
+    text-anchor: middle;
+  }
+
+  .path-label {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 13.5px;
+    fill: #1f2937;
+  }
+
+  .flow-arrow {
+    stroke: #1f2937;
+    stroke-width: 1.6;
+    fill: none;
+    marker-end: url(#arrow);
+  }
+
+  .dashed-arrow {
+    stroke: #d97706;
+    stroke-width: 1.6;
+    stroke-dasharray: 4 3;
+    fill: none;
+    marker-end: url(#arrow-orange);
+  }
+
+  .purple-arrow {
+    stroke: #7c3aed;
+    stroke-width: 1.6;
+    stroke-dasharray: 4 3;
+    fill: none;
+    marker-end: url(#arrow-purple);
+  }
+
+  .coral-arrow {
+    stroke: #ea580c;
+    stroke-width: 1.6;
+    fill: none;
+    marker-end: url(#arrow-coral);
+  }
+
+  .edge-label {
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    fill: #4b5563;
+    text-anchor: middle;
+  }
+
+  .legend-box {
+    background: #ffffff;
+    border: 1.5px solid #222;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    font-size: 0.82rem;
+    font-weight: 500;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .legend-line {
+    width: 24px;
+    height: 2px;
+  }
+  .legend-line.solid { background: #1f2937; }
+  .legend-line.dashed { background: #d97706; border-top: 2px dashed #d97706; }
+  .legend-line.purple { background: #7c3aed; border-top: 2px dashed #7c3aed; }
+  .legend-line.coral { background: #ea580c; }
+
+  .legend-chip {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid #222;
+  }
+
+  .info-cards {
+    margin-top: 35px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    width: 100%;
+    max-width: 1320px;
+  }
+
+  .info-card {
+    background: #ffffff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+
+  .info-card h3 {
+    font-size: 1.05rem;
+    color: #111827;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .info-card p {
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: #4b5563;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .tag-green { background: #d1fae5; color: #065f46; }
+  .tag-orange { background: #fef3c7; color: #92400e; }
+  .tag-purple { background: #ede9fe; color: #5b21b6; }
+  .tag-coral { background: #ffedd5; color: #9a3412; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-main">High Level Design: Aura Code, Archimedes & :designx (2026)</div>
+  <div class="subtitle">Provider-Agnostic AAM Runtime · Small-Model Alternation · 4-Layer Sleep Memory · Design Commission Loop</div>
+  
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('tab-runtime')">1. Runtime & Alternation Architecture</button>
+    <button class="tab-btn" onclick="switchTab('tab-memory')">2. 4-Layer Memory & Mining Pipeline</button>
+    <button class="tab-btn" onclick="switchTab('tab-alternator')">3. Claim-Aware Verification State Machine</button>
+    <button class="tab-btn" onclick="switchTab('tab-designx')">4. :designx Commission & Build Loop</button>
+  </div>
+</header>
+
+<div class="diagram-board">
+
+  <!-- ==================== TAB 1: RUNTIME & ALTERNATION ==================== -->
+  <div id="tab-runtime" class="tab-pane active">
+    <svg viewBox="0 0 1200 780" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#1f2937"/>
+        </marker>
+        <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#d97706"/>
+        </marker>
+        <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#7c3aed"/>
+        </marker>
+        <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#16a34a"/>
+        </marker>
+        <marker id="arrow-coral" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#ea580c"/>
+        </marker>
+      </defs>
+
+      <!-- 1. INPUT CONTAINER (LEFT) -->
+      <g id="input-container">
+        <rect x="25" y="80" width="130" height="370" fill="#ffffff" class="subsystem-box dashed-box"/>
+        <text x="90" y="110" class="box-label" style="font-size:13px;">Input Surface</text>
+        
+        <!-- Input items -->
+        <g transform="translate(40, 135)">
+          <rect width="100" height="52" fill="#f0f4ff" stroke="#3b82f6" class="node-rect"/>
+          <text x="50" y="22" text-anchor="middle" class="node-title" fill="#1e3a8a">CLI / REPL</text>
+          <text x="50" y="38" text-anchor="middle" class="node-sub">:repl / auracode</text>
+        </g>
+        
+        <g transform="translate(40, 200)">
+          <rect width="100" height="52" fill="#ffedd5" stroke="#ea580c" class="node-rect"/>
+          <text x="50" y="22" text-anchor="middle" class="node-title" fill="#9a3412">:designx</text>
+          <text x="50" y="38" text-anchor="middle" class="node-sub">Design Commission</text>
+        </g>
+
+        <g transform="translate(40, 265)">
+          <rect width="100" height="52" fill="#f0f4ff" stroke="#3b82f6" class="node-rect"/>
+          <text x="50" y="22" text-anchor="middle" class="node-title" fill="#1e3a8a">Telegram</text>
+          <text x="50" y="38" text-anchor="middle" class="node-sub">Bot Gateway</text>
+        </g>
+
+        <g transform="translate(40, 330)">
+          <rect width="100" height="52" fill="#f0f4ff" stroke="#3b82f6" class="node-rect"/>
+          <text x="50" y="22" text-anchor="middle" class="node-title" fill="#1e3a8a">CI / Script</text>
+          <text x="50" y="38" text-anchor="middle" class="node-sub">Automations</text>
+        </g>
+      </g>
+
+      <!-- 2. APPLICATION LAYER (RUNTIME MAIN BOX) -->
+      <g id="app-runtime-container">
+        <rect x="185" y="80" width="820" height="370" fill="#ffffff" class="subsystem-box"/>
+        <text x="595" y="110" class="box-label">Application Layer (Aura Agent Runtime — AAM Machine)</text>
+
+        <!-- PATH A: ARCHIMEDES FAST-PATH -->
+        <g id="path-a-box">
+          <rect x="205" y="130" width="600" height="135" fill="#f9fefb" stroke="#16a34a" class="subsystem-box dashed-box"/>
+          <text x="220" y="152" class="path-label" fill="#14532d">Path A: Archimedes Fast-Path (Local-First Small Model)</text>
+
+          <!-- Competence Gate -->
+          <g transform="translate(225, 170)">
+            <rect width="115" height="75" fill="#e6fffa" stroke="#0d9488" class="node-rect"/>
+            <text x="57" y="28" text-anchor="middle" class="node-title" fill="#115e59">Competence Gate</text>
+            <text x="57" y="46" text-anchor="middle" class="node-sub">assessCompetence</text>
+            <text x="57" y="60" text-anchor="middle" class="node-sub">ε-probe (5%)</text>
+          </g>
+
+          <!-- Archimedes Model -->
+          <g transform="translate(370, 170)">
+            <rect width="125" height="75" fill="#e6fffa" stroke="#0d9488" class="node-rect"/>
+            <text x="62" y="28" text-anchor="middle" class="node-title" fill="#115e59">Archimedes</text>
+            <text x="62" y="46" text-anchor="middle" class="node-sub">Ollama / Granite 3B</text>
+            <text x="62" y="60" text-anchor="middle" class="node-sub">Read-Only (max 15t)</text>
+          </g>
+
+          <!-- Claim-Type Verifier -->
+          <g transform="translate(525, 170)">
+            <rect width="135" height="75" fill="#fef3c7" stroke="#d97706" class="node-rect"/>
+            <text x="67" y="28" text-anchor="middle" class="node-title" fill="#92400e">Verification Gate</text>
+            <text x="67" y="46" text-anchor="middle" class="node-sub">1 cheap complete()</text>
+            <text x="67" y="60" text-anchor="middle" class="node-sub">Strict tool check</text>
+          </g>
+
+          <path d="M 340 207 L 370 207" class="flow-arrow"/>
+          <path d="M 495 207 L 525 207" class="flow-arrow"/>
+        </g>
+
+        <!-- PATH B: FRONTIER CLOUD AGENT LOOP -->
+        <g id="path-b-box">
+          <rect x="205" y="285" width="600" height="145" fill="#fffdfa" stroke="#d97706" class="subsystem-box dashed-box"/>
+          <text x="220" y="307" class="path-label" fill="#78350f">Path B: Frontier Cloud Oracle (Escalation & Full Agent Loop)</text>
+
+          <!-- Compactor & Ladder -->
+          <g transform="translate(225, 325)">
+            <rect width="115" height="85" fill="#fffaf0" stroke="#dd6b20" class="node-rect"/>
+            <text x="57" y="28" text-anchor="middle" class="node-title" fill="#7c2d12">Compactor</text>
+            <text x="57" y="46" text-anchor="middle" class="node-sub">Generational Ladder</text>
+            <text x="57" y="62" text-anchor="middle" class="node-sub">[0.55, 0.70, 0.85]</text>
+          </g>
+
+          <!-- Cloud Oracle -->
+          <g transform="translate(370, 325)">
+            <rect width="125" height="85" fill="#fffaf0" stroke="#dd6b20" class="node-rect"/>
+            <text x="62" y="28" text-anchor="middle" class="node-title" fill="#7c2d12">Frontier Oracle (O)</text>
+            <text x="62" y="46" text-anchor="middle" class="node-sub">Claude Sonnet 4.5 / GPT-4o</text>
+            <text x="62" y="62" text-anchor="middle" class="node-sub">Provider Stream</text>
+          </g>
+
+          <!-- Safety Gate & Tools -->
+          <g transform="translate(525, 325)">
+            <rect width="135" height="85" fill="#fee2e2" stroke="#dc2626" class="node-rect"/>
+            <text x="67" y="28" text-anchor="middle" class="node-title" fill="#991b1b">Safety Gate (δ)</text>
+            <text x="67" y="46" text-anchor="middle" class="node-sub">27 Tools (P)</text>
+            <text x="67" y="62" text-anchor="middle" class="node-sub">Auto/Confirm/Sandbox</text>
+          </g>
+
+          <path d="M 340 367 L 370 367" class="flow-arrow"/>
+          <path d="M 495 367 L 525 367" class="flow-arrow"/>
+        </g>
+
+        <!-- ESCALATION & COUNCIL HANDLER -->
+        <g id="council-box" transform="translate(830, 150)">
+          <rect width="155" height="250" fill="#fdf4ff" stroke="#c084fc" class="node-rect"/>
+          <text x="77" y="30" text-anchor="middle" class="node-title" fill="#6b21a8">Escalation &</text>
+          <text x="77" y="48" text-anchor="middle" class="node-title" fill="#6b21a8">Design Council</text>
+          
+          <rect x="15" y="70" width="125" height="45" fill="#ffffff" stroke="#a855f7" rx="6"/>
+          <text x="77" y="88" text-anchor="middle" class="node-sub" font-weight="600">SessionBudget Check</text>
+          <text x="77" y="103" text-anchor="middle" class="node-sub" font-size="9.5px">Cap & Confirm</text>
+
+          <rect x="15" y="125" width="125" height="50" fill="#ffffff" stroke="#a855f7" rx="6"/>
+          <text x="77" y="145" text-anchor="middle" class="node-sub" font-weight="600">5-Agent Ecclesia</text>
+          <text x="77" y="162" text-anchor="middle" class="node-sub" font-size="9.5px">Divergent Proposals</text>
+
+          <rect x="15" y="185" width="125" height="45" fill="#ffffff" stroke="#a855f7" rx="6"/>
+          <text x="77" y="205" text-anchor="middle" class="node-sub" font-weight="600">MoA Synthesis</text>
+          <text x="77" y="220" text-anchor="middle" class="node-sub" font-size="9.5px">Re-Verification</text>
+        </g>
+      </g>
+
+      <!-- 3. OUTPUT CONTAINER (RIGHT) -->
+      <g id="output-container" transform="translate(1035, 170)">
+        <rect width="140" height="200" fill="#f0fdf4" stroke="#16a34a" class="subsystem-box"/>
+        <text x="70" y="32" text-anchor="middle" class="box-label" style="font-size:14px;">Verified Output</text>
+        
+        <g transform="translate(15, 60)">
+          <rect width="110" height="55" fill="#ffffff" stroke="#22c55e" class="node-rect"/>
+          <text x="55" y="24" text-anchor="middle" class="node-title" fill="#15803d">Verified Answer</text>
+          <text x="55" y="42" text-anchor="middle" class="node-sub">"I don't try. I verify."</text>
+        </g>
+
+        <g transform="translate(15, 125)">
+          <rect width="110" height="55" fill="#ffffff" stroke="#22c55e" class="node-rect"/>
+          <text x="55" y="24" text-anchor="middle" class="node-title" fill="#15803d">File Patch / Artefact</text>
+          <text x="55" y="42" text-anchor="middle" class="node-sub">Single-file / Diffs</text>
+        </g>
+      </g>
+
+      <!-- CONNECTORS -->
+      <path d="M 155 207 L 225 207" class="flow-arrow"/>
+      <text x="190" y="200" class="edge-label">Task</text>
+
+      <path d="M 155 230 C 180 230, 180 367, 225 367" class="dashed-arrow"/>
+      <text x="180" y="335" class="edge-label" fill="#d97706">Bypass</text>
+
+      <path d="M 660 207 C 760 207, 950 207, 1035 207" class="flow-arrow" stroke="#16a34a" marker-end="url(#arrow-green)"/>
+      <text x="745" y="198" class="edge-label" fill="#16a34a" font-weight="700">VALID (0 API cost)</text>
+
+      <path d="M 592 245 C 592 280, 282 270, 282 325" class="dashed-arrow"/>
+      <text x="440" y="280" class="edge-label" fill="#d97706">INVALID / Escalation + Dead-end context</text>
+
+      <path d="M 660 367 L 830 367" class="dashed-arrow"/>
+      <text x="745" y="360" class="edge-label" fill="#d97706">Design Failure</text>
+
+      <path d="M 660 380 C 750 420, 950 420, 1035 240" class="flow-arrow"/>
+      <path d="M 985 275 L 1035 220" class="flow-arrow"/>
+
+      <!-- 4. BOTTOM SUBSYSTEM: OBSERVABILITY -->
+      <g id="obs-container" transform="translate(185, 480)">
+        <rect width="580" height="110" fill="#ffffff" class="subsystem-box dashed-box"/>
+        <text x="290" y="26" text-anchor="middle" class="box-label" style="font-size:13.5px;">Observability, Verification & Budget Governance</text>
+
+        <g transform="translate(15, 42)">
+          <rect width="125" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="62" y="22" text-anchor="middle" class="node-title">:machina</text>
+          <text x="62" y="38" text-anchor="middle" class="node-sub">Formal AAM Proof</text>
+        </g>
+        <g transform="translate(150, 42)">
+          <rect width="130" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="65" y="22" text-anchor="middle" class="node-title">SessionBudget</text>
+          <text x="65" y="38" text-anchor="middle" class="node-sub">Token & Cost Ledger</text>
+        </g>
+        <g transform="translate(290, 42)">
+          <rect width="135" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="67" y="22" text-anchor="middle" class="node-title">ContextHealth</text>
+          <text x="67" y="38" text-anchor="middle" class="node-sub">Turn & Compaction</text>
+        </g>
+        <g transform="translate(435, 42)">
+          <rect width="130" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="65" y="22" text-anchor="middle" class="node-title">Council Auditor</text>
+          <text x="65" y="38" text-anchor="middle" class="node-sub">Citation Verifier</text>
+        </g>
+      </g>
+
+      <!-- 5. BOTTOM SUBSYSTEM: INFRASTRUCTURE -->
+      <g id="infra-container" transform="translate(185, 610)">
+        <rect width="580" height="110" fill="#ffffff" class="subsystem-box dashed-box"/>
+        <text x="290" y="26" text-anchor="middle" class="box-label" style="font-size:13.5px;">Infrastructure & Tool Engine</text>
+
+        <g transform="translate(15, 42)">
+          <rect width="125" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="62" y="22" text-anchor="middle" class="node-title">27 Primitives</text>
+          <text x="62" y="38" text-anchor="middle" class="node-sub">Finite Tool Set (P)</text>
+        </g>
+        <g transform="translate(150, 42)">
+          <rect width="130" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="65" y="22" text-anchor="middle" class="node-title">Local Daemon</text>
+          <text x="65" y="38" text-anchor="middle" class="node-sub">Ollama / LM Studio</text>
+        </g>
+        <g transform="translate(290, 42)">
+          <rect width="135" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="67" y="22" text-anchor="middle" class="node-title">Circuit Breaker</text>
+          <text x="67" y="38" text-anchor="middle" class="node-sub">Exponential Jitter</text>
+        </g>
+        <g transform="translate(435, 42)">
+          <rect width="130" height="52" fill="#f8fafc" stroke="#64748b" class="node-rect"/>
+          <text x="65" y="22" text-anchor="middle" class="node-title">Permission Sys</text>
+          <text x="65" y="38" text-anchor="middle" class="node-sub">Sandbox & Prompts</text>
+        </g>
+      </g>
+
+      <!-- 6. BOTTOM RIGHT: DURABLE MEMORY -->
+      <g id="memory-container" transform="translate(790, 480)">
+        <rect width="385" height="240" fill="#faf5ff" stroke="#7c3aed" class="subsystem-box dashed-box"/>
+        <text x="192" y="26" text-anchor="middle" class="box-label" fill="#4c1d95" style="font-size:13.5px;">Durable Memory & State (Event-Sourced)</text>
+
+        <g transform="translate(20, 45)">
+          <rect width="165" height="75" fill="#ffffff" stroke="#8b5cf6" class="node-rect"/>
+          <text x="82" y="24" text-anchor="middle" class="node-title" fill="#5b21b6">L1: Raw Episodes</text>
+          <text x="82" y="42" text-anchor="middle" class="node-sub">~/.aura/episodes/*.json</text>
+          <text x="82" y="58" text-anchor="middle" class="node-sub">Zero LLM · Append-only</text>
+        </g>
+
+        <g transform="translate(200, 45)">
+          <rect width="165" height="75" fill="#ffffff" stroke="#8b5cf6" class="node-rect"/>
+          <text x="82" y="24" text-anchor="middle" class="node-title" fill="#5b21b6">L2: Daily Dreams</text>
+          <text x="82" y="42" text-anchor="middle" class="node-sub">dreams/YYYY-MM-DD.md</text>
+          <text x="82" y="58" text-anchor="middle" class="node-sub">1 LLM Consolidation Call</text>
+        </g>
+
+        <g transform="translate(20, 140)">
+          <rect width="165" height="80" fill="#ffffff" stroke="#8b5cf6" class="node-rect"/>
+          <text x="82" y="24" text-anchor="middle" class="node-title" fill="#5b21b6">L3: Reconciled View</text>
+          <text x="82" y="42" text-anchor="middle" class="node-sub">dreams/.reconciled.md</text>
+          <text x="82" y="58" text-anchor="middle" class="node-sub">Pure Stats · 6 Verdicts</text>
+          <text x="82" y="72" text-anchor="middle" class="node-sub">Mechanical Confidence</text>
+        </g>
+
+        <g transform="translate(200, 140)">
+          <rect width="165" height="80" fill="#ffffff" stroke="#8b5cf6" class="node-rect"/>
+          <text x="82" y="24" text-anchor="middle" class="node-title" fill="#5b21b6">L4: System Injection</text>
+          <text x="82" y="42" text-anchor="middle" class="node-sub">### Memory (~2k chars)</text>
+          <text x="82" y="58" text-anchor="middle" class="node-sub">knowledge/ (OKF v0.1)</text>
+          <text x="82" y="72" text-anchor="middle" class="node-sub">Experience Mining</text>
+        </g>
+      </g>
+
+      <path d="M 595 450 C 595 470, 872 470, 872 525" class="purple-arrow"/>
+      <text x="730" y="465" class="edge-label" fill="#7c3aed">Save Task Episode</text>
+
+      <path d="M 872 620 C 872 635, 100 635, 100 450" class="purple-arrow"/>
+      <text x="440" y="735" class="edge-label" fill="#7c3aed">Inject Reconciled Memory into System Prompt</text>
+
+      <!-- 7. LEGEND -->
+      <g id="legend" transform="translate(25, 480)">
+        <rect width="130" height="240" fill="#ffffff" stroke="#222" rx="8" stroke-width="1.5"/>
+        <text x="65" y="26" text-anchor="middle" class="box-label" style="font-size:12px;">Legend</text>
+
+        <line x1="15" y1="50" x2="45" y2="50" class="flow-arrow"/>
+        <text x="55" y="54" class="node-sub" font-weight="600">Task Flow</text>
+
+        <line x1="15" y1="85" x2="45" y2="85" class="dashed-arrow"/>
+        <text x="55" y="89" class="node-sub" font-weight="600">Escalation</text>
+
+        <line x1="15" y1="120" x2="45" y2="120" class="purple-arrow"/>
+        <text x="55" y="124" class="node-sub" font-weight="600">Memory Sync</text>
+
+        <rect x="15" y="145" width="28" height="20" fill="#e6fffa" stroke="#0d9488" rx="3"/>
+        <text x="55" y="159" class="node-sub" font-weight="600">Local / Fast</text>
+
+        <rect x="15" y="175" width="28" height="20" fill="#fffaf0" stroke="#dd6b20" rx="3"/>
+        <text x="55" y="189" class="node-sub" font-weight="600">Cloud Oracle</text>
+
+        <rect x="15" y="205" width="28" height="20" fill="#fdf4ff" stroke="#9333ea" rx="3"/>
+        <text x="55" y="219" class="node-sub" font-weight="600">Council/Store</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- ==================== TAB 2: MEMORY PIPELINE ==================== -->
+  <div id="tab-memory" class="tab-pane">
+    <svg viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg">
+      <!-- Stage 1 -->
+      <g transform="translate(30, 40)">
+        <rect width="260" height="580" fill="#fff5f5" stroke="#e53e3e" class="subsystem-box"/>
+        <text x="130" y="36" text-anchor="middle" class="box-label" fill="#7f1d1d">LAYER 1: EPISODE</text>
+        <text x="130" y="58" text-anchor="middle" class="node-sub" font-weight="700">Zero LLM · Auto-Record</text>
+
+        <rect x="20" y="80" width="220" height="90" fill="#ffffff" stroke="#f87171" class="node-rect"/>
+        <text x="130" y="105" text-anchor="middle" class="node-title" fill="#991b1b">Task Execution Event</text>
+        <text x="130" y="125" text-anchor="middle" class="node-sub">Every CLI / REPL / Bot run</text>
+        <text x="130" y="145" text-anchor="middle" class="node-sub">Atomic .tmp → rename write</text>
+
+        <rect x="20" y="190" width="220" height="150" fill="#ffffff" stroke="#f87171" class="node-rect"/>
+        <text x="130" y="215" text-anchor="middle" class="node-title" fill="#991b1b">~/.aura/episodes/*.json</text>
+        <text x="35" y="240" class="node-sub" font-family="JetBrains Mono">• id: timestamp+hex</text>
+        <text x="35" y="260" class="node-sub" font-family="JetBrains Mono">• task: user prompt</text>
+        <text x="35" y="280" class="node-sub" font-family="JetBrains Mono">• model & durationMs</text>
+        <text x="35" y="300" class="node-sub" font-family="JetBrains Mono">• tokens & success</text>
+        <text x="35" y="320" class="node-sub" font-family="JetBrains Mono">• category & toolsUsed</text>
+
+        <rect x="20" y="360" width="220" height="180" fill="#fee2e2" stroke="#ef4444" rx="8"/>
+        <text x="130" y="390" text-anchor="middle" class="node-title" fill="#7f1d1d">Core Invariant</text>
+        <text x="130" y="420" text-anchor="middle" class="node-sub" style="font-size:12px; font-weight:600;">"Record everything.</text>
+        <text x="130" y="440" text-anchor="middle" class="node-sub" style="font-size:12px; font-weight:600;">Judge nothing."</text>
+        <text x="35" y="480" class="node-sub">• Raw immutable facts</text>
+        <text x="35" y="500" class="node-sub">• Never burns on error</text>
+        <text x="35" y="520" class="node-sub">• Pure disk I/O, 0 tokens</text>
+      </g>
+
+      <!-- Stage 2 -->
+      <g transform="translate(320, 40)">
+        <rect width="260" height="580" fill="#fffaf0" stroke="#dd6b20" class="subsystem-box"/>
+        <text x="130" y="36" text-anchor="middle" class="box-label" fill="#7c2d12">LAYER 2: DREAM</text>
+        <text x="130" y="58" text-anchor="middle" class="node-sub" font-weight="700">1 LLM Call · Consolidation</text>
+
+        <rect x="20" y="80" width="220" height="90" fill="#ffffff" stroke="#fb923c" class="node-rect"/>
+        <text x="130" y="105" text-anchor="middle" class="node-title" fill="#9a3412">:dream Command</text>
+        <text x="130" y="125" text-anchor="middle" class="node-sub">Reads new episode delta</text>
+        <text x="130" y="145" text-anchor="middle" class="node-sub">Cutoff in dreams/.state.json</text>
+
+        <rect x="20" y="190" width="220" height="150" fill="#ffffff" stroke="#fb923c" class="node-rect"/>
+        <text x="130" y="215" text-anchor="middle" class="node-title" fill="#9a3412">dreams/YYYY-MM-DD.md</text>
+        <text x="35" y="240" class="node-sub" font-family="JetBrains Mono">## Lessons [tag]</text>
+        <text x="35" y="260" class="node-sub" font-family="JetBrains Mono">## Patterns (shapes)</text>
+        <text x="35" y="280" class="node-sub" font-family="JetBrains Mono">## Open threads [todo]</text>
+        <text x="35" y="300" class="node-sub" font-family="JetBrains Mono">## Tomorrow brief</text>
+        <text x="35" y="320" class="node-sub" font-family="JetBrains Mono">Append-only markdown</text>
+
+        <rect x="20" y="360" width="220" height="180" fill="#ffedd5" stroke="#f97316" rx="8"/>
+        <text x="130" y="390" text-anchor="middle" class="node-title" fill="#7c2d12">Sleep Analogy</text>
+        <text x="130" y="420" text-anchor="middle" class="node-sub" style="font-size:12px; font-weight:600;">"Distill signal from noise.</text>
+        <text x="130" y="440" text-anchor="middle" class="node-sub" style="font-size:12px; font-weight:600;">One call only."</text>
+        <text x="35" y="480" class="node-sub">• Cutoff advances ONLY</text>
+        <text x="35" y="500" class="node-sub">  on successful write</text>
+        <text x="35" y="520" class="node-sub">• Fallback to Ollama if cloud fails</text>
+      </g>
+
+      <!-- Stage 3 -->
+      <g transform="translate(610, 40)">
+        <rect width="260" height="580" fill="#e6fffa" stroke="#0d9488" class="subsystem-box"/>
+        <text x="130" y="36" text-anchor="middle" class="box-label" fill="#134e4a">LAYER 3: RECONCILE</text>
+        <text x="130" y="58" text-anchor="middle" class="node-sub" font-weight="700">Pure Statistics · 0 AI Guess</text>
+
+        <rect x="20" y="80" width="220" height="90" fill="#ffffff" stroke="#2dd4bf" class="node-rect"/>
+        <text x="130" y="105" text-anchor="middle" class="node-title" fill="#115e59">3-Dream Gate</text>
+        <text x="130" y="125" text-anchor="middle" class="node-sub">Requires ≥ 3 daily dreams</text>
+        <text x="130" y="145" text-anchor="middle" class="node-sub">Cross-dream matrix</text>
+
+        <rect x="20" y="190" width="220" height="150" fill="#ffffff" stroke="#2dd4bf" class="node-rect"/>
+        <text x="130" y="215" text-anchor="middle" class="node-title" fill="#115e59">6 Lineage Verdicts</text>
+        <text x="35" y="240" class="node-sub" font-weight="600" fill="#15803d">KEEP · STRENGTHEN</text>
+        <text x="35" y="260" class="node-sub" font-weight="600" fill="#1d4ed8">MERGE · SUPERSEDE</text>
+        <text x="35" y="280" class="node-sub" font-weight="600" fill="#b91c1c">CONFLICT (surfaced)</text>
+        <text x="35" y="300" class="node-sub" font-weight="600" fill="#4b5563">DROP (duplicate)</text>
+        <text x="35" y="325" class="node-sub" font-size="10px">conf = sourceDates / total</text>
+
+        <rect x="20" y="360" width="220" height="180" fill="#ccfbf1" stroke="#14b8a6" rx="8"/>
+        <text x="130" y="390" text-anchor="middle" class="node-title" fill="#134e4a">Materialized View</text>
+        <text x="130" y="420" text-anchor="middle" class="node-sub" style="font-size:12px; font-weight:600;">"Trust numbers,</text>
+        <text x="130" y="440" text-anchor="middle" class="node-sub" style="font-size:12px; font-weight:600;">not model feelings."</text>
+        <text x="35" y="480" class="node-sub">• dreams/.reconciled.md</text>
+        <text x="35" y="500" class="node-sub">• 100% regenerable</text>
+        <text x="35" y="520" class="node-sub">• Conflicts never hidden</text>
+      </g>
+
+      <!-- Stage 4 -->
+      <g transform="translate(900, 40)">
+        <rect width="270" height="580" fill="#eff6ff" stroke="#2563eb" class="subsystem-box"/>
+        <text x="135" y="36" text-anchor="middle" class="box-label" fill="#1e3a8a">LAYER 4: INJECT & MINING</text>
+        <text x="135" y="58" text-anchor="middle" class="node-sub" font-weight="700">System Prompt & Fine-Tuning</text>
+
+        <rect x="20" y="80" width="230" height="90" fill="#ffffff" stroke="#60a5fa" class="node-rect"/>
+        <text x="135" y="105" text-anchor="middle" class="node-title" fill="#1d4ed8">unified-memory.ts</text>
+        <text x="135" y="125" text-anchor="middle" class="node-sub">loadReconciledMemory()</text>
+        <text x="135" y="145" text-anchor="middle" class="node-sub">Truncated ~2,000 characters</text>
+
+        <rect x="20" y="190" width="230" height="150" fill="#ffffff" stroke="#60a5fa" class="node-rect"/>
+        <text x="135" y="215" text-anchor="middle" class="node-title" fill="#1d4ed8">Dual Projections</text>
+        <text x="35" y="240" class="node-sub" font-weight="600">1. System Prompt:</text>
+        <text x="45" y="258" class="node-sub">### Memory (past sessions)</text>
+        <text x="35" y="282" class="node-sub" font-weight="600">2. OKF v0.1 Bundle:</text>
+        <text x="45" y="300" class="node-sub">knowledge/lessons/*.md</text>
+        <text x="45" y="318" class="node-sub">knowledge/patterns/*.md</text>
+
+        <rect x="20" y="360" width="230" height="180" fill="#dbeafe" stroke="#3b82f6" rx="8"/>
+        <text x="135" y="390" text-anchor="middle" class="node-title" fill="#1e3a8a">Experience Mining</text>
+        <text x="135" y="415" text-anchor="middle" class="node-sub" font-weight="700" fill="#1d4ed8">Baby → Papa Archimedes</text>
+        <text x="35" y="445" class="node-sub">• Baby: Depth-bounded cluster</text>
+        <text x="35" y="465" class="node-sub">• Papa: Local LLM generalization</text>
+        <text x="35" y="485" class="node-sub">• Output: training-data/*.jsonl</text>
+        <text x="35" y="505" class="node-sub">• Fine-tunes local model!</text>
+      </g>
+
+      <path d="M 290 260 L 320 260" class="flow-arrow"/>
+      <path d="M 580 260 L 610 260" class="flow-arrow"/>
+      <path d="M 870 260 L 900 260" class="flow-arrow"/>
+    </svg>
+  </div>
+
+  <!-- ==================== TAB 3: STATE MACHINE ==================== -->
+  <div id="tab-alternator" class="tab-pane">
+    <svg viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg">
+      <g transform="translate(60, 280)">
+        <circle cx="40" cy="40" r="38" fill="#f0f4ff" stroke="#3b82f6" stroke-width="2"/>
+        <text x="40" y="36" text-anchor="middle" class="node-title" fill="#1e3a8a">User</text>
+        <text x="40" y="52" text-anchor="middle" class="node-title" fill="#1e3a8a">Task</text>
+      </g>
+
+      <g transform="translate(180, 240)">
+        <rect width="180" height="120" fill="#ffffff" stroke="#222" class="node-rect"/>
+        <text x="90" y="28" text-anchor="middle" class="node-title">1. Competence Check</text>
+        <text x="90" y="48" text-anchor="middle" class="node-sub">Match against last 50 episodes</text>
+        <text x="20" y="75" class="node-sub">• &lt; 3 attempts → Learn</text>
+        <text x="20" y="93" class="node-sub">• Rate ≥ 0.70 → Pass</text>
+        <text x="20" y="111" class="node-sub">• Gated → ε-probe (5%)</text>
+      </g>
+
+      <g transform="translate(420, 120)">
+        <rect width="200" height="110" fill="#e6fffa" stroke="#0d9488" class="node-rect"/>
+        <text x="100" y="28" text-anchor="middle" class="node-title" fill="#115e59">2A. Archimedes Local Run</text>
+        <text x="100" y="48" text-anchor="middle" class="node-sub">Ollama Granite 3B / Qwen</text>
+        <text x="20" y="75" class="node-sub">• Read-only tool sandbox</text>
+        <text x="20" y="95" class="node-sub">• Cap: max 15 turns</text>
+      </g>
+
+      <g transform="translate(680, 120)">
+        <rect width="220" height="120" fill="#fef3c7" stroke="#d97706" class="node-rect"/>
+        <text x="110" y="28" text-anchor="middle" class="node-title" fill="#92400e">2B. Verification Gate</text>
+        <text x="110" y="48" text-anchor="middle" class="node-sub">1 complete() call (0 tools)</text>
+        <text x="20" y="75" class="node-sub">• Retrieval: strict tool evidence</text>
+        <text x="20" y="95" class="node-sub">• Design: facts strict + coherent</text>
+        <text x="20" y="113" class="node-sub">• Fabrications → INVALID</text>
+      </g>
+
+      <g transform="translate(450, 390)">
+        <rect width="210" height="110" fill="#fffaf0" stroke="#dd6b20" class="node-rect"/>
+        <text x="105" y="28" text-anchor="middle" class="node-title" fill="#7c2d12">3. Cloud Frontier Oracle</text>
+        <text x="105" y="48" text-anchor="middle" class="node-sub">Claude Sonnet 4.5 / GPT-4o</text>
+        <text x="20" y="75" class="node-sub">• Full 27 tool primitives (P)</text>
+        <text x="20" y="95" class="node-sub">• Receives failure context</text>
+      </g>
+
+      <g transform="translate(720, 390)">
+        <rect width="220" height="120" fill="#fdf4ff" stroke="#9333ea" class="node-rect"/>
+        <text x="110" y="28" text-anchor="middle" class="node-title" fill="#6b21a8">4. 5-Agent Council</text>
+        <text x="110" y="48" text-anchor="middle" class="node-sub">Design Failure Escalation</text>
+        <text x="20" y="75" class="node-sub">• SessionBudget check (~80k tok)</text>
+        <text x="20" y="95" class="node-sub">• User confirm before spend</text>
+        <text x="20" y="113" class="node-sub">• MoA Synthesis + Re-verify</text>
+      </g>
+
+      <g transform="translate(1000, 240)">
+        <rect width="160" height="120" fill="#f0fdf4" stroke="#16a34a" class="node-rect"/>
+        <text x="80" y="32" text-anchor="middle" class="node-title" fill="#15803d">Episode Saved &</text>
+        <text x="80" y="52" text-anchor="middle" class="node-title" fill="#15803d">Verified Answer</text>
+        <text x="80" y="80" text-anchor="middle" class="node-sub">"I don't try. I verify."</text>
+        <text x="80" y="102" text-anchor="middle" class="node-sub" font-size="10px">Persist ~/.aura/episodes/</text>
+      </g>
+
+      <!-- CONNECTORS -->
+      <path d="M 138 300 L 180 300" class="flow-arrow"/>
+      
+      <path d="M 270 240 C 270 175, 340 175, 420 175" class="flow-arrow"/>
+      <text x="330" y="165" class="edge-label" fill="#16a34a">Competent / Probe</text>
+
+      <path d="M 270 360 C 270 445, 360 445, 450 445" class="dashed-arrow"/>
+      <text x="340" y="460" class="edge-label" fill="#d97706">Gated (Score &lt; 0.7)</text>
+
+      <path d="M 620 175 L 680 175" class="flow-arrow"/>
+
+      <path d="M 900 175 C 960 175, 960 260, 1000 260" class="flow-arrow" stroke="#16a34a" marker-end="url(#arrow-green)"/>
+      <text x="940" y="165" class="edge-label" fill="#16a34a" font-weight="700">VALID</text>
+
+      <path d="M 790 240 C 790 320, 560 300, 560 390" class="dashed-arrow"/>
+      <text x="690" y="325" class="edge-label" fill="#d97706">INVALID (Inject failure context)</text>
+
+      <path d="M 660 445 C 800 445, 950 340, 1000 300" class="flow-arrow"/>
+      <text x="790" y="460" class="edge-label">Normal Complete</text>
+
+      <path d="M 660 445 L 720 445" class="dashed-arrow"/>
+
+      <path d="M 940 445 C 980 445, 980 340, 1000 320" class="flow-arrow" stroke="#9333ea" marker-end="url(#arrow-purple)"/>
+      <text x="970" y="415" class="edge-label" fill="#9333ea">Synthesized</text>
+    </svg>
+  </div>
+
+  <!-- ==================== TAB 4: :DESIGNX COMMISSION LOOP ==================== -->
+  <div id="tab-designx" class="tab-pane">
+    <svg viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg">
+      <!-- Stage 1: Lexicon Routing -->
+      <g transform="translate(25, 40)">
+        <rect width="215" height="580" fill="#fff7ed" stroke="#ea580c" class="subsystem-box"/>
+        <text x="107" y="36" text-anchor="middle" class="box-label" fill="#9a3412">1. LEXICON ROUTING</text>
+        <text x="107" y="56" text-anchor="middle" class="node-sub" font-weight="700">routeStyles(brief, daring)</text>
+
+        <rect x="15" y="80" width="185" height="75" fill="#ffffff" stroke="#fb923c" class="node-rect"/>
+        <text x="107" y="105" text-anchor="middle" class="node-title" fill="#9a3412">Brief & Daring Dial</text>
+        <text x="25" y="128" class="node-sub">• Target: web | deck | pdf</text>
+        <text x="25" y="144" class="node-sub">• Daring: classic → feral</text>
+
+        <rect x="15" y="170" width="185" height="210" fill="#ffffff" stroke="#fb923c" class="node-rect"/>
+        <text x="107" y="195" text-anchor="middle" class="node-title" fill="#9a3412">Curated Lexicon</text>
+        <text x="25" y="220" class="node-sub" font-weight="600">• Swiss Overdriven [r:2]</text>
+        <text x="25" y="240" class="node-sub" font-weight="600">• Terminal Gothic [r:3]</text>
+        <text x="25" y="260" class="node-sub" font-weight="600">• Risograph Misprint [r:4]</text>
+        <text x="25" y="280" class="node-sub" font-weight="600">• Bauhaus Machine [r:3]</text>
+        <text x="25" y="300" class="node-sub" font-weight="600">• Broadsheet Serif [r:2]</text>
+        <text x="25" y="320" class="node-sub" font-weight="600">• Neo-Brutalist [r:4]</text>
+        <text x="25" y="340" class="node-sub" font-weight="600">• Japanese Minimal [r:1]</text>
+        <text x="25" y="365" class="node-sub" font-size="10px">Picks 2–3 conflicting styles</text>
+
+        <rect x="15" y="400" width="185" height="150" fill="#ffedd5" stroke="#ea580c" rx="8"/>
+        <text x="107" y="425" text-anchor="middle" class="node-title" fill="#9a3412">Aesthetic Tension</text>
+        <text x="107" y="450" text-anchor="middle" class="node-sub" font-weight="600">Forces synthesis over</text>
+        <text x="107" y="468" text-anchor="middle" class="node-sub" font-weight="600">default AI templates</text>
+        <text x="25" y="500" class="node-sub">• Lineage & strict palette</text>
+        <text x="25" y="520" class="node-sub">• Explicit type pairings</text>
+        <text x="25" y="540" class="node-sub">• Composition & motion</text>
+      </g>
+
+      <!-- Stage 2: Pre-Flight Scrape -->
+      <g transform="translate(260, 40)">
+        <rect width="215" height="580" fill="#fefce8" stroke="#ca8a04" class="subsystem-box"/>
+        <text x="107" y="36" text-anchor="middle" class="box-label" fill="#854d0e">2. REFERENCE PASS</text>
+        <text x="107" y="56" text-anchor="middle" class="node-sub" font-weight="700">buildScrapePlan()</text>
+
+        <rect x="15" y="80" width="185" height="90" fill="#ffffff" stroke="#facc15" class="node-rect"/>
+        <text x="107" y="105" text-anchor="middle" class="node-title" fill="#854d0e">Search Pre-Flight</text>
+        <text x="107" y="125" text-anchor="middle" class="node-sub">probeSearchAvailability()</text>
+        <text x="25" y="148" class="node-sub">Cost: 1 probe request</text>
+        <text x="25" y="162" class="node-sub">Avoids dead search loops</text>
+
+        <rect x="15" y="185" width="185" height="180" fill="#ffffff" stroke="#facc15" class="node-rect"/>
+        <text x="107" y="210" text-anchor="middle" class="node-title" fill="#854d0e">Steal Craft Details</text>
+        <text x="25" y="235" class="node-sub">• 4-6 specific search queries</text>
+        <text x="25" y="255" class="node-sub">• Curated reference seeds</text>
+        <text x="25" y="280" class="node-sub" font-weight="600">Extracts:</text>
+        <text x="35" y="300" class="node-sub">1. Exact type pairing</text>
+        <text x="35" y="320" class="node-sub">2. Grid & ratio tension</text>
+        <text x="35" y="340" class="node-sub">3. Layout mechanics</text>
+
+        <rect x="15" y="380" width="185" height="170" fill="#fef9c3" stroke="#eab308" rx="8"/>
+        <text x="107" y="410" text-anchor="middle" class="node-title" fill="#854d0e">Budget Guard</text>
+        <text x="107" y="435" text-anchor="middle" class="node-sub" font-weight="600">Max 4–6 fetches</text>
+        <text x="25" y="470" class="node-sub">• Stop researching, build!</text>
+        <text x="25" y="495" class="node-sub">• If search fails: clean</text>
+        <text x="25" y="515" class="node-sub">  degrade to lexicon only</text>
+        <text x="25" y="535" class="node-sub">• Never burns tokens</text>
+      </g>
+
+      <!-- Stage 3: Prompt & Contracts -->
+      <g transform="translate(495, 40)">
+        <rect width="215" height="580" fill="#f0fdf4" stroke="#16a34a" class="subsystem-box"/>
+        <text x="107" y="36" text-anchor="middle" class="box-label" fill="#14532d">3. COMMISSION PROMPT</text>
+        <text x="107" y="56" text-anchor="middle" class="node-sub" font-weight="700">buildDesignXPrompt()</text>
+
+        <rect x="15" y="80" width="185" height="120" fill="#ffffff" stroke="#4ade80" class="node-rect"/>
+        <text x="107" y="105" text-anchor="middle" class="node-title" fill="#15803d">1-Sentence Job</text>
+        <text x="107" y="128" text-anchor="middle" class="node-sub">"What this artefact has</text>
+        <text x="107" y="146" text-anchor="middle" class="node-sub">to DO to the reader"</text>
+        <text x="25" y="172" class="node-sub">• Argument &gt; Decoration</text>
+        <text x="25" y="188" class="node-sub">• Style is subordinate</text>
+
+        <rect x="15" y="215" width="185" height="175" fill="#ffffff" stroke="#4ade80" class="node-rect"/>
+        <text x="107" y="240" text-anchor="middle" class="node-title" fill="#15803d">Strict Non-Negotiables</text>
+        <text x="25" y="265" class="node-sub">• Real copy (0 lorem ipsum)</text>
+        <text x="25" y="285" class="node-sub">• WCAG AA contrast ratio</text>
+        <text x="25" y="305" class="node-sub">• Zero CDN / external fonts</text>
+        <text x="25" y="325" class="node-sub">• Responsive down to 380px</text>
+        <text x="25" y="345" class="node-sub">• Light + Dark mode CSS</text>
+        <text x="25" y="365" class="node-sub">• Prefers-reduced-motion</text>
+
+        <rect x="15" y="405" width="185" height="145" fill="#dcfce7" stroke="#22c55e" rx="8"/>
+        <text x="107" y="435" text-anchor="middle" class="node-title" fill="#14532d">Anti-Cliché Guard</text>
+        <text x="25" y="465" class="node-sub">FORBIDDEN:</text>
+        <text x="25" y="485" class="node-sub">• Centred hero + gradient</text>
+        <text x="25" y="505" class="node-sub">• 3 generic rounded cards</text>
+        <text x="25" y="525" class="node-sub">• Indigo-to-purple clichés</text>
+      </g>
+
+      <!-- Stage 4: Build Loop -->
+      <g transform="translate(730, 40)">
+        <rect width="215" height="580" fill="#eff6ff" stroke="#2563eb" class="subsystem-box"/>
+        <text x="107" y="36" text-anchor="middle" class="box-label" fill="#1e3a8a">4. AGENT BUILD LOOP</text>
+        <text x="107" y="56" text-anchor="middle" class="node-sub" font-weight="700">runAgentLoop(maxTurns: 30)</text>
+
+        <rect x="15" y="80" width="185" height="120" fill="#ffffff" stroke="#60a5fa" class="node-rect"/>
+        <text x="107" y="105" text-anchor="middle" class="node-title" fill="#1d4ed8">Step-by-Step Build</text>
+        <text x="25" y="130" class="node-sub">1. Web reference fetch</text>
+        <text x="25" y="150" class="node-sub">2. Draft markup & CSS</text>
+        <text x="25" y="170" class="node-sub">3. Author inline SVG/motion</text>
+        <text x="25" y="190" class="node-sub">4. Read back & revise</text>
+
+        <rect x="15" y="215" width="185" height="175" fill="#ffffff" stroke="#60a5fa" class="node-rect"/>
+        <text x="107" y="240" text-anchor="middle" class="node-title" fill="#1d4ed8">Output Writers</text>
+        <text x="25" y="265" class="node-sub">• Primary artefact file</text>
+        <text x="25" y="285" class="node-sub">• DESIGN.md rationale:</text>
+        <text x="35" y="305" class="node-sub">- Defensible choices</text>
+        <text x="35" y="325" class="node-sub">- Lineage reasoning</text>
+        <text x="35" y="345" class="node-sub">- Rejected paths</text>
+        <text x="25" y="370" class="node-sub">• PDF compile (Headless)</text>
+
+        <rect x="15" y="405" width="185" height="145" fill="#dbeafe" stroke="#3b82f6" rx="8"/>
+        <text x="107" y="435" text-anchor="middle" class="node-title" fill="#1e3a8a">Turn Budget</text>
+        <text x="107" y="460" text-anchor="middle" class="node-sub" font-weight="600">30 Turns Sized for Craft</text>
+        <text x="25" y="490" class="node-sub">• 12 is too tight for design</text>
+        <text x="25" y="510" class="node-sub">• Room to read & polish</text>
+        <text x="25" y="530" class="node-sub">• Permission-sandboxed</text>
+      </g>
+
+      <!-- Stage 5: Output & Verification -->
+      <g transform="translate(965, 40)">
+        <rect width="210" height="580" fill="#faf5ff" stroke="#7c3aed" class="subsystem-box"/>
+        <text x="105" y="36" text-anchor="middle" class="box-label" fill="#4c1d95">5. VERIFIED DELIVERY</text>
+        <text x="105" y="56" text-anchor="middle" class="node-sub" font-weight="700">listOutputs(dir)</text>
+
+        <rect x="15" y="80" width="180" height="90" fill="#ffffff" stroke="#c084fc" class="node-rect"/>
+        <text x="105" y="105" text-anchor="middle" class="node-title" fill="#6b21a8">web: index.html</text>
+        <text x="105" y="125" text-anchor="middle" class="node-sub">Single-file web application</text>
+        <text x="25" y="150" class="node-sub">design/&lt;slug&gt;-web/</text>
+
+        <rect x="15" y="185" width="180" height="90" fill="#ffffff" stroke="#c084fc" class="node-rect"/>
+        <text x="105" y="210" text-anchor="middle" class="node-title" fill="#6b21a8">deck: deck.html</text>
+        <text x="105" y="230" text-anchor="middle" class="node-sub">16:9 Presentation + Keys</text>
+        <text x="25" y="255" class="node-sub">Print PDF 1-slide/page</text>
+
+        <rect x="15" y="290" width="180" height="95" fill="#ffffff" stroke="#c084fc" class="node-rect"/>
+        <text x="105" y="315" text-anchor="middle" class="node-title" fill="#6b21a8">pdf: document.pdf</text>
+        <text x="105" y="335" text-anchor="middle" class="node-sub">A4 print media (mm/pt)</text>
+        <text x="25" y="360" class="node-sub">Chromium headless compile</text>
+
+        <rect x="15" y="400" width="180" height="150" fill="#f3e8ff" stroke="#9333ea" rx="8"/>
+        <text x="105" y="425" text-anchor="middle" class="node-title" fill="#4c1d95">Audit & Re-Roll</text>
+        <text x="25" y="455" class="node-sub">• Disk verified (not model)</text>
+        <text x="25" y="475" class="node-sub">• Re-roll command:</text>
+        <text x="25" y="495" class="node-sub" font-family="JetBrains Mono" font-size="9px">:designx &lt;brief&gt;</text>
+        <text x="25" y="510" class="node-sub" font-family="JetBrains Mono" font-size="9px">  --seed (n+1)</text>
+        <text x="25" y="535" class="node-sub">• Fully reproducible</text>
+      </g>
+
+      <!-- Connectors between 5 stages -->
+      <path d="M 240 260 L 260 260" class="coral-arrow"/>
+      <path d="M 475 260 L 495 260" class="coral-arrow"/>
+      <path d="M 710 260 L 730 260" class="coral-arrow"/>
+      <path d="M 945 260 L 965 260" class="coral-arrow"/>
+    </svg>
+  </div>
+
+  <!-- BOTTOM LEGEND CHIP CONTAINER -->
+  <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e5e7eb; padding-top: 18px;">
+    <div class="legend-box">
+      <div class="legend-item"><div class="legend-line solid"></div><span>Control Flow</span></div>
+      <div class="legend-item"><div class="legend-line dashed"></div><span>Escalation / Fallback</span></div>
+      <div class="legend-item"><div class="legend-line purple"></div><span>Memory / Consolidation</span></div>
+      <div class="legend-item"><div class="legend-line coral"></div><span>:designx Pipeline</span></div>
+      <div class="legend-item"><div class="legend-chip" style="background:#e6fffa; border-color:#0d9488;"></div><span>Archimedes (Local)</span></div>
+      <div class="legend-item"><div class="legend-chip" style="background:#fffaf0; border-color:#dd6b20;"></div><span>Cloud Oracle</span></div>
+      <div class="legend-item"><div class="legend-chip" style="background:#ffedd5; border-color:#ea580c;"></div><span>:designx Commission</span></div>
+    </div>
+    <div style="font-family: var(--font-mono); font-size: 0.8rem; color: #6b7280;">
+      Aura Code v0.8.0 · 1317 Tests Passing · MIT License
+    </div>
+  </div>
+
+</div>
+
+<!-- DETAILED INFO CARDS -->
+<div class="info-cards">
+  <div class="info-card">
+    <h3><span class="tag tag-coral">Commission</span> :designx Engine</h3>
+    <p>Routes 2–3 opinionated style directions (e.g. Swiss Overdriven + Risograph) from a hand-curated lexicon. Pre-flights web search references, builds self-contained single-file artefacts (web/deck/pdf), and writes <code>DESIGN.md</code>.</p>
+  </div>
+
+  <div class="info-card">
+    <h3><span class="tag tag-green">Principle</span> Archimedes Alternation</h3>
+    <p>A small local model (IBM Granite 4.1 3B / Qwen 1.5B via Ollama) handles repetitive tasks in a read-only sandbox. A large cloud model steps in only when historical competence is low or answer verification fails.</p>
+  </div>
+
+  <div class="info-card">
+    <h3><span class="tag tag-orange">Zero-Tool Gate</span> Claim-Aware Verification</h3>
+    <p>Archimedes's answers are verified with one cheap, zero-tool <code>complete()</code> call. Retrieval tasks strictly check tool evidence to eliminate hallucinations; design tasks allow novel proposals while keeping factual premises strict.</p>
+  </div>
+
+  <div class="info-card">
+    <h3><span class="tag tag-purple">Event-Sourced</span> 4-Layer Sleep Memory</h3>
+    <p>Experience is recorded as immutable episodes (L1), periodically consolidated into daily dreams (L2), statistically reconciled into a projection with mechanical confidence (L3), and injected into the prompt (L4). No model feelings.</p>
+  </div>
+</div>
+
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+</script>
+
+</body>
+</html>
