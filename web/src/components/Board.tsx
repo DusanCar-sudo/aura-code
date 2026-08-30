@@ -561,45 +561,71 @@ export function Board({
     }
   }
 
+  const [pointerStart, setPointerStart] = useState<{
+    id: string;
+    x0: number;
+    y0: number;
+    cx: number;
+    cy: number;
+    targetEl: HTMLElement | null;
+  } | null>(null);
+
   const handleGrab = (e: React.PointerEvent, id: string, initialX: number, initialY: number) => {
     const target = e.target as HTMLElement;
-    if (target.closest('button, input, textarea, select, a, label, .btn-preview-html-chip, .btn-open-code-chip')) {
+    if (target.closest('button, input, textarea, select, a, label, .btn-preview-html-chip, .btn-open-code-chip, .btn-edit-card-chip')) {
       return;
     }
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
     const currentPos = cardPositions[id] || { x: initialX, y: initialY };
-    setDragCard({
+    setPointerStart({
       id,
       x0: currentPos.x,
       y0: currentPos.y,
       cx: e.clientX,
       cy: e.clientY,
+      targetEl: e.currentTarget as HTMLElement,
     });
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragCard) return;
-    setCardPositions((prev) => ({
-      ...prev,
-      [dragCard.id]: {
-        x: dragCard.x0 + (e.clientX - dragCard.cx),
-        y: dragCard.y0 + (e.clientY - dragCard.cy),
-      },
-    }));
+    if (pointerStart && !dragCard) {
+      const dx = e.clientX - pointerStart.cx;
+      const dy = e.clientY - pointerStart.cy;
+      if (Math.hypot(dx, dy) > 4) {
+        if (pointerStart.targetEl) {
+          try {
+            pointerStart.targetEl.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+        }
+        setDragCard({
+          id: pointerStart.id,
+          x0: pointerStart.x0,
+          y0: pointerStart.y0,
+          cx: pointerStart.cx,
+          cy: pointerStart.cy,
+        });
+      }
+    } else if (dragCard) {
+      setCardPositions((prev) => ({
+        ...prev,
+        [dragCard.id]: {
+          x: dragCard.x0 + (e.clientX - dragCard.cx),
+          y: dragCard.y0 + (e.clientY - dragCard.cy),
+        },
+      }));
+    }
   };
 
   const handlePointerUp = (e?: React.PointerEvent) => {
-    if (e && dragCard) {
+    if (pointerStart?.targetEl && e) {
       try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        pointerStart.targetEl.releasePointerCapture(e.pointerId);
       } catch {
         // ignore
       }
     }
+    setPointerStart(null);
     setDragCard(null);
   };
 
@@ -867,9 +893,18 @@ export function Board({
           <div className="kanban-stage-columns">
             {LANES.map((lane) => {
               const laneTasks = laneTaskLists[lane.key] || [];
+              const isLaneActiveForDrag = Boolean(dragCard && laneTasks.some((t) => t.id === dragCard.id));
 
               return (
-                <div key={lane.key} className={`kanban-column-lane lane-${lane.key}`}>
+                <div
+                  key={lane.key}
+                  className={`kanban-column-lane lane-${lane.key}`}
+                  style={{
+                    zIndex: isLaneActiveForDrag ? 9999 : 1,
+                    position: 'relative',
+                    overflow: 'visible'
+                  }}
+                >
                   {/* Column Header */}
                   <div className="kanban-column-header">
                     <div className="column-title-row">
@@ -909,7 +944,7 @@ export function Board({
                       return (
                         <div
                           key={tItem.id}
-                          className={`kanban-card ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''}`}
+                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''}`}
                           style={{
                             transform: cardPositions[tItem.id]
                               ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)`
@@ -917,20 +952,47 @@ export function Board({
                             cursor: dragCard?.id === tItem.id ? 'grabbing' : 'grab',
                             touchAction: 'none',
                             userSelect: 'none',
-                            zIndex: dragCard?.id === tItem.id ? 99 : 1,
+                            zIndex: dragCard?.id === tItem.id ? 99999 : 1,
                             position: 'relative'
                           }}
                           onPointerDown={(e) => handleGrab(e, tItem.id, cardPositions[tItem.id]?.x || 0, cardPositions[tItem.id]?.y || 0)}
+                          onPointerMove={handlePointerMove}
                           onPointerUp={handlePointerUp}
                         >
                           {/* Inner Card Content */}
                           <div
                             className="card-clickable-area"
-                            onClick={() => setDetailTaskId(tItem.id)}
+                            onClick={() => {
+                              setDetailTaskId(tItem.id);
+                              setIsEditingDetail(false);
+                            }}
                           >
                             <div className="card-header-row">
                               <span className="card-id-badge">#{tItem.id.slice(0, 6)}</span>
-                              <div className="card-badges-right">
+                              <div className="card-badges-right" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  type="button"
+                                  className="btn-edit-card-chip"
+                                  style={{
+                                    background: 'rgba(110, 208, 234, 0.15)',
+                                    color: 'var(--acc2)',
+                                    border: '1px solid rgba(110, 208, 234, 0.3)',
+                                    borderRadius: '4px',
+                                    fontSize: '10.5px',
+                                    padding: '2px 6px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                    marginRight: '4px'
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDetailTaskId(tItem.id);
+                                    setIsEditingDetail(true);
+                                  }}
+                                  title="Edit task box details"
+                                >
+                                  ✏️ Edit
+                                </button>
                                 {extra.gated && (
                                   <span className="badge-gated" title="Human gate approval required">
                                     🔒 gated
