@@ -1530,16 +1530,16 @@ select{margin-left:auto;background:var(--s);border:1px solid var(--l2);color:var
 .mu{display:flex;justify-content:flex-end}
 .mu .b{background:var(--ti);border:1px solid rgba(204,120,92,.2);border-radius:14px 14px 4px 14px;padding:11px 16px;max-width:75%;line-height:1.55}
 .ma .b{background:var(--s);border:1px solid var(--l2);border-radius:4px 14px 14px 14px;padding:13px 16px;color:var(--inks);line-height:1.65;white-space:pre-wrap}
-.mt{background:#1a1008;border:1px solid var(--l);border-left:2px solid var(--c);border-radius:6px;padding:9px 13px;font-family:monospace;font-size:12px}
+.mt{background:#1a1008;border:1px solid var(--l);border-radius:6px;padding:9px 13px;font-family:monospace;font-size:12px}
 .tn{color:var(--c);font-weight:700;margin-bottom:3px}
 .ti{color:var(--m)}
 .tr{color:var(--inks);margin-top:5px;padding-top:5px;border-top:1px solid var(--l);font-size:11px;white-space:pre-wrap;max-height:90px;overflow-y:auto}
 .sy{font-family:monospace;font-size:11px;color:#d4903a;text-align:center;padding:4px}
 .tk{display:flex;align-items:center;gap:8px;font-family:monospace;font-size:11px;color:var(--m);padding:6px 0}
 .tk::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c);flex-shrink:0;animation:p 1.2s infinite}
-.sk{background:var(--s);border:1px solid var(--l2);border-left:2px solid var(--c);border-radius:6px;padding:13px 16px;color:var(--inks);line-height:1.65;white-space:pre-wrap}
+.sk{background:var(--s);border:1px solid rgba(204,120,92,.3);border-radius:6px;padding:13px 16px;color:var(--inks);line-height:1.65;white-space:pre-wrap}
 .cur{display:inline-block;width:8px;height:14px;background:var(--c);margin-left:2px;animation:bk 1s steps(1) infinite;vertical-align:text-bottom}
-.cf{background:#1a1008;border:1px solid var(--l2);border-left:2px solid #d4903a;border-radius:8px;padding:12px 15px;margin:4px 0}
+.cf{background:#1a1008;border:1px solid rgba(212,144,58,.4);border-radius:8px;padding:12px 15px;margin:4px 0}
 .cfm{color:var(--ink);font-size:13px;line-height:1.5;margin-bottom:10px}
 .cfb{display:flex;gap:8px;align-items:center}
 .cfb button{border:none;border-radius:6px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer}
