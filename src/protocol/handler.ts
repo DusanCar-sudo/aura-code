@@ -826,7 +826,7 @@ export class ProtocolHandler {
     for (const key of [
       'title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result',
       'failed', 'order', 'priority', 'attention', 'linkedTo', 'files', 'waiting',
-      'archived', 'archivedAt', 'swarm',
+      'archived', 'archivedAt', 'swarm', 'startedAt',
     ]) {
       if (p[key] !== undefined) patch[key] = p[key];
     }
@@ -971,7 +971,7 @@ export class ProtocolHandler {
     };
     this.sessions.set(sessionId, session);
 
-    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false, waiting: undefined });
+    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false, waiting: undefined, startedAt: new Date().toISOString() });
     this.boardCommit(root, state);
 
     const turnId = randomUUID();
@@ -1055,6 +1055,7 @@ export class ProtocolHandler {
       result: undefined,
       failed: false,
       waiting: undefined,
+      startedAt: new Date().toISOString(),
       swarm: {
         strategy: task.swarm?.strategy,
         agents: agents.map((a) => ({ ...a, status: 'pending' as const, summary: undefined })),
@@ -1168,7 +1169,7 @@ export class ProtocolHandler {
     };
     this.sessions.set(sessionId, session);
 
-    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false, waiting: undefined });
+    updateTask(state, id, { column: 'execution', sessionId, result: undefined, failed: false, waiting: undefined, startedAt: new Date().toISOString() });
     this.boardCommit(root, state);
 
     const outcome = await this.runTurn(session, randomUUID(), taskPrompt(task));

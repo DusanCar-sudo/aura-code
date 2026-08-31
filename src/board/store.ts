@@ -153,6 +153,7 @@ export interface TaskPatch {
   waiting?: boolean;
   archived?: boolean;
   archivedAt?: string;
+  startedAt?: string;
 }
 
 /**
@@ -181,6 +182,7 @@ export function addTask(state: BoardState, patch: TaskPatch & { title: string })
     workflow: patch.workflow,
     swarm: patch.swarm,
     archived: patch.archived,
+    startedAt: patch.startedAt,
     archivedAt: patch.archivedAt,
     createdAt: now,
     updatedAt: now,
@@ -219,6 +221,7 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   if (patch.linkedTo !== undefined) task.linkedTo = patch.linkedTo || undefined;
   if (patch.workflow !== undefined) task.workflow = patch.workflow;
   if (patch.swarm !== undefined) task.swarm = patch.swarm;
+  if (patch.startedAt !== undefined) task.startedAt = patch.startedAt;
   if (patch.waiting !== undefined) task.waiting = patch.waiting;
   if (patch.archived !== undefined) {
     task.archived = patch.archived;

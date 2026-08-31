@@ -225,6 +225,12 @@ export interface BoardTask {
    */
   archived?: boolean;
   archivedAt?: string;
+  /**
+   * When the current (or last) run moved the tile into execution. The web
+   * client reads it to phase the execution glow — red early, orange late —
+   * since the engine cannot see into the model's progress.
+   */
+  startedAt?: string;
   /** Ordering within a column. Sparse, so a move never rewrites its neighbours. */
   order: number;
   createdAt: string;

@@ -35,6 +35,13 @@ const LANES: LaneMeta[] = [
   { key: 'finished', name: 'Finished', rule: 'Verified. Evidence attached.', dot: 'var(--ok)', tint: 'rgba(90,158,110,0.04)' },
 ];
 
+/**
+ * Nominal single-task run length used to phase the execution glow. The engine
+ * cannot see into a model's progress, so "middle of the task" is estimated:
+ * red until half of this has elapsed, orange after. Purely cosmetic.
+ */
+const EXEC_NOMINAL_MS = 6 * 60 * 1000;
+
 export const AVAILABLE_TOOLS = [
   { id: 'read_file', label: 'Read File', icon: '📄', desc: 'Read file contents' },
   { id: 'list_dir', label: 'List Dir', icon: '📁', desc: 'Explore directory structure' },
@@ -480,6 +487,13 @@ export function Board({
   // flag the click handler checks.
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const dragMovedRef = useRef(false);
+  // Ticks every 20s so the execution glow phases red→orange on its own,
+  // without waiting for a board event.
+  const [glowTick, setGlowTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setGlowTick((n) => n + 1), 20000);
+    return () => clearInterval(t);
+  }, []);
   // Inline title rewrite: one card at a time, saved on Enter or blur.
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
@@ -1092,7 +1106,14 @@ export function Board({
                       return (
                         <div
                           key={tItem.id}
-                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${expandedCards.has(tItem.id) ? 'expanded' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''} ${tItem.column === 'execution' ? 'glow-running' : landingTasks.has(tItem.id) ? 'glow-landing' : tItem.column === 'finished' ? (tItem.failed ? 'glow-failed' : 'glow-done') : ''}`}
+                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${expandedCards.has(tItem.id) ? 'expanded' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''} ${tItem.column === 'execution' ? ((() => {
+                            // Red early, orange late — "middle of the task" is
+                            // estimated from the run's startedAt, refreshed by
+                            // the glow tick.
+                            void glowTick;
+                            const elapsed = tItem.startedAt ? Date.now() - new Date(tItem.startedAt).getTime() : 0;
+                            return elapsed > EXEC_NOMINAL_MS / 2 ? 'glow-mid' : 'glow-running';
+                          })()) : landingTasks.has(tItem.id) ? 'glow-landing' : tItem.column === 'finished' ? (tItem.failed ? 'glow-failed' : 'glow-done') : tItem.column === 'planning' ? 'glow-plan' : tItem.column === 'preparation' ? 'glow-prep' : ''}`}
                           style={{
                             transform: cardPositions[tItem.id]
                               ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)`

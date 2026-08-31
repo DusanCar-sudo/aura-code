@@ -76,6 +76,7 @@ export interface BoardTask {
   waiting?: boolean;
   archived?: boolean;
   archivedAt?: string;
+  startedAt?: string;
   files?: string[];
   createdAt: string;
   updatedAt: string;
