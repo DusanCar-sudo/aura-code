@@ -4,14 +4,6 @@ import type { Conversation } from '../hooks/useAura';
 
 type T = (key: string) => string;
 
-const DEFAULT_SAMPLE_CHATS: Conversation[] = [
-  { sessionId: 'ch1', title: 'Flaky retry in the agent loop', at: Date.now() - 12 * 60000 },
-  { sessionId: 'ch2', title: 'Bound the retry queue at 8', at: Date.now() - 60 * 60000 },
-  { sessionId: 'ch3', title: 'Telegram long-poll fallback', at: Date.now() - 24 * 3600000 },
-  { sessionId: 'ch4', title: 'Strip ANSI from bot replies', at: Date.now() - 48 * 3600000 },
-  { sessionId: 'ch5', title: 'Sidecar WebSocket reconnect', at: Date.now() - 72 * 3600000 },
-];
-
 export function Sidebar({
   conversations,
   sessionId,
@@ -45,17 +37,12 @@ export function Sidebar({
     setRenaming(null);
   };
 
-  // The placeholder list stands in for an empty history. Its rows have no
-  // session behind them, so rename and delete would call the engine with an id
-  // it has never seen, fail, and be swallowed — a control that looks live and
-  // does nothing. They are hidden until there is something real to act on.
-  const hasRealChats = conversations.length > 0;
-  const listToDisplay = hasRealChats ? conversations : DEFAULT_SAMPLE_CHATS;
-  const activeId = sessionId || (conversations.length > 0 ? conversations[0].sessionId : 'ch1');
+  const listToDisplay = conversations;
+  const activeId = sessionId || (conversations.length > 0 ? conversations[0].sessionId : null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? listToDisplay.filter((c) => c.title.toLowerCase().includes(q)) : listToDisplay;
+    return q ? listToDisplay.filter((c) => c.title.toLowerCase().includes(q) || c.sessionId.toLowerCase().includes(q)) : listToDisplay;
   }, [listToDisplay, query]);
 
   return (
@@ -73,12 +60,15 @@ export function Sidebar({
 
         <div className="chat-sidebar-list">
           {filtered.length === 0 ? (
-            <div className="chat-sidebar-empty">No conversations</div>
+            <div className="chat-sidebar-empty" style={{ padding: '16px', fontSize: '11.5px', color: 'var(--dim)', textAlign: 'center' }}>
+              No saved conversations
+            </div>
           ) : (
             filtered.map((c, i) => {
               const isActive = c.sessionId === activeId;
-              const isLive = isActive || (i === 0 && !c.sessionId.startsWith('ch'));
+              const isLive = isActive;
               const timeAgo = c.at ? formatTimeAgo(c.at) : '';
+              const sessionNum = c.number ?? (i + 1);
               return (
                 <div
                   key={c.sessionId}
@@ -109,17 +99,21 @@ export function Sidebar({
                       type="button"
                       className="convo-select-btn"
                       onClick={() => onOpen(c.sessionId)}
-                      onDoubleClick={() => hasRealChats && setRenaming({ id: c.sessionId, value: c.title || '' })}
+                      onDoubleClick={() => setRenaming({ id: c.sessionId, value: c.title || '' })}
                       title="Click to open · double-click to rename"
                     >
                       <div className="convo-title-row">
+                        <span className="convo-number-badge">#{sessionNum}</span>
                         <span className={`convo-status-dot ${isLive ? 'live' : ''}`} />
                         <span className="convo-title-text">{c.title || 'Untitled Session'}</span>
                       </div>
-                      {timeAgo && <span className="convo-time-meta">{timeAgo}</span>}
+                      <div className="convo-meta-row">
+                        <span className="convo-id-pill">{c.sessionId.slice(0, 8)}</span>
+                        {c.turns !== undefined && c.turns > 0 && <span className="convo-turns-meta">· {c.turns}t</span>}
+                        {timeAgo && <span className="convo-time-meta">· {timeAgo}</span>}
+                      </div>
                     </button>
                   )}
-                  {hasRealChats && (
                   <button
                     type="button"
                     className="convo-rename-btn"
@@ -131,8 +125,6 @@ export function Sidebar({
                   >
                     <Icon name="edit" size="0.85em" />
                   </button>
-                  )}
-                  {hasRealChats && (
                   <button
                     type="button"
                     className="convo-delete-btn"
@@ -144,7 +136,6 @@ export function Sidebar({
                   >
                     <Icon name="trash" size="0.85em" />
                   </button>
-                  )}
                 </div>
               );
             })
