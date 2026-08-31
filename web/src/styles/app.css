@@ -387,14 +387,40 @@
   white-space: nowrap;
 }
 
-.chat-convo-item.active .convo-title-text {
-  color: var(--ink);
+.convo-number-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--acc);
+  background: var(--recess);
+  border: 1px solid var(--rim);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex: none;
+  letter-spacing: 0.02em;
+}
+
+.convo-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--dim);
+}
+
+.convo-id-pill {
+  color: var(--mut);
+}
+
+.convo-turns-meta {
+  color: var(--dim);
 }
 
 .convo-time-meta {
-  padding-left: 12px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 9.5px;
   color: var(--dim);
 }
 
@@ -7460,3 +7486,51 @@ body.theme-light .chat-input {
 
 
 
+
+/* ── Taskbox glow lifecycle ────────────────────────────────────────────────
+   Red pulse while a task runs, an orange hand-off the moment it lands in
+   finished, then a steady green (dim red if it failed). The base
+   .kanban-card box-shadow carries !important, so these must too. */
+
+.kanban-card.glow-running {
+  border-color: rgba(230, 57, 70, 0.55) !important;
+  animation: taskbox-glow-red 1.6s ease-in-out infinite;
+}
+
+@keyframes taskbox-glow-red {
+  0%, 100% {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 10px rgba(230, 57, 70, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+  50% {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 22px rgba(230, 57, 70, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.kanban-card.glow-landing {
+  animation: taskbox-glow-land 2s ease-out forwards;
+}
+
+@keyframes taskbox-glow-land {
+  0% {
+    border-color: rgba(230, 57, 70, 0.55) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(230, 57, 70, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+  45% {
+    border-color: rgba(240, 173, 78, 0.6) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(240, 173, 78, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+  100% {
+    border-color: rgba(90, 158, 110, 0.55) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 14px rgba(90, 158, 110, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.kanban-card.glow-done {
+  border-color: rgba(90, 158, 110, 0.55) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(90, 158, 110, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.kanban-card.glow-failed {
+  border-color: rgba(230, 57, 70, 0.5) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(230, 57, 70, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}

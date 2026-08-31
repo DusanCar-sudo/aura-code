@@ -580,6 +580,37 @@ export function Board({
   };
 
   const archivedTasks = allTasks.filter((t) => Boolean(t.archived));
+
+  // Taskbox glow lifecycle: red pulse while a task runs, an orange hand-off
+  // the moment it lands in finished, then a steady green. Landing is detected
+  // by a fresh updatedAt on a finished task — recently-finished tasks only
+  // flare once, and never on page load, where every updatedAt is old news.
+  const [landingTasks, setLandingTasks] = useState<Set<string>>(new Set());
+  const landedSeenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const now = Date.now();
+    const fresh = allTasks.filter(
+      (t) => t.column === 'finished' && !landedSeenRef.current.has(t.id)
+        && now - new Date(t.updatedAt).getTime() < 2500,
+    );
+    if (fresh.length === 0) return;
+    for (const t of fresh) landedSeenRef.current.add(t.id);
+    const ids = fresh.map((t) => t.id);
+    setLandingTasks((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    const timer = setTimeout(() => {
+      setLandingTasks((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [allTasks]);
+
   const filteredArchivedTasks = archivedTasks.filter((t) => {
     const q = archiveSearch.trim().toLowerCase();
     if (!q) return true;
@@ -1034,7 +1065,7 @@ export function Board({
                       return (
                         <div
                           key={tItem.id}
-                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''}`}
+                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''} ${tItem.column === 'execution' ? 'glow-running' : landingTasks.has(tItem.id) ? 'glow-landing' : tItem.column === 'finished' ? (tItem.failed ? 'glow-failed' : 'glow-done') : ''}`}
                           style={{
                             transform: cardPositions[tItem.id]
                               ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)`
