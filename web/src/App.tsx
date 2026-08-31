@@ -66,14 +66,36 @@ export function isTaskIntent(input: string): boolean {
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [view, setView] = useState<MainView>('chat');
+  const [view, setView] = useState<MainView>(() => {
+    try {
+      const saved = localStorage.getItem('aura_active_view');
+      if (saved === 'chat' || saved === 'kanban' || saved === 'canvas' || saved === 'code') {
+        return saved as MainView;
+      }
+    } catch { /* */ }
+    return 'chat';
+  });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('agents');
   const [agentName, setAgentName] = useState('Aura');
   const [openMenuAt, setOpenMenuAt] = useState(0);
   const [canvasPreviewPayload, setCanvasPreviewPayload] = useState<{ path: string; content?: string } | null>(null);
-  const [codeInitialFile, setCodeInitialFile] = useState<string>('src/agent/loop.ts');
+  const [codeInitialFile, setCodeInitialFile] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('aura_code_active_file');
+      if (saved) return saved;
+    } catch { /* */ }
+    return 'src/agent/loop.ts';
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('aura_active_view', view); } catch { /* */ }
+  }, [view]);
+
+  useEffect(() => {
+    try { localStorage.setItem('aura_code_active_file', codeInitialFile); } catch { /* */ }
+  }, [codeInitialFile]);
 
   // Model selection state
   const [availableModels, setAvailableModels] = useState<ModelItem[]>(DEFAULT_MODELS_FALLBACK);
@@ -83,6 +105,16 @@ export function App() {
 
   const t = useCallback((key: string) => translate(settings.locale, key), [settings.locale]);
   const aura = useAura(settings);
+
+  // Update check — the server reports what npm reports; the banner is the
+  // web client's whole story about newer versions.
+  const [updateInfo, setUpdateInfo] = useState<{ available: boolean; current: string; latest: string | null } | null>(null);
+  useEffect(() => {
+    fetch('/api/update')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.update) setUpdateInfo(data.update); })
+      .catch(() => { /* the banner is optional; a failed fetch is not news */ });
+  }, []);
 
   // Load models from server endpoint & sync saved settings model with server
   useEffect(() => {
@@ -220,6 +252,32 @@ export function App() {
         className="aura-bg-watermark"
         aria-hidden="true"
       />
+
+      {/* Update notice — the web client's equivalent of the TUI's startup line */}
+      {updateInfo?.available && (
+        <div
+          className="aura-update-banner"
+          role="status"
+          style={{
+            position: 'relative', zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: '8px', padding: '6px 16px', fontSize: '12.5px', fontWeight: 600,
+            background: 'linear-gradient(90deg, rgba(90,158,110,0.18), rgba(110,208,234,0.18))',
+            borderBottom: '1px solid rgba(90,158,110,0.35)',
+            color: 'var(--txt, #e8eaf2)',
+          }}
+        >
+          <span>⬆ Aura {updateInfo.latest} is available — you have {updateInfo.current}.</span>
+          <code style={{ fontSize: '11.5px', opacity: 0.85 }}>npm install -g aura-code</code>
+          <button
+            type="button"
+            onClick={() => setUpdateInfo((u) => (u ? { ...u, available: false } : u))}
+            style={{ marginLeft: '8px', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '13px' }}
+            aria-label="Dismiss update notice"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Top Header */}
       <header className="aura-header">
@@ -370,6 +428,7 @@ export function App() {
                 busy={aura.busy}
                 error={aura.error}
                 sessionId={aura.sessionId}
+                sessionNumber={activeConversation?.number ?? 1}
                 chatTitle={activeConversation?.title}
                 approval={aura.approval}
                 permission={settings.permission}

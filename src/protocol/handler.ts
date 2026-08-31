@@ -4,6 +4,7 @@ import * as path from 'path';
 import { createProvider, getApiKeyForModel } from '../providers/factory.js';
 import { loadProjectContext, type ProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
+import { runSwarm, mergeSwarmOutcomes } from '../agent/swarm.js';
 import { sessionStore } from '../agent/session-store.js';
 import { PermissionSystem, setConfirmHandler, type ConfirmContext } from '../safety/permissions.js';
 import { SessionBudget } from '../agent/session-budget.js';
@@ -11,7 +12,7 @@ import { TOOL_DEFINITIONS } from '../tools/index.js';
 import {
   addTask, loadBoard, removeAttachments, removeTask, saveBoard, taskPrompt, updateTask,
 } from '../board/store.js';
-import { BOARD_AGENTS, BOARD_COLUMNS, isWorkflowDef, type BoardColumn, type BoardAgent, type BoardTask } from '../board/types.js';
+import { BOARD_AGENTS, BOARD_COLUMNS, isWorkflowDef, isSwarmDef, type BoardColumn, type BoardAgent, type BoardTask, type SwarmAgent } from '../board/types.js';
 import { agentPresets, effectivePermission, AGENT_PRESETS } from '../board/agents.js';
 import type { Display } from '../cli/display.js';
 import type { HistoryMessage } from '../providers/types.js';
@@ -801,6 +802,9 @@ export class ProtocolHandler {
       // graph editor arrives with the task that is being created, and dropping
       // it here would lose the steps the moment they were saved.
       workflow: isWorkflowDef(p.workflow) ? p.workflow : undefined,
+      // Same terms as the workflow above: carried on create, validated, and
+      // kept — the swarm modal sends the roster with the task it creates.
+      swarm: isSwarmDef(p.swarm) ? p.swarm : undefined,
     });
     this.boardCommit(root, state);
     this.ok(req.id, { task });
@@ -822,7 +826,7 @@ export class ProtocolHandler {
     for (const key of [
       'title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result',
       'failed', 'order', 'priority', 'attention', 'linkedTo', 'files', 'waiting',
-      'archived', 'archivedAt',
+      'archived', 'archivedAt', 'swarm',
     ]) {
       if (p[key] !== undefined) patch[key] = p[key];
     }
@@ -834,6 +838,11 @@ export class ProtocolHandler {
         return this.fail(req.id, { code: 'bad_params', message: 'Malformed workflow.' });
       }
       patch.workflow = p.workflow;
+    }
+    // Same story as workflow: structured, persisted, and read back on every
+    // load — a malformed roster is a persistent break, so validate at the wire.
+    if (p.swarm !== undefined && !isSwarmDef(p.swarm)) {
+      return this.fail(req.id, { code: 'bad_params', message: 'Malformed swarm.' });
     }
     const task = updateTask(state, id, patch);
     if (!task) {
@@ -933,6 +942,14 @@ export class ProtocolHandler {
       ? p.apiKey
       : (getApiKeyForModel(model) || this.opts.defaultApiKey);
 
+    // A task carrying a roster runs as a swarm, not as one turn: concurrent
+    // agent loops share the objective, and the merged outcome lands on the
+    // tile. Nothing below this branch is reached for such a task.
+    const swarmAgents = (task.swarm?.agents ?? []).filter((a) => a && typeof a.name === 'string');
+    if (swarmAgents.length > 1) {
+      return this.swarmRun(req, { root, task, agents: swarmAgents, model, apiKey, permission, context });
+    }
+
     const sessionId = randomUUID();
     const session: Session = {
       id: sessionId,
@@ -987,6 +1004,101 @@ export class ProtocolHandler {
       // earlier task is an infinite workflow that spends real money until
       // somebody notices.
       await this.runLinked(root, done.linkedTo, chosen, new Set([id]));
+    }
+  }
+
+  /**
+   * Run a board task as a swarm: one concurrent agent loop per roster entry,
+   * per-agent status persisted to the tile as it changes so every connected
+   * client watches the same live picture.
+   *
+   * There is deliberately no session: a swarm is not a conversation, and
+   * putting N synthetic sessions in the sidebar would be noise. The tile's
+   * column is the run's state — moving it out of execution is the stop signal.
+   */
+  private async swarmRun(
+    req: ReqFrame,
+    args: {
+      root: string;
+      task: BoardTask;
+      agents: SwarmAgent[];
+      model: string;
+      apiKey?: string;
+      permission: 'read-only' | 'normal' | 'auto';
+      context: ProjectContext;
+    },
+  ): Promise<void> {
+    const { root, task, agents, model, apiKey, permission, context } = args;
+    const id = task.id;
+    const preset = AGENT_PRESETS[task.agent] ?? AGENT_PRESETS.aura;
+
+    // Per-agent progress lands in the board file and is announced through the
+    // normal board-changed event, so no new protocol surface is needed for a
+    // client to watch the swarm work.
+    const persistAgent = (agentId: string, patch: Partial<SwarmAgent>): void => {
+      try {
+        const cur = loadBoard(root);
+        const t = cur.tasks.find((x) => x.id === id);
+        if (!t?.swarm) return;
+        updateTask(cur, id, {
+          swarm: { ...t.swarm, agents: t.swarm.agents.map((a) => (a.id === agentId ? { ...a, ...patch } : a)) },
+        });
+        this.boardCommit(root, cur);
+      } catch { /* progress writes are best-effort; the run itself is the truth */ }
+    };
+
+    // Everyone starts pending, persisted before the first loop spins up, so a
+    // client connecting mid-run still sees the full roster.
+    const begin = loadBoard(root);
+    updateTask(begin, id, {
+      column: 'execution',
+      result: undefined,
+      failed: false,
+      waiting: undefined,
+      swarm: {
+        strategy: task.swarm?.strategy,
+        agents: agents.map((a) => ({ ...a, status: 'pending' as const, summary: undefined })),
+      },
+    });
+    this.boardCommit(root, begin);
+
+    this.ok(req.id, { swarm: true, agents: agents.length });
+
+    const outcomes = await runSwarm({
+      task,
+      context,
+      model,
+      ...(apiKey ? { apiKey } : {}),
+      ...(this.opts.defaultBaseUrl ? { baseUrl: this.opts.defaultBaseUrl } : {}),
+      permission,
+      allowedTools: preset.allowedTools ?? null,
+      onAgentUpdate: persistAgent,
+      shouldStop: () => {
+        try {
+          const t = loadBoard(root).tasks.find((x) => x.id === id);
+          return !t || t.column !== 'execution';
+        } catch { return false; }
+      },
+    });
+
+    const merged = mergeSwarmOutcomes(outcomes);
+
+    // Re-read rather than mutating: the run took minutes and the tile may have
+    // been edited, or stopped, while the agents worked.
+    const after = loadBoard(root);
+    const done = updateTask(after, id, {
+      column: 'finished',
+      result: merged.summary,
+      failed: !merged.success,
+      attention: false,
+      files: merged.files.length > 0 ? merged.files : (task.files ?? []),
+    });
+    this.boardCommit(root, after);
+
+    await this.processQueue(root);
+
+    if (done?.linkedTo && merged.success) {
+      await this.runLinked(root, done.linkedTo, permission, new Set([id]));
     }
   }
 

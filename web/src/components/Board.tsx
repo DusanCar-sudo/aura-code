@@ -1139,6 +1139,38 @@ export function Board({
 
                             <h4 className="card-title">{tItem.title}</h4>
 
+                            {/* Live swarm roster — status comes from the engine as each agent runs */}
+                            {tItem.swarm && tItem.swarm.agents.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                                {tItem.swarm.agents.map((a) => {
+                                  const statusColor = a.status === 'running' ? '#ff6b6b'
+                                    : a.status === 'done' ? 'var(--ok)'
+                                    : a.status === 'failed' ? '#e63946'
+                                    : 'var(--mut)';
+                                  const statusIcon = a.status === 'running' ? '⟳'
+                                    : a.status === 'done' ? '✓'
+                                    : a.status === 'failed' ? '✗'
+                                    : '◯';
+                                  return (
+                                    <span
+                                      key={a.id}
+                                      title={a.summary || a.role || a.name}
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                        fontSize: '10px', fontWeight: 600,
+                                        color: statusColor,
+                                        border: `1px solid ${statusColor}55`,
+                                        background: `${a.status === 'running' ? '#ff6b6b' : statusColor}18`,
+                                        padding: '1px 6px', borderRadius: '4px',
+                                      }}
+                                    >
+                                      {a.icon || '•'} {a.name} {statusIcon}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+
                             {tItem.notes && <p className="card-notes">{tItem.notes}</p>}
 
                             {/* Tool Badges */}

@@ -23,6 +23,10 @@ import {
 } from '../providers/factory.js';
 import type { ProviderConfig } from '../providers/types.js';
 import { loadProjectContext } from '../agent/context.js';
+import {
+  refreshUpdateCacheInBackground, readUpdateCache, isUpdateAvailable, updateCheckEnabled,
+} from '../util/update-check.js';
+import pkg from '../../package.json';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js';
@@ -130,7 +134,29 @@ export function jsonBodyParser(): express.RequestHandler {
   };
 }
 
+// The check's own TTL is daily; the server refreshes more often than that so a
+// release published mid-session is still seen without waiting out the cache.
+const UPDATE_REFRESH_MS = 6 * 60 * 60 * 1000;
+
+/** What the client needs to know about updates, or null when the check is off. */
+function updateStatus(): { available: boolean; current: string; latest: string | null } | null {
+  if (!updateCheckEnabled()) return null;
+  const cache = readUpdateCache();
+  return {
+    available: cache ? isUpdateAvailable(pkg.version, cache.latest) : false,
+    current: pkg.version,
+    latest: cache?.latest ?? null,
+  };
+}
+
 export async function startServer(opts: ServeOptions): Promise<void> {
+  // The web client learns about updates only through this server, and a
+  // long-lived server outlives the daily TTL, so refresh on start and then
+  // keep refreshing — the check is cheap, cached, and never blocks.
+  refreshUpdateCacheInBackground();
+  const updateTimer = setInterval(() => refreshUpdateCacheInBackground(), UPDATE_REFRESH_MS);
+  updateTimer.unref();
+
   // Nothing is running the instant the engine starts, so any board task found
   // in `execution` was cut off by whatever ended the last process. Put it back
   // where the user can run it again instead of leaving a tile parked in a
@@ -1046,6 +1072,16 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       activeEnvKey: apiKeyEnvVarForModel(opts.model) ?? null,
       activeModel: opts.model,
     });
+  });
+
+  /**
+   * Update availability, from the same npm-registry check and cache the TUI
+   * banner uses. The web client has no other way to learn it is stale — it
+   * never sees the CLI's startup line — so the server publishes what it knows
+   * and refreshes the cache on start and on a 6h interval.
+   */
+  app.get('/api/update', (_req, res) => {
+    res.json({ update: updateStatus() });
   });
 
   app.get('/api/models', (_req, res) => {

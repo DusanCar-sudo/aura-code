@@ -71,7 +71,7 @@ export interface BoardTask {
   workflow?: WorkflowDef;
   swarm?: {
     strategy: string;
-    agents: Array<{ id: string; name: string; role: string; icon: string }>;
+    agents: Array<{ id: string; name: string; role?: string; icon?: string; status?: 'pending' | 'running' | 'done' | 'failed'; summary?: string }>;
   };
   waiting?: boolean;
   archived?: boolean;
@@ -92,7 +92,7 @@ export interface NewTask {
   workflow?: WorkflowDef;
   swarm?: {
     strategy: string;
-    agents: Array<{ id: string; name: string; role: string; icon: string }>;
+    agents: Array<{ id: string; name: string; role?: string; icon?: string; status?: 'pending' | 'running' | 'done' | 'failed'; summary?: string }>;
   };
 }
 

@@ -19,7 +19,7 @@ import * as path from 'path';
 import { auraPath } from '../util/aura-home.js';
 import {
   EMPTY_BOARD, isBoardAgent, isBoardColumn,
-  type BoardAgent, type BoardAttachment, type BoardColumn, type BoardState, type BoardTask, type WorkflowDef,
+  type BoardAgent, type BoardAttachment, type BoardColumn, type BoardState, type BoardTask, type SwarmDef, type WorkflowDef,
 } from './types.js';
 
 /**
@@ -149,6 +149,7 @@ export interface TaskPatch {
   order?: number;
   files?: string[];
   workflow?: WorkflowDef;
+  swarm?: SwarmDef;
   waiting?: boolean;
   archived?: boolean;
   archivedAt?: string;
@@ -178,6 +179,7 @@ export function addTask(state: BoardState, patch: TaskPatch & { title: string })
     order: last + 1000,
     files: patch.files,
     workflow: patch.workflow,
+    swarm: patch.swarm,
     archived: patch.archived,
     archivedAt: patch.archivedAt,
     createdAt: now,
@@ -216,6 +218,7 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   // as it was made.
   if (patch.linkedTo !== undefined) task.linkedTo = patch.linkedTo || undefined;
   if (patch.workflow !== undefined) task.workflow = patch.workflow;
+  if (patch.swarm !== undefined) task.swarm = patch.swarm;
   if (patch.waiting !== undefined) task.waiting = patch.waiting;
   if (patch.archived !== undefined) {
     task.archived = patch.archived;

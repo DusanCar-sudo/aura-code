@@ -569,12 +569,16 @@ export function useAura(settings: Settings) {
       // while it works. Deliberately does NOT set `busy`: a board task runs in
       // its own session, so the chat's session is not busy — and marking it so
       // was what stopped a second task from being started at all.
-      setSessionId(res.sessionId);
-      setMessages([{
-        id: `u${Date.now()}`, role: 'user',
-        text: task.notes?.trim() ? `${task.title}\n\n${task.notes}` : task.title,
-        tools: [], at: Date.now(),
-      }]);
+      // A swarm run has no session of its own — the tile is the run — so the
+      // chat view is left exactly where the operator left it.
+      if (res?.sessionId) {
+        setSessionId(res.sessionId);
+        setMessages([{
+          id: `u${Date.now()}`, role: 'user',
+          text: task.notes?.trim() ? `${task.title}\n\n${task.notes}` : task.title,
+          tools: [], at: Date.now(),
+        }]);
+      }
       void refreshConversations();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
