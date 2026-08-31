@@ -475,6 +475,11 @@ export function Board({
   const [cardPositions, setCardPositions] = useState<Record<string, { x: number; y: number }>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
+  // Cards are uniform fixed-size boxes; a click (not a drag) expands one in
+  // place. A card just dragged must not also toggle, so the drag onset sets a
+  // flag the click handler checks.
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const dragMovedRef = useRef(false);
   // Inline title rewrite: one card at a time, saved on Enter or blur.
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
@@ -667,6 +672,7 @@ export function Board({
       const dx = e.clientX - pointerStart.cx;
       const dy = e.clientY - pointerStart.cy;
       if (Math.hypot(dx, dy) > 4) {
+        dragMovedRef.current = true;
         if (pointerStart.targetEl) {
           try {
             pointerStart.targetEl.setPointerCapture(e.pointerId);
@@ -1086,7 +1092,7 @@ export function Board({
                       return (
                         <div
                           key={tItem.id}
-                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''} ${tItem.column === 'execution' ? 'glow-running' : landingTasks.has(tItem.id) ? 'glow-landing' : tItem.column === 'finished' ? (tItem.failed ? 'glow-failed' : 'glow-done') : ''}`}
+                          className={`kanban-card ${dragCard?.id === tItem.id ? 'dragging' : ''} ${expandedCards.has(tItem.id) ? 'expanded' : ''} ${isPrimaryExecution ? 'primary-runner' : ''} ${isParallelExecution ? 'parallel-runner' : ''} ${isWaiting ? 'waiting-runner' : ''} ${tItem.column === 'execution' ? 'glow-running' : landingTasks.has(tItem.id) ? 'glow-landing' : tItem.column === 'finished' ? (tItem.failed ? 'glow-failed' : 'glow-done') : ''}`}
                           style={{
                             transform: cardPositions[tItem.id]
                               ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)`
@@ -1105,8 +1111,12 @@ export function Board({
                           <div
                             className="card-clickable-area"
                             onClick={() => {
-                              setDetailTaskId(tItem.id);
-                              setIsEditingDetail(false);
+                              if (dragMovedRef.current) { dragMovedRef.current = false; return; }
+                              setExpandedCards((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(tItem.id)) next.delete(tItem.id); else next.add(tItem.id);
+                                return next;
+                              });
                             }}
                           >
                             <div className="card-header-row">

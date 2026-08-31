@@ -4729,6 +4729,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 12px;
   padding-top: 8px;
   border-top: 2px solid #232534;
@@ -4737,6 +4738,8 @@
 .nes-arcade-btn {
   display: inline-flex;
   align-items: center;
+  flex: none;
+  white-space: nowrap;
   gap: 8px;
   padding: 8px 18px;
   border-radius: 6px;
@@ -4790,10 +4793,18 @@
 }
 
 /* ── NES Glass Backdrop (transparent/non-obstructive) ─────────────────── */
+/* A normal floating popup: nothing is darkened or blurred behind it, and the
+   page underneath stays clickable — the popup itself re-enables pointer
+   events on its own card. */
 .nes-backdrop-glass {
-  background: rgba(5, 6, 10, 0.45) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  backdrop-filter: blur(12px) saturate(1.2);
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+.nes-backdrop-glass > .modal-card {
+  pointer-events: auto;
 }
 
 /* ── NES Inline Edit Inputs ───────────────────────────────────────────── */
@@ -7504,6 +7515,38 @@ body.theme-light .chat-input {
   50% {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(230, 57, 70, 0.95), 0 0 64px rgba(230, 57, 70, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   }
+}
+
+/* Uniform tile size — every card is the same fixed height (matched to the
+   swarm-roster card look), full lane width, single column. Content clips;
+   clicking a card — only a click, not a drag — expands it in place to show
+   the whole task. */
+.kanban-column-cards .kanban-card {
+  height: 150px;
+}
+
+.kanban-column-cards .kanban-card .card-clickable-area {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Action buttons pin to the tile's bottom edge so they stay reachable even
+   when the content above is clipped. */
+.kanban-column-cards .kanban-card .card-actions-line {
+  margin-top: auto;
+}
+
+.kanban-column-cards .kanban-card.expanded {
+  height: auto;
+  min-height: 150px;
+  z-index: 200;
+}
+
+.kanban-column-cards .kanban-card.expanded .card-clickable-area {
+  height: auto;
+  overflow: visible;
 }
 
 /* Corner delete — a small bin in the tile's top-right, ~30% larger than a
