@@ -86,6 +86,12 @@ export interface SwarmAgent {
   name: string;
   role?: string;
   icon?: string;
+  /**
+   * This agent's own model. Absent means inherit the task's model — the
+   * operator chooses per agent, and with that choice the cost and the
+   * failure modes of that agent's provider are theirs too.
+   */
+  model?: string;
   status?: 'pending' | 'running' | 'done' | 'failed';
   summary?: string;
 }
@@ -109,7 +115,8 @@ export function isSwarmDef(v: unknown): v is SwarmDef {
   return d.agents.every((a) => {
     if (!a || typeof a !== 'object') return false;
     const agent = a as Record<string, unknown>;
-    return typeof agent.id === 'string' && typeof agent.name === 'string';
+    return typeof agent.id === 'string' && typeof agent.name === 'string'
+      && (agent.model === undefined || typeof agent.model === 'string');
   });
 }
 

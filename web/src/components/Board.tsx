@@ -454,6 +454,8 @@ export function Board({
 
   // Swarm Modal State
   const [swarmModalOpen, setSwarmModalOpen] = useState(false);
+  // Per-agent model choice, by preset id. Empty string = inherit task model.
+  const [swarmAgentModels, setSwarmAgentModels] = useState<Record<string, string>>({});
   const [swarmTitle, setSwarmTitle] = useState('Autonomous Multi-Agent Swarm Mission');
   const [swarmObjective, setSwarmObjective] = useState('Collaborative multi-agent swarm: Architect maps design blueprints, Researcher indexes call-sites, Coder implements surgical changes, and QA verifies stability concurrently.');
   const [swarmTargetColumn, setSwarmTargetColumn] = useState<BoardColumn>('preparation');
@@ -789,7 +791,12 @@ export function Board({
       model: agentRoster[0]?.model || selectedModel,
       swarm: {
         strategy: swarmStrategy,
-        agents: agentRoster.map((a) => ({ id: a.id, name: a.name, role: a.role, icon: a.icon })),
+        agents: agentRoster.map((a) => ({
+          id: a.id, name: a.name, role: a.role, icon: a.icon,
+          // Empty string means "inherit" — sent as undefined so the engine
+          // falls back to the task model.
+          ...(swarmAgentModels[a.id] ? { model: swarmAgentModels[a.id] } : {}),
+        })),
       },
     });
 
@@ -1154,7 +1161,7 @@ export function Board({
                                   return (
                                     <span
                                       key={a.id}
-                                      title={a.summary || a.role || a.name}
+                                      title={`${a.summary || a.role || a.name}${a.model ? ` — ${a.model}` : ''}`}
                                       style={{
                                         display: 'inline-flex', alignItems: 'center', gap: '3px',
                                         fontSize: '10px', fontWeight: 600,
@@ -1164,7 +1171,7 @@ export function Board({
                                         padding: '1px 6px', borderRadius: '4px',
                                       }}
                                     >
-                                      {a.icon || '•'} {a.name} {statusIcon}
+                                      {a.icon || '•'} {a.name}{a.model ? ` · ${a.model.split('/').pop()}` : ''} {statusIcon}
                                     </span>
                                   );
                                 })}
@@ -3004,6 +3011,47 @@ export function Board({
                     <option value="pipeline">🔄 Sequential Pipeline (Passes artifacts step-to-step)</option>
                     <option value="hierarchical">👑 Hierarchical (Leader orchestrates worker agents)</option>
                   </select>
+                </div>
+
+                <div className="form-field-group">
+                  <label className="form-label">Agent Models</label>
+                  <div style={{ fontSize: '11px', color: 'var(--txt-dim)', marginBottom: '8px', lineHeight: 1.5 }}>
+                    Each agent runs on its own model and provider — with that agent's cost and
+                    failure modes. A dead key takes down only its agent; the swarm still finishes
+                    and the result names it.
+                  </div>
+                  {selectedSwarmAgents.map((id, i) => {
+                    const preset = SWARM_AGENT_PRESETS.find((a) => a.id === id);
+                    if (!preset) return null;
+                    const providers = [...new Set(availableModels.map((m) => m.provider))];
+                    return (
+                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}>
+                        <span style={{ minWidth: '20px', height: '20px', borderRadius: '50%', background: 'rgba(204,120,92,0.15)', color: 'var(--txt-dim)', fontSize: '11px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {i + 1}
+                        </span>
+                        <span style={{ flex: 1, fontSize: '12.5px', color: 'var(--txt)', fontWeight: 600 }}>
+                          {preset.icon} {preset.name}
+                        </span>
+                        <select
+                          className="form-select"
+                          style={{ flex: 2, fontSize: '12px' }}
+                          value={swarmAgentModels[id] ?? ''}
+                          onChange={(e) => setSwarmAgentModels((prev) => ({ ...prev, [id]: e.target.value }))}
+                        >
+                          <option value="">⬇ Inherit task model</option>
+                          {providers.map((prov) => (
+                            <optgroup key={prov} label={prov}>
+                              {availableModels.filter((m) => m.provider === prov).map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.label || m.name || m.id}{m.hasKey === false ? ' · no key' : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="form-field-group">

@@ -88,8 +88,9 @@ export function mergeSwarmOutcomes(outcomes: SwarmAgentOutcome[]): {
   const sections = outcomes.map((o) => {
     const icon = o.agent.icon || '•';
     const mark = o.success ? '✓' : '✗';
+    const modelTag = o.agent.model ? ` \`${o.agent.model}\`` : '';
     const body = o.summary?.trim() || (o.success ? '(no summary)' : '(agent failed)');
-    return `### ${icon} ${o.agent.name} ${mark}\n${body}`;
+    return `### ${icon} ${o.agent.name}${modelTag} ${mark}\n${body}`;
   });
 
   return {
@@ -140,7 +141,14 @@ export async function runSwarm(opts: SwarmRunOptions): Promise<SwarmAgentOutcome
     onAgentUpdate(agent.id, { status: 'running' });
 
     try {
-      const provider = createProvider({ model, ...(apiKey ? { apiKey } : {}), ...(baseUrl ? { baseUrl } : {}) });
+      // The agent's own model wins; the task's model is the fallback. Each
+      // agent resolves its own key through the same factory routing, so a
+      // mixed swarm talks to a mixed set of providers. The task-level key is
+      // only handed to agents on the task's own model — an OpenRouter key
+      // must never ride along to an agent that is talking to Zhipu.
+      const agentModel = agent.model?.trim() || model;
+      const inheritedKey = agentModel === model ? apiKey : undefined;
+      const provider = createProvider({ model: agentModel, ...(inheritedKey ? { apiKey: inheritedKey } : {}), ...(baseUrl ? { baseUrl } : {}) });
       const result = await runAgentLoop({
         provider,
         task: agentPrompt(agent, task),
