@@ -68,28 +68,42 @@ interface ProviderEntry {
   id: string;
   name: string;
   envKey?: string;
+  signupUrl?: string;
   role: 'primary' | 'mesh' | 'archimedes' | 'review';
   endpoint: string;
   model: string;
   key: string;
+  maskedKey?: string;
+  keySet?: boolean;
   ping: string;
   pingOk: boolean;
 }
 
 const DEFAULT_PROVIDERS: ProviderEntry[] = [
-  { id: 'p1', name: 'Anthropic', envKey: 'ANTHROPIC_API_KEY', role: 'primary', endpoint: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5-20251001', key: 'sk-ant-api03-9Xk2...7pQ4', ping: '42ms', pingOk: true },
-  { id: 'p2', name: 'OpenCode Zen (Free & Fast)', envKey: 'OPENCODE_API_KEY', role: 'mesh', endpoint: 'https://opencode.ai/zen/v1', model: 'opencode/big-pickle', key: 'opencode-free', ping: '35ms', pingOk: true },
-  { id: 'p3', name: 'OpenRouter', envKey: 'OPENROUTER_API_KEY', role: 'mesh', endpoint: 'https://openrouter.ai/api/v1', model: 'openrouter/deepseek/deepseek-v4-pro', key: 'sk-or-v1-b81f...c30a', ping: '118ms', pingOk: true },
-  { id: 'p4', name: 'NVIDIA NIM (Nemotron)', envKey: 'NVIDIA_API_KEY', role: 'mesh', endpoint: 'https://integrate.api.nvidia.com/v1', model: 'nvidia/llama-3.1-nemotron-70b-instruct', key: 'nvapi-9aK8...3xP1', ping: '55ms', pingOk: true },
-  { id: 'p5', name: 'FPT Cloud AI', envKey: 'FPT_API_KEY', role: 'mesh', endpoint: 'https://mkp-api.fptcloud.com/v1', model: 'fpt/DeepSeek-V4-Flash', key: 'fpt-mkp-7b1...2c0a', ping: '62ms', pingOk: true },
-  { id: 'p6', name: 'BytePlus ModelArk', envKey: 'ARK_API_KEY', role: 'mesh', endpoint: 'https://ark.ap-southeast.bytepluses.com/api/v3', model: 'byteplus/deepseek-v4-flash-ga-260731', key: 'ark-sec-88c...90e', ping: '48ms', pingOk: true },
-  { id: 'p7', name: 'Google (Gemini)', envKey: 'GOOGLE_API_KEY', role: 'review', endpoint: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-3.1-pro-preview', key: 'AIza...9wQ1', ping: '28ms', pingOk: true },
-  { id: 'p8', name: 'DeepSeek', envKey: 'DEEPSEEK_API_KEY', role: 'mesh', endpoint: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash', key: 'sk-d98...21fa', ping: '84ms', pingOk: true },
-  { id: 'p9', name: 'Xiaomi MiMo', envKey: 'XIAOMI_API_KEY', role: 'mesh', endpoint: 'https://token-plan-sgp.xiaomimimo.com/v1', model: 'mimo-v2.5-pro', key: 'mimo-tp-92...11c', ping: '92ms', pingOk: true },
+  { id: 'p1', name: 'Anthropic', envKey: 'ANTHROPIC_API_KEY', signupUrl: 'https://console.anthropic.com', role: 'primary', endpoint: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5-20251001', key: 'sk-ant-api03-9Xk2...7pQ4', ping: '42ms', pingOk: true },
+  { id: 'p2', name: 'OpenCode Zen (Free & Fast)', envKey: 'OPENCODE_API_KEY', signupUrl: 'https://opencode.ai', role: 'mesh', endpoint: 'https://opencode.ai/zen/v1', model: 'opencode/big-pickle', key: 'opencode-free', ping: '35ms', pingOk: true },
+  { id: 'p3', name: 'OpenRouter', envKey: 'OPENROUTER_API_KEY', signupUrl: 'https://openrouter.ai/keys', role: 'mesh', endpoint: 'https://openrouter.ai/api/v1', model: 'openrouter/deepseek/deepseek-v4-pro', key: 'sk-or-v1-b81f...c30a', ping: '118ms', pingOk: true },
+  { id: 'p_cerebras', name: 'Cerebras (Free Wafer-Scale)', envKey: 'CEREBRAS_API_KEY', signupUrl: 'https://cloud.cerebras.ai', role: 'mesh', endpoint: 'https://api.cerebras.ai/v1', model: 'cerebras/llama-3.3-70b', key: '', ping: 'no key', pingOk: false },
+  { id: 'p_sambanova', name: 'SambaNova Cloud (Free Tier)', envKey: 'SAMBANOVA_API_KEY', signupUrl: 'https://cloud.sambanova.ai', role: 'mesh', endpoint: 'https://api.sambanova.ai/v1', model: 'sambanova/Meta-Llama-3.3-70B-Instruct', key: '', ping: 'no key', pingOk: false },
+  { id: 'p4', name: 'NVIDIA NIM (Nemotron)', envKey: 'NVIDIA_API_KEY', signupUrl: 'https://build.nvidia.com', role: 'mesh', endpoint: 'https://integrate.api.nvidia.com/v1', model: 'nvidia/llama-3.1-nemotron-70b-instruct', key: 'nvapi-9aK8...3xP1', ping: '55ms', pingOk: true },
+  { id: 'p5', name: 'FPT Cloud AI', envKey: 'FPT_API_KEY', signupUrl: 'https://fptcloud.com', role: 'mesh', endpoint: 'https://mkp-api.fptcloud.com/v1', model: 'fpt/DeepSeek-V4-Flash', key: 'fpt-mkp-7b1...2c0a', ping: '62ms', pingOk: true },
+  { id: 'p6', name: 'BytePlus ModelArk', envKey: 'ARK_API_KEY', signupUrl: 'https://byteplus.com', role: 'mesh', endpoint: 'https://ark.ap-southeast.bytepluses.com/api/v3', model: 'byteplus/deepseek-v4-flash-ga-260731', key: 'ark-sec-88c...90e', ping: '48ms', pingOk: true },
+  { id: 'p7', name: 'Google (Gemini)', envKey: 'GOOGLE_API_KEY', signupUrl: 'https://aistudio.google.com/app/apikey', role: 'review', endpoint: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-3.1-pro-preview', key: 'AIza...9wQ1', ping: '28ms', pingOk: true },
+  { id: 'p8', name: 'DeepSeek', envKey: 'DEEPSEEK_API_KEY', signupUrl: 'https://platform.deepseek.com', role: 'mesh', endpoint: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash', key: 'sk-d98...21fa', ping: '84ms', pingOk: true },
+  { id: 'p9', name: 'Xiaomi MiMo', envKey: 'XIAOMI_API_KEY', signupUrl: 'https://xiaomimimo.com', role: 'mesh', endpoint: 'https://token-plan-sgp.xiaomimimo.com/v1', model: 'mimo-v2.5-pro', key: 'mimo-tp-92...11c', ping: '92ms', pingOk: true },
   { id: 'p10', name: 'Ollama (local)', envKey: undefined, role: 'archimedes', endpoint: 'http://127.0.0.1:11434/v1', model: 'qwen3-coder:30b', key: '-', ping: '6ms', pingOk: true },
 ];
 
 const COMPREHENSIVE_FALLBACK_MODELS: ModelOption[] = [
+  // Cerebras (Free Wafer-Scale)
+  { id: 'cerebras/llama-3.3-70b', label: 'Llama 3.3 70B (Cerebras Ultra-fast free)', provider: 'Cerebras', speed: 'Ultra-fast · free' },
+  { id: 'cerebras/llama3.1-8b', label: 'Llama 3.1 8B (Cerebras Instant free)', provider: 'Cerebras', speed: 'Instant · free' },
+  { id: 'cerebras/deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 70B (Cerebras Free reasoning)', provider: 'Cerebras', speed: 'Reasoning · free' },
+  { id: 'cerebras/gpt-oss-120b', label: 'GPT OSS 120B (Cerebras Free)', provider: 'Cerebras', speed: 'Powerful · free' },
+  // SambaNova Cloud (Free Tier)
+  { id: 'sambanova/Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B (SambaNova Free tier)', provider: 'SambaNova', speed: 'Ultra-fast · free' },
+  { id: 'sambanova/DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 70B (SambaNova Free tier)', provider: 'SambaNova', speed: 'Reasoning · free' },
+  { id: 'sambanova/Meta-Llama-3.1-405B-Instruct', label: 'Llama 3.1 405B (SambaNova Free tier)', provider: 'SambaNova', speed: 'Powerful · free' },
   // OpenCode
   { id: 'opencode/big-pickle', label: 'Big Pickle (free)', provider: 'OpenCode', speed: 'Powerful · free' },
   { id: 'opencode/mimo-v2.5-free', label: 'MiMo V2.5 (free)', provider: 'OpenCode', speed: 'Fast · free' },
@@ -100,6 +114,10 @@ const COMPREHENSIVE_FALLBACK_MODELS: ModelOption[] = [
   { id: 'go-anthropic/claude-sonnet-5', label: 'Claude Sonnet 5 (Go)', provider: 'OpenCode', speed: 'Powerful' },
   { id: 'go-anthropic/claude-opus-5', label: 'Claude Opus 5 (Go)', provider: 'OpenCode', speed: 'Powerful' },
   // OpenRouter
+  { id: 'openrouter/google/gemini-2.0-flash-lite-001:free', label: 'Gemini 2.0 Flash Lite (OR free)', provider: 'OpenRouter', speed: 'Fast · free' },
+  { id: 'openrouter/meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (OR free)', provider: 'OpenRouter', speed: 'Powerful · free' },
+  { id: 'openrouter/deepseek/deepseek-r1:free', label: 'DeepSeek R1 (OR free)', provider: 'OpenRouter', speed: 'Reasoning · free' },
+  { id: 'openrouter/qwen/qwen-2.5-coder-32b-instruct:free', label: 'Qwen 2.5 Coder 32B (OR free)', provider: 'OpenRouter', speed: 'Code · free' },
   { id: 'openrouter/deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro (OR)', provider: 'OpenRouter', speed: 'Powerful · open' },
   { id: 'openrouter/deepseek/deepseek-r1', label: 'DeepSeek R1 (OR)', provider: 'OpenRouter', speed: 'Reasoning · open' },
   { id: 'openrouter/anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet (OR)', provider: 'OpenRouter', speed: 'Fast' },
@@ -197,6 +215,8 @@ export function SettingsPanel({
     availableModels.length > 0 ? availableModels : COMPREHENSIVE_FALLBACK_MODELS
   );
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
+  const [keySavedStatus, setKeySavedStatus] = useState<Record<string, boolean>>({});
   const [skills, setSkills] = useState<SkillItem[]>(DEFAULT_SKILLS);
   const [dragOver, setDragOver] = useState(false);
   const [dropStatus, setDropStatus] = useState('nothing staged');
@@ -214,26 +234,48 @@ export function SettingsPanel({
     fetch('/api/providers')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && Array.isArray(data.providers)) {
-          setProviders((prev) =>
-            prev.map((p) => {
-              const found = data.providers.find(
-                (prov: any) => prov.envKey === p.envKey || prov.name.toLowerCase() === p.name.toLowerCase()
-              );
-              if (found && found.keySet) {
-                return { ...p, pingOk: true };
-              }
-              return p;
-            })
-          );
+        if (data && Array.isArray(data.providers) && data.providers.length > 0) {
+          const activeEnvKey = data.activeEnvKey || '';
+          const activeModel = settings.model || data.activeModel || '';
+          const activeProviderName = settings.provider || '';
+
+          const serverProviders: ProviderEntry[] = data.providers.map((prov: any, idx: number) => {
+            const isMatch =
+              (prov.envKey && prov.envKey === activeEnvKey) ||
+              (activeProviderName && prov.name.toLowerCase().includes(activeProviderName.toLowerCase())) ||
+              (activeModel && prov.models?.some((m: any) => m.id === activeModel));
+
+            const defaultModel = prov.models?.find((m: any) => m.id === activeModel)?.id || prov.models?.[0]?.id || '';
+
+            return {
+              id: `p_${prov.envKey || idx}`,
+              name: prov.name,
+              envKey: prov.envKey,
+              signupUrl: prov.signupUrl || '',
+              role: isMatch ? ('primary' as const) : ('mesh' as const),
+              endpoint: prov.baseUrl || '',
+              model: defaultModel,
+              key: prov.maskedKey || '',
+              maskedKey: prov.maskedKey || '',
+              keySet: Boolean(prov.keySet),
+              ping: prov.keySet ? '42ms' : 'no key',
+              pingOk: Boolean(prov.keySet),
+            };
+          });
+
+          if (!serverProviders.some((p) => p.role === 'primary') && serverProviders.length > 0) {
+            serverProviders[0].role = 'primary';
+          }
+
+          setProviders(serverProviders);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [settings.model, settings.provider]);
 
   const tabTitles: Record<SettingsTab, string> = {
     agents: 'Agents',
-    models: 'Providers & Models — OpenCode, OpenRouter, NVIDIA Nemotron, FPT, BytePlus & More',
+    models: 'Providers & Models — Free Tier, Cerebras, SambaNova, OpenRouter, OpenCode, Google & More',
     skills: 'Skills & plugins',
     autonomy: 'Approval & sandbox',
     general: 'General Preferences',
@@ -252,40 +294,81 @@ export function SettingsPanel({
     );
   };
 
+  const handleSaveKey = async (provider: ProviderEntry) => {
+    if (!provider.envKey) return;
+    const rawVal = keyInputs[provider.id] ?? '';
+    try {
+      const res = await fetch('/api/apikey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envKey: provider.envKey, value: rawVal }),
+      }).then((r) => r.json());
+
+      if (res.ok) {
+        setProviders((prev) =>
+          prev.map((item) =>
+            item.id === provider.id
+              ? {
+                  ...item,
+                  keySet: res.keySet,
+                  maskedKey: res.maskedKey || '',
+                  key: res.maskedKey || '',
+                  pingOk: res.keySet,
+                  ping: res.keySet ? '42ms' : 'no key',
+                }
+              : item
+          )
+        );
+        setKeySavedStatus((prev) => ({ ...prev, [provider.id]: true }));
+        setTimeout(() => setKeySavedStatus((prev) => ({ ...prev, [provider.id]: false })), 3000);
+
+        // Refresh available models
+        fetch('/api/models')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (d && Array.isArray(d.models) && d.models.length > 0) {
+              setAllModels(d.models);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {
+      // Ignore network errors
+    }
+  };
+
   const handleProviderEdit = (id: string, field: 'endpoint' | 'model' | 'key' | 'name', val: string) => {
     setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: val } : p)));
     if (field === 'model') {
       const p = providers.find((x) => x.id === id);
       if (p && p.role === 'primary') {
-        onChange({ model: val });
+        onChange({ model: val, provider: p.name });
         fetch('/api/model', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: val }),
         }).catch(() => {});
       }
-    } else if (field === 'key') {
-      const p = providers.find((x) => x.id === id);
-      if (p?.envKey) {
-        fetch('/api/apikey', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ envKey: p.envKey, value: val }),
-        }).catch(() => {});
-      }
     }
   };
 
   const setPrimaryProvider = (id: string) => {
+    const chosen = providers.find((p) => p.id === id);
+    if (!chosen) return;
     setProviders((prev) =>
       prev.map((p) => ({
         ...p,
-        role: p.id === id ? 'primary' : p.role === 'primary' ? 'mesh' : p.role,
-      })),
+        role: p.id === id ? 'primary' : 'mesh',
+      }))
     );
-    const chosen = providers.find((p) => p.id === id);
-    if (chosen) {
-      onChange({ model: chosen.model, provider: chosen.name });
+    const chosenModel = chosen.model || '';
+    onChange({ model: chosenModel, provider: chosen.name });
+    if (chosenModel) {
+      fetch('/api/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: chosenModel }),
+      }).catch(() => {});
     }
   };
 
@@ -406,13 +489,16 @@ export function SettingsPanel({
             {tab === 'models' && (
               <div className="tab-models">
                 <p className="tab-intro">
-                  Model-agnostic by design. Choose any model via the dropdown menu for each provider. All major providers are supported: OpenCode, OpenRouter, NVIDIA Nemotron, FPT Cloud AI, BytePlus ModelArk, Google Gemini, Anthropic, OpenAI, DeepSeek, Xiaomi MiMo, and Ollama.
+                  Model-agnostic by design. Select any provider as Primary and manage API keys below. Supports OpenCode, OpenRouter, Cerebras, SambaNova, NVIDIA, FPT Cloud, BytePlus, Google Gemini, Anthropic, OpenAI, DeepSeek, Xiaomi MiMo, Ollama, and more.
                 </p>
 
                 <div className="providers-list">
                   {providers.map((p) => {
                     const isPrimary = p.role === 'primary';
                     const isKeyRevealed = !!revealedKeys[p.id];
+                    const rawInputValue = keyInputs[p.id];
+                    const displayValue = rawInputValue !== undefined ? rawInputValue : (isKeyRevealed ? p.key : '');
+
                     return (
                       <div key={p.id} className={`provider-card ${isPrimary ? 'primary' : ''}`}>
                         <div className="provider-card-head">
@@ -420,7 +506,7 @@ export function SettingsPanel({
                             type="button"
                             className="provider-radio-btn"
                             onClick={() => setPrimaryProvider(p.id)}
-                            title="Set as primary model for loop"
+                            title="Set as primary provider for agent loop"
                           >
                             <span className={`radio-outer ${isPrimary ? 'checked' : ''}`}>
                               {isPrimary && <span className="radio-inner" />}
@@ -428,7 +514,26 @@ export function SettingsPanel({
                           </button>
                           <span className="provider-name">{p.name}</span>
                           <span className={`provider-role-badge role-${p.role}`}>{p.role}</span>
+                          {p.envKey && (
+                            <span style={{ fontSize: '11px', marginLeft: '6px' }}>
+                              {p.keySet ? (
+                                <span style={{ color: 'var(--ok, #34d399)', fontWeight: 600 }}>✓ Key Configured</span>
+                              ) : (
+                                <span style={{ color: 'var(--warn, #fbbf24)' }}>No Key Set</span>
+                              )}
+                            </span>
+                          )}
                           <div className="spacer" />
+                          {p.signupUrl && (
+                            <a
+                              href={p.signupUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ fontSize: '11px', color: 'var(--accent, #60a5fa)', marginRight: '10px', textDecoration: 'underline' }}
+                            >
+                              Get Key ↗
+                            </a>
+                          )}
                           <span className={`provider-ping ${p.pingOk ? 'ok' : 'err'}`}>
                             {p.ping}
                           </span>
@@ -469,13 +574,37 @@ export function SettingsPanel({
                           </label>
 
                           <label className="provider-field full-row">
-                            <span className="field-meta">API key</span>
-                            <div className="key-row">
+                            <span className="field-meta">
+                              API Key {p.envKey ? `(${p.envKey})` : ''}
+                            </span>
+                            <div className="key-row" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                               <input
+                                type={isKeyRevealed ? 'text' : 'password'}
                                 className="field-input key-input"
-                                value={isKeyRevealed ? 'sk-live-configured-api-key' : p.key}
-                                onChange={(e) => handleProviderEdit(p.id, 'key', e.target.value)}
+                                placeholder={p.maskedKey ? `Saved: ${p.maskedKey}` : 'Enter API key...'}
+                                value={displayValue}
+                                onChange={(e) => setKeyInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
                               />
+                              {p.envKey && (
+                                <button
+                                  type="button"
+                                  className="btn-key-save"
+                                  style={{
+                                    padding: '4px 12px',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    borderRadius: '4px',
+                                    background: keySavedStatus[p.id] ? 'var(--ok, #10b981)' : 'var(--accent, #3b82f6)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  onClick={() => handleSaveKey(p)}
+                                >
+                                  {keySavedStatus[p.id] ? '✓ Saved!' : 'Save Key'}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="btn-key-toggle"

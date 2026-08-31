@@ -150,6 +150,8 @@ export interface TaskPatch {
   files?: string[];
   workflow?: WorkflowDef;
   waiting?: boolean;
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 /**
@@ -176,6 +178,8 @@ export function addTask(state: BoardState, patch: TaskPatch & { title: string })
     order: last + 1000,
     files: patch.files,
     workflow: patch.workflow,
+    archived: patch.archived,
+    archivedAt: patch.archivedAt,
     createdAt: now,
     updatedAt: now,
   };
@@ -213,6 +217,13 @@ export function updateTask(state: BoardState, id: string, patch: TaskPatch): Boa
   if (patch.linkedTo !== undefined) task.linkedTo = patch.linkedTo || undefined;
   if (patch.workflow !== undefined) task.workflow = patch.workflow;
   if (patch.waiting !== undefined) task.waiting = patch.waiting;
+  if (patch.archived !== undefined) {
+    task.archived = patch.archived;
+    if (!patch.archived) {
+      task.archivedAt = undefined;
+    }
+  }
+  if (patch.archivedAt !== undefined) task.archivedAt = patch.archivedAt;
   task.updatedAt = new Date().toISOString();
   return task;
 }

@@ -172,6 +172,11 @@ export interface BoardTask {
    * The task is waiting in the queue because another write-capable task is running.
    */
   waiting?: boolean;
+  /**
+   * The task is archived from the finished column.
+   */
+  archived?: boolean;
+  archivedAt?: string;
   /** Ordering within a column. Sparse, so a move never rewrites its neighbours. */
   order: number;
   createdAt: string;

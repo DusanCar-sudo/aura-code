@@ -74,6 +74,9 @@ export interface BoardTask {
     agents: Array<{ id: string; name: string; role: string; icon: string }>;
   };
   waiting?: boolean;
+  archived?: boolean;
+  archivedAt?: string;
+  files?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +115,8 @@ export interface BoardApi {
   add: (patch: NewTask) => Promise<BoardTask | null>;
   update: (id: string, patch: Partial<BoardTask>) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  stop: (id: string) => Promise<void>;
+  archive: (id: string, archived?: boolean) => Promise<void>;
   refresh: () => Promise<void>;
   /** Fold in a `board.changed` event. Called by useAura's event router. */
   applyChanged: (params: unknown) => void;
@@ -192,6 +197,26 @@ export function useBoard(
   );
   const remove = useCallback(async (id: string): Promise<void> => { await call(M.boardRemove, { id }); }, [call]);
 
+  const stop = useCallback(async (id: string): Promise<void> => {
+    const task = tasks.find((t) => t.id === id);
+    if (task?.sessionId) {
+      void call(M.turnCancel, { sessionId: task.sessionId });
+    }
+    await update(id, {
+      column: 'preparation',
+      result: 'Stopped by user.',
+      failed: true,
+      waiting: false,
+    });
+  }, [call, tasks, update]);
+
+  const archive = useCallback(async (id: string, archived = true): Promise<void> => {
+    await update(id, {
+      archived,
+      archivedAt: archived ? new Date().toISOString() : undefined,
+    });
+  }, [update]);
+
   /**
    * Send a picked file to the engine, which writes it beside the board and
    * puts the path on the task.
@@ -223,8 +248,8 @@ export function useBoard(
   // WebSocket down and rebuilt it on every render, which froze the tab and
   // showed as a permanent "Disconnected".
   return useMemo(() => ({
-    tasks, agents, presets, error, refresh, applyChanged, add, update, remove, attach,
-  }), [tasks, agents, presets, error, refresh, applyChanged, add, update, remove, attach]);
+    tasks, agents, presets, error, refresh, applyChanged, add, update, remove, stop, archive, attach,
+  }), [tasks, agents, presets, error, refresh, applyChanged, add, update, remove, stop, archive, attach]);
 }
 
 /**

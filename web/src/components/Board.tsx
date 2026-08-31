@@ -474,8 +474,9 @@ export function Board({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
 
-  // Sub-Tab Navigation inside Kanban ('board' | 'dag' | 'list' | 'providers')
-  const [kanbanSubTab, setKanbanSubTab] = useState<'board' | 'dag' | 'list' | 'providers'>('board');
+  // Sub-Tab Navigation inside Kanban ('board' | 'dag' | 'list' | 'providers' | 'archive')
+  const [kanbanSubTab, setKanbanSubTab] = useState<'board' | 'dag' | 'list' | 'providers' | 'archive'>('board');
+  const [archiveSearch, setArchiveSearch] = useState('');
 
   // Workflow DAG State inside Kanban
   const [dagNodes, setDagNodes] = useState<WorkflowStepNode[]>([
@@ -578,7 +579,21 @@ export function Board({
     finished: [],
   };
 
+  const archivedTasks = allTasks.filter((t) => Boolean(t.archived));
+  const filteredArchivedTasks = archivedTasks.filter((t) => {
+    const q = archiveSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      t.title.toLowerCase().includes(q) ||
+      (t.notes && t.notes.toLowerCase().includes(q)) ||
+      (t.result && t.result.toLowerCase().includes(q)) ||
+      (t.model && t.model.toLowerCase().includes(q)) ||
+      (t.files && t.files.some((f: string) => f.toLowerCase().includes(q)))
+    );
+  });
+
   for (const tItem of allTasks) {
+    if (tItem.archived) continue;
     if (laneTaskLists[tItem.column]) {
       laneTaskLists[tItem.column].push(tItem);
     } else {
@@ -930,6 +945,13 @@ export function Board({
             >
               🔌 Third-Party Providers
             </button>
+            <button
+              type="button"
+              className={`btn-mode-pill ${kanbanSubTab === 'archive' ? 'active' : ''}`}
+              onClick={() => setKanbanSubTab('archive')}
+            >
+              📦 Archive ({archivedTasks.length})
+            </button>
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1129,7 +1151,7 @@ export function Board({
                               <span className="card-model-name">{tItem.model || activeModel}</span>
                             </div>
 
-                            <div className="card-actions-line">
+                             <div className="card-actions-line" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span>{extra.tokens || '-'}</span>
                               <span>{extra.duration || '-'}</span>
                               <label
@@ -1142,17 +1164,91 @@ export function Board({
                               >
                                 <span style={{ fontSize: '12px', lineHeight: 1 }}>+</span>attach
                               </label>
-                              {tItem.column !== 'finished' && (
+
+                              {(tItem.column === 'planning' || tItem.column === 'preparation') && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn-card-delete"
+                                    style={{
+                                      background: 'rgba(255, 107, 107, 0.12)',
+                                      color: '#ff6b6b',
+                                      border: '1px solid rgba(255, 107, 107, 0.3)',
+                                      borderRadius: '4px',
+                                      fontSize: '11px',
+                                      padding: '2px 8px',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void board.remove(tItem.id);
+                                    }}
+                                    title="Delete task from planning/preparation"
+                                  >
+                                    🗑️ Delete
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="btn-card-run"
+                                    disabled={busy}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onRun(tItem);
+                                    }}
+                                  >
+                                    run
+                                  </button>
+                                </>
+                              )}
+
+                              {tItem.column === 'execution' && (
                                 <button
                                   type="button"
-                                  className="btn-card-run"
-                                  disabled={busy}
+                                  className="btn-card-stop"
+                                  style={{
+                                    background: '#e63946',
+                                    color: '#ffffff',
+                                    border: '1px solid #d62828',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    padding: '2px 10px',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    boxShadow: '0 0 8px rgba(230, 57, 70, 0.4)',
+                                  }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onRun(tItem);
+                                    void board.stop(tItem.id);
                                   }}
+                                  title="Stop executing task box and abort active agent run"
                                 >
-                                  run
+                                  🛑 STOP
+                                </button>
+                              )}
+
+                              {tItem.column === 'finished' && (
+                                <button
+                                  type="button"
+                                  className="btn-card-archive"
+                                  style={{
+                                    background: 'rgba(90, 158, 110, 0.15)',
+                                    color: 'var(--ok)',
+                                    border: '1px solid rgba(90, 158, 110, 0.35)',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    padding: '2px 8px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void board.archive(tItem.id, true);
+                                  }}
+                                  title="Archive finished task box"
+                                >
+                                  📦 Archive
                                 </button>
                               )}
                             </div>
@@ -1588,6 +1684,180 @@ export function Board({
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {kanbanSubTab === 'archive' && (
+        <div style={{
+          flex: 1,
+          minHeight: 0,
+          maxHeight: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '24px 32px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          background: 'rgba(11, 14, 23, 0.4)',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
+          {/* Top Bar with Search */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)', fontSize: '14px' }}>🔍</span>
+              <input
+                type="text"
+                placeholder="Search archived tasks, summary, model, or file paths..."
+                value={archiveSearch}
+                onChange={(e) => setArchiveSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  background: 'var(--bg)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--txt)',
+                  fontSize: '13px'
+                }}
+              />
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--txt-dim)' }}>
+              Total Archived: <strong style={{ color: 'var(--txt)' }}>{archivedTasks.length}</strong>
+            </div>
+          </div>
+
+          {/* Archived Tasks List */}
+          {filteredArchivedTasks.length === 0 ? (
+            <div style={{
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: 'var(--txt-dim)',
+              border: '1px dashed var(--line)',
+              borderRadius: '8px',
+              background: 'rgba(255,255,255,0.01)'
+            }}>
+              <div style={{ fontSize: '32px', marginBottom: '12px' }}>📦</div>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', color: 'var(--txt)' }}>No Archived Tasks Found</h4>
+              <p style={{ margin: 0, fontSize: '13px' }}>
+                Finished tasks archived from the Kanban board will appear here with their complete outcome & file outputs.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {filteredArchivedTasks.map((task) => {
+                const outcomeText = task.result || (task.failed ? 'Execution failed' : 'Execution completed successfully');
+                const fileList = task.files || [];
+                const archiveDateStr = task.archivedAt ? new Date(task.archivedAt).toLocaleString() : new Date(task.updatedAt).toLocaleString();
+
+                return (
+                  <div
+                    key={task.id}
+                    style={{
+                      background: 'var(--surface-overlay, rgba(20, 26, 40, 0.75))',
+                      border: '1px solid var(--line)',
+                      borderRadius: '8px',
+                      padding: '16px 20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--txt-dim)', background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px' }}>
+                            #{task.id.slice(0, 8)}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--ok)', background: 'rgba(90, 158, 110, 0.15)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                            ✓ Finished & Archived
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--txt-dim)' }}>
+                            Archived on: {archiveDateStr}
+                          </span>
+                        </div>
+                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--txt)', fontWeight: 600 }}>{task.title}</h3>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--acc2)', background: 'rgba(110, 208, 234, 0.1)', padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(110, 208, 234, 0.2)' }}>
+                          🤖 {task.model || activeModel}
+                        </span>
+                        <button
+                          type="button"
+                          style={{
+                            background: 'rgba(110, 208, 234, 0.15)',
+                            color: 'var(--acc2)',
+                            border: '1px solid rgba(110, 208, 234, 0.35)',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            padding: '4px 10px',
+                            cursor: 'pointer',
+                            fontWeight: 600
+                          }}
+                          onClick={() => void board.archive(task.id, false)}
+                          title="Restore task to Finished column in Kanban board"
+                        >
+                          ↩️ Restore to Finished
+                        </button>
+                      </div>
+                    </div>
+
+                    {task.notes && (
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--txt-dim)', whiteSpace: 'pre-wrap' }}>{task.notes}</p>
+                    )}
+
+                    {/* Outcome Box */}
+                    <div style={{
+                      background: task.failed ? 'rgba(255, 107, 107, 0.08)' : 'rgba(90, 158, 110, 0.08)',
+                      borderLeft: `3px solid ${task.failed ? 'var(--err, #ff6b6b)' : 'var(--ok, #5a9e6e)'}`,
+                      padding: '10px 14px',
+                      borderRadius: '0 6px 6px 0',
+                      fontSize: '13px',
+                      color: 'var(--txt)'
+                    }}>
+                      <div style={{ fontWeight: 600, fontSize: '11px', color: task.failed ? '#ff6b6b' : 'var(--ok)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {task.failed ? '⚠️ Execution Failure Outcome' : '✓ Execution Outcome Summary'}
+                      </div>
+                      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{outcomeText}</div>
+                    </div>
+
+                    {/* File Outputs & Created Artifact Paths */}
+                    {fileList.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          📁 Modified / Output Files ({fileList.length})
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {fileList.map((filePath: string) => (
+                            <span
+                              key={filePath}
+                              style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid var(--line)',
+                                borderRadius: '4px',
+                                padding: '4px 8px',
+                                fontSize: '12px',
+                                color: 'var(--acc2)',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              onClick={() => handleFileLaunch(filePath, task)}
+                              title={`Open ${filePath}`}
+                            >
+                              📄 {filePath}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -2280,6 +2550,48 @@ export function Board({
                     onClick={() => setIsEditingDetail(true)}
                   >
                     <span className="nes-btn-badge">[ E ]</span> EDIT
+                  </button>
+                )}
+
+                {(detailModalTask.column === 'planning' || detailModalTask.column === 'preparation') && (
+                  <button
+                    type="button"
+                    className="nes-arcade-btn"
+                    style={{ background: 'rgba(255,107,107,0.15)', color: '#ff6b6b', borderColor: '#ff6b6b' }}
+                    onClick={() => {
+                      closeDetail();
+                      void board.remove(detailModalTask.id);
+                    }}
+                  >
+                    <span className="nes-btn-badge">[ DEL ]</span> DELETE TASK
+                  </button>
+                )}
+
+                {detailModalTask.column === 'execution' && (
+                  <button
+                    type="button"
+                    className="nes-arcade-btn"
+                    style={{ background: '#e63946', color: '#fff', borderColor: '#d62828', fontWeight: 700 }}
+                    onClick={() => {
+                      closeDetail();
+                      void board.stop(detailModalTask.id);
+                    }}
+                  >
+                    <span className="nes-btn-badge">[ STOP ]</span> STOP AGENT
+                  </button>
+                )}
+
+                {detailModalTask.column === 'finished' && (
+                  <button
+                    type="button"
+                    className="nes-arcade-btn"
+                    style={{ background: 'rgba(90,158,110,0.15)', color: 'var(--ok)', borderColor: 'var(--ok)' }}
+                    onClick={() => {
+                      closeDetail();
+                      void board.archive(detailModalTask.id, true);
+                    }}
+                  >
+                    <span className="nes-btn-badge">[ ARCHIVE ]</span> ARCHIVE TASK
                   </button>
                 )}
 

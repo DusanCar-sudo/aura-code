@@ -36,9 +36,11 @@ export interface Message {
 }
 
 export interface Conversation {
+  number: number;
   sessionId: string;
   title: string;
   at: number;
+  turns?: number;
 }
 
 export interface PendingApproval {
@@ -91,6 +93,86 @@ export function pruneMessages(msgs: Message[]): Message[] {
   return changed ? mapped : msgs;
 }
 
+export function historyToMessages(history: any[]): Message[] {
+  if (!Array.isArray(history)) return [];
+  const result: Message[] = [];
+  let currentAssistant: Message | null = null;
+
+  for (let i = 0; i < history.length; i++) {
+    const item = history[i];
+    if (!item) continue;
+
+    if (item.role === 'user') {
+      currentAssistant = null;
+      const text = typeof item.content === 'string' ? item.content : String(item.text ?? item.content ?? '');
+      result.push({
+        id: `h-u-${i}`,
+        role: 'user',
+        text,
+        tools: [],
+        at: Number(item.at ?? Date.now()),
+      });
+    } else if (item.role === 'assistant') {
+      const tools: ToolEvent[] = (item.toolCalls ?? []).map((tc: any, idx: number) => ({
+        id: tc.id || `tc-${i}-${idx}`,
+        name: tc.name || 'tool',
+        input: tc.input,
+      }));
+      const text = typeof item.content === 'string' ? item.content : String(item.text ?? item.content ?? '');
+      currentAssistant = {
+        id: `h-a-${i}`,
+        role: 'assistant',
+        text,
+        tools,
+        at: Number(item.at ?? Date.now()),
+      };
+      result.push(currentAssistant);
+    } else if (item.role === 'tool_result' || item.role === 'tool') {
+      const results: any[] = Array.isArray(item.results) ? item.results : [item];
+      if (currentAssistant) {
+        for (const res of results) {
+          const match = currentAssistant.tools.find((t) => t.id === res.id || t.name === res.name);
+          const contentStr = typeof res.content === 'string' ? res.content : JSON.stringify(res.content ?? res.result ?? '');
+          if (match) {
+            match.result = contentStr;
+            if (res.isError) match.blocked = 'Execution failed';
+          } else {
+            currentAssistant.tools.push({
+              id: res.id || `res-${i}`,
+              name: res.name || 'tool',
+              result: contentStr,
+              blocked: res.isError ? 'Execution failed' : undefined,
+            });
+          }
+        }
+      } else {
+        result.push({
+          id: `h-t-${i}`,
+          role: 'assistant',
+          text: '',
+          tools: results.map((res: any, idx: number) => ({
+            id: res.id || `res-${i}-${idx}`,
+            name: res.name || 'tool',
+            result: typeof res.content === 'string' ? res.content : JSON.stringify(res.content ?? res.result ?? ''),
+            blocked: res.isError ? 'Execution failed' : undefined,
+          })),
+          at: Number(item.at ?? Date.now()),
+        });
+      }
+    } else {
+      result.push({
+        id: `h-m-${i}`,
+        role: item.role === 'system' ? 'system' : item.role === 'assistant' ? 'assistant' : 'user',
+        text: typeof item.content === 'string' ? item.content : String(item.text ?? item.content ?? ''),
+        tools: Array.isArray(item.tools) ? item.tools : [],
+        at: Number(item.at ?? Date.now()),
+      });
+    }
+  }
+
+  return pruneMessages(result);
+}
+
 export function useAura(settings: Settings) {
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -114,6 +196,7 @@ export function useAura(settings: Settings) {
   // Read inside newChat, which must not be rebuilt every time the tool list
   // arrives — a changing identity there would restart the session flow.
   const toolNamesRef = useRef<string[]>([]);
+  const refreshConversationsRef = useRef<() => void>(() => {});
 
   // The project board. Declared here rather than in the component because the
   // engine announces changes as events, and the event router lives in this
@@ -227,6 +310,7 @@ export function useAura(settings: Settings) {
             costUsd: typeof p.usage.costUsd === 'number' ? p.usage.costUsd : undefined,
           });
         }
+        refreshConversationsRef.current();
         break;
       }
       case M.boardChanged:
@@ -281,17 +365,53 @@ export function useAura(settings: Settings) {
     // every settings change would drop an in-flight turn.
   }, [onEvent, onRequest]);
 
+  const openChat = useCallback(async (id: string) => {
+    setSessionId(id);
+    try { localStorage.setItem('aura_active_session_id', id); } catch { /* */ }
+    setError(null);
+    try {
+      const res = await clientRef.current?.request<{ messages?: any[] }>(M.sessionHistory, {
+        sessionId: id,
+      });
+      if (res?.messages && Array.isArray(res.messages)) {
+        setMessages(historyToMessages(res.messages));
+      } else {
+        setMessages([]);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
   const refreshConversations = useCallback(async () => {
     try {
       const res = await clientRef.current?.request<{ sessions?: any[] }>(M.sessionList);
-      const list = (res?.sessions ?? []).map((s: any) => ({
+      const rawList = res?.sessions ?? [];
+      const list = rawList.map((s: any) => ({
         sessionId: String(s.sessionId),
         title: String(s.name || 'Untitled'),
-        at: Number(s.createdAt ?? Date.now()),
+        at: Number(s.createdAt ? new Date(s.createdAt).getTime() : Date.now()),
+        turns: Number(s.turnsUsed ?? (Array.isArray(s.history) ? Math.floor(s.history.length / 2) : 0)),
       }));
-      setConversations(list.sort((a, b) => b.at - a.at));
+      const sorted = list.sort((a, b) => b.at - a.at);
+      const numbered: Conversation[] = sorted.map((c, idx) => ({
+        ...c,
+        number: idx + 1,
+      }));
+      setConversations(numbered);
+
+      // Auto-restore stored active session or open the latest conversation on page load/refresh
+      let savedId: string | null = null;
+      try { savedId = localStorage.getItem('aura_active_session_id'); } catch { /* localStorage unavailable */ }
+
+      if (savedId && numbered.some((c) => c.sessionId === savedId)) {
+        void openChat(savedId);
+      } else if (numbered.length > 0 && !sessionId) {
+        void openChat(numbered[0].sessionId);
+      }
     } catch { /* a listing failure must not blank the UI */ }
-  }, []);
+  }, [openChat, sessionId]);
+  refreshConversationsRef.current = refreshConversations;
 
   const newChat = useCallback(async (title?: string) => {
     const s = settingsRef.current;
@@ -311,6 +431,7 @@ export function useAura(settings: Settings) {
       });
       if (res?.sessionId) {
         setSessionId(res.sessionId);
+        try { localStorage.setItem('aura_active_session_id', res.sessionId); } catch { /* */ }
         setMessages([]);
         setUsage(null);
         setError(null);
@@ -323,25 +444,6 @@ export function useAura(settings: Settings) {
     }
   }, [refreshConversations]);
 
-  const openChat = useCallback(async (id: string) => {
-    setSessionId(id);
-    setError(null);
-    try {
-      const res = await clientRef.current?.request<{ messages?: any[] }>(M.sessionHistory, {
-        sessionId: id,
-      });
-      setMessages((res?.messages ?? []).map((m: any, i: number) => ({
-        id: `h${i}`,
-        role: m.role === 'user' ? 'user' : 'assistant',
-        text: typeof m.content === 'string' ? m.content : String(m.text ?? ''),
-        tools: [],
-        at: Number(m.at ?? Date.now()),
-      })));
-    } catch (e) {
-      setError(String(e));
-    }
-  }, []);
-
   /** Give a conversation a name. Empty clears it back to the placeholder. */
   const renameChat = useCallback(async (id: string, title: string) => {
     try { await clientRef.current?.request(M.sessionRename, { sessionId: id, name: title }); }
@@ -351,7 +453,11 @@ export function useAura(settings: Settings) {
 
   const deleteChat = useCallback(async (id: string) => {
     try { await clientRef.current?.request(M.sessionDestroy, { sessionId: id }); } catch { /* */ }
-    if (sessionId === id) { setSessionId(null); setMessages([]); }
+    if (sessionId === id) {
+      setSessionId(null);
+      setMessages([]);
+      try { localStorage.removeItem('aura_active_session_id'); } catch { /* */ }
+    }
     void refreshConversations();
   }, [sessionId, refreshConversations]);
 

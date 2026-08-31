@@ -28,6 +28,42 @@ const DEFAULT_MODELS_FALLBACK: ModelItem[] = [
   { id: 'qwen3-coder-30b', name: 'Qwen3 Coder 30B', provider: 'Ollama', speed: 'Local · fast', hasKey: true },
 ];
 
+export function isTaskIntent(input: string): boolean {
+  const text = input.trim().toLowerCase();
+  if (!text) return false;
+
+  const casualPhrases = new Set([
+    'hi', 'hello', 'hey', 'yo', 'sup', 'howdy', 'good morning', 'good afternoon', 'good evening',
+    'who are you', 'what are you', 'what can you do', 'what do you do', 'how are you',
+    'thanks', 'thank you', 'thx', 'cool', 'nice', 'awesome', 'ok', 'okay', 'great',
+    'help', 'bye', 'goodbye', 'ping', 'test'
+  ]);
+  const cleaned = text.replace(/[!?.,]/g, '');
+  if (casualPhrases.has(cleaned)) return false;
+
+  const actionKeywords = [
+    'build', 'create', 'add', 'fix', 'implement', 'refactor', 'update', 'delete', 'remove',
+    'change', 'modify', 'run', 'test', 'debug', 'check', 'search', 'find', 'read', 'write',
+    'install', 'deploy', 'generate', 'setup', 'configure', 'optimize', 'parse', 'inspect',
+    'clean', 'convert', 'script', 'component', 'function', 'class', 'file', 'code', 'bug',
+    'issue', 'error', 'feature', 'kanban', 'tab', 'ui', 'api', 'server', 'db'
+  ];
+
+  const hasActionKeyword = actionKeywords.some((kw) => text.includes(kw));
+  const isQuestionAboutBot = /^(what|who|how|why|are you|can you)\s+(is|are|can|do|did|does|you|your|aura|this app)\b/i.test(text);
+
+  if (isQuestionAboutBot && !hasActionKeyword) {
+    return false;
+  }
+
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount <= 3 && !hasActionKeyword) {
+    return false;
+  }
+
+  return true;
+}
+
 export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [view, setView] = useState<MainView>('chat');
@@ -48,14 +84,20 @@ export function App() {
   const t = useCallback((key: string) => translate(settings.locale, key), [settings.locale]);
   const aura = useAura(settings);
 
-  // Load models from server endpoint
+  // Load models from server endpoint & sync saved settings model with server
   useEffect(() => {
     fetch('/api/models')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data && Array.isArray(data.models)) {
           setAvailableModels(data.models);
-          if (data.activeModel && !settings.model) {
+          if (settings.model) {
+            fetch('/api/model', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: settings.model }),
+            }).catch(() => {});
+          } else if (data.activeModel) {
             setSettings((prev) => ({ ...prev, model: data.activeModel }));
           }
         }
@@ -126,8 +168,8 @@ export function App() {
       return;
     }
 
-    // Automatically create task in Kanban 'execution' lane when entering real tasks in chat
-    if (trimmed) {
+    // Automatically create task in Kanban 'execution' lane ONLY when entering real building/researching tasks (not casual chat)
+    if (trimmed && isTaskIntent(trimmed)) {
       const firstLine = trimmed.split('\n')[0].replace(/^#+\s*/, '').trim();
       const title = firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
 

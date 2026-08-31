@@ -190,10 +190,8 @@ export function Chat({
   const pinned = useRef(true);
   const [sampleGateState, setSampleGateState] = useState<'pending' | 'approved' | 'denied'>('pending');
 
-  // Use real messages if present, or sample messages for ch1 / demo session
-  const displayList: CustomMessage[] = messages.length > 0
-    ? (messages as CustomMessage[])
-    : (!sessionId || sessionId === 'ch1' ? DEFAULT_SAMPLE_MESSAGES : []);
+  // Use real messages in the active thread
+  const displayList: CustomMessage[] = (messages as CustomMessage[]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -209,12 +207,12 @@ export function Chat({
         <div className="chat-header-meta-row">
           <span className="meta-badge-session">Session</span>
           <span className="meta-session-id">
-            {sessionId ? `sess ${sessionId.slice(0, 6)} · aura-code · main` : 'sess 4f8c · aura-code · main'}
+            {sessionId ? `sess ${sessionId.slice(0, 6)} · aura-code · main` : 'no session active'}
           </span>
           <div className="spacer" />
           <span className="meta-policy-pills">{approvalPill} · {sandboxPill}</span>
         </div>
-        <h1 className="chat-header-title">{chatTitle || 'Flaky retry in the agent loop'}</h1>
+        <h1 className="chat-header-title">{chatTitle || (sessionId ? 'Active Session' : 'New Chat')}</h1>
       </header>
 
       <div
