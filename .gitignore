@@ -134,3 +134,18 @@ hyperframes/
 
 # Personal, per Claude Code's own convention (settings.json is the shared one).
 .claude/settings.local.json
+
+# Generated showcase-video media (reproducible from scripts/*.py; audio, video
+# and intermediate screens are large and not source).
+scripts/*.mp3
+scripts/*.mp4
+scripts/slide_*.txt
+.tmp-screens/
+.graphify/
+assets/hyperframes_generated/
+aura_code_hyperframes_showcase.mp4
+web-portfolio-preview.png
+
+# Personal documents (job applications, generated CVs).
+prvi_posao.pdf
+temp_cv.pdf
