@@ -90,74 +90,12 @@ export interface CustomMessage extends Omit<Partial<Message>, 'role'> {
   resolved?: boolean;
 }
 
-const DEFAULT_SAMPLE_MESSAGES: CustomMessage[] = [
-  {
-    id: 'm1',
-    role: 'user',
-    text: 'The retry test in loop.spec.ts fails maybe one run in six. Find out why.',
-    files: [{ name: 'loop.spec.ts' }, { name: 'ci-run-1188.log' }],
-  },
-  {
-    id: 'm2',
-    role: 'assistant',
-    text: 'I will reproduce it before I touch anything. Running the single spec twenty times.',
-  },
-  {
-    id: 'm3',
-    role: 'tool',
-    icon: '⚡',
-    tool: 'shell',
-    detail: 'vitest run loop.spec.ts --repeat 20',
-    status: '3 failed',
-    statusColor: 'var(--err)',
-  },
-  {
-    id: 'm4',
-    role: 'tool',
-    icon: '📄',
-    tool: 'read',
-    detail: 'src/agent/loop.ts:31-78',
-    status: '48 lines',
-    statusColor: 'var(--mut)',
-  },
-  {
-    id: 'm5',
-    role: 'assistant',
-    text: 'Line 47 computes the backoff from Date.now() inside the assertion window, so a slow tick pushes the third retry past the 200ms budget. The bug is in the test clock, not the loop - but the loop should not read the wall clock either.',
-  },
-  {
-    id: 'm6',
-    role: 'gate',
-    text: 'edit src/agent/loop.ts',
-    detail: '2 hunks · replaces Date.now() with an injected clock',
-    pending: true,
-  },
-  {
-    id: 'm7',
-    role: 'tool',
-    icon: '🧪',
-    tool: 'test',
-    detail: 'vitest run --repeat 40',
-    status: '40/40',
-    statusColor: 'var(--ok)',
-  },
-  {
-    id: 'm8',
-    role: 'verify',
-    lines: [
-      { text: '✓ 1,205 tests passing', color: 'var(--ok)' },
-      { text: '✓ loop.spec.ts stable over 40 runs', color: 'var(--ok)' },
-      { text: '✗ 0 regressions', color: 'var(--mut)' },
-      { text: '→ src/agent/loop.ts:47, src/agent/clock.ts (new)', color: 'var(--mut)' },
-    ],
-  },
-];
-
 export function Chat({
   messages,
   busy,
   error,
   sessionId,
+  sessionNumber,
   chatTitle,
   approval,
   permission = 'auto',
@@ -174,6 +112,7 @@ export function Chat({
   busy: boolean;
   error: string | null;
   sessionId: string | null;
+  sessionNumber?: number;
   chatTitle?: string;
   approval?: PendingApproval | null;
   permission?: string;
@@ -188,7 +127,6 @@ export function Chat({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
-  const [sampleGateState, setSampleGateState] = useState<'pending' | 'approved' | 'denied'>('pending');
 
   // Use real messages in the active thread
   const displayList: CustomMessage[] = (messages as CustomMessage[]);
@@ -205,14 +143,14 @@ export function Chat({
     <div className="chat-pane-root">
       <header className="chat-pane-header">
         <div className="chat-header-meta-row">
-          <span className="meta-badge-session">Session</span>
+          <span className="meta-badge-session">{sessionNumber ? `Session #${sessionNumber}` : 'Session'}</span>
           <span className="meta-session-id">
-            {sessionId ? `sess ${sessionId.slice(0, 6)} · aura-code · main` : 'no session active'}
+            {sessionId ? `sess ${sessionId.slice(0, 8)} · aura-code · main` : 'no session active'}
           </span>
           <div className="spacer" />
           <span className="meta-policy-pills">{approvalPill} · {sandboxPill}</span>
         </div>
-        <h1 className="chat-header-title">{chatTitle || (sessionId ? 'Active Session' : 'New Chat')}</h1>
+        <h1 className="chat-header-title">{chatTitle || (sessionId ? `Session #${sessionNumber ?? 1}` : 'New Chat')}</h1>
       </header>
 
       <div
@@ -283,48 +221,15 @@ export function Chat({
               }
 
               if (isGate) {
-                const isPending = sampleGateState === 'pending';
                 return (
                   <div key={m.id} className="chat-msg-row">
                     <div className="chat-gate-card">
                       <div className="gate-card-head">
                         <span className="gate-icon">⚠️</span>
-                        <span className="gate-title">Approval required</span>
+                        <span className="gate-title">Approval</span>
                       </div>
                       <div className="gate-tool-text">{m.text}</div>
-                      <div className="gate-detail-text">{m.detail}</div>
-                      {isPending ? (
-                        <div className="gate-actions-row">
-                          <button
-                            type="button"
-                            className="btn-gate-approve"
-                            onClick={() => setSampleGateState('approved')}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-gate-deny"
-                            onClick={() => setSampleGateState('denied')}
-                          >
-                            Deny
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            marginTop: '10px',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '10.5px',
-                            letterSpacing: '0.06em',
-                            color: sampleGateState === 'approved' ? 'var(--ok)' : 'var(--err)',
-                          }}
-                        >
-                          {sampleGateState === 'approved'
-                            ? '✓ approved — applied 2 hunks'
-                            : '✗ denied — no files written'}
-                        </div>
-                      )}
+                      {m.detail && <div className="gate-detail-text">{m.detail}</div>}
                     </div>
                   </div>
                 );
