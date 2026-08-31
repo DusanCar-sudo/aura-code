@@ -81,10 +81,19 @@ export async function handleSessionCommand(
   }
 
   if (input.startsWith(':resume ')) {
-    const id = input.slice(':resume '.length).trim();
+    const rawArg = input.slice(':resume '.length).trim();
+    let id = rawArg;
+    const numMatch = rawArg.match(/^#?(\d+)$/);
+    if (numMatch) {
+      const index = parseInt(numMatch[1], 10) - 1;
+      const list = sessionStore.listSessions(c.chatState.projectRoot);
+      if (index >= 0 && index < list.length) {
+        id = list[index].id;
+      }
+    }
     const loaded = await sessionStore.loadSession(c.chatState.projectRoot, id);
     if (!loaded) {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
+      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}\n`));
       return { handled: true };
     }
     c.budget.reset();   // a different conversation, so a different total
@@ -129,7 +138,16 @@ export async function handleSessionCommand(
   }
 
   if (input.startsWith(':delete ')) {
-    const id = input.slice(':delete '.length).trim();
+    const rawArg = input.slice(':delete '.length).trim();
+    let id = rawArg;
+    const numMatch = rawArg.match(/^#?(\d+)$/);
+    if (numMatch) {
+      const index = parseInt(numMatch[1], 10) - 1;
+      const list = sessionStore.listSessions(c.chatState.projectRoot);
+      if (index >= 0 && index < list.length) {
+        id = list[index].id;
+      }
+    }
     const deleted = await sessionStore.deleteSession(c.chatState.projectRoot, id);
     if (deleted) {
       console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
@@ -140,7 +158,7 @@ export async function handleSessionCommand(
         return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
       }
     } else {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${id}\n`));
+      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}\n`));
     }
     return { handled: true };
   }

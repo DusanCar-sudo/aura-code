@@ -298,6 +298,32 @@ describe('ProtocolHandler', () => {
     await expect(longRunning).resolves.toBe(true);
     expect(released).toBe(true);
   });
+
+  it('persists sessions across handler instances and reloads from disk', async () => {
+    const id = await create({ name: 'Persistent Chat' });
+
+    // Create a new handler instance pointing to the same directory
+    const c2 = collector();
+    const h2 = new ProtocolHandler({
+      defaultModel: 'deepseek/deepseek-v4-flash',
+      defaultProjectRoot: tmp,
+      send: c2.send,
+    });
+
+    // It should list the persisted session
+    await h2.handle(req(M.sessionList));
+    const listRes = c2.res('t' + n) as { ok: true; result: { sessions: { sessionId: string; name: string }[] } };
+    expect(listRes?.ok).toBe(true);
+    expect(listRes.result.sessions.some(s => s.sessionId === id && s.name === 'Persistent Chat')).toBe(true);
+
+    // It should be able to get history for the persisted session
+    await h2.handle(req(M.sessionHistory, { sessionId: id }));
+    const histRes = c2.res('t' + n) as { ok: true; result: { messages: unknown[] } };
+    expect(histRes?.ok).toBe(true);
+    expect(Array.isArray(histRes.result.messages)).toBe(true);
+
+    h2.dispose();
+  });
 });
 
 describe('confirm() structured context', () => {

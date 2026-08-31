@@ -63,7 +63,8 @@ export const sessionStore = {
   },
 
   projectDir(projectRoot: string): string {
-    const safe = projectRoot.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+    const resolved = path.resolve(projectRoot);
+    const safe = resolved.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
     return path.join(this.defaultDir(), safe);
   },
 
@@ -113,12 +114,47 @@ export const sessionStore = {
     return filePath;
   },
 
+  loadSessionSync(projectRoot: string, id: string): ChatSession | null {
+    const filePath = path.join(this.projectDir(projectRoot), `${id}.json`);
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw) as Partial<ChatSession> & { savedAt?: string };
+      if (!parsed.id) {
+        if (path.basename(filePath) === 'latest.json') return null;
+        return {
+          id,
+          title: parsed.history ? this.titleFromHistory(parsed.history) : 'Untitled',
+          createdAt: parsed.savedAt || new Date().toISOString(),
+          updatedAt: parsed.savedAt || new Date().toISOString(),
+          version: 1,
+          history: parsed.history || [],
+        } as ChatSession;
+      }
+      return parsed as ChatSession;
+    } catch {
+      return null;
+    }
+  },
+
   async loadSession(projectRoot: string, id: string): Promise<ChatSession | null> {
     const filePath = path.join(this.projectDir(projectRoot), `${id}.json`);
     if (!fs.existsSync(filePath)) return null;
     try {
       const raw = await fs.promises.readFile(filePath, 'utf8');
-      return JSON.parse(raw) as ChatSession;
+      const parsed = JSON.parse(raw) as Partial<ChatSession> & { savedAt?: string };
+      if (!parsed.id) {
+        if (path.basename(filePath) === 'latest.json') return null;
+        return {
+          id,
+          title: parsed.history ? this.titleFromHistory(parsed.history) : 'Untitled',
+          createdAt: parsed.savedAt || new Date().toISOString(),
+          updatedAt: parsed.savedAt || new Date().toISOString(),
+          version: 1,
+          history: parsed.history || [],
+        } as ChatSession;
+      }
+      return parsed as ChatSession;
     } catch {
       return null;
     }
@@ -159,13 +195,23 @@ export const sessionStore = {
     if (!fs.existsSync(dir)) return [];
     return fs
       .readdirSync(dir)
-      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
+      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp') && f !== 'latest.json')
       .map(f => {
         try {
           const raw = fs.readFileSync(path.join(dir, f), 'utf8');
           const parsed = JSON.parse(raw) as Partial<ChatSession> & { savedAt?: string };
           // Migrate legacy format (no id/title)
-          if (!parsed.id) return null;
+          if (!parsed.id) {
+            const id = f.replace('.json', '');
+            return {
+              id,
+              title: parsed.history ? this.titleFromHistory(parsed.history) : 'Untitled',
+              createdAt: parsed.savedAt || new Date().toISOString(),
+              updatedAt: parsed.savedAt || new Date().toISOString(),
+              version: 1,
+              history: parsed.history || [],
+            } as ChatSession;
+          }
           return parsed as ChatSession;
         } catch {
           return null;

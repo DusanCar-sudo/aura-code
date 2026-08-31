@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
+import * as path from 'path';
 import { createProvider, getApiKeyForModel } from '../providers/factory.js';
 import { loadProjectContext, type ProjectContext } from '../agent/context.js';
 import { runAgentLoop } from '../agent/loop.js';
+import { sessionStore } from '../agent/session-store.js';
 import { PermissionSystem, setConfirmHandler, type ConfirmContext } from '../safety/permissions.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { TOOL_DEFINITIONS } from '../tools/index.js';
@@ -194,7 +196,7 @@ export class ProtocolHandler {
    * Trimmed and length-capped: a name is a label, and an unbounded one would
    * be echoed into every session listing.
    */
-  private sessionRename(req: ReqFrame, p: Record<string, unknown>): void {
+  private async sessionRename(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
     const s = this.lookup(req, p);
     if (!s) return;
     if (typeof p.name !== 'string') {
@@ -204,13 +206,17 @@ export class ProtocolHandler {
     // An empty name clears it rather than storing "", so the client falls back
     // to its own placeholder instead of rendering a blank row.
     s.name = name || undefined;
+    try {
+      await sessionStore.upsertSession(s.projectRoot || this.opts.defaultProjectRoot, s.id, s.history, s.name);
+    } catch { /* best effort */ }
     this.ok(req.id, { sessionId: s.id, name: s.name });
   }
 
   private async sessionCreate(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
-    const projectRoot = typeof p.projectRoot === 'string' && p.projectRoot
+    const rawRoot = typeof p.projectRoot === 'string' && p.projectRoot && p.projectRoot !== '.'
       ? p.projectRoot
       : this.opts.defaultProjectRoot;
+    const projectRoot = path.resolve(rawRoot);
     const model = typeof p.model === 'string' && p.model ? p.model : this.opts.defaultModel;
     // An unrecognised level falls back to 'normal' rather than to the most
     // permissive reading of a typo.
@@ -239,7 +245,7 @@ export class ProtocolHandler {
       });
     }
 
-    const id = randomUUID();
+    const id = sessionStore.generateId();
     const maxInputTokens = typeof p.maxInputTokens === 'number' ? p.maxInputTokens : undefined;
     const session: Session = {
       id,
@@ -260,15 +266,28 @@ export class ProtocolHandler {
       alwaysAllow: new Set(),
     };
     this.sessions.set(id, session);
+    try {
+      await sessionStore.saveSession(projectRoot, {
+        id,
+        title: session.name || 'New Chat',
+        createdAt: new Date(session.createdAt).toISOString(),
+        updatedAt: new Date(session.createdAt).toISOString(),
+        version: 1,
+        history: [],
+      });
+    } catch { /* best effort */ }
 
     this.ok(req.id, { sessionId: id, projectRoot, model, name: session.name });
   }
 
-  private sessionDestroy(req: ReqFrame, p: Record<string, unknown>): void {
+  private async sessionDestroy(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
     const s = this.lookup(req, p);
     if (!s) return;
     s.activeTurn?.abort.abort();
     this.sessions.delete(s.id);
+    try {
+      await sessionStore.deleteSession(s.projectRoot || this.opts.defaultProjectRoot, s.id);
+    } catch { /* best effort */ }
     this.ok(req.id, { destroyed: true });
   }
 
@@ -440,6 +459,28 @@ export class ProtocolHandler {
       }));
 
       s.history = result.history;
+      const root = s.projectRoot || this.opts.defaultProjectRoot;
+      const title = s.name || sessionStore.titleFromHistory(s.history);
+      s.name = title;
+      try {
+        await sessionStore.upsertSession(root, s.id, s.history, s.name, {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          cachedTokens: result.usage.cachedTokens ?? 0,
+          cacheCreationTokens: 0,
+          costUsd: result.costUsd ?? 0,
+          turns: [{
+            turn: result.turns,
+            at: new Date().toISOString(),
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            cachedTokens: result.usage.cachedTokens ?? 0,
+            cacheCreationTokens: 0,
+            costUsd: result.costUsd ?? 0,
+          }],
+        });
+      } catch { /* best effort */ }
+
       this.emit(M.turnCompleted, s.id, {
         turnId,
         success: result.success,
@@ -459,6 +500,20 @@ export class ProtocolHandler {
           .filter((t) => (t.name === 'write_file' || t.name === 'edit_file') && typeof t.input?.path === 'string')
           .map((t) => String(t.input.path))
       ));
+      try {
+        const bState = loadBoard(root);
+        const taskInExec = bState.tasks.find((t) => (t.sessionId === s.id || t.id === s.id) && t.column === 'execution');
+        if (taskInExec) {
+          updateTask(bState, taskInExec.id, {
+            column: 'finished',
+            result: result.summary,
+            failed: !result.success,
+            attention: false,
+            files: modifiedFiles.length > 0 ? modifiedFiles : (taskInExec.files ?? []),
+          });
+          this.boardCommit(root, bState);
+        }
+      } catch { /* best effort */ }
       return { success: result.success, summary: result.summary, files: modifiedFiles };
     } catch (e) {
       this.emit(M.turnError, s.id, {
@@ -471,6 +526,26 @@ export class ProtocolHandler {
         turns: 0, toolCount: 0,
         usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0, costUsd: 0 },
       });
+      try {
+        const root = s.projectRoot || this.opts.defaultProjectRoot;
+        if (s.history.length > 0) {
+          await sessionStore.upsertSession(root, s.id, s.history, s.name);
+        }
+      } catch { /* best effort */ }
+      try {
+        const root = s.projectRoot || this.opts.defaultProjectRoot;
+        const bState = loadBoard(root);
+        const taskInExec = bState.tasks.find((t) => (t.sessionId === s.id || t.id === s.id) && t.column === 'execution');
+        if (taskInExec) {
+          updateTask(bState, taskInExec.id, {
+            column: 'finished',
+            result: e instanceof Error ? e.message : String(e),
+            failed: true,
+            attention: false,
+          });
+          this.boardCommit(root, bState);
+        }
+      } catch { /* best effort */ }
       return { success: false, summary: e instanceof Error ? e.message : String(e), files: [] };
     } finally {
       // Only the turn's own state is cleared. The confirm handler is
@@ -584,16 +659,42 @@ export class ProtocolHandler {
   }
 
   private listSessions(): SessionSummary[] {
-    return [...this.sessions.values()].map(s => ({
-      sessionId: s.id,
-      name: s.name,
-      projectRoot: s.projectRoot,
-      model: s.model,
-      createdAt: s.createdAt,
-      busy: s.activeTurn !== null,
-      turnsUsed: s.budget.turnsUsed,
-      inputTokensUsed: s.budget.inputTokensUsed,
-    }));
+    const projectRoot = path.resolve(this.opts.defaultProjectRoot);
+    const diskSessions = sessionStore.listSessions(projectRoot);
+    const seen = new Set<string>();
+    const result: SessionSummary[] = [];
+
+    for (const s of this.sessions.values()) {
+      seen.add(s.id);
+      result.push({
+        sessionId: s.id,
+        name: s.name || (s.history.length > 0 ? sessionStore.titleFromHistory(s.history) : 'Untitled Session'),
+        projectRoot: s.projectRoot,
+        model: s.model,
+        createdAt: s.createdAt,
+        busy: s.activeTurn !== null,
+        turnsUsed: s.budget.turnsUsed || Math.floor(s.history.length / 2),
+        inputTokensUsed: s.budget.inputTokensUsed,
+      });
+    }
+
+    for (const ds of diskSessions) {
+      if (!seen.has(ds.id)) {
+        seen.add(ds.id);
+        result.push({
+          sessionId: ds.id,
+          name: ds.title || 'Untitled Session',
+          projectRoot,
+          model: this.opts.defaultModel,
+          createdAt: ds.createdAt ? new Date(ds.createdAt).getTime() : Date.now(),
+          busy: false,
+          turnsUsed: Math.floor((ds.history?.length ?? 0) / 2),
+          inputTokensUsed: ds.usage?.inputTokens ?? 0,
+        });
+      }
+    }
+
+    return result.sort((a, b) => b.createdAt - a.createdAt);
   }
 
   private listTools(): ToolInfo[] {
@@ -610,7 +711,30 @@ export class ProtocolHandler {
       this.fail(req.id, { code: 'bad_params', message: 'params.sessionId is required.' });
       return null;
     }
-    const s = this.sessions.get(id);
+    let s = this.sessions.get(id);
+    if (!s) {
+      const projectRoot = path.resolve(this.opts.defaultProjectRoot);
+      const disk = sessionStore.loadSessionSync(projectRoot, id);
+      if (disk) {
+        s = {
+          id: disk.id,
+          name: disk.title,
+          projectRoot,
+          model: this.opts.defaultModel,
+          apiKey: this.opts.defaultApiKey || getApiKeyForModel(this.opts.defaultModel),
+          baseUrl: this.opts.defaultBaseUrl,
+          context: { root: projectRoot, files: [], dependencies: {}, structure: [] } as any,
+          permissions: new PermissionSystem('auto'),
+          allowedTools: null,
+          budget: new SessionBudget(),
+          history: disk.history || [],
+          createdAt: disk.createdAt ? new Date(disk.createdAt).getTime() : Date.now(),
+          activeTurn: null,
+          alwaysAllow: new Set(),
+        };
+        this.sessions.set(id, s);
+      }
+    }
     if (!s) {
       this.fail(req.id, { code: 'no_such_session', message: `No such session: ${id}` });
       return null;
@@ -698,6 +822,7 @@ export class ProtocolHandler {
     for (const key of [
       'title', 'notes', 'column', 'agent', 'model', 'sessionId', 'result',
       'failed', 'order', 'priority', 'attention', 'linkedTo', 'files', 'waiting',
+      'archived', 'archivedAt',
     ]) {
       if (p[key] !== undefined) patch[key] = p[key];
     }

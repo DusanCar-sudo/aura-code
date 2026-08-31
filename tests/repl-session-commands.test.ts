@@ -158,6 +158,18 @@ describe('REPL session commands reset the budget', () => {
     expect(r!.handled).toBe(true);
     expect(r!.newChatId).toBeUndefined();
     expect(c.budget.inputTokensUsed).toBe(1_200);
+    expect(c.budget.exhausted()).not.toBeNull();
+  });
+
+  it(':resume <number> and :resume #<number> resolves numeric session index', async () => {
+    await sessionStore.upsertSession(PROJECT, 'saved-alpha', historyOf(2), 'Alpha');
+    const c = spentCtx();
+
+    const r1 = await handleSessionCommand(':resume 1', c);
+    expect(r1!.newChatId).toBe('saved-alpha');
+
+    const r2 = await handleSessionCommand(':resume #1', c);
+    expect(r2!.newChatId).toBe('saved-alpha');
   });
 
   it('returns null for anything it does not own, so the caller chain continues', async () => {

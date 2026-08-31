@@ -294,11 +294,13 @@ if (argv['list-sessions']) {
     console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions for this project.\n'));
   } else {
     console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
-    for (const s of sessions) {
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
+      const num = chalk.hex(TEXT_DIM_HEX)(`[#${i + 1}]`.padEnd(5));
       const updated = new Date(s.updatedAt).toLocaleString();
       const turns = Math.floor(s.history.length / 2);
       console.log(
-        `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
+        `  ${num} ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
         `${chalk.hex(TEXT_HEX)(s.title.slice(0, 45).padEnd(46))} ` +
         `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}`,
       );
@@ -2939,12 +2941,14 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions.\n'));
     } else {
       console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
-      for (const s of sessions) {
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        const num = chalk.hex(TEXT_DIM_HEX)(`[#${i + 1}]`.padEnd(5));
         const updated = new Date(s.updatedAt).toLocaleString();
         const turns = Math.floor(s.history.length / 2);
         const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
         console.log(
-          `  ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
+          `  ${num} ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
           `${chalk.hex(TEXT_HEX)(s.title.slice(0, 40).padEnd(41))} ` +
           `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}${marker}`,
         );
