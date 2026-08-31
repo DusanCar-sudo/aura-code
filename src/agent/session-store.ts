@@ -72,6 +72,23 @@ export const sessionStore = {
     return crypto.randomBytes(4).toString('hex') + '-' + Date.now().toString(36);
   },
 
+  /**
+   * Whether a directory entry is a session file at all. The sessions dir also
+   * holds companion artifacts keyed off a session id — the loop's crash-safety
+   * `<id>.run.json` and tiered-context's `<id>.factlog.json` — and a legacy
+   * `latest.json` pointer. None of them is a session; listing or migrating
+   * them as one put "Untitled" ghosts and duplicate threads in every sidebar.
+   */
+  isSessionFile(f: string): boolean {
+    return (
+      f.endsWith('.json') &&
+      !f.endsWith('.tmp') &&
+      !f.endsWith('.run.json') &&
+      !f.endsWith('.factlog.json') &&
+      path.basename(f, '.json') !== 'latest'
+    );
+  },
+
   /** Derive a short title from the first user message. */
   titleFromHistory(history: HistoryMessage[]): string {
     const first = history.find(m => m.role === 'user');
@@ -195,7 +212,7 @@ export const sessionStore = {
     if (!fs.existsSync(dir)) return [];
     return fs
       .readdirSync(dir)
-      .filter(f => f.endsWith('.json') && !f.endsWith('.tmp') && f !== 'latest.json')
+      .filter(f => this.isSessionFile(f))
       .map(f => {
         try {
           const raw = fs.readFileSync(path.join(dir, f), 'utf8');
