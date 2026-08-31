@@ -7499,11 +7499,52 @@ body.theme-light .chat-input {
 
 @keyframes taskbox-glow-red {
   0%, 100% {
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 10px rgba(230, 57, 70, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(230, 57, 70, 0.7), 0 0 42px rgba(230, 57, 70, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   }
   50% {
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 22px rgba(230, 57, 70, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(230, 57, 70, 0.95), 0 0 64px rgba(230, 57, 70, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   }
+}
+
+/* Corner delete — a small bin in the tile's top-right, ~30% larger than a
+   standard 13px icon. Faded until hovered; it is a button, so the drag
+   handler ignores it, and its click never opens the detail modal. */
+.card-trash-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  border: none;
+  border-radius: 5px;
+  background: rgba(11, 14, 23, 0.55);
+  font-size: 17px;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.card-trash-btn:hover {
+  opacity: 1;
+  background: rgba(230, 57, 70, 0.3);
+}
+
+/* Inline title rewrite on the tile itself. */
+.card-title-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 4px 0;
+  padding: 1px 3px;
+  border: 1px solid var(--acc2);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .kanban-card.glow-landing {

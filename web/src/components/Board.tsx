@@ -475,6 +475,9 @@ export function Board({
   const [cardPositions, setCardPositions] = useState<Record<string, { x: number; y: number }>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
+  // Inline title rewrite: one card at a time, saved on Enter or blur.
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
 
   // Sub-Tab Navigation inside Kanban ('board' | 'dag' | 'list' | 'providers' | 'archive')
   const [kanbanSubTab, setKanbanSubTab] = useState<'board' | 'dag' | 'list' | 'providers' | 'archive'>('board');
@@ -801,6 +804,17 @@ export function Board({
     });
 
     setSwarmModalOpen(false);
+  };
+
+  /** Persist an inline title rewrite. Empty or unchanged drafts are no-ops. */
+  const saveTitle = async (id: string): Promise<void> => {
+    const draft = titleDraft.trim();
+    setEditingTitleId(null);
+    setTitleDraft('');
+    if (!draft) return;
+    const task = allTasks.find((t) => t.id === id);
+    if (!task || task.title === draft) return;
+    await board.update(id, { title: draft });
   };
 
   const handleAttachClick = (taskId: string) => {
@@ -1144,7 +1158,33 @@ export function Board({
                               </div>
                             </div>
 
-                            <h4 className="card-title">{tItem.title}</h4>
+                            {editingTitleId === tItem.id ? (
+                              <input
+                                autoFocus
+                                className="card-title-input"
+                                value={titleDraft}
+                                onChange={(e) => setTitleDraft(e.target.value)}
+                                onBlur={() => { void saveTitle(tItem.id); }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.currentTarget.blur(); }
+                                  if (e.key === 'Escape') { setEditingTitleId(null); setTitleDraft(''); }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <h4
+                                className="card-title"
+                                style={{ cursor: 'text' }}
+                                title="Click to rename"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTitleId(tItem.id);
+                                  setTitleDraft(tItem.title);
+                                }}
+                              >
+                                {tItem.title}
+                              </h4>
+                            )}
 
                             {/* Live swarm roster — status comes from the engine as each agent runs */}
                             {tItem.swarm && tItem.swarm.agents.length > 0 && (
@@ -1239,28 +1279,6 @@ export function Board({
                                 <>
                                   <button
                                     type="button"
-                                    className="btn-card-delete"
-                                    style={{
-                                      background: 'rgba(255, 107, 107, 0.12)',
-                                      color: '#ff6b6b',
-                                      border: '1px solid rgba(255, 107, 107, 0.3)',
-                                      borderRadius: '4px',
-                                      fontSize: '11px',
-                                      padding: '2px 8px',
-                                      cursor: 'pointer',
-                                      fontWeight: 600,
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void board.remove(tItem.id);
-                                    }}
-                                    title="Delete task from planning/preparation"
-                                  >
-                                    🗑️ Delete
-                                  </button>
-
-                                  <button
-                                    type="button"
                                     className="btn-card-run"
                                     disabled={busy}
                                     onClick={(e) => {
@@ -1323,6 +1341,20 @@ export function Board({
                               )}
                             </div>
                           </div>
+                          {/* Corner bin — replaces the old fat Delete button. It is a
+                             button, so the drag handler ignores it, and stopPropagation
+                             keeps the click away from the card's own handlers. */}
+                          <button
+                            type="button"
+                            className="card-trash-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void board.remove(tItem.id);
+                            }}
+                            title="Delete task"
+                          >
+                            🗑️
+                          </button>
                         </div>
                       );
                     })}
