@@ -1,0 +1,60 @@
+1
+00:00:00,000 --> 00:00:07,452
+Welcome to Aura Code. A modern model agnostic coding agent built for high performance development.
+
+2
+00:00:07,552 --> 00:00:15,988
+Our Kanban board gives you complete visual control. Drag and drop task cards across columns with instant re parenting.
+
+3
+00:00:16,088 --> 00:00:24,356
+The core philosophy is simple: Zero context switching. Everything happens inside one unified work window.
+
+4
+00:00:24,456 --> 00:00:32,124
+The Execution List lets you search and filter through all tasks, monitoring status and tool usage in real time.
+
+5
+00:00:32,224 --> 00:00:38,092
+Connect your automation ecosystem without writing a single line of integration glue code.
+
+6
+00:00:38,192 --> 00:00:47,156
+Our Third Party Hub connects directly to n8n, Zapier, Make, Pipedream, Slack, Telegram, and REST webhooks.
+
+7
+00:00:47,256 --> 00:00:52,836
+Design complex automation pipelines visually with our Workflow DAG engine.
+
+8
+00:00:52,936 --> 00:01:00,868
+Build node graphs, configure tool actions, set human approval checkpoints, or switch to a linear Zapier mode.
+
+9
+00:01:00,968 --> 00:01:05,948
+See your web apps come to life instantly inside the Web Studio Canvas.
+
+10
+00:01:06,048 --> 00:01:13,332
+Run code live in a secure sandbox and preview layouts across mobile, tablet, and desktop viewports.
+
+11
+00:01:13,432 --> 00:01:18,196
+Tackle massive refactors with parallel multi-agent Swarm mode.
+
+12
+00:01:18,296 --> 00:01:26,108
+Specialized researcher, coder, and reviewer sub agents execute simultaneously in isolated git branches.
+
+13
+00:01:26,208 --> 00:01:30,900
+Aura Code gets smarter over time with the Archimedes memory engine.
+
+14
+00:01:31,000 --> 00:01:37,612
+It tracks model competence per task domain and selects the optimal LLM provider automatically.
+
+15
+00:01:37,712 --> 00:01:45,308
+Whether you love the fast Terminal UI or the Web Studio, Aura Code puts true agent autonomy at your fingertips.
+

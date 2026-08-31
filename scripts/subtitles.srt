@@ -1,0 +1,48 @@
+1
+00:00:00,000 --> 00:00:13,476
+Welcome to Aura Code. We built this because jumping between ten different developer tools destroys your focus. Here in our Kanban view, you can track tasks across lanes and drag cards around freely.
+
+2
+00:00:13,676 --> 00:00:24,224
+Need a clean table view? The Execution List lets you search through every task, filter by status, and see exactly what models and tools were used.
+
+3
+00:00:24,423 --> 00:00:36,003
+Connecting your existing tools is super easy. With our Integration Hub, you can hook up n8n, Zapier, Slack, Telegram, or custom webhooks in seconds.
+
+4
+00:00:36,204 --> 00:00:47,231
+For complex pipelines, check out the Workflow editor. You can connect nodes visually, set up human approval checkpoints, or switch to a simple step-by-step list.
+
+5
+00:00:47,432 --> 00:00:58,100
+Inside the Web Studio Canvas, your code runs live in a safe sandbox. You can preview web apps across phone, tablet, or desktop screens instantly.
+
+6
+00:00:58,300 --> 00:01:08,608
+Behind the scenes, our Archimedes memory engine remembers what worked best. It tracks model performance so every future task gets routed smarter.
+
+7
+00:01:08,808 --> 00:01:21,252
+Aura Code is completely model-agnostic. Mix and match Claude, GPT-4, Gemini, MiMo, or local Ollama models with automatic fallback if an API goes down.
+
+8
+00:01:21,452 --> 00:01:32,072
+When you need extra power, turn on Swarm mode. Specialized researcher, coder, and reviewer agents work together in parallel to tackle big features.
+
+9
+00:01:32,272 --> 00:01:42,820
+Everything follows a clean four-step loop: perception reads your code, planning designs the fix, execution runs the tools, and verification checks the tests.
+
+10
+00:01:43,020 --> 00:01:53,088
+Clicking any task opens a retro inspection modal. Here you can tweak instructions, adjust model settings, or attach files whenever you need.
+
+11
+00:01:53,288 --> 00:02:02,324
+The built-in Code Canvas gives you a clean side-by-side editor with syntax highlighting, so you can inspect and edit files right alongside the agent.
+
+12
+00:02:02,524 --> 00:02:10,744
+Whether you prefer the lightning-fast Terminal UI or the Web Studio, Aura Code gives you full autonomy in one single work window.
+
