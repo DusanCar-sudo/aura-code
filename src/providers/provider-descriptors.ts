@@ -284,6 +284,20 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     transport: 'openai-compatible',
     baseUrl: 'https://api.deepseek.com/v1', baseUrlEnv: ['DEEPSEEK_BASE_URL'],
   },
+  {
+    family: 'cerebras', displayName: 'Cerebras',
+    prefixes: ['cerebras/'],
+    apiKeyEnv: ['CEREBRAS_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.cerebras.ai/v1', baseUrlEnv: ['CEREBRAS_BASE_URL'],
+  },
+  {
+    family: 'sambanova', displayName: 'SambaNova',
+    prefixes: ['sambanova/'],
+    apiKeyEnv: ['SAMBANOVA_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.sambanova.ai/v1', baseUrlEnv: ['SAMBANOVA_BASE_URL'],
+  },
 
   // ── Local backends: no vendor URL, no secret ──────────────────────────────
   {

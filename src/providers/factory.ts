@@ -185,16 +185,6 @@ export function getApiKeyForModel(model: string): string | undefined {
     const preferred = getApiKey(preferredEnvVar);
     if (preferred) return preferred;
   }
-  // Fall back to any other configured key, in case the user only has one
-  // provider set up and is calling a model from a different family by
-  // mistake — createProvider()'s own baseUrl logic will still catch and
-  // correct an actual family mismatch, so this fallback can't silently
-  // send the wrong key to the wrong endpoint the way the old code could.
-  for (const envVar of Object.values(FAMILY_API_KEY_ENV)) {
-    if (envVar === preferredEnvVar) continue;
-    const key = getApiKey(envVar);
-    if (key) return key;
-  }
   return undefined;
 }
 

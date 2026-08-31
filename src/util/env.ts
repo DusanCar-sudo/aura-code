@@ -18,7 +18,15 @@ export function getApiKey(canonical: string, ...aliases: string[]): string | und
   const names = [canonical, canonical.toLowerCase(), ...aliases];
   for (const name of names) {
     const v = process.env[name];
-    if (v && v.trim() && v !== 'your_api_key_here') return v;
+    if (
+      v &&
+      v.trim() &&
+      v !== 'your_api_key_here' &&
+      v !== 'sk-live-configured-api-key' &&
+      !v.includes('...')
+    ) {
+      return v.trim();
+    }
   }
   return undefined;
 }

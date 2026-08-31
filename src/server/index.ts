@@ -41,7 +41,8 @@ import { loadAllPlugins } from '../plugins/loader.js';
 import { auraHome, auraPath } from '../util/aura-home.js';
 import { installPlugin, removePlugin } from '../plugins/market.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
-import { PROVIDER_REGISTRY } from '../setup/provider-registry.js';
+import { PROVIDER_REGISTRY, maskApiKey } from '../setup/provider-registry.js';
+import { saveKey } from '../setup/key-store.js';
 import { routeCatalogueId } from '../providers/provider-descriptors.js';
 import {
   loadBoard, reclaimStrandedTasks, saveAttachment, saveBoard, updateTask,
@@ -1019,25 +1020,21 @@ export async function startServer(opts: ServeOptions): Promise<void> {
 
   app.get('/api/providers', (_req, res) => {
     res.json({
-      providers: PROVIDER_REGISTRY.map((entry) => ({
-        name: entry.name,
-        baseUrl: entry.baseUrl,
-        envKey: entry.envKey,
-        signupUrl: entry.signupUrl,
-        keySet: entry.envKey ? Boolean(process.env[entry.envKey]?.trim()) : true,
-        // Routed ids, not catalogue ids. BytePlus and FPT resell other
-        // vendors' models under their own gateway, so their catalogue entries
-        // are bare vendor names — FPT lists "GLM-5.2". Sent unprefixed that
-        // routes to Zhipu's own API with a Zhipu key: the wrong endpoint, the
-        // wrong bill, and an "insufficient balance" error naming an account the
-        // user never chose to use. The TUI has always applied this; the web
-        // picker did not, so choosing a provider there silently reached a
-        // different one.
-        models: entry.models.map((m) => ({
-          id: routeCatalogueId(entry.name, m.id),
-          label: m.label, speed: m.speed, contextWindow: m.contextWindow,
-        })),
-      })),
+      providers: PROVIDER_REGISTRY.map((entry) => {
+        const envVal = entry.envKey ? process.env[entry.envKey] : null;
+        return {
+          name: entry.name,
+          baseUrl: entry.baseUrl,
+          envKey: entry.envKey,
+          signupUrl: entry.signupUrl,
+          keySet: entry.envKey ? Boolean(envVal?.trim()) : true,
+          maskedKey: envVal ? maskApiKey(envVal) : '',
+          models: entry.models.map((m) => ({
+            id: routeCatalogueId(entry.name, m.id),
+            label: m.label, speed: m.speed, contextWindow: m.contextWindow,
+          })),
+        };
+      }),
       // So the panel can say why the field is unavailable instead of offering
       // an input that answers every save with a 403.
       apiKeysWritable: apiKeysAllowed(),
@@ -1047,6 +1044,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       // like `fpt/Z.ai:GLM-5.3`, so it showed no provider selected and hid the
       // API-key field entirely on a perfectly working setup.
       activeEnvKey: apiKeyEnvVarForModel(opts.model) ?? null,
+      activeModel: opts.model,
     });
   });
 
@@ -1135,11 +1133,12 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     }
     if (!value) {
       delete process.env[envKey];
-      res.json({ ok: true, keySet: false });
+      saveKey(envKey, '');
+      res.json({ ok: true, keySet: false, maskedKey: '' });
       return;
     }
-    process.env[envKey] = value;
-    res.json({ ok: true, keySet: true });
+    saveKey(envKey, value);
+    res.json({ ok: true, keySet: true, maskedKey: maskApiKey(value) });
   });
 
   /**

@@ -457,7 +457,10 @@ function resolveApiKey(config: ProviderConfig): string {
   if (config.baseUrl?.includes('xiaomimimo') || m.startsWith('mimo-')) return getApiKey('XIAOMI_API_KEY') ?? '';
   if (config.baseUrl?.includes('api.z.ai') || m.startsWith('glm-')) return getApiKey('ZHIPU_API_KEY') ?? '';
   if (config.baseUrl?.includes('localhost') || config.baseUrl?.includes('127.0.0.1')) return 'local';
-  return getApiKey('OPENAI_API_KEY') ?? '';
+  if (!config.baseUrl || config.baseUrl.includes('openai.com') || m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) {
+    return getApiKey('OPENAI_API_KEY') ?? '';
+  }
+  return '';
 }
 
 function resolveBaseUrl(config: ProviderConfig): string | undefined {

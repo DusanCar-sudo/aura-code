@@ -105,7 +105,34 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     envKey: 'OPENROUTER_API_KEY',
     signupUrl: 'https://openrouter.ai/keys',
     models: [
-      { id: 'auto', label: 'Auto (best available)', speed: 'Auto', contextWindow: 128_000 },
+      { id: 'openrouter/google/gemini-2.0-flash-lite-001:free', label: 'Gemini 2.0 Flash Lite (free)', speed: 'Fast · free', contextWindow: 1_000_000 },
+      { id: 'openrouter/meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (free)', speed: 'Powerful · free', contextWindow: 128_000 },
+      { id: 'openrouter/deepseek/deepseek-r1:free', label: 'DeepSeek R1 (free)', speed: 'Reasoning · free', contextWindow: 128_000 },
+      { id: 'openrouter/qwen/qwen-2.5-coder-32b-instruct:free', label: 'Qwen 2.5 Coder 32B (free)', speed: 'Code · free', contextWindow: 32_768 },
+      { id: 'openrouter/auto', label: 'Auto (best available)', speed: 'Auto', contextWindow: 128_000 },
+    ],
+  },
+  {
+    name: 'Cerebras (Free Wafer-Scale)',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    envKey: 'CEREBRAS_API_KEY',
+    signupUrl: 'https://cloud.cerebras.ai',
+    models: [
+      { id: 'cerebras/llama-3.3-70b', label: 'Llama 3.3 70B (Ultra-fast free)', speed: 'Ultra-fast · free', contextWindow: 128_000 },
+      { id: 'cerebras/llama3.1-8b', label: 'Llama 3.1 8B (Instant free)', speed: 'Instant · free', contextWindow: 128_000 },
+      { id: 'cerebras/deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 70B (Free reasoning)', speed: 'Reasoning · free', contextWindow: 128_000 },
+      { id: 'cerebras/gpt-oss-120b', label: 'GPT OSS 120B (Free)', speed: 'Powerful · free', contextWindow: 128_000 },
+    ],
+  },
+  {
+    name: 'SambaNova Cloud (Free Tier)',
+    baseUrl: 'https://api.sambanova.ai/v1',
+    envKey: 'SAMBANOVA_API_KEY',
+    signupUrl: 'https://cloud.sambanova.ai',
+    models: [
+      { id: 'sambanova/Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B (Free tier)', speed: 'Ultra-fast · free', contextWindow: 128_000 },
+      { id: 'sambanova/DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 70B (Free tier)', speed: 'Reasoning · free', contextWindow: 128_000 },
+      { id: 'sambanova/Meta-Llama-3.1-405B-Instruct', label: 'Llama 3.1 405B (Free tier)', speed: 'Powerful · free', contextWindow: 128_000 },
     ],
   },
   {
