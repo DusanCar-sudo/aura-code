@@ -40,6 +40,10 @@ export const M = {
   boardUpdate: 'board.update',
   boardRemove: 'board.remove',
   boardRun: 'board.run',
+  /** Run a `:command` on the engine and get back what it printed. Mirrors
+   *  src/protocol/types.ts — see src/commands/core.ts for what runs. */
+  commandRun: 'command.run',
+  commandList: 'command.list',
   approvalRequest: 'approval.request',
   engineReady: 'engine.ready',
   turnStarted: 'turn.started',

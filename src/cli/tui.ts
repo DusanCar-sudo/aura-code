@@ -32,6 +32,7 @@ import { formatContextBar, formatContextDashboard } from './context-health.js';
 import { gradient, gradientStopFor, TEXT_HEX, TEXT_DIM_HEX, BG_HEX, CHROME_DIM, RUBY_ACCENT } from './diamond.js';
 import { PALETTE_COMMANDS, filterCommands, renderPalette, type PaletteCommand } from './command-palette.js';
 import { renderMarkdown } from './markdown.js';
+import { readClipboardSync } from '../tools/clipboard.js';
 
 const TEXT = chalk.hex(TEXT_HEX);
 const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
@@ -81,6 +82,15 @@ function closeOverlay(): void {
 
 let scrollMode = false;
 let scrollOffset = 0;
+/**
+ * When scroll mode was last left. A free-spinning wheel or a trackpad with
+ * inertia keeps emitting scroll detents for a moment after the hand has moved
+ * back to the keyboard, and the wheel auto-enters scroll mode — so a user who
+ * types `i`, types one letter, and gets a trailing detent is thrown straight
+ * back into the pager. Within this grace window a stray wheel tick is ignored.
+ */
+let leftScrollAt = 0;
+const SCROLL_REENTRY_GRACE_MS = 500;
 
 /**
  * Mouse selection.
@@ -220,17 +230,20 @@ let pendingResize = false;
  * Mouse reporting, as its own pair so anything that takes stdin away from the
  * TUI can switch it off.
  *
- * 1002: report button press, release, and motion *while a button is held* —
- * not bare motion (1003), which would wake this process on every mouse move
- * across the window for nothing. 1006: SGR coordinates, so columns past 223
- * survive; the legacy encoding silently corrupts them on a wide terminal.
+ * 1000: basic click tracking. 1002: also report motion *while a button is
+ * held* — not bare motion (1003), which would wake this process on every mouse
+ * move across the window for nothing. Both are sent because some terminals and
+ * multiplexers (tmux, older PuTTY) act on 1000 and ignore a lone 1002,
+ * leaving the mouse dead. 1006: SGR coordinates, so columns past 223 survive
+ * and the parser has one format to read; the legacy encoding silently corrupts
+ * wide terminals.
  *
  * Holding Shift makes the terminal keep the events for its own selection
  * instead of forwarding them, which is the standard escape hatch and is
  * advertised in the scroll indicator.
  */
-function enableMouse(): void { rawWrite('\x1b[?1002h\x1b[?1006h'); }
-function disableMouse(): void { rawWrite('\x1b[?1006l\x1b[?1002l'); }
+function enableMouse(): void { rawWrite('\x1b[?1000h\x1b[?1002h\x1b[?1006h'); }
+function disableMouse(): void { rawWrite('\x1b[?1006l\x1b[?1002l\x1b[?1000l'); }
 
 export function enterAltScreen(): void {
   altScreenActive = true;
@@ -715,6 +728,25 @@ function copySelection(): void {
 }
 
 /**
+ * Right-click paste: drop the system clipboard into the input line at the
+ * cursor. Routed through commitPaste so it gets the same treatment as a
+ * bracketed paste — overlay-aware, and long/multi-line text collapsed to a
+ * placeholder that expands on submit.
+ */
+function pasteFromClipboard(): void {
+  const raw = readClipboardSync();
+  if (raw == null) {
+    selToast = 'no clipboard utility (install xclip, xsel, or wl-clipboard)';
+    if (scrollMode) renderScrollView(); else drawPromptBottom();
+    return;
+  }
+  const text = raw.replace(/\r\n?/g, '\n').replace(/\n$/, '');
+  if (!text) return;
+  if (scrollMode) exitScrollMode();   // the paste belongs in the input, not the pager
+  commitPaste(text);
+}
+
+/**
  * SGR mouse report: ESC [ < b ; x ; y (M=press/drag, m=release).
  * Returns true when the sequence was consumed.
  */
@@ -727,6 +759,9 @@ function handleMouse(button: number, _col: number, row: number, pressed: boolean
   // reaching for the wheel *is* the request to scroll.
   if (wheel) {
     if (!scrollMode) {
+      // A detent that lands right after the user left scroll mode to type is
+      // almost always wheel/trackpad slack, not a request to scroll again.
+      if (Date.now() - leftScrollAt < SCROLL_REENTRY_GRACE_MS) return;
       if (scrollBuffer.length === 0) return;
       enterScrollMode(0);
     }
@@ -734,6 +769,21 @@ function handleMouse(button: number, _col: number, row: number, pressed: boolean
       ? Math.min(scrollOffset + 3, maxScrollOffset())   // wheel up = back in time
       : Math.max(0, scrollOffset - 3);
     renderScrollView();
+    return;
+  }
+
+  // Right button — the classic terminal right-click, restored. Aura runs on
+  // the alternate screen and does its own line selection (see the note on
+  // `selecting`), so the terminal's own right-click menu operates on an empty
+  // native selection and is useless here. Context-aware: with a scroll-mode
+  // selection it copies, otherwise it pastes the clipboard into the input.
+  if (btn === 2) {
+    if (!pressed || motion) return;   // act on the press, ignore drag/release
+    if (scrollMode && selectionRange() !== null) {
+      copySelection();
+    } else {
+      pasteFromClipboard();
+    }
     return;
   }
 
@@ -791,6 +841,7 @@ function enterScrollMode(initialOffset: number): void {
 
 function exitScrollMode(): void {
   scrollMode = false;
+  leftScrollAt = Date.now();
   pendingG = false;
   scrollOffset = 0;
   clearSelection();
@@ -1283,6 +1334,18 @@ function rawHandler(data: string): void {
           i += 3;
           continue;
         }
+        // ESC immediately followed by a printable character in the same read is
+        // Alt/Meta+<char> (xterm encodes it that way), not the Escape key. The
+        // TUI has no Alt bindings, so drop the modifier and handle the bare
+        // character. Without this the ESC flipped the pager on and the letter
+        // was eaten by scroll-mode key handling — "I type one letter and land
+        // in scroll". A real Escape press arrives alone and is handled above.
+        const meta = stdinBuffer[i + 1];
+        if (meta !== '[' && meta !== 'O' && isPrintableText(meta) && meta !== '\x1b') {
+          handleKey(meta);
+          i += 2;
+          continue;
+        }
         handleKey('\x1b');
         i += 1;
         continue;
@@ -1354,6 +1417,7 @@ export function setChatId(id: string): void {
 
 export function initTui(): void {
   scrollMode = false;
+  leftScrollAt = 0;
   scrollOffset = 0;
   // A fresh TUI must not inherit a selection from the previous one: the
   // indices point into a scrollBuffer that is about to be emptied, so a stale

@@ -27,8 +27,8 @@ describe('mouse reporting across stdin handoff', () => {
   let writeSpy: ReturnType<typeof vi.spyOn>;
   let savedIsTTY: PropertyDescriptor | undefined;
 
-  const ENABLE = '\x1b[?1002h\x1b[?1006h';
-  const DISABLE = '\x1b[?1006l\x1b[?1002l';
+  const ENABLE = '\x1b[?1000h\x1b[?1002h\x1b[?1006h';
+  const DISABLE = '\x1b[?1006l\x1b[?1002l\x1b[?1000l';
   const out = () => chunks.join('');
 
   beforeEach(() => {

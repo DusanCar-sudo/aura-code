@@ -23,6 +23,7 @@ import { TEXT_DIM_HEX } from './diamond.js';
 import type { ContextHealthTracker } from './context-health.js';
 import type { Display } from './display.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
+import { emit } from '../commands/surface.js';
 
 /** The REPL's running per-session totals, as displayed by /stats. */
 export interface SessionCounters {
@@ -61,19 +62,19 @@ export async function handleUsageCommand(
     c.cumulative.inputTokens = 0;
     c.cumulative.outputTokens = 0;
     c.cumulative.costUsd = 0;
-    console.log(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
+    emit(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
     // This zeroes the *displayed* counters only — the underlying history
     // (what actually gets resent and billed on the next task) is untouched.
     // Say so explicitly: "reset"/"clear" reads as "start fresh" otherwise,
     // and a user who believes that will keep paying to resend everything.
-    console.log(chalk.hex(TEXT_DIM_HEX)('    (conversation history is unchanged — use :new or :clear-history to actually reset it)'));
+    emit(chalk.hex(TEXT_DIM_HEX)('    (conversation history is unchanged — use :new or :clear-history to actually reset it)'));
     return { handled: true };
   }
 
   if (input === '/stats' || input === '/usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
-    console.log(chalk.hex(TEXT_DIM_HEX)([
+    emit(chalk.hex(TEXT_DIM_HEX)([
       '',
       `  Session usage:`,
       `    Turns:        ${u.turns}`,
@@ -100,7 +101,7 @@ export async function handleUsageCommand(
     const { readTokenLog, formatCostReport } = await import('./cost-report.js');
     const arg = input.startsWith('/cost ') ? input.slice('/cost '.length).trim() : '';
     const recent = /^\d+$/.test(arg) ? Number(arg) : 20;
-    console.log(formatCostReport(readTokenLog(c.projectRoot), recent));
+    emit(formatCostReport(readTokenLog(c.projectRoot), recent));
     return { handled: true };
   }
 

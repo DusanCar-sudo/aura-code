@@ -21,6 +21,7 @@ import { sessionStore } from '../agent/session-store.js';
 import { TEXT_DIM_HEX } from './diamond.js';
 import type { HistoryMessage } from '../providers/types.js';
 import type { SessionBudget } from '../agent/session-budget.js';
+import { emit } from '../commands/surface.js';
 
 export interface ChatState {
   projectRoot: string;
@@ -44,9 +45,18 @@ export interface ReplCommandResult {
   newSmall1Override?: boolean;
   newMode?: ReplMode;
   newTurnsOverride?: number | undefined;
+  /** The REPL's conversation was swapped for a different one (:resume, :new,
+   *  :clear-history, deleting the active session) — as opposed to being edited
+   *  in place (:compact). A coder task still streaming when this lands must not
+   *  write its result back over the conversation the user just switched to. */
+  sessionReplaced?: boolean;
   /** Computer use was toggled — the REPL redraws its status line so a feature
    *  that can move the real pointer is never on without being visible. */
   newComputerUse?: boolean;
+  /** Something else the status line reports changed (the permission level).
+   *  Nothing redraws that bar on its own, so a command that flips it and does
+   *  not say so leaves the bar announcing a state that is no longer true. */
+  statusChanged?: boolean;
   /** A task the command wants the agent to carry out — `:catchthis run` hands
    *  a recorded procedure back this way rather than reaching into the REPL. */
   runTask?: string;
@@ -70,14 +80,31 @@ export async function handleSessionCommand(
   c: SessionCommandCtx,
 ): Promise<ReplCommandResult | null> {
   if (input === ':resume' || input === ':resume ') {
-    const latest = sessionStore.findLatestSession(c.chatState.projectRoot);
+    // Prefer this project's latest; if it has none (a fresh directory), fall
+    // back to the most recent session anywhere, so `:resume` is predictable —
+    // it always brings back your last conversation.
+    let latest: { id: string; title: string; history: HistoryMessage[] } | null =
+      sessionStore.findLatestSession(c.chatState.projectRoot);
+    let fromOtherProject: string | undefined;
     if (!latest) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions to resume.\n'));
+      const anywhere = sessionStore.listAllSessions()[0];
+      if (anywhere) {
+        latest = anywhere;
+        fromOtherProject = anywhere.project.replace(/^_/, '');
+      }
+    }
+    if (!latest) {
+      emit(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions to resume anywhere.\n'));
       return { handled: true };
     }
     c.budget.reset();   // a different conversation, so a different total
-    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
-    return { handled: true, newChatId: latest.id, newHistory: latest.history, newTitle: latest.title };
+    emit(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
+    if (fromOtherProject) {
+      emit(chalk.hex(TEXT_DIM_HEX)(
+        `  ⚠ from another project (${fromOtherProject.slice(0, 40)}) — history loaded, tools run against the current directory.\n`,
+      ));
+    }
+    return { handled: true, sessionReplaced: true, newChatId: latest.id, newHistory: latest.history, newTitle: latest.title };
   }
 
   if (input.startsWith(':resume ')) {
@@ -86,19 +113,37 @@ export async function handleSessionCommand(
     const numMatch = rawArg.match(/^#?(\d+)$/);
     if (numMatch) {
       const index = parseInt(numMatch[1], 10) - 1;
-      const list = sessionStore.listSessions(c.chatState.projectRoot);
+      // Numbering matches the merged `:sessions` list (all projects).
+      const list = sessionStore.listAllSessions();
       if (index >= 0 && index < list.length) {
         id = list[index].id;
       }
     }
-    const loaded = await sessionStore.loadSession(c.chatState.projectRoot, id);
+    let loaded: { id: string; title: string; history: HistoryMessage[] } | null =
+      await sessionStore.loadSession(c.chatState.projectRoot, id);
+    let fromOtherProject: string | undefined;
     if (!loaded) {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}\n`));
+      // Not in this project — look across every project directory, so a
+      // session id from `:sessions all` resumes regardless of cwd.
+      const anywhere = sessionStore.findSessionAnywhere(id);
+      if (anywhere) {
+        loaded = anywhere;
+        fromOtherProject = anywhere.project.replace(/^_/, '');
+      }
+    }
+    if (!loaded) {
+      emit(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}  (try :sessions all)\n`));
       return { handled: true };
     }
     c.budget.reset();   // a different conversation, so a different total
-    console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
-    return { handled: true, newChatId: loaded.id, newHistory: loaded.history, newTitle: loaded.title };
+    emit(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
+    if (fromOtherProject) {
+      emit(chalk.hex(TEXT_DIM_HEX)(
+        `  ⚠ This session was saved under a different project (${fromOtherProject.slice(0, 40)}). ` +
+        `Its history is loaded, but tools run against the current directory.\n`,
+      ));
+    }
+    return { handled: true, sessionReplaced: true, newChatId: loaded.id, newHistory: loaded.history, newTitle: loaded.title };
   }
 
   if (input === ':new') {
@@ -107,13 +152,13 @@ export async function handleSessionCommand(
     // it — otherwise the budget is a process ceiling wearing a session's name
     // and this command cannot clear an exhausted one.
     c.budget.reset();
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
-    return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
+    emit(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
+    return { handled: true, sessionReplaced: true, newChatId: newId, newHistory: [], newTitle: undefined };
   }
 
   if (input === ':history') {
     const turns = Math.floor(c.chatState.activeChatHistory.length / 2);
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
+    emit(chalk.hex(TEXT_DIM_HEX)(`\n  Current session: ${turns} turn${turns !== 1 ? 's' : ''} in history.\n`));
     return { handled: true };
   }
 
@@ -121,19 +166,19 @@ export async function handleSessionCommand(
     // Same reasoning as :new — only the session id survives. The exhaustion
     // message offers this as the other way out, so it has to work too.
     c.budget.reset();
-    console.log(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
-    return { handled: true, newHistory: [] };
+    emit(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
+    return { handled: true, sessionReplaced: true, newHistory: [] };
   }
 
   if (input === ':save' || input.startsWith(':save ')) {
     const title = input.startsWith(':save ') ? input.slice(':save '.length).trim() : undefined;
     const cs = c.chatState;
     if (!cs.activeChatId) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No active session to save (--no-session mode).\n'));
+      emit(chalk.hex(TEXT_DIM_HEX)('\n  No active session to save (--no-session mode).\n'));
       return { handled: true };
     }
     const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
+    emit(chalk.hex('#5a9e6e')(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
     return { handled: true, newTitle: session.title };
   }
 
@@ -143,22 +188,28 @@ export async function handleSessionCommand(
     const numMatch = rawArg.match(/^#?(\d+)$/);
     if (numMatch) {
       const index = parseInt(numMatch[1], 10) - 1;
-      const list = sessionStore.listSessions(c.chatState.projectRoot);
+      // Numbering matches the merged `:sessions` list (all projects).
+      const list = sessionStore.listAllSessions();
       if (index >= 0 && index < list.length) {
         id = list[index].id;
       }
     }
-    const deleted = await sessionStore.deleteSession(c.chatState.projectRoot, id);
+    let deleted = await sessionStore.deleteSession(c.chatState.projectRoot, id);
+    if (!deleted) {
+      // Merged list may point at a session in another project.
+      const elsewhere = sessionStore.findSessionAnywhere(id);
+      if (elsewhere) deleted = await sessionStore.deleteSession(elsewhere.projectRoot, id);
+    }
     if (deleted) {
-      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
+      emit(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
       if (id === c.chatState.activeChatId) {
         const newId = sessionStore.generateId();
         c.budget.reset();   // deleting the active session starts a fresh one
-        console.log(chalk.hex(TEXT_DIM_HEX)(`  Starting new session: ${newId}\n`));
-        return { handled: true, newChatId: newId, newHistory: [], newTitle: undefined };
+        emit(chalk.hex(TEXT_DIM_HEX)(`  Starting new session: ${newId}\n`));
+        return { handled: true, sessionReplaced: true, newChatId: newId, newHistory: [], newTitle: undefined };
       }
     } else {
-      console.log(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}\n`));
+      emit(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}\n`));
     }
     return { handled: true };
   }

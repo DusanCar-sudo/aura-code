@@ -65,6 +65,22 @@ function detectClipboardCommand(): { copy: string[]; paste: string[] } | null {
   return null;
 }
 
+/**
+ * Read the system clipboard, or null when no utility is installed or the read
+ * fails. Synchronous on purpose: the TUI's right-click-to-paste handler runs in
+ * a sync mouse-event path and a deliberate click can afford one `execSync`.
+ */
+export function readClipboardSync(): string | null {
+  const cmds = detectClipboardCommand();
+  if (!cmds) return null;
+  try {
+    const [bin, ...args] = cmds.paste;
+    return execSync(`${bin} ${args.join(' ')}`, { encoding: 'utf8', timeout: 5000 });
+  } catch {
+    return null;
+  }
+}
+
 export async function clipboardTool(input: ClipboardInput): Promise<string> {
   const cmds = detectClipboardCommand();
   if (!cmds) {

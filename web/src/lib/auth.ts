@@ -51,11 +51,11 @@ export async function getAuthToken(): Promise<string> {
 
   // In Tauri the IPC answer is authoritative and is checked FIRST.
   //
-  // The server mints a fresh random token on every run and writes it to
-  // ~/.aura/active_token, which is what `get_auth_token` reads. Web storage,
-  // by contrast, survives across runs — so consulting it first hands back the
-  // *previous* run's token and every request 401s for as long as the app is
-  // installed. Storage is a browser fallback, not a source of truth.
+  // `get_auth_token` reads ~/.aura/active_token (and ~/.aura/server-token),
+  // which `aura serve` keeps current. The token is persistent now, so this is
+  // stable across runs — but web storage is still not a source of truth: a
+  // token cached there from an environment the desktop app later leaves would
+  // 401 forever. The live IPC answer wins.
   if (isTauri()) {
     const tauriToken = await tokenFromTauri();
     if (tauriToken) {

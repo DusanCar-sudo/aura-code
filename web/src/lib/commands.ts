@@ -7,43 +7,45 @@
  * command must either run or say why it cannot. It must never be sent to the
  * model as if it were a question.
  *
- * Three groups:
+ * That much has been true here for a while. What was missing was somewhere for
+ * the commands to actually run: this file could serve fourteen of them from
+ * the browser's own state and answered the other fifty-two with "terminal
+ * only", even though most of them have nothing to do with a terminal. The
+ * engine now exposes `command.run` over the protocol, backed by the same
+ * implementations the REPL uses (src/commands/core.ts), so the split is:
  *
- *   LOCAL     — has a real equivalent here (sessions, usage, settings), so it
- *               runs against the protocol or the UI.
- *   TERMINAL  — implemented in the TUI's REPL loop (src/cli/index.ts) against
- *               objects the protocol does not expose. Reported honestly as
- *               terminal-only rather than silently swallowed.
- *   UNKNOWN   — not a command at all.
+ *   LOCAL   — the answer lives in this client's own UI. `:model` should open
+ *             the model picker, not print a list; `:new` should swap the
+ *             thread on screen. Running these on the engine would be a worse
+ *             answer, not an equivalent one.
+ *   ENGINE  — everything else. Sent to `command.run`, output shown in the
+ *             thread. If the engine reports it as terminal-only, the client
+ *             says which command and why.
  *
- * Moving a TERMINAL command to LOCAL means giving the engine a protocol method
- * for it; nothing here should pretend otherwise in the meantime.
+ * There is no third group any more. A command this file does not recognise is
+ * still a command, and goes to the engine rather than to the model.
  */
 
-export type CommandKind = 'local' | 'terminal' | 'unknown';
+export type CommandKind = 'local' | 'engine';
 
-/** Commands the TUI owns that this client cannot yet run, with why. */
-export const TERMINAL_ONLY = new Set([
-  ':dream', ':rem', ':mine', ':research', ':btw', ':lessons', ':forget',
-  ':council', ':machina', ':workflow', ':workflows',
-  ':archon', ':archoff', ':archmodel',
-  ':compon', ':compoff', ':comp',
-  ':turnson', ':turnsoff',
-  ':speak', ':doctor', ':compact', ':compress',
+/**
+ * Commands answered by this client's own UI. Everything else goes to the
+ * engine — see `classify`.
+ *
+ * `:context` and `:usage` are deliberately here rather than on the engine:
+ * the browser holds the live per-turn usage the engine does not track for a
+ * remote session, so the local answer is the accurate one.
+ */
+export const LOCAL_COMMANDS = new Set([
+  ':new', ':resume', ':sessions', ':history', ':id',
+  ':context', ':usage', ':model', ':provider', ':apikey',
+  ':help', ':q', ':quit',
 ]);
 
 export function classify(input: string): CommandKind {
   const head = input.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-  if (!head.startsWith(':')) return 'unknown';
-  if (TERMINAL_ONLY.has(head)) return 'terminal';
-  return LOCAL_COMMANDS.has(head) ? 'local' : 'terminal';
+  return LOCAL_COMMANDS.has(head) ? 'local' : 'engine';
 }
-
-export const LOCAL_COMMANDS = new Set([
-  ':new', ':resume', ':sessions', ':history', ':id', ':save',
-  ':context', ':usage', ':model', ':provider', ':apikey', ':approve',
-  ':help', ':q',
-]);
 
 /** Everything a command needs to actually do something. */
 export interface CommandContext {
@@ -55,20 +57,29 @@ export interface CommandContext {
   newChat: () => void;
   openChat: (id: string) => void;
   note: (text: string) => void;
-  openSettings: (tab: 'general' | 'provider' | 'skills' | 'about') => void;
+  /** Opens a Settings tab. The names are Settings.tsx's own `SettingsTab`
+   *  union — spelling them independently here is how `:model` ended up
+   *  opening a tab that no longer existed, and a blank panel. */
+  openSettings: (tab: 'agents' | 'models' | 'skills' | 'autonomy' | 'general') => void;
   openCommandMenu: () => void;
+  /** Runs the command on the engine. Resolves true once it has been answered
+   *  — including when the answer is "that one needs the terminal". */
+  runOnEngine: (command: string) => Promise<boolean>;
 }
 
 /**
  * Run a command. Returns true when it was handled — the caller must not fall
  * through to sending it as a turn.
+ *
+ * Engine commands are dispatched without awaiting: the answer arrives in the
+ * thread as a note, the same way a turn's output does, so the composer is not
+ * held while `:doctor` or `:graph` does its work.
  */
 export function runCommand(input: string, ctx: CommandContext): boolean {
   const trimmed = input.trim();
   const [head] = trimmed.split(/\s+/);
-  const arg = trimmed.slice(head.length).trim();
   const cmd = head.toLowerCase();
-  if (!cmd.startsWith(':')) return false;
+  if (!cmd.startsWith(':') && !cmd.startsWith('/')) return false;
 
   switch (cmd) {
     case ':new':
@@ -119,29 +130,21 @@ export function runCommand(input: string, ctx: CommandContext): boolean {
     case ':model':
     case ':provider':
     case ':apikey':
-      ctx.openSettings('provider');
-      return true;
-
-    case ':approve':
-      ctx.openSettings('general');
+      ctx.openSettings('models');
       return true;
 
     case ':help':
       ctx.openCommandMenu();
       return true;
 
-    case ':save':
-      // Renaming needs a protocol method the engine does not have; saying so
-      // beats a control that appears to work and quietly does nothing.
-      ctx.note(arg ? ctx.t('cmd.renameUnsupported') : ctx.t('cmd.renameUnsupported'));
-      return true;
-
     case ':q':
+    case ':quit':
       ctx.note(ctx.t('cmd.quit'));
       return true;
 
     default:
-      ctx.note(`${cmd} — ${ctx.t('cmd.terminalOnly')}`);
+      // Not one this client answers better itself — the engine runs it.
+      void ctx.runOnEngine(trimmed);
       return true;
   }
 }

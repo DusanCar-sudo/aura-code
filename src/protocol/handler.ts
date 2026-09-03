@@ -15,6 +15,11 @@ import {
 import { BOARD_AGENTS, BOARD_COLUMNS, isWorkflowDef, isSwarmDef, type BoardColumn, type BoardAgent, type BoardTask, type SwarmAgent } from '../board/types.js';
 import { agentPresets, effectivePermission, AGENT_PRESETS } from '../board/agents.js';
 import type { Display } from '../cli/display.js';
+import { ContextHealthTracker } from '../cli/context-health.js';
+import { formatContextDashboard, formatContextBar } from '../cli/context-health.js';
+import { runCoreCommand, isTerminalOnlyCommand, TERMINAL_ONLY_COMMANDS, type CommandCtx } from '../commands/core.js';
+import { collectingSurface, withSurface } from '../commands/surface.js';
+import { PALETTE_COMMANDS } from '../cli/command-palette.js';
 import type { HistoryMessage } from '../providers/types.js';
 import {
   M,
@@ -102,6 +107,16 @@ interface Session {
   alwaysAllow: Set<string>;
   /** Client-chosen tool allowlist, or null for every tool. */
   allowedTools: string[] | null;
+  /**
+   * Per-task turn cap for this session, set by `:turns`/`:turnson`/`:turnsoff`
+   * (Infinity for "off"). Undefined leaves the loop's own default in place.
+   *
+   * The command already returned a cap before this field existed, and nothing
+   * read it — so `:turnsoff` on a remote client answered "unlimited turns" and
+   * the very next turn stopped at the default. A command that reports a change
+   * it did not make is worse than one that says it cannot.
+   */
+  maxTurns?: number;
 }
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
@@ -180,6 +195,8 @@ export class ProtocolHandler {
       case M.boardUpdate:     return this.boardUpdate(req, p);
       case M.boardRemove:     return this.boardRemove(req, p);
       case M.boardRun:        return this.boardRun(req, p);
+      case M.commandRun:      return this.commandRun(req, p);
+      case M.commandList:     return this.ok(req.id, { commands: PALETTE_COMMANDS, terminalOnly: TERMINAL_ONLY_COMMANDS });
       default:
         return this.fail(req.id, { code: 'unknown_method', message: `Unknown method: ${req.method}` });
     }
@@ -340,6 +357,18 @@ export class ProtocolHandler {
       return this.fail(req.id, { code: 'bad_params', message: 'params.message must be a non-empty string.' });
     }
 
+    // Model switch from the client's picker. runTurn reads s.model, so a picker
+    // change had no effect on an existing session — every turn kept running the
+    // model the session was created with (the reported "I switch providers but
+    // keep getting the same error"). Apply it here so the next turn uses it.
+    if (typeof p.model === 'string' && p.model.trim() && p.model.trim() !== s.model) {
+      s.model = p.model.trim();
+      s.apiKey = (typeof p.apiKey === 'string' && p.apiKey.trim())
+        ? p.apiKey.trim()
+        : getApiKeyForModel(s.model);
+      if (typeof p.baseUrl === 'string') s.baseUrl = p.baseUrl.trim() || undefined;
+    }
+
     const msg = p.message.trim();
     if (msg === ':marathon' || msg.startsWith(':marathon ')) {
       const { MarathonManager } = await import('../orchestration/marathon.js');
@@ -428,6 +457,7 @@ export class ProtocolHandler {
     this.emit(M.turnStarted, s.id, { turnId });
 
     const ask: Ask = (message, ctx) => this.askApproval(s, turnId, message, ctx);
+    console.log('[diag] runTurn start', turnId, 'model=', s.model); // TEMP DIAGNOSTIC
 
     try {
       const provider = createProvider({
@@ -455,6 +485,7 @@ export class ProtocolHandler {
         display: this.displayFor(s, turnId),
         ...(s.allowedTools ? { allowedTools: s.allowedTools } : {}),
         budget: s.budget,
+        ...(s.maxTurns !== undefined ? { maxTurns: s.maxTurns } : {}),
         initialHistory: s.history,
         abortSignal: abort.signal,
       }));
@@ -515,8 +546,10 @@ export class ProtocolHandler {
           this.boardCommit(root, bState);
         }
       } catch { /* best effort */ }
+      console.log('[diag] runTurn success', turnId, 'success=', result.success, 'summary=', result.summary.slice(0, 200)); // TEMP DIAGNOSTIC
       return { success: result.success, summary: result.summary, files: modifiedFiles };
     } catch (e) {
+      console.log('[diag] runTurn threw', turnId, String(e)); // TEMP DIAGNOSTIC
       this.emit(M.turnError, s.id, {
         turnId,
         message: e instanceof Error ? e.message : String(e),
@@ -650,6 +683,120 @@ export class ProtocolHandler {
     };
   }
 
+  /**
+   * Run one `:command` and hand back what it printed.
+   *
+   * The command core does the work (commands/core.ts); everything here is the
+   * adaptation. Two pieces matter:
+   *
+   *  - Output goes to a collecting surface, never to stdout. The engine serves
+   *    several clients at once, so a command's answer belongs to the client
+   *    that asked and nothing else — see commands/surface.ts.
+   *  - `confirm` denies. A command that wants a yes/no would otherwise block
+   *    on a terminal nobody is reading. `:compon` is the one that cares, and
+   *    refusing consent nobody gave is the only correct answer here.
+   *
+   * A command the core does not own is reported with where it does live, so
+   * the client can say so instead of sending the line to the model as a
+   * question — which is what the web client did before this existed.
+   */
+  private async commandRun(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
+    const s = this.lookup(req, p);
+    if (!s) return;
+    const input = typeof p.command === 'string' ? p.command.trim() : '';
+    if (!input) {
+      return this.fail(req.id, { code: 'bad_params', message: 'params.command must be a non-empty string.' });
+    }
+
+    const elsewhere = isTerminalOnlyCommand(input);
+    if (elsewhere) {
+      return this.ok(req.id, { handled: false, terminalOnly: true, reason: elsewhere, output: [] });
+    }
+
+    const surface = collectingSurface();
+    const display = this.displayFor(s, `cmd-${randomUUID().slice(0, 8)}`);
+    // The core prints through the surface; a command that also drives a Display
+    // (the ones that run a sub-task, like :machina) must land in the same place
+    // as its own output rather than streaming into an unrelated turn.
+    const capturing: Display = {
+      ...display,
+      warning: (m: string) => surface.write(m, 'warn'),
+      success: (m: string) => surface.write(m, 'ok'),
+      error: (m: string) => surface.write(m, 'error'),
+      streamText: (t: string) => surface.write(t),
+      // /context and the compaction commands answer through these rather than
+      // by returning text. Without them the command ran and printed nothing —
+      // which is exactly the shape of "wired but dead" this change is undoing.
+      contextBar: (health) => surface.write(formatContextBar(health)),
+      contextDashboard: (health) => surface.write(formatContextDashboard(health)),
+      compactionEvent: (info) => surface.write(
+        `Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens · gen ${info.generation}`,
+        'warn',
+      ),
+    };
+
+    const ctx: CommandCtx = {
+      ctx: s.context,
+      display: capturing,
+      providerConfig: { model: s.model, apiKey: s.apiKey, baseUrl: s.baseUrl },
+      permissions: s.permissions,
+      cumulative: { turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 },
+      chatState: {
+        projectRoot: s.projectRoot,
+        activeChatId: s.id,
+        activeChatHistory: s.history,
+        activeChatTitle: s.name,
+        noSession: false,
+      },
+      sessionPath: undefined,
+      // /context reports against the session's real history and model, so the
+      // dashboard a remote client sees is the one the engine would act on.
+      healthTracker: new ContextHealthTracker(() => '', () => s.history, s.model, s.model),
+      archimedesOverride: undefined,
+      archimedesModelOverride: undefined,
+      small1Override: false,
+      // Read back what a previous :turns set on this session, or the reported
+      // cap is the default no matter what the last command answered.
+      turnsOverride: s.maxTurns,
+      defaultMaxTurns: undefined,
+      budget: s.budget,
+      mode: 'coder',
+      surface,
+      buildProvider: (_d, override) => createProvider({
+        model: s.model, apiKey: s.apiKey, baseUrl: s.baseUrl, ...override,
+      }),
+      effort: undefined,
+      confirm: async () => false,
+      verify: {},
+      catchSession: { handle: null, startedAt: 0 },
+      webServer: { child: null, url: null },
+    };
+
+    let result;
+    try {
+      result = await withSurface(surface, () => runCoreCommand(input, ctx));
+    } catch (e) {
+      return this.fail(req.id, { code: 'internal', message: e instanceof Error ? e.message : String(e) });
+    }
+
+    // A command may have replaced the conversation (:new, :resume,
+    // :clear-history) or edited it in place (:compact). Carry that back onto
+    // the session, or the client would see the answer and keep the old history.
+    if (result.newHistory !== undefined) s.history = result.newHistory;
+    if (result.newTitle !== undefined) s.name = result.newTitle;
+    if (result.newTurnsOverride !== undefined) s.maxTurns = result.newTurnsOverride;
+
+    this.ok(req.id, {
+      handled: result.handled,
+      terminalOnly: false,
+      output: surface.lines(),
+      sessionReplaced: result.sessionReplaced === true,
+      /** `:catchthis run` hands back a task rather than doing the work here —
+       *  the client sends it as an ordinary turn, the same as the REPL does. */
+      runTask: result.runTask,
+    });
+  }
+
   private usageOf(s: Session) {
     return {
       inputTokensUsed: s.budget.inputTokensUsed,
@@ -660,8 +807,11 @@ export class ProtocolHandler {
   }
 
   private listSessions(): SessionSummary[] {
-    const projectRoot = path.resolve(this.opts.defaultProjectRoot);
-    const diskSessions = sessionStore.listSessions(projectRoot);
+    // Every saved session, across every project directory — the same merged
+    // list the TUI's `:sessions` shows. The web server and the TUI are usually
+    // started in different directories, and scoping each to its own `cwd` made
+    // them look like two different histories.
+    const diskSessions = sessionStore.listAllSessions();
     const seen = new Set<string>();
     const result: SessionSummary[] = [];
 
@@ -685,9 +835,10 @@ export class ProtocolHandler {
         result.push({
           sessionId: ds.id,
           name: ds.title || 'Untitled Session',
-          projectRoot,
+          projectRoot: ds.projectRoot,
           model: this.opts.defaultModel,
-          createdAt: ds.createdAt ? new Date(ds.createdAt).getTime() : Date.now(),
+          createdAt: ds.updatedAt ? new Date(ds.updatedAt).getTime()
+                   : ds.createdAt ? new Date(ds.createdAt).getTime() : Date.now(),
           busy: false,
           turnsUsed: Math.floor((ds.history?.length ?? 0) / 2),
           inputTokensUsed: ds.usage?.inputTokens ?? 0,
@@ -714,8 +865,14 @@ export class ProtocolHandler {
     }
     let s = this.sessions.get(id);
     if (!s) {
-      const projectRoot = path.resolve(this.opts.defaultProjectRoot);
-      const disk = sessionStore.loadSessionSync(projectRoot, id);
+      const defaultRoot = path.resolve(this.opts.defaultProjectRoot);
+      let disk = sessionStore.loadSessionSync(defaultRoot, id);
+      // Not under the server's own directory — find it in whichever project it
+      // was saved in, so the merged list's entries all actually open.
+      if (!disk) disk = sessionStore.findSessionAnywhere(id);
+      const projectRoot = disk?.projectRoot
+        ? path.resolve(disk.projectRoot)
+        : defaultRoot;
       if (disk) {
         s = {
           id: disk.id,

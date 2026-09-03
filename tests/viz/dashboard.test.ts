@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { generateDashboard } from '../../src/viz/index.js';
+import { generateDashboard, harvestGlobalGraph, generateGlobalDashboard } from '../../src/viz/index.js';
 
 describe('viz dashboard corruption fix', () => {
   let tmpRoot: string;
@@ -86,13 +86,11 @@ describe('viz dashboard corruption fix', () => {
     expect(fs.existsSync(outPath)).toBe(true);
     const html = fs.readFileSync(outPath, 'utf8');
 
-    // Exactly 2 <script> open tags: d3 external + inline DATA
-    const scriptOpenTags = html.match(/<script[\s>]/g) || [];
-    expect(scriptOpenTags.length).toBe(2);
-
-    // Exactly 2 </script> close tags — no extra ones from injected content
-    const scriptCloseTags = html.match(/<\/script>/g) || [];
-    expect(scriptCloseTags.length).toBe(2);
+    // The one invariant that matters: the embedded DATA line carries no raw
+    // </script> that would close the block early — user content is escaped.
+    const dataLine = html.split('\n').find((l) => l.startsWith('const DATA = ')) || '';
+    expect(dataLine).not.toContain('</script>');
+    expect(dataLine.length).toBeGreaterThan(20);
 
     // Session history content must NOT appear (history was stripped)
     expect(html).not.toContain('alert("xss")');
@@ -153,11 +151,11 @@ describe('viz dashboard corruption fix', () => {
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('</html>');
 
-    // Exactly 2 script tags (d3 + inline)
-    const scriptOpenTags = html.match(/<script[\s>]/g) || [];
-    expect(scriptOpenTags.length).toBe(2);
-    const scriptCloseTags = html.match(/<\/script>/g) || [];
-    expect(scriptCloseTags.length).toBe(2);
+    // The one invariant that matters: the embedded DATA line carries no raw
+    // </script> that would close the block early — user content is escaped.
+    const dataLine = html.split('\n').find((l) => l.startsWith('const DATA = ')) || '';
+    expect(dataLine).not.toContain('</script>');
+    expect(dataLine.length).toBeGreaterThan(20);
   });
 
   it('plan steps retain dependsOn for DAG rendering after stripping', () => {
@@ -204,11 +202,79 @@ describe('viz dashboard corruption fix', () => {
     const outPath = generateDashboard(tmpRoot);
     const html = fs.readFileSync(outPath, 'utf8');
 
-    // Exactly 2 </script> close tags (one per script block)
-    const scriptCloseTags = html.match(/<\/script>/g) || [];
-    expect(scriptCloseTags.length).toBe(2);
+    // The one invariant that matters: the embedded DATA line carries no raw
+    // </script> that would close the block early — user content is escaped.
+    const dataLine = html.split('\n').find((l) => l.startsWith('const DATA = ')) || '';
+    expect(dataLine).not.toContain('</script>');
+    expect(dataLine.length).toBeGreaterThan(20);
 
     // The escaped version should appear inside the DATA
     expect(html).toContain('<\\/script>');
+  });
+});
+
+describe('cross-project (global) harvest', () => {
+  let home: string;
+  let projA: string;
+  let projB: string;
+  const origHome = process.env.HOME;
+
+  const graph = (nodes: unknown[], edges: unknown[]) =>
+    JSON.stringify({ nodes, edges, extractedAt: Date.now() });
+
+  const writeProject = (root: string, slug: string, nodes: unknown[], edges: unknown[]) => {
+    fs.mkdirSync(path.join(root, 'graphify-out'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'graphify-out', 'graph.json'), graph(nodes, edges));
+    const sdir = path.join(home, '.aura', 'sessions', slug);
+    fs.mkdirSync(sdir, { recursive: true });
+    fs.writeFileSync(path.join(sdir, 's1.json'), JSON.stringify({
+      id: 's1', title: 't', version: 1, history: [],
+      createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-02T00:00:00Z',
+      projectRoot: root,
+    }));
+  };
+
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-home-'));
+    projA = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-a-'));
+    projB = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-b-'));
+    process.env.HOME = home;
+    writeProject(projA, 'projA',
+      [{ id: 'src/a.ts', type: 'file', label: 'a.ts' }, { id: 'react', type: 'concept', label: 'react' }],
+      [{ source: 'src/a.ts', target: 'react', relation: 'imports' }]);
+    writeProject(projB, 'projB',
+      [{ id: 'src/b.ts', type: 'file', label: 'b.ts' }, { id: 'react', type: 'concept', label: 'react' }],
+      [{ source: 'src/b.ts', target: 'react', relation: 'imports' }]);
+  });
+  afterEach(() => {
+    process.env.HOME = origHome;
+    for (const d of [home, projA, projB]) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it('merges every project with a graph, one cluster each, shared deps not namespaced', () => {
+    const g = harvestGlobalGraph();
+    expect(g.projects.length).toBe(2);
+    // Each project's file node is namespaced and tagged.
+    const files = g.nodes.filter(n => n.type === 'file');
+    expect(files.every(f => f.id.includes('│') && f.project)).toBe(true);
+    // `react` appears once, shared, un-namespaced.
+    const react = g.nodes.filter(n => n.label === 'react');
+    expect(react).toHaveLength(1);
+    expect(react[0].id).toBe('dep│react');
+    // …and both projects' files link to that one shared node.
+    const toReact = g.edges.filter(e => e.target === 'dep│react');
+    expect(toReact.length).toBeGreaterThanOrEqual(2);
+    // A project hub per project.
+    expect(g.nodes.filter(n => n.type === 'project')).toHaveLength(2);
+  });
+
+  it('writes the global dashboard under ~/.aura/graphify-out', () => {
+    const out = generateGlobalDashboard();
+    expect(out).toBe(path.join(home, '.aura', 'graphify-out', 'dashboard.html'));
+    expect(fs.existsSync(out)).toBe(true);
+    expect(fs.existsSync(path.join(home, '.aura', 'graphify-out', 'graph.json'))).toBe(true);
+    const html = fs.readFileSync(out, 'utf8');
+    expect(html).toContain('all projects (2)');
+    expect((html.match(/<\/script>/g) || []).length).toBe((html.match(/<script[\s>]/g) || []).length);
   });
 });

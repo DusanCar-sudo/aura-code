@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
-import { exec, spawn, type ChildProcess } from 'child_process';
+import { exec, execFileSync, spawn, type ChildProcess } from 'child_process';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 
@@ -149,6 +149,26 @@ function updateStatus(): { available: boolean; current: string; latest: string |
   };
 }
 
+/**
+ * The machine-user's persistent server token. Read from `file` when it holds a
+ * plausible token (hex, long enough), otherwise a fresh one is minted and
+ * written with owner-only permissions. Any filesystem error falls back to an
+ * in-memory random token — a readonly home shouldn't stop the server, it just
+ * means links won't survive a restart that run.
+ */
+export function loadOrCreatePersistentToken(file: string): string {
+  try {
+    const existing = fs.readFileSync(file, 'utf8').trim();
+    if (/^[0-9a-f]{32,}$/i.test(existing)) return existing;
+  } catch { /* missing or unreadable — mint below */ }
+  const minted = crypto.randomBytes(24).toString('hex');
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, minted, { mode: 0o600 });
+  } catch { /* couldn't persist; the in-memory token still works for this run */ }
+  return minted;
+}
+
 export async function startServer(opts: ServeOptions): Promise<void> {
   // The web client learns about updates only through this server, and a
   // long-lived server outlives the daily TTL, so refresh on start and then
@@ -175,17 +195,60 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   // visits (WebSocket hijack). Defenses: bind loopback only, require a
   // per-run bearer token on every route + the WS handshake, and validate the
   // WS Origin so a browser tab on another site can't connect.
-  const token = process.env.AURA_SERVER_TOKEN || crypto.randomBytes(24).toString('hex');
+  // Token resolution, in order: an explicit AURA_SERVER_TOKEN always wins;
+  // otherwise a per-user token persisted at ~/.aura/server-token is reused
+  // across runs, and minted + saved on the first run. Persisting it is what
+  // keeps an already-open browser tab or a saved `?token=` link working after
+  // the server restarts — without it every run minted a fresh random token and
+  // the old link 401'd with "missing or invalid token". Still loopback-only,
+  // still one token per machine-user, so this widens nothing that `aura url`
+  // (which hands out the same token) did not already expose.
+  const persistentTokenFile = auraPath('server-token');
+  const token = process.env.AURA_SERVER_TOKEN?.trim() || loadOrCreatePersistentToken(persistentTokenFile);
+  // Keyed by port, not a single shared file: two `aura serve` processes on
+  // different ports (a real session plus a debugging one, say) used to
+  // overwrite the same `active_token` file, leaving whichever died last
+  // holding the name and `aura url` — or a person reading the file by hand —
+  // pointed at a token the live server on the port they actually want no
+  // longer accepts. Cleared on a clean exit below so a dead server's file
+  // doesn't outlive it and get handed out as if it were live.
+  const tokenRecord = JSON.stringify({ token, pid: process.pid, startedAt: Date.now() });
+  const globalTokenFile = auraPath('tokens', `${opts.port}.json`);
+  const localTokenFile = path.join(process.cwd(), '.aura', 'tokens', `${opts.port}.json`);
   try {
     const home = auraHome();
     if (!fs.existsSync(home)) fs.mkdirSync(home, { recursive: true });
-    fs.writeFileSync(auraPath('active_token'), token, { mode: 0o600 });
+    fs.mkdirSync(path.dirname(globalTokenFile), { recursive: true });
+    fs.writeFileSync(globalTokenFile, tokenRecord, { mode: 0o600 });
   } catch {}
   try {
-    const localAura = path.join(process.cwd(), '.aura');
-    if (!fs.existsSync(localAura)) fs.mkdirSync(localAura, { recursive: true });
-    fs.writeFileSync(path.join(localAura, 'active_token'), token, { mode: 0o600 });
+    fs.mkdirSync(path.dirname(localTokenFile), { recursive: true });
+    fs.writeFileSync(localTokenFile, tokenRecord, { mode: 0o600 });
   } catch {}
+  // Legacy `active_token` — a bare token string, not the JSON record. The Tauri
+  // desktop app's get_auth_token and older tooling still read this path; the
+  // per-port refactor stopped writing it, which is why the desktop client began
+  // 401ing with "missing or invalid token". Safe to keep a single shared file
+  // again now that the token is persistent (server-token): every `aura serve`,
+  // on any port, resolves to the same value, so this is never stale while a
+  // server is up. Not cleared on exit — a dead server's file points at a token
+  // the next server will also accept.
+  try { fs.writeFileSync(auraPath('active_token'), token, { mode: 0o600 }); } catch {}
+  try {
+    fs.mkdirSync(path.join(process.cwd(), '.aura'), { recursive: true });
+    fs.writeFileSync(path.join(process.cwd(), '.aura', 'active_token'), token, { mode: 0o600 });
+  } catch {}
+  let tokenFilesCleared = false;
+  const clearTokenFiles = (): void => {
+    if (tokenFilesCleared) return;
+    tokenFilesCleared = true;
+    try { fs.unlinkSync(globalTokenFile); } catch {}
+    try { fs.unlinkSync(localTokenFile); } catch {}
+  };
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(sig, () => { clearTokenFiles(); process.exit(0); });
+  }
+  process.on('exit', clearTokenFiles);
 
   const host = '127.0.0.1';
   const allowedOrigins = new Set([
@@ -465,6 +528,26 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     const provided = explicit ?? cookieToken(req);
     const who = identify(provided);
     if (!who) {
+      // A browser hitting the root with a stale or missing token — a bookmarked
+      // URL from a previous run, a tab reopened after a restart. Give it a page
+      // that says what to do instead of a bare line the user can't act on. API
+      // and asset requests still get the terse text (their callers parse it).
+      const wantsHtml = req.method === 'GET'
+        && (req.path === '/' || req.path === '')
+        && (req.header('accept') ?? '').includes('text/html');
+      if (wantsHtml) {
+        res.status(401).type('html').send(
+          `<!doctype html><meta charset=utf-8><meta name=color-scheme content="light dark">` +
+          `<title>Aura — link expired</title>` +
+          `<style>body{font:15px/1.6 system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1.5rem}` +
+          `code{font-size:.9em}</style>` +
+          `<h1>This link is missing a valid access token</h1>` +
+          `<p>The server restarted, or this URL is from an older session.</p>` +
+          `<p>Get a fresh link: run <code>aura url --port ${opts.port} --open</code> in your terminal, ` +
+          `or copy the URL printed by <code>aura serve</code>.</p>`,
+        );
+        return;
+      }
       res.status(401).send('Unauthorized: missing or invalid token.');
       return;
     }
@@ -717,6 +800,63 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       res.json({ ok: true, path: relPath });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  /** Repo-relative path inside the project, or null if it escapes / is empty. */
+  const safeRel = (raw: unknown): string | null => {
+    const rel = typeof raw === 'string' ? raw.trim() : '';
+    if (!rel || rel.startsWith('/') || rel.split(/[\\/]/).includes('..')) return null;
+    const abs = path.resolve(opts.cwd, rel);
+    return abs.startsWith(path.resolve(opts.cwd) + path.sep) || abs === path.resolve(opts.cwd) ? rel : null;
+  };
+  const runGit = (args: string[]): string => {
+    try {
+      return execFileSync('git', args, { cwd: opts.cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    } catch (e: any) {
+      // `git diff` exits non-zero only on real errors; empty diff is exit 0.
+      return typeof e?.stdout === 'string' ? e.stdout : '';
+    }
+  };
+
+  // Real diff for the web Diff Inspector. mode=worktree → uncommitted changes
+  // (working, else staged). mode=run → everything since Aura's last checkpoint.
+  app.get('/api/file/diff', async (req, res) => {
+    const rel = safeRel(req.query.path);
+    if (!rel) { res.status(400).json({ error: 'Bad or missing path.' }); return; }
+    const mode = req.query.mode === 'run' ? 'run' : 'worktree';
+    try {
+      let diff = '';
+      if (mode === 'run') {
+        const { checkpointFileDiff } = await import('../checkpoints/engine.js');
+        diff = await checkpointFileDiff(opts.cwd, rel);
+      } else {
+        diff = runGit(['diff', '--no-color', '--', rel]);
+        if (!diff.trim()) diff = runGit(['diff', '--no-color', '--staged', '--', rel]);
+      }
+      res.json({ ok: true, path: rel, mode, diff });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // Undo one hunk. `patch` is a self-contained unified diff (one file, one or
+  // more hunks) taken from /api/file/diff; git applies it in reverse.
+  app.post('/api/file/revert-hunk', (req, res) => {
+    const body = (req.body ?? {}) as { path?: string; patch?: string };
+    const rel = safeRel(body.path);
+    if (!rel) { res.status(400).json({ error: 'Bad or missing path.' }); return; }
+    if (typeof body.patch !== 'string' || !body.patch.includes('@@')) {
+      res.status(400).json({ error: 'Missing or malformed patch.' });
+      return;
+    }
+    try {
+      execFileSync('git', ['apply', '--reverse', '--recount', '--unidiff-zero', '-'], {
+        cwd: opts.cwd, input: body.patch, encoding: 'utf8',
+      });
+      res.json({ ok: true, path: rel });
+    } catch (e: any) {
+      res.status(409).json({ error: `Could not revert — the file changed since this diff was shown. ${e?.stderr || e?.message || ''}`.trim() });
     }
   });
 
@@ -1367,9 +1507,11 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         type: string; task?: string; model?: string; id?: string; approved?: boolean;
       };
       try { msg = JSON.parse(raw.toString()); } catch { return; }
+      console.log('[diag] ws message', msg.kind, (msg as any).method, msg.type); // TEMP DIAGNOSTIC
 
       if (msg.kind === 'req' || msg.kind === 'res' || msg.kind === 'evt') {
         await protocol.handle(msg as unknown as Frame);
+        console.log('[diag] protocol.handle returned'); // TEMP DIAGNOSTIC
         return;
       }
 

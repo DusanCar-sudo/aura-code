@@ -18,6 +18,83 @@ interface CodeLine {
   mark: string;
   kind: 'ctx' | 'add' | 'del';
   text: string;
+  /** Index into the parsed hunk list, or -1 for the "no changes" placeholder. */
+  hunk: number;
+}
+
+interface DiffHunk {
+  /** Self-contained one-file patch for just this hunk — POSTed to revert it. */
+  patch: string;
+  header: string;
+  adds: number;
+  dels: number;
+}
+
+/**
+ * Parse `git diff` output for a single file into rows the Diff Inspector
+ * renders, plus a per-hunk patch that can be reverted independently.
+ */
+function parseUnifiedDiff(diff: string): { lines: CodeLine[]; hunks: DiffHunk[] } {
+  const raw = diff.split('\n');
+  // File header — the `diff --git`, `index`, `---`, `+++` lines. Prepended to
+  // every single-hunk patch so `git apply` has something to match against.
+  const fileHeader: string[] = [];
+  let i = 0;
+  for (; i < raw.length; i++) {
+    const l = raw[i];
+    if (l.startsWith('@@')) break;
+    if (l.startsWith('diff --git') || l.startsWith('index ') || l.startsWith('--- ') ||
+        l.startsWith('+++ ') || l.startsWith('new file') || l.startsWith('deleted file') ||
+        l.startsWith('rename ') || l.startsWith('similarity ')) {
+      fileHeader.push(l);
+    }
+  }
+
+  const lines: CodeLine[] = [];
+  const hunks: DiffHunk[] = [];
+  let cur: string[] | null = null;
+  let oldLn = 0, newLn = 0, hunkIdx = -1;
+
+  const flush = () => {
+    if (cur && hunkIdx >= 0) {
+      const body = cur.join('\n');
+      hunks[hunkIdx] = {
+        ...hunks[hunkIdx],
+        patch: fileHeader.join('\n') + '\n' + body + '\n',
+      };
+    }
+  };
+
+  for (; i < raw.length; i++) {
+    const l = raw[i];
+    const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l);
+    if (m) {
+      flush();
+      hunkIdx++;
+      oldLn = parseInt(m[1], 10);
+      newLn = parseInt(m[2], 10);
+      cur = [l];
+      hunks[hunkIdx] = { patch: '', header: l, adds: 0, dels: 0 };
+      lines.push({ n: '', mark: '', kind: 'ctx', text: l, hunk: hunkIdx });
+      continue;
+    }
+    if (hunkIdx < 0) continue;              // preamble noise
+    cur?.push(l);
+    if (l.startsWith('+') && !l.startsWith('+++')) {
+      lines.push({ n: String(newLn++), mark: '+', kind: 'add', text: l.slice(1), hunk: hunkIdx });
+      hunks[hunkIdx].adds++;
+    } else if (l.startsWith('-') && !l.startsWith('---')) {
+      lines.push({ n: String(oldLn++), mark: '-', kind: 'del', text: l.slice(1), hunk: hunkIdx });
+      hunks[hunkIdx].dels++;
+    } else if (l.startsWith('\\')) {
+      // "\ No newline at end of file" — keep it in the patch, not in the view.
+    } else {
+      lines.push({ n: String(newLn++), mark: '', kind: 'ctx', text: l.slice(1), hunk: hunkIdx });
+      oldLn++;
+    }
+  }
+  flush();
+  return { lines, hunks };
 }
 
 const DEFAULT_TREE: TreeItem[] = [
@@ -102,31 +179,6 @@ describe('Aura Tools Suite', () => {
 `,
 };
 
-const DEFAULT_DIFF_LINES: CodeLine[] = [
-  { n: '41', mark: '', kind: 'ctx', text: '  private async attempt(step: Step, n: number) {' },
-  { n: '42', mark: '', kind: 'ctx', text: '    const budget = this.opts.retryBudgetMs;' },
-  { n: '43', mark: '-', kind: 'del', text: '    const startedAt = Date.now();' },
-  { n: '44', mark: '-', kind: 'del', text: '    const delay = backoff(n) + jitter();' },
-  { n: '45', mark: '+', kind: 'add', text: '    const startedAt = this.clock.now();' },
-  { n: '46', mark: '+', kind: 'add', text: '    const delay = backoff(n, this.clock.seed);' },
-  { n: '47', mark: '', kind: 'ctx', text: '' },
-  { n: '48', mark: '', kind: 'ctx', text: '    if (delay > budget) {' },
-  { n: '49', mark: '', kind: 'ctx', text: '      throw new RetryBudgetExceeded(step.id, delay, budget);' },
-  { n: '50', mark: '', kind: 'ctx', text: '    }' },
-  { n: '51', mark: '', kind: 'ctx', text: '' },
-  { n: '52', mark: '+', kind: 'add', text: '    await this.clock.sleep(delay);' },
-  { n: '53', mark: '-', kind: 'del', text: '    await sleep(delay);' },
-  { n: '54', mark: '', kind: 'ctx', text: '    const result = await this.tools.run(step);' },
-  { n: '55', mark: '', kind: 'ctx', text: '' },
-  { n: '56', mark: '', kind: 'ctx', text: '    this.log.tool(step.tool, {' },
-  { n: '57', mark: '', kind: 'ctx', text: '      ms: this.clock.now() - startedAt,' },
-  { n: '58', mark: '', kind: 'ctx', text: '      attempt: n,' },
-  { n: '59', mark: '', kind: 'ctx', text: '    });' },
-  { n: '60', mark: '', kind: 'ctx', text: '' },
-  { n: '61', mark: '', kind: 'ctx', text: '    return result;' },
-  { n: '62', mark: '', kind: 'ctx', text: '  }' },
-];
-
 export function Code({
   initialFile,
   isVisible = true,
@@ -137,8 +189,12 @@ export function Code({
   const [activeFile, setActiveFile] = useState(initialFile || 'src/agent/loop.ts');
   const [files, setFiles] = useState<Record<string, string>>(INITIAL_FILE_CONTENTS);
   const [viewMode, setViewMode] = useState<'edit' | 'diff'>('edit');
-  const [reverted, setReverted] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [diffMode, setDiffMode] = useState<'worktree' | 'run'>('worktree');
+  const [diffLines, setDiffLines] = useState<CodeLine[]>([]);
+  const [diffHunks, setDiffHunks] = useState<DiffHunk[]>([]);
+  const [diffState, setDiffState] = useState<'idle' | 'loading' | 'clean' | 'error'>('idle');
+  const [diffNonce, setDiffNonce] = useState(0);   // bump to re-fetch after a revert
 
   const [terminalHeight, setTerminalHeight] = useState<number>(260);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -179,6 +235,52 @@ export function Code({
       })
       .catch(() => {});
   }, []);
+
+  // Real diff for the Diff Inspector — actual working-tree / since-this-run
+  // changes to the active file, not a canned sample.
+  useEffect(() => {
+    if (viewMode !== 'diff') return;
+    let cancelled = false;
+    setDiffState('loading');
+    fetch(`/api/file/diff?path=${encodeURIComponent(activeFile)}&mode=${diffMode}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((data: { diff?: string }) => {
+        if (cancelled) return;
+        const text = (data.diff || '').trim();
+        if (!text) { setDiffLines([]); setDiffHunks([]); setDiffState('clean'); return; }
+        const { lines, hunks } = parseUnifiedDiff(data.diff || '');
+        setDiffLines(lines);
+        setDiffHunks(hunks);
+        setDiffState(hunks.length ? 'idle' : 'clean');
+      })
+      .catch(() => { if (!cancelled) { setDiffLines([]); setDiffHunks([]); setDiffState('error'); } });
+    return () => { cancelled = true; };
+  }, [activeFile, viewMode, diffMode, diffNonce]);
+
+  const revertHunk = async (h: DiffHunk) => {
+    try {
+      const res = await fetch('/api/file/revert-hunk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: activeFile, patch: h.patch }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setSaveStatus(j.error || 'Revert failed');
+      } else {
+        setSaveStatus('Hunk reverted');
+        // Refresh the editor buffer and the diff.
+        fetch(`/api/file/read?path=${encodeURIComponent(activeFile)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d?.content != null) setFiles((p) => ({ ...p, [activeFile]: d.content })); })
+          .catch(() => {});
+        setDiffNonce((n) => n + 1);
+      }
+    } catch (e) {
+      setSaveStatus(String(e));
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
 
   useEffect(() => {
     if (!xtermContainerRef.current) return;
@@ -546,8 +648,8 @@ export function Code({
     }
   };
 
-  const diffAdd = DEFAULT_DIFF_LINES.filter((l) => l.kind === 'add').length;
-  const diffDel = DEFAULT_DIFF_LINES.filter((l) => l.kind === 'del').length;
+  const diffAdd = diffLines.filter((l) => l.kind === 'add').length;
+  const diffDel = diffLines.filter((l) => l.kind === 'del').length;
 
   return (
     <div className="code-workspace" ref={workspaceRef}>
@@ -629,13 +731,27 @@ export function Code({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                className="btn-hunk"
-                onClick={() => setReverted((v) => !v)}
-              >
-                {reverted ? 'Restore hunk' : 'Revert hunk'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="diff-mode-toggle" style={{ display: 'flex', gap: '2px' }}>
+                  <button
+                    type="button"
+                    className={`btn-code-mode-toggle ${diffMode === 'worktree' ? 'active' : ''}`}
+                    onClick={() => setDiffMode('worktree')}
+                    title="All uncommitted changes to this file (git diff)"
+                  >
+                    Working tree
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-code-mode-toggle ${diffMode === 'run' ? 'active' : ''}`}
+                    onClick={() => setDiffMode('run')}
+                    title="Everything changed since Aura's last checkpoint"
+                  >
+                    This run
+                  </button>
+                </div>
+                {saveStatus && <span style={{ fontSize: '11px', color: 'var(--mut)' }}>{saveStatus}</span>}
+              </div>
             )}
           </header>
 
@@ -661,13 +777,45 @@ export function Code({
             </div>
           ) : (
             <div className="code-lines-scroll">
-              {DEFAULT_DIFF_LINES.map((l, i) => {
+              {diffState === 'loading' && (
+                <div className="code-line-row" style={{ color: 'var(--mut)', padding: '12px' }}>Loading diff…</div>
+              )}
+              {diffState === 'error' && (
+                <div className="code-line-row" style={{ color: 'var(--err)', padding: '12px' }}>
+                  Could not load the diff for this file.
+                </div>
+              )}
+              {diffState === 'clean' && (
+                <div className="code-line-row" style={{ color: 'var(--mut)', padding: '12px' }}>
+                  No {diffMode === 'run' ? 'changes since the last checkpoint' : 'uncommitted changes'} in <code>{activeFile}</code>.
+                </div>
+              )}
+              {diffState === 'idle' && diffLines.map((l, i) => {
+                if (l.text.startsWith('@@')) {
+                  const h = diffHunks[l.hunk];
+                  return (
+                    <div key={i} className="code-line-row" style={{ background: 'rgba(110,208,234,0.08)', alignItems: 'center' }}>
+                      <span className="line-code" style={{ color: 'var(--mut)', flex: 1 }}>{l.text}</span>
+                      {h && (
+                        <button
+                          type="button"
+                          className="btn-hunk"
+                          style={{ marginRight: '8px' }}
+                          onClick={() => revertHunk(h)}
+                          title={`Undo this hunk (+${h.adds} / −${h.dels})`}
+                        >
+                          ↩ Revert hunk
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
                 const bg = l.kind === 'add' ? 'rgba(90,158,110,0.13)' : l.kind === 'del' ? 'rgba(177,84,57,0.13)' : 'transparent';
                 const markColor = l.kind === 'add' ? 'var(--ok)' : l.kind === 'del' ? 'var(--err)' : 'transparent';
                 const fg = l.kind === 'ctx' ? 'var(--txt)' : 'var(--ink)';
                 return (
                   <div key={i} className="code-line-row" style={{ background: bg }}>
-                    <span className="line-num">{l.n}</span>
+                    <span className="line-num">{l.kind === 'add' ? '' : l.n}</span>
                     <span className="line-mark" style={{ color: markColor }}>{l.mark}</span>
                     <span className="line-code" style={{ color: fg }}>{l.text || ' '}</span>
                   </div>

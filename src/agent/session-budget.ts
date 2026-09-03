@@ -10,7 +10,9 @@
  * at 1/2/3 with the input payload already at 55k tokens per call. A 30-turn cap
  * on a three-segment conversation still permits 90 turns.
  *
- * Two ceilings, because turns are a poor proxy for cost:
+ * Two ceilings, because turns are a poor proxy for cost. The token ceiling is
+ * opt-in (Infinity unless AURA_SESSION_BUDGET sets a finite value); `maxTurns`
+ * is the guard that always applies.
  *
  *  - `maxTurns`     — cumulative model turns across the whole conversation.
  *  - `maxInputTokens` — cumulative input tokens **net of prompt-cache hits**.
@@ -32,23 +34,20 @@
  * so history is persisted and the session stays resumable.
  */
 
-/** Cumulative billed input tokens before a conversation is a runaway.
- *  A backstop above the turn cap, not a routine limit: a 50-turn session that
- *  caches well bills a small fraction of this, while a cold one reaches it. */
-export const DEFAULT_MAX_INPUT_TOKENS = 1_000_000;
+/** Cumulative billed input-token ceiling when the caller sets none.
+ *  Infinity by default: the token guard is off unless AURA_SESSION_BUDGET
+ *  opts into a finite ceiling. The per-invocation `maxTurns` cap still bounds
+ *  a runaway loop within any single turn. */
+export const DEFAULT_MAX_INPUT_TOKENS = Infinity;
 
-/** Env override for the token ceiling, for the case the default is wrong for
- *  the work at hand (a large planned refactor that legitimately bills past 1M).
+/** Env override for the token ceiling, for the case a run should be bounded by
+ *  cumulative billed input rather than only by turns.
  *
- *    unset / empty  → DEFAULT_MAX_INPUT_TOKENS. Unchanged for anyone who has
- *                     not opted in; the guard is not something you can disable
- *                     by accident.
+ *    unset / empty  → DEFAULT_MAX_INPUT_TOKENS (Infinity — no token ceiling).
  *    0              → Infinity, i.e. no token ceiling. An explicit opt-out.
  *    positive N     → N billed input tokens.
  *
- *  A malformed value falls back to the default rather than to unlimited —
- *  failing open on a typo would remove the guard silently, which is the one
- *  outcome this must never have. */
+ *  A malformed value falls back to the default rather than guessing a number. */
 export const SESSION_BUDGET_ENV = 'AURA_SESSION_BUDGET';
 
 let warnedBadBudgetEnv = false;
@@ -64,8 +63,7 @@ export function maxInputTokensFromEnv(
       warnedBadBudgetEnv = true;
       process.stderr.write(
         `${SESSION_BUDGET_ENV}="${trimmed}" is not a non-negative number — ` +
-        `using the default ceiling of ${DEFAULT_MAX_INPUT_TOKENS.toLocaleString()}. ` +
-        `Set 0 for no ceiling.\n`,
+        `ignoring it; no token ceiling. Set a positive number to bound cumulative billed input.\n`,
       );
     }
     return DEFAULT_MAX_INPUT_TOKENS;

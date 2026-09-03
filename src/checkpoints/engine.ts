@@ -229,6 +229,24 @@ export async function listCheckpoints(root: string): Promise<Checkpoint[]> {
 }
 
 /**
+ * Unified diff of `filePath` (repo-relative) between a checkpoint's snapshot
+ * and the current working tree — i.e. everything that changed since that
+ * checkpoint was taken. Newest checkpoint when `id` is omitted. Empty string
+ * outside a repo, with no checkpoints, or when the file is unchanged.
+ */
+export async function checkpointFileDiff(root: string, filePath: string, id?: string): Promise<string> {
+  if (!(await gitDirOf(root))) return '';
+  const all = await listCheckpoints(root);
+  const cp = id ? all.find(c => c.id === id) : all[0];
+  if (!cp) return '';
+  try {
+    return await git(root, ['diff', '--no-color', cp.tree, '--', filePath]);
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Restore the working tree to the state captured by checkpoint `id`
  * (or the most recent checkpoint when id is omitted).
  *

@@ -232,6 +232,13 @@ export const M = {
   boardUpdate: 'board.update',
   boardRemove: 'board.remove',
   boardRun: 'board.run',
+  /** Run a `:command` against the engine and return its output. The client
+   *  used to have no way to reach these at all: `/api/commands` advertised the
+   *  whole set while `web/src/lib/commands.ts` could only run fourteen of them
+   *  locally and answered the rest with "terminal only". */
+  commandRun: 'command.run',
+  /** Which commands this engine can run, and which need the terminal. */
+  commandList: 'command.list',
   // engine → client (request)
   approvalRequest: 'approval.request',
   // engine → client (events)

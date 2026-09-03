@@ -24,8 +24,17 @@ export interface PaletteCommand {
 /**
  * All commands available in the palette. Derived from help-data.ts
  * but kept as a static list here to avoid circular imports.
+ *
+ * This list is not only the terminal's Ctrl+P menu: the engine serves it at
+ * `/api/commands` and over `command.list`, so it is also the web client's `/`
+ * menu. It had thirty-nine of the sixty-six commands `:help` advertises, which
+ * meant twenty-seven were reachable only by typing them from memory on either
+ * surface. Adding a command to :help means adding it here.
  */
 export const PALETTE_COMMANDS: PaletteCommand[] = [
+  // Modes
+  { id: ':coder', label: 'Coder mode', description: 'Full coding agent — tools and project context', category: 'Modes' },
+  { id: ':gazelle', label: 'Gazelle mode', description: 'Lean conversation — no tools, no project context', category: 'Modes' },
   // Session
   { id: ':id', label: 'Show session ID', description: 'Current chat ID', category: 'Session' },
   { id: ':sessions', label: 'List sessions', description: 'All saved sessions', category: 'Session' },
@@ -33,10 +42,15 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':new', label: 'New session', description: 'Start fresh session', category: 'Session' },
   { id: ':history', label: 'Show history', description: 'Turn count in current session', category: 'Session' },
   { id: ':save', label: 'Save session', description: 'Rename/save current session', category: 'Session' },
+  { id: ':sessions all', label: 'Sessions everywhere', description: 'Saved sessions across every project', category: 'Session' },
+  { id: ':clear-history', label: 'Clear history', description: 'Wipe the conversation, keep the session id', category: 'Session' },
+  { id: ':delete', label: 'Delete a session', description: 'Remove a saved session by id', category: 'Session' },
   // Model
   { id: ':model', label: 'Switch model', description: 'Interactive model selector', category: 'Model / API' },
   { id: ':provider', label: 'Provider selector', description: 'Pick provider, then model', category: 'Model / API' },
   { id: ':apikey', label: 'Set API key', description: 'Set API key for session', category: 'Model / API' },
+  { id: ':effort', label: 'Reasoning effort', description: 'Show or set the effort rung for this model', category: 'Model / API' },
+  { id: ':skills', label: 'List skills', description: 'Skills the agent can route to', category: 'Model / API' },
   // Workflows
   { id: ':workflows', label: 'List workflows', description: 'All saved workflows', category: 'Workflows' },
   { id: ':workflow', label: 'Create workflow', description: 'Multi-step workflow', category: 'Workflows' },
@@ -44,6 +58,12 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':council', label: 'Council', description: 'Parallel read-only specialists', category: 'Workflows' },
   { id: ':q add', label: 'Queue task', description: 'Enqueue a task', category: 'Workflows' },
   { id: ':q list', label: 'Queue list', description: 'List queued tasks', category: 'Workflows' },
+  { id: ':resume-workflow', label: 'Resume workflow', description: 'Continue a paused or failed workflow', category: 'Workflows' },
+  { id: ':ecclesia', label: 'Ecclesia', description: '5 independent research agents, then a synthesis verdict', category: 'Workflows' },
+  { id: ':nerds', label: 'Nerds', description: 'One writer at a time, readers in parallel', category: 'Workflows' },
+  { id: ':marathon', label: 'Marathon', description: 'Flag a long haul (24h, lapses on its own)', category: 'Workflows' },
+  { id: ':plans', label: 'Execution plans', description: 'Plans this project has run', category: 'Workflows' },
+  { id: ':stop', label: 'Stop the task', description: 'Abort whatever is running (alias: :cancel)', category: 'Workflows' },
   // Design
   { id: ':designx', label: 'Design commission', description: 'Route a style, scrape references, build the artefact', category: 'Design' },
   { id: ':designx styles', label: 'Design lexicon', description: 'List the style directions :designx routes from', category: 'Design' },
@@ -58,6 +78,10 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':lessons', label: 'Lessons learned', description: 'What Aura learned and now tells herself', category: 'Memory' },
   { id: ':lessons timeline', label: 'Learning timeline', description: 'When lessons were learned, per day', category: 'Memory' },
   { id: ':forget', label: 'Forget a lesson', description: 'Remove one learned lesson from the prompt', category: 'Memory' },
+  { id: ':confess', label: 'Confess', description: 'Auto-detect and confess an anomalous episode', category: 'Memory' },
+  { id: ':confessions', label: 'List confessions', description: 'Everything confessed so far', category: 'Memory' },
+  { id: ':graph', label: 'Codebase graph', description: 'Knowledge-graph summary (also: extract, refresh)', category: 'Memory' },
+  { id: ':viz', label: 'Memory dashboard', description: 'Generate and open it (alias: :dashboard; :viz all for every project)', category: 'Memory' },
   // Voice
   { id: ':speak', label: 'Toggle voice', description: 'Read replies aloud', category: 'Voice' },
   // Safety
@@ -74,11 +98,20 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':archmodel', label: 'Archimedes Model', description: 'Set Archimedes local model for this session  e.g. :archmodel qwen3-vl:4b', category: 'System' },
   { id: ':turnsoff', label: 'Turns Off', description: 'Disable per-task turn limit (unlimited)', category: 'System' },
   { id: ':turnson', label: 'Turns On', description: 'Enable per-task turn limit (default: 50)', category: 'System' },
+  { id: ':turns', label: 'Turn limit', description: 'Show or set the per-task turn cap', category: 'System' },
+  { id: ':small1', label: 'Start with Archimedes', description: 'Bypass the competence gate for this session', category: 'System' },
+  { id: ':cost', label: 'Cost ledger', description: 'Spent vs direct-large counterfactual, per outcome', category: 'System' },
   { id: ':q', label: 'Quit', description: 'Exit Aura', category: 'System' },
   { id: ':context', label: 'Context health', description: 'Token usage dashboard', category: 'System' },
   { id: ':doctor', label: 'Doctor', description: 'Run health checks', category: 'System' },
   { id: ':compact', label: 'Force compact', description: 'Manual context compaction (alias: :compress)', category: 'System' },
   { id: ':compress', label: 'Force compress', description: 'Manual context compaction (alias: :compact)', category: 'System' },
+  { id: ':quit', label: 'Quit', description: 'Exit Aura (aliases: :q, /exit)', category: 'System' },
+  // Stats — the slash half of the set, which had no palette entries at all
+  { id: '/stats', label: 'Session usage', description: 'Tokens and cost this session (alias: /usage)', category: 'Stats' },
+  { id: '/cost', label: 'Cache report', description: 'Cache hit rate and cost per call', category: 'Stats' },
+  { id: '/context', label: 'Context health', description: 'Window, compaction ladder, cost', category: 'Stats' },
+  { id: '/clear', label: 'Reset usage stats', description: 'Zero the counters — history untouched (alias: /reset)', category: 'Stats' },
 ];
 
 /**

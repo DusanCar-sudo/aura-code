@@ -14,10 +14,20 @@ import { runCommand } from './lib/commands';
 export type MainView = 'chat' | 'kanban' | 'canvas' | 'code';
 
 const DEFAULT_MODELS_FALLBACK: ModelItem[] = [
-  { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'NVIDIA Nemotron 70B', provider: 'NVIDIA NIM', speed: 'Powerful · 131k', hasKey: true },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google', speed: 'Powerful · reasoning', hasKey: true },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', speed: 'Fast · cheap', hasKey: true },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (preview)', provider: 'Google', speed: 'Powerful · reasoning', hasKey: true },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google', speed: 'Fast · cheap', hasKey: true },
   { id: 'gemini-pro-latest', name: 'Gemini Pro (latest)', provider: 'Google', speed: 'Powerful', hasKey: true },
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash', provider: 'Google', speed: 'Fast', hasKey: true },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', provider: 'Google', speed: 'Fastest · cheap', hasKey: true },
+  { id: 'cerebras/llama-3.3-70b', name: 'Llama 3.3 70B (Free Wafer-Scale)', provider: 'Cerebras', speed: 'Ultra-fast · free', hasKey: true },
+  { id: 'sambanova/Meta-Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B (Free Tier)', provider: 'SambaNova', speed: 'Ultra-fast · free', hasKey: true },
+  { id: 'opencode/big-pickle', name: 'Big Pickle (Free)', provider: 'OpenCode', speed: 'Powerful · free', hasKey: true },
+  { id: 'openrouter/google/gemini-2.0-flash-lite-001:free', name: 'Gemini 2.0 Flash Lite (Free)', provider: 'OpenRouter', speed: 'Fast · free', hasKey: true },
+  { id: 'groq/llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Groq)', provider: 'Groq', speed: 'Ultra-fast · 128k', hasKey: true },
+  { id: 'mistral/codestral-latest', name: 'Codestral Latest', provider: 'Mistral AI', speed: 'Code · fast', hasKey: true },
+  { id: 'together/meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo', provider: 'Together AI', speed: 'Fast · 128k', hasKey: true },
+  { id: 'cohere/command-r-plus-08-2024', name: 'Command R+ 08-2024', provider: 'Cohere', speed: 'Powerful · 128k', hasKey: true },
+  { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'NVIDIA Nemotron 70B', provider: 'NVIDIA NIM', speed: 'Powerful · 131k', hasKey: true },
   { id: 'claude-sonnet-4-5-20251001', name: 'Claude Sonnet 4.5', provider: 'Anthropic', speed: 'Fast · balanced', hasKey: true },
   { id: 'claude-opus-4-5-20251001', name: 'Claude Opus 4.5', provider: 'Anthropic', speed: 'Powerful · flagship', hasKey: true },
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', speed: 'Fast · general', hasKey: true },
@@ -25,7 +35,7 @@ const DEFAULT_MODELS_FALLBACK: ModelItem[] = [
   { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'DeepSeek', speed: 'Fast · 1M context', hasKey: true },
   { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', provider: 'DeepSeek', speed: 'Powerful · 1M context', hasKey: true },
   { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'Xiaomi MiMo', speed: 'Powerful · 1T', hasKey: true },
-  { id: 'qwen3-coder-30b', name: 'Qwen3 Coder 30B', provider: 'Ollama', speed: 'Local · fast', hasKey: true },
+  { id: 'qwen3-coder:30b', name: 'Qwen3 Coder 30B (local)', provider: 'Ollama', speed: 'Local · fast', hasKey: true },
 ];
 
 export function isTaskIntent(input: string): boolean {
@@ -169,7 +179,8 @@ export function App() {
   }, []);
 
   const handleSelectModel = (modelId: string) => {
-    patch({ model: modelId });
+    const found = availableModels.find((m: ModelItem) => m.id === modelId) || DEFAULT_MODELS_FALLBACK.find((m: ModelItem) => m.id === modelId);
+    patch({ model: modelId, ...(found?.provider ? { provider: found.provider } : {}) });
     setModelDropdownOpen(false);
     // Tell the running server
     fetch('/api/model', {
@@ -181,7 +192,10 @@ export function App() {
 
   const submit = useCallback((text: string, attachments: Parameters<typeof aura.send>[1]) => {
     const trimmed = text.trim();
-    if (trimmed.startsWith(':')) {
+    // `/` commands (/stats, /cost, /context) are commands too — only `:` was
+    // checked here, so the slash half of the advertised set went to the model
+    // as prose. A bare "/" or ":" is someone opening the menu, not a command.
+    if ((trimmed.startsWith(':') || trimmed.startsWith('/')) && trimmed.length > 1) {
       runCommand(text, {
         t,
         sessionId: aura.sessionId,
@@ -192,10 +206,11 @@ export function App() {
         openChat: (id) => void aura.openChat(id),
         note: aura.systemNote,
         openSettings: (tab) => {
-          setSettingsTab(tab as SettingsTab);
+          setSettingsTab(tab);
           setSettingsOpen(true);
         },
         openCommandMenu: () => setOpenMenuAt(Date.now()),
+        runOnEngine: (command) => aura.runEngineCommand(command),
       });
       return;
     }

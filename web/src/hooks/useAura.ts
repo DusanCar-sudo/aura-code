@@ -505,6 +505,10 @@ export function useAura(settings: Settings) {
       await clientRef.current?.request(M.turnSend, {
         sessionId: id,
         message: trimmed + note,
+        // The engine reads the session's model, which is fixed at creation —
+        // send the picker's current choice every turn so switching it mid-chat
+        // actually takes effect.
+        ...(settingsRef.current.model ? { model: settingsRef.current.model } : {}),
         ...(images.length > 0 ? { images } : {}),
       });
     } catch (e) {
@@ -512,6 +516,50 @@ export function useAura(settings: Settings) {
       setError(String(e));
     }
   }, [busy, sessionId, newChat]);
+
+  /**
+   * Run a `:command` on the engine and show what it printed.
+   *
+   * The engine owns the implementations (src/commands/core.ts), so what runs
+   * here is what runs in the terminal — this client used to answer fifty-two
+   * of the advertised commands with "terminal only" because there was no
+   * method to call. Commands the engine genuinely cannot run come back with
+   * `terminalOnly` and the reason, which is still an answer rather than the
+   * line being sent to the model as a question.
+   */
+  const runEngineCommand = useCallback(async (command: string): Promise<boolean> => {
+    let id = sessionId;
+    if (!id) id = await newChat(command.slice(0, 60));
+    if (!id) return false;
+    try {
+      const res = await clientRef.current?.request<{
+        handled?: boolean; terminalOnly?: boolean; reason?: string;
+        output?: string[]; sessionReplaced?: boolean; runTask?: string;
+      }>(M.commandRun, { sessionId: id, command });
+      if (!res) return false;
+      if (res.terminalOnly) {
+        systemNote(`${command.split(/\s+/)[0]} runs in the terminal — it ${res.reason ?? 'needs a terminal'}.`);
+        return true;
+      }
+      if (!res.handled) return false;
+      const text = (res.output ?? []).join('\n').trim();
+      if (text) systemNote(text);
+      // :new, :resume and :clear-history replace the conversation on the
+      // engine; reload so the thread on screen is the one the engine holds.
+      if (res.sessionReplaced) {
+        await refreshConversations();
+        await openChat(id);
+      }
+      // :catchthis run hands back a task rather than doing the work itself —
+      // send it as an ordinary turn, exactly as the REPL does.
+      if (res.runTask) await send(res.runTask);
+      return true;
+    } catch (e) {
+      systemNote(`${command} failed: ${String(e)}`);
+      return true;
+    }
+  }, [sessionId, newChat, systemNote, refreshConversations, openChat, send]);
+
 
   const stop = useCallback(async () => {
     if (!sessionId) return;
@@ -529,7 +577,10 @@ export function useAura(settings: Settings) {
     });
     setBusy(true);
     try {
-      await clientRef.current?.request(M.turnSend, { sessionId, message: lastUser.text });
+      await clientRef.current?.request(M.turnSend, {
+        sessionId, message: lastUser.text,
+        ...(settingsRef.current.model ? { model: settingsRef.current.model } : {}),
+      });
     } catch (e) {
       setBusy(false);
       setError(String(e));
@@ -601,10 +652,10 @@ export function useAura(settings: Settings) {
   return useMemo(() => ({
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
     send, stop, regenerate, newChat, openChat, deleteChat, renameChat, refreshConversations, systemNote,
-    board, runTask,
+    board, runTask, runEngineCommand,
   }), [
     connection, conversations, sessionId, messages, busy, approval, usage, tools, error,
     send, stop, regenerate, newChat, openChat, deleteChat, renameChat, refreshConversations, systemNote,
-    board, runTask,
+    board, runTask, runEngineCommand,
   ]);
 }

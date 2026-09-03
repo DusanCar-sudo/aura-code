@@ -30,12 +30,17 @@ fn get_auth_token() -> Result<String, String> {
         std::path::PathBuf::from(".aura")
     };
 
-    let token_file = home.join("active_token");
-    if token_file.exists() {
-        if let Ok(contents) = std::fs::read_to_string(&token_file) {
-            let tok = contents.trim().to_string();
-            if !tok.is_empty() {
-                return Ok(tok);
+    // `active_token` (bare token) is written by `aura serve` for this exact
+    // purpose. `server-token` is the persistent token it is derived from — a
+    // fallback for the window before any serve has run this session.
+    for name in ["active_token", "server-token"] {
+        let token_file = home.join(name);
+        if token_file.exists() {
+            if let Ok(contents) = std::fs::read_to_string(&token_file) {
+                let tok = contents.trim().to_string();
+                if !tok.is_empty() {
+                    return Ok(tok);
+                }
             }
         }
     }

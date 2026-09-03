@@ -19,6 +19,7 @@
 import chalk from 'chalk';
 import { aggregateCosts, defaultCostLogDir, loadCostLogs, type CostOutcome } from '../archimedes/cost-log.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
+import { emit } from '../commands/surface.js';
 
 const DIM = '#8a94a6';
 const FAINT = '#4a5568';
@@ -145,6 +146,6 @@ export async function handleCostCommand(input: string): Promise<ReplCommandResul
   const lower = input.trim().toLowerCase();
   if (lower !== ':cost' && !lower.startsWith(':cost ')) return null;
   const entries = await loadCostLogs();
-  for (const line of renderCostReport(entries)) console.log(line);
+  for (const line of renderCostReport(entries)) emit(line);
   return { handled: true };
 }

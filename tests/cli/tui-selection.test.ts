@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The clipboard is a real subprocess (xclip/wl-copy). Stub it so the tests
 // assert on what Aura decided to copy, not on the developer's clipboard.
 const copied = vi.hoisted(() => ({ text: '' as string, calls: 0 }));
+const clip = vi.hoisted(() => ({ contents: null as string | null }));
 vi.mock('../../src/tools/clipboard.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/tools/clipboard.js')>()),
   clipboardTool: async (input: { action: string; text?: string }) => {
@@ -10,6 +11,7 @@ vi.mock('../../src/tools/clipboard.js', async (importOriginal) => ({
     copied.text = input.text ?? '';
     return `Copied ${input.text?.length ?? 0} characters to clipboard.`;
   },
+  readClipboardSync: () => clip.contents,
 }));
 
 import {
@@ -26,6 +28,7 @@ const drag    = (row: number) => `\x1b[<32;5;${row}M`;
 const release = (row: number) => `\x1b[<0;5;${row}m`;
 const wheelUp   = (row: number) => `\x1b[<64;5;${row}M`;
 const wheelDown = (row: number) => `\x1b[<65;5;${row}M`;
+const rightClick = (row: number) => `\x1b[<2;5;${row}M`;
 
 describe('TUI mouse selection', () => {
   const stdoutState = {
@@ -38,6 +41,7 @@ describe('TUI mouse selection', () => {
     vi.useFakeTimers();
     chunks = [];
     copied.text = ''; copied.calls = 0;
+    clip.contents = null;
     Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 80 });
     Object.defineProperty(process.stdout, 'rows', { configurable: true, value: 24 });
     vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => {
@@ -165,6 +169,39 @@ describe('TUI mouse selection', () => {
     process.stdin.emit('data', 'i');
     process.stdin.emit('data', 'x');
     expect(stripAnsi(chunks.join(''))).toContain('x');
+  });
+
+  it('right-click copies the current selection', async () => {
+    process.stdin.emit('data', press(4));
+    process.stdin.emit('data', drag(6));
+    process.stdin.emit('data', drag(6));   // stay held; no release
+    expect(selectionRange()).not.toBeNull();
+
+    process.stdin.emit('data', rightClick(6));
+    await vi.waitFor(() => expect(copied.calls).toBe(1));
+    expect(copied.text.split('\n')).toHaveLength(3);
+  });
+
+  it('right-click with no selection pastes the clipboard into the input', () => {
+    clip.contents = 'pasted text';
+    chunks = [];
+    process.stdin.emit('data', rightClick(20));
+    expect(copied.calls).toBe(0);
+    expect(stripAnsi(chunks.join(''))).toContain('pasted text');
+  });
+
+  it('a stray wheel tick just after leaving scroll mode does not re-enter it', () => {
+    process.stdin.emit('data', wheelUp(5));            // enter scroll mode
+    expect(stripAnsi(chunks.join(''))).toMatch(/-- SCROLL --/);
+    process.stdin.emit('data', 'i');                   // back to insert
+    chunks = [];
+
+    process.stdin.emit('data', wheelUp(5));            // trailing detent
+    expect(stripAnsi(chunks.join(''))).not.toMatch(/-- SCROLL --/);
+
+    vi.advanceTimersByTime(600);   // past the re-entry grace window
+    process.stdin.emit('data', wheelUp(5));            // deliberate, after the grace window
+    expect(stripAnsi(chunks.join(''))).toMatch(/-- SCROLL --/);
   });
 
   it('survives a report split across two reads', () => {

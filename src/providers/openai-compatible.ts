@@ -14,6 +14,7 @@ export function envMaxTokens(): number | undefined {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
 }
 import { clampEffort, parseEffort } from './effort.js';
+import { paramPolicyFor } from './param-policy.js';
 import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
@@ -54,16 +55,26 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.reasoningEffort = requested
       ? clampEffort(requested, { model: config.model, baseUrl: config.baseUrl })
       : deriveProviderName(config) === 'Zhipu' ? 'high' : undefined;
-    this.temperature = config.temperature ?? 0.2;
+    // A few endpoints pin these to one value and 400 on anything else, so the
+    // policy wins over both the caller's choice and Aura's default: there is
+    // no useful sense in which a request that cannot be sent honours it. See
+    // param-policy.ts — on Moonshot this is the difference between every
+    // request failing and the provider working at all.
+    const pinned = paramPolicyFor({ model: config.model, baseUrl: config.baseUrl }) ?? {};
+    this.temperature = pinned.temperature ?? config.temperature ?? 0.2;
     // Nonzero penalties discourage degenerate repetition loops (observed live
     // with DeepSeek); 0.3 is conservative enough not to hurt code generation.
-    this.frequencyPenalty = config.frequencyPenalty ?? 0.3;
-    this.presencePenalty = config.presencePenalty ?? 0.3;
+    this.frequencyPenalty = pinned.frequencyPenalty ?? config.frequencyPenalty ?? 0.3;
+    this.presencePenalty = pinned.presencePenalty ?? config.presencePenalty ?? 0.3;
     this.name = providerName ?? deriveProviderName(config);
 
     this.client = new OpenAI({
       apiKey: config.apiKey ?? resolveApiKey(config),
       baseURL: config.baseUrl ?? resolveBaseUrl(config),
+      defaultHeaders: {
+        'HTTP-Referer': 'https://github.com/dusan-mile/aura',
+        'X-Title': 'Aura CLI'
+      },
     });
   }
 

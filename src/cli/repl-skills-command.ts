@@ -23,6 +23,7 @@ import chalk from 'chalk';
 import { FAINT_HEX, TEXT_DIM_HEX, TEXT_HEX } from './diamond.js';
 import { loadProjectSkills, type ProjectSkill } from '../plugins/project-skills.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
+import { emit } from '../commands/surface.js';
 
 /** The slice of ReplCtx this command touches. Declared structurally rather
  *  than importing ReplCtx so this module never depends on index.ts. */
@@ -48,7 +49,7 @@ export function handleSkillsCommand(
   const all = load(c.projectRoot);
 
   if (all.length === 0) {
-    console.log(chalk.hex(TEXT_DIM_HEX)(
+    emit(chalk.hex(TEXT_DIM_HEX)(
       '\n  No skills loaded.\n' +
       '  Install some with:  npx skills@latest add <owner>/<repo>\n' +
       '  Aura reads .agents/skills/<name>/SKILL.md and .claude/skills/<name>/SKILL.md.\n',
@@ -61,18 +62,18 @@ export function handleSkillsCommand(
     : all;
 
   if (shown.length === 0) {
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  No skill matches "${query}" (${all.length} loaded — :skills to list them all).\n`));
+    emit(chalk.hex(TEXT_DIM_HEX)(`\n  No skill matches "${query}" (${all.length} loaded — :skills to list them all).\n`));
     return { handled: true };
   }
 
   const heading = query
     ? `  ${shown.length} of ${all.length} skill(s) matching "${query}":`
     : `  ${all.length} skill(s) available to the agent:`;
-  console.log(chalk.hex(TEXT_DIM_HEX)('\n' + heading + '\n'));
+  emit(chalk.hex(TEXT_DIM_HEX)('\n' + heading + '\n'));
 
   const width = Math.max(...shown.map(s => s.name.length));
   for (const s of shown) {
-    console.log(
+    emit(
       chalk.hex(TEXT_HEX)('  ' + s.name.padEnd(width)) +
       chalk.hex(TEXT_DIM_HEX)('  ' + s.description),
     );
@@ -80,7 +81,7 @@ export function handleSkillsCommand(
 
   // The routing rule, not a usage hint: these are offered to the model as a
   // catalog, and it reads the body only when a task matches one.
-  console.log(chalk.hex(FAINT_HEX)(
+  emit(chalk.hex(FAINT_HEX)(
     '\n  Names and descriptions are in the system prompt; the agent reads a\n' +
     '  skill\'s SKILL.md only when a task matches it.\n',
   ));

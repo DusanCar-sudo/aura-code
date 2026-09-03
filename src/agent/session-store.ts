@@ -37,6 +37,12 @@ export interface ChatSession {
   version: number;
   history: HistoryMessage[];
   usage?: SessionUsage;
+  /** Absolute path of the project this session belongs to. Recorded on save so
+   *  every surface (TUI, web) can show one merged, cross-project list and open
+   *  any entry regardless of which directory it is currently in. Absent on
+   *  sessions saved before this field existed — derived from the directory
+   *  slug as a fallback. */
+  projectRoot?: string;
 }
 
 /** Accumulate one run's real usage into a session's running totals. */
@@ -124,6 +130,7 @@ export const sessionStore = {
   async saveSession(projectRoot: string, session: ChatSession): Promise<string> {
     const dir = this.projectDir(projectRoot);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    session.projectRoot = path.resolve(projectRoot);
     const filePath = path.join(dir, `${session.id}.json`);
     const tmp = filePath + '.tmp';
     await fs.promises.writeFile(tmp, JSON.stringify(session, null, 2), 'utf8');
@@ -258,5 +265,49 @@ export const sessionStore = {
       .filter(f => f.endsWith('.json'))
       .map(f => path.join(dir, f))
       .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  },
+
+  /**
+   * Every saved session across every project directory, newest first — the one
+   * merged list the TUI (`:sessions`) and the web client both render, so both
+   * surfaces see the same thing regardless of which directory each was started
+   * in. `project` is the directory slug; `projectRoot` is the real absolute
+   * path when the session recorded it (all do, from 2026-09-02), else the slug.
+   */
+  listAllSessions(): Array<ChatSession & { project: string; projectRoot: string }> {
+    const root = this.defaultDir();
+    if (!fs.existsSync(root)) return [];
+    const out: Array<ChatSession & { project: string; projectRoot: string }> = [];
+    for (const project of fs.readdirSync(root)) {
+      const dir = path.join(root, project);
+      let stat: fs.Stats;
+      try { stat = fs.statSync(dir); } catch { continue; }
+      if (!stat.isDirectory()) continue;
+      for (const f of fs.readdirSync(dir)) {
+        if (!this.isSessionFile(f)) continue;
+        try {
+          const parsed = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Partial<ChatSession> & { savedAt?: string };
+          const id = parsed.id ?? f.replace(/\.json$/, '');
+          out.push({
+            id,
+            title: parsed.title ?? (parsed.history ? this.titleFromHistory(parsed.history) : 'Untitled'),
+            createdAt: parsed.createdAt ?? parsed.savedAt ?? new Date(0).toISOString(),
+            updatedAt: parsed.updatedAt ?? parsed.savedAt ?? new Date(0).toISOString(),
+            version: parsed.version ?? 1,
+            history: parsed.history ?? [],
+            usage: parsed.usage,
+            projectRoot: parsed.projectRoot ?? project,
+            project,
+          });
+        } catch { /* skip an unparseable file */ }
+      }
+    }
+    return out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  },
+
+  /** Find a session by id in ANY project directory (newest match wins). For
+   *  `:resume <id>` / the web opening a session from another project. */
+  findSessionAnywhere(id: string): (ChatSession & { project: string; projectRoot: string }) | null {
+    return this.listAllSessions().find(s => s.id === id) ?? null;
   },
 };

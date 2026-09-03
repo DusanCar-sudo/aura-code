@@ -526,10 +526,14 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'minimax/abab6.5s-chat',     name: 'MiniMax Abab 6.5s',  provider: 'MiniMax', speed: 'Fast · chat' },
 
   // ── Kimi / Moonshot ──────────────────────────────────────────────────────
-  { id: 'kimi/kimi-k2-0905-preview', name: 'Kimi K2',            provider: 'Kimi', speed: 'Powerful · agentic' },
-  { id: 'kimi/moonshot-v1-128k',     name: 'Moonshot V1 128K',   provider: 'Kimi', speed: 'Long context · 128k' },
-  { id: 'kimi/moonshot-v1-32k',      name: 'Moonshot V1 32K',    provider: 'Kimi', speed: 'Balanced · 32k' },
-  { id: 'kimi/moonshot-v1-8k',       name: 'Moonshot V1 8K',     provider: 'Kimi', speed: 'Fast · 8k' },
+  // What api.moonshot.ai/v1/models actually returns (checked 2026-09-03). The
+  // previous four — kimi-k2-0905-preview and the moonshot-v1-* trio — are all
+  // 404 "Not found the model or Permission denied" now, so the picker offered
+  // four models that could not be selected and hid the four that work.
+  { id: 'kimi/kimi-k3',                     name: 'Kimi K3',                 provider: 'Kimi', speed: 'Powerful · agentic' },
+  { id: 'kimi/kimi-k2.7-code',              name: 'Kimi K2.7 Code',          provider: 'Kimi', speed: 'Coding' },
+  { id: 'kimi/kimi-k2.7-code-highspeed',    name: 'Kimi K2.7 Code Highspeed', provider: 'Kimi', speed: 'Fast · coding' },
+  { id: 'kimi/kimi-k2.6',                   name: 'Kimi K2.6',               provider: 'Kimi', speed: 'Balanced' },
 
   // ── Groq ─────────────────────────────────────────────────────────────────
   { id: 'groq/llama-3.3-70b-versatile',        name: 'Llama 3.3 70B (Groq)',       provider: 'Groq', speed: 'Ultra-fast · 128k' },
@@ -638,6 +642,32 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'openrouter/deepseek/deepseek-v4-pro',                name: 'DeepSeek V4 Pro (OR)',     provider: 'OpenRouter', speed: 'Powerful · open' },
   { id: 'openrouter/google/gemma-2-27b-it',                   name: 'Gemma 2 27B (OR)',         provider: 'OpenRouter', speed: 'Open · fast' },
 
+  // ── Cerebras (Free Wafer-Scale) ──────────────────────────────────────────
+  { id: 'cerebras/llama-3.3-70b',                     name: 'Llama 3.3 70B (Cerebras free)', provider: 'Cerebras', speed: 'Ultra-fast · free' },
+  { id: 'cerebras/llama3.1-8b',                       name: 'Llama 3.1 8B (Cerebras free)',  provider: 'Cerebras', speed: 'Instant · free' },
+  { id: 'cerebras/deepseek-r1-distill-llama-70b',     name: 'DeepSeek R1 70B (Cerebras free)', provider: 'Cerebras', speed: 'Reasoning · free' },
+  { id: 'cerebras/gpt-oss-120b',                      name: 'GPT OSS 120B (Cerebras free)',  provider: 'Cerebras', speed: 'Powerful · free' },
+
+  // ── SambaNova Cloud (Free Tier) ──────────────────────────────────────────
+  { id: 'sambanova/Meta-Llama-3.3-70B-Instruct',      name: 'Llama 3.3 70B (SambaNova free)', provider: 'SambaNova', speed: 'Ultra-fast · free' },
+  { id: 'sambanova/DeepSeek-R1-Distill-Llama-70B',    name: 'DeepSeek R1 70B (SambaNova free)', provider: 'SambaNova', speed: 'Reasoning · free' },
+  { id: 'sambanova/Meta-Llama-3.1-405B-Instruct',     name: 'Llama 3.1 405B (SambaNova free)', provider: 'SambaNova', speed: 'Powerful · free' },
+
+  // ── Mistral AI ───────────────────────────────────────────────────────────
+  { id: 'mistral/codestral-latest',                   name: 'Codestral Latest',     provider: 'Mistral AI', speed: 'Code · fast' },
+  { id: 'mistral/mistral-large-latest',               name: 'Mistral Large Latest', provider: 'Mistral AI', speed: 'Powerful · flagship' },
+  { id: 'mistral/mistral-small-latest',               name: 'Mistral Small Latest', provider: 'Mistral AI', speed: 'Fast · cheap' },
+  { id: 'mistral/open-mistral-nemo',                  name: 'Mistral Nemo',         provider: 'Mistral AI', speed: 'Fast · compact' },
+
+  // ── Together AI ──────────────────────────────────────────────────────────
+  { id: 'together/meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo (Together)', provider: 'Together AI', speed: 'Fast · 128k' },
+  { id: 'together/deepseek-ai/DeepSeek-R1',                 name: 'DeepSeek R1 (Together)',         provider: 'Together AI', speed: 'Reasoning · fast' },
+  { id: 'together/Qwen/Qwen2.5-Coder-32B-Instruct',         name: 'Qwen 2.5 Coder 32B (Together)',  provider: 'Together AI', speed: 'Code · 32k' },
+
+  // ── Cohere ───────────────────────────────────────────────────────────────
+  { id: 'cohere/command-r-plus-08-2024',              name: 'Command R+ 08-2024',   provider: 'Cohere', speed: 'Powerful · 128k' },
+  { id: 'cohere/command-r-08-2024',                   name: 'Command R 08-2024',    provider: 'Cohere', speed: 'Fast · 128k' },
+
   // ── Hugging Face ─────────────────────────────────────────────────────────
   { id: 'huggingface/meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B (HF)', provider: 'Hugging Face', speed: 'Open · 128k' },
   { id: 'huggingface/deepseek-ai/DeepSeek-R1',          name: 'DeepSeek R1 (HF)',    provider: 'Hugging Face', speed: 'Reasoning · open' },
@@ -668,7 +698,7 @@ const LIVE_PREFERRED_PROVIDERS = new Set([
   'Anthropic', 'OpenAI', 'Google', 'OpenRouter', 'DeepSeek', 'Qwen', 'MiniMax',
   'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'BytePlus ModelArk', 'Upstage',
   'Arcee AI', 'Tencent TokenHub', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
-  'Xiaomi MiMo', 'Zhipu',
+  'Xiaomi MiMo', 'Zhipu', 'Cerebras', 'SambaNova', 'Mistral AI', 'Together AI', 'Cohere',
 ]);
 
 /**

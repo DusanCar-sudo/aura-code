@@ -235,10 +235,10 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     envKey: 'MOONSHOT_API_KEY',
     signupUrl: 'https://platform.moonshot.cn/',
     models: [
-      { id: 'kimi-k2-0905-preview', label: 'Kimi K2', speed: 'Powerful · agentic', contextWindow: 128_000 },
-      { id: 'moonshot-v1-128k', label: 'Moonshot V1 128K', speed: 'Long context · 128k', contextWindow: 128_000 },
-      { id: 'moonshot-v1-32k', label: 'Moonshot V1 32K', speed: 'Balanced · 32k', contextWindow: 32_768 },
-      { id: 'moonshot-v1-8k', label: 'Moonshot V1 8K', speed: 'Fast · 8k', contextWindow: 8_192 },
+      { id: 'kimi-k3', label: 'Kimi K3', speed: 'Powerful · agentic', contextWindow: 256_000 },
+      { id: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', speed: 'Coding', contextWindow: 256_000 },
+      { id: 'kimi-k2.7-code-highspeed', label: 'Kimi K2.7 Code Highspeed', speed: 'Fast · coding', contextWindow: 256_000 },
+      { id: 'kimi-k2.6', label: 'Kimi K2.6', speed: 'Balanced', contextWindow: 256_000 },
     ],
   },
   {
@@ -341,8 +341,21 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     baseUrl: 'https://api.kilocode.ai/api/openrouter',
     envKey: 'KILOCODE_API_KEY',
     signupUrl: 'https://kilocode.ai/',
+    // Kilo Code proxies OpenRouter, so ids are `kilocode/<vendor>/<model>` — the
+    // full prefix is required here, otherwise `minimax/…` etc. would route to
+    // the direct MiniMax provider instead. The `:free` list rotates on Kilo's
+    // side; if one 402s ("add credits / switch to a free model") it was pulled,
+    // pick another or run `:model` to see the live list.
     models: [
       { id: 'auto', label: 'Kilo Auto', speed: 'Auto-routed', contextWindow: 128_000 },
+      { id: 'kilocode/minimax/minimax-m3:free', label: 'MiniMax M3 (free)', speed: 'Agentic · free · 1M', contextWindow: 1_048_576 },
+      { id: 'kilocode/minimax/minimax-m2.7:free', label: 'MiniMax M2.7 (free)', speed: 'Fast agentic · free', contextWindow: 196_608 },
+      { id: 'kilocode/nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B (free)', speed: 'Powerful · free · 1M', contextWindow: 1_000_000 },
+      { id: 'kilocode/nvidia/nemotron-3-super-120b-a12b:free', label: 'Nemotron 3 Super 120B (free)', speed: 'Powerful · free', contextWindow: 262_144 },
+      { id: 'kilocode/nvidia/nemotron-3.5-lightning:free', label: 'Nemotron 3.5 Lightning (free)', speed: 'Fast · free · 1M', contextWindow: 1_000_000 },
+      { id: 'kilocode/cohere/north-mini-code:free', label: 'North Mini Code (free)', speed: 'Code · free', contextWindow: 256_000 },
+      { id: 'kilocode/stepfun/step-3.7-flash:free', label: 'Step 3.7 Flash (free)', speed: 'Fast · free', contextWindow: 262_144 },
+      { id: 'kilocode/thinkingmachines/inkling:free', label: 'Inkling (free)', speed: 'Reasoning · free · 1M', contextWindow: 1_048_576 },
     ],
   },
   {
@@ -362,8 +375,41 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     signupUrl: 'https://huggingface.co/settings/tokens',
     models: [
       { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B', speed: 'Open · 128k', contextWindow: 128_000 },
-      { id: 'deepseek-ai/DeepSeek-R1', label: 'DeepSeek R1', speed: 'Reasoning · open', contextWindow: 64_000 },
+      { id: 'deepseek-ai/DeepSeek-R1', label: 'DeepSeek R1', speed: 'Reasoning · open', contextWindow: 128_000 },
       { id: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen 2.5 Coder 32B', speed: 'Code · open', contextWindow: 32_768 },
+    ],
+  },
+  {
+    name: 'Mistral AI',
+    baseUrl: 'https://api.mistral.ai/v1',
+    envKey: 'MISTRAL_API_KEY',
+    signupUrl: 'https://console.mistral.ai/',
+    models: [
+      { id: 'codestral-latest', label: 'Codestral Latest', speed: 'Code · fast', contextWindow: 256_000 },
+      { id: 'mistral-large-latest', label: 'Mistral Large Latest', speed: 'Powerful · flagship', contextWindow: 128_000 },
+      { id: 'mistral-small-latest', label: 'Mistral Small Latest', speed: 'Fast · cheap', contextWindow: 128_000 },
+      { id: 'open-mistral-nemo', label: 'Mistral Nemo', speed: 'Fast · compact', contextWindow: 128_000 },
+    ],
+  },
+  {
+    name: 'Together AI',
+    baseUrl: 'https://api.together.xyz/v1',
+    envKey: 'TOGETHER_API_KEY',
+    signupUrl: 'https://api.together.ai/',
+    models: [
+      { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo', speed: 'Fast · 128k', contextWindow: 128_000 },
+      { id: 'deepseek-ai/DeepSeek-R1', label: 'DeepSeek R1 (Together)', speed: 'Reasoning · fast', contextWindow: 128_000 },
+      { id: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen 2.5 Coder 32B', speed: 'Code · 32k', contextWindow: 32_768 },
+    ],
+  },
+  {
+    name: 'Cohere',
+    baseUrl: 'https://api.cohere.com/v2',
+    envKey: 'COHERE_API_KEY',
+    signupUrl: 'https://dashboard.cohere.com/',
+    models: [
+      { id: 'command-r-plus-08-2024', label: 'Command R+ 08-2024', speed: 'Powerful · 128k', contextWindow: 128_000 },
+      { id: 'command-r-08-2024', label: 'Command R 08-2024', speed: 'Fast · 128k', contextWindow: 128_000 },
     ],
   },
   {

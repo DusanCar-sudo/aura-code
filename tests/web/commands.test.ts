@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  runCommand, classify, LOCAL_COMMANDS, TERMINAL_ONLY, type CommandContext,
+  runCommand, classify, LOCAL_COMMANDS, type CommandContext,
 } from '../../web/src/lib/commands';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -10,6 +10,12 @@ import {
 // the engine as an ordinary turn — so typing `:resume` sent the agent off to
 // research the word "resume". A command must run, or say why it cannot. It
 // must never reach the model.
+//
+// And "say why it cannot" was doing far too much work: this client could only
+// answer fourteen commands from its own state and told the user the other
+// fifty-two were terminal-only, which for most of them was never true. The
+// engine now runs them (command.run → src/commands/core.ts), so the contract
+// these guard is: local, or engine — and nothing silently in between.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -21,7 +27,7 @@ import {
  * which is exactly the kind of asymmetry that makes a test lie.
  */
 function ctx(over: Partial<CommandContext> = {}) {
-  const seen = { notes: [] as string[], opened: [] as string[], newChats: 0, menus: 0 };
+  const seen = { notes: [] as string[], opened: [] as string[], engine: [] as string[], newChats: 0, menus: 0 };
   const context: CommandContext = {
     t: (k: string) => k,
     sessionId: 's1',
@@ -36,32 +42,27 @@ function ctx(over: Partial<CommandContext> = {}) {
     note: (text) => { seen.notes.push(text); },
     openSettings: (tab) => { seen.opened.push(`settings:${tab}`); },
     openCommandMenu: () => { seen.menus++; },
+    runOnEngine: async (command) => { seen.engine.push(command); return true; },
     ...over,
   };
   return { context, ...seen, seen };
 }
 
 describe('classify', () => {
-  it('treats anything without a leading colon as not a command', () => {
-    expect(classify('what does this project do?')).toBe('unknown');
-    expect(classify('the ratio is 3:1')).toBe('unknown');
-  });
-
-  it('knows which commands run here', () => {
+  it('knows which commands this client answers itself', () => {
     for (const cmd of LOCAL_COMMANDS) expect(classify(cmd)).toBe('local');
   });
 
-  it('knows which belong to the terminal', () => {
-    for (const cmd of TERMINAL_ONLY) expect(classify(cmd)).toBe('terminal');
-  });
-
-  it('classifies an unrecognised colon-word as terminal, never as a prompt', () => {
-    // The safe default: refuse and explain, rather than send it to the model.
-    expect(classify(':nosuchcommand')).toBe('terminal');
+  it('sends everything else to the engine, including ones it has never heard of', () => {
+    // The safe default is the engine, not the model: an unknown `:word` is
+    // still a command, and command.run reports honestly when it cannot run it.
+    expect(classify(':nosuchcommand')).toBe('engine');
+    expect(classify(':dream')).toBe('engine');
+    expect(classify('/stats')).toBe('engine');
   });
 
   it('ignores arguments when classifying', () => {
-    expect(classify(':archmodel qwen3:4b')).toBe('terminal');
+    expect(classify(':archmodel qwen3:4b')).toBe('engine');
     expect(classify(':resume  ')).toBe('local');
   });
 });
@@ -74,9 +75,18 @@ describe('runCommand', () => {
   });
 
   it('handles every command it claims to, so none can fall through to a turn', () => {
-    for (const cmd of [...LOCAL_COMMANDS, ...TERMINAL_ONLY, ':unrecognised']) {
+    for (const cmd of [...LOCAL_COMMANDS, ':dream', ':graph', '/stats', ':unrecognised']) {
       expect(runCommand(cmd, ctx().context)).toBe(true);
     }
+  });
+
+  it('sends a slash command to the engine rather than to the model', () => {
+    // /stats, /cost and /context were checked nowhere: submit() only looked
+    // for a leading ':', so the slash half of the set was sent as prose.
+    const c = ctx();
+    expect(runCommand('/stats', c.context)).toBe(true);
+    expect(c.seen.engine).toEqual(['/stats']);
+    expect(c.seen.notes).toHaveLength(0);
   });
 
   it(':resume opens the most recent conversation', () => {
@@ -121,11 +131,11 @@ describe('runCommand', () => {
     expect(empty.seen.notes[0]).toBe('cmd.noUsage');
   });
 
-  it(':model, :provider and :apikey open the provider settings', () => {
+  it(':model, :provider and :apikey open the models settings tab', () => {
     for (const cmd of [':model', ':provider', ':apikey']) {
       const c = ctx();
       runCommand(cmd, c.context);
-      expect(c.seen.opened).toContain('settings:provider');
+      expect(c.seen.opened).toContain('settings:models');
     }
   });
 
@@ -135,11 +145,18 @@ describe('runCommand', () => {
     expect(c.seen.menus).toBe(1);
   });
 
-  it('a terminal-only command explains itself and names itself', () => {
+  it('runs a command it does not own on the engine, verbatim and with its arguments', () => {
     const c = ctx();
-    runCommand(':dream', c.context);
-    expect(c.seen.notes[0]).toContain(':dream');
-    expect(c.seen.notes[0]).toContain('cmd.terminalOnly');
+    runCommand(':mine --stats', c.context);
+    expect(c.seen.engine).toEqual([':mine --stats']);
+    // Nothing is asserted locally: the answer comes back from the engine.
+    expect(c.seen.notes).toHaveLength(0);
+  });
+
+  it('sends an unrecognised command to the engine instead of guessing', () => {
+    const c = ctx();
+    runCommand(':nosuchcommand', c.context);
+    expect(c.seen.engine).toEqual([':nosuchcommand']);
   });
 
   it('is case-insensitive on the command itself', () => {

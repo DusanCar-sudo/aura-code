@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { looksPromissory } from '../../src/agent/promise-guard.js';
+import {
+  looksPromissory,
+  looksLikeUnparsedToolCall,
+  claimedNewFiles,
+  claimsVerification,
+} from '../../src/agent/promise-guard.js';
 
 /**
  * The strings below marked "observed" are verbatim from a real session that
@@ -69,5 +74,73 @@ describe('looksPromissory — what it must never flag', () => {
   it('does not flag empty or whitespace text', () => {
     expect(looksPromissory('')).toBe(false);
     expect(looksPromissory('   \n ')).toBe(false);
+  });
+});
+
+describe('looksLikeUnparsedToolCall — tool call leaked as text', () => {
+  it('catches the observed Termux transcript form and its siblings', () => {
+    for (const s of [
+      `Let me try one more thing:\n<|toolcallstart|>[runshell(command='echo "test" > /tmp/test.txt')]<|toolcall_end|>`,
+      'ok <|tool_call_begin|>{"name":"read_file"}<|tool_call_end|>',
+      'I will check.\n<|tool▁call▁end|>',
+      '<tool_call>\n{"name": "write_file", "arguments": {"path": "x.ts"}}\n</tool_call>',
+      '[TOOL_CALLS] [run_shell(command="ls")]',
+      'here goes <|python_tag|>print(1)',
+    ]) {
+      expect(looksLikeUnparsedToolCall(s), s).toBe(true);
+    }
+  });
+
+  it('does not flag ordinary prose that mentions tools or calls', () => {
+    for (const s of [
+      'I called write_file with the new content and it succeeded.',
+      'The tool call returned an error, so I read the file first.',
+      'This function calls `execTool()` internally.',
+      '',
+      'See the <details> block below for the full diff.',
+    ]) {
+      expect(looksLikeUnparsedToolCall(s), s).toBe(false);
+    }
+  });
+});
+
+describe('claimedNewFiles — paths a reply says it created', () => {
+  it('pulls backticked paths near a creation verb', () => {
+    expect(claimedNewFiles('I created `src/foo/bar.ts` with the implementation.'))
+      .toEqual(['src/foo/bar.ts']);
+    expect(claimedNewFiles('New file: `scripts/deploy.sh`').sort())
+      .toEqual(['scripts/deploy.sh']);
+    expect(claimedNewFiles('Wrote `a.py` and generated `b/c.json` for you.').sort())
+      .toEqual(['a.py', 'b/c.json']);
+  });
+
+  it('ignores non-paths and prose without a claim', () => {
+    expect(claimedNewFiles('I updated the existing `config` value.')).toEqual([]);
+    expect(claimedNewFiles('The bug is in `parser.ts` where it uses `==`.')).toEqual([]);
+    expect(claimedNewFiles('Created a helper function to handle retries.')).toEqual([]);
+  });
+});
+
+describe('claimsVerification — "the tests pass"', () => {
+  it('flags assertions that verification passed', () => {
+    for (const s of [
+      'All tests pass.',
+      'The build succeeds with no errors.',
+      'I ran the tests and everything is green.',
+      'Typecheck is clean.',
+      'Verified the build compiles.',
+    ]) {
+      expect(claimsVerification(s), s).toBe(true);
+    }
+  });
+
+  it('does not flag mentions that stop short of a pass claim', () => {
+    for (const s of [
+      'You should run the tests after this change.',
+      'The test file is at tests/foo.test.ts.',
+      'This might break the build — check it.',
+    ]) {
+      expect(claimsVerification(s), s).toBe(false);
+    }
   });
 });

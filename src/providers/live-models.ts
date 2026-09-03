@@ -190,6 +190,10 @@ const OPENAI_COMPAT_MODELS: Record<string, { base: string; envKey: string; prefi
   gmi:            { base: 'https://api.gmi-serving.com/v1', envKey: 'GMI_API_KEY',       prefix: 'gmi/' },
   kilocode:       { base: 'https://api.kilocode.ai/api/openrouter', envKey: 'KILOCODE_API_KEY', prefix: 'kilocode/' },
   alibaba:        { base: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', envKey: 'ALIBABA_API_KEY', prefix: 'alibaba/' },
+  cerebras:       { base: 'https://api.cerebras.ai/v1',     envKey: 'CEREBRAS_API_KEY',  prefix: 'cerebras/' },
+  sambanova:      { base: 'https://api.sambanova.ai/v1',    envKey: 'SAMBANOVA_API_KEY', prefix: 'sambanova/' },
+  mistral:        { base: 'https://api.mistral.ai/v1',      envKey: 'MISTRAL_API_KEY',   prefix: 'mistral/' },
+  together:       { base: 'https://api.together.xyz/v1',    envKey: 'TOGETHER_API_KEY',  prefix: 'together/' },
 };
 
 async function fetchOpenAICompatModels(cfg: { base: string; envKey: string; prefix: string; exclude?: RegExp }): Promise<LiveModel[]> {
@@ -394,5 +398,10 @@ export const PROVIDER_LIST: ProviderEntry[] = [
   { id: 'github',       name: 'GitHub Copilot',            desc: 'GitHub token API or copilot --acp process',     envKey: 'GITHUB_TOKEN' },
   { id: 'upstage',      name: 'Upstage',                   desc: 'Solar API',                                     envKey: 'UPSTAGE_API_KEY',     liveFetch: true },
   { id: 'alibaba',      name: 'Alibaba Cloud Coding Plan', desc: 'Dedicated coding tier',                         envKey: 'ALIBABA_API_KEY',     liveFetch: true },
+  { id: 'cerebras',     name: 'Cerebras (Free Wafer-Scale)', desc: 'Ultra-fast wafer-scale free inference',             envKey: 'CEREBRAS_API_KEY',    liveFetch: true },
+  { id: 'sambanova',    name: 'SambaNova Cloud (Free Tier)', desc: 'Fast inference with full 70B/405B models',         envKey: 'SAMBANOVA_API_KEY',   liveFetch: true },
+  { id: 'mistral',      name: 'Mistral AI',                desc: 'Codestral & Mistral models',                    envKey: 'MISTRAL_API_KEY',     liveFetch: true },
+  { id: 'together',     name: 'Together AI',               desc: 'Open models and fast inference',                envKey: 'TOGETHER_API_KEY',    liveFetch: true },
+  { id: 'cohere',       name: 'Cohere',                    desc: 'Command R+ models',                             envKey: 'COHERE_API_KEY' },
   { id: 'custom',       name: 'Custom endpoint',           desc: 'Enter URL manually' },
 ];

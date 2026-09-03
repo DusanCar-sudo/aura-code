@@ -258,10 +258,10 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
     { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
   ],
   kimi: [
-    { id: 'kimi/kimi-k2-0905-preview', name: 'Kimi K2' },
-    { id: 'kimi/moonshot-v1-128k', name: 'Moonshot V1 128K' },
-    { id: 'kimi/moonshot-v1-32k', name: 'Moonshot V1 32K' },
-    { id: 'kimi/moonshot-v1-8k', name: 'Moonshot V1 8K' },
+    { id: 'kimi/kimi-k3', name: 'Kimi K3' },
+    { id: 'kimi/kimi-k2.7-code', name: 'Kimi K2.7 Code' },
+    { id: 'kimi/kimi-k2.7-code-highspeed', name: 'Kimi K2.7 Code Highspeed' },
+    { id: 'kimi/kimi-k2.6', name: 'Kimi K2.6' },
   ],
   qwen: [
     { id: 'qwen/qwen3-coder-plus', name: 'Qwen3 Coder Plus' },
@@ -422,6 +422,11 @@ const ROUTE_PREFIX: Record<string, string> = {
   gmi: 'gmi/',
   kilocode: 'kilocode/',
   alibaba: 'alibaba/',
+  cerebras: 'cerebras/',
+  sambanova: 'sambanova/',
+  mistral: 'mistral/',
+  together: 'together/',
+  cohere: 'cohere/',
 };
 
 /** Prefix a bare model id with its provider's routing prefix when missing.
@@ -430,7 +435,7 @@ export function applyRoutePrefix(providerId: string, id: string): string {
   const prefix = ROUTE_PREFIX[providerId];
   if (!prefix || id.startsWith(prefix)) return id;
   // Already carries some other known routing prefix (user typed it fully) — leave alone.
-  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|vertex|vertex-google|google-vertex)\//.test(id)) return id;
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|vertex|vertex-google|google-vertex|cerebras|sambanova|mistral|together|cohere)\//.test(id)) return id;
   return prefix + id;
 }
 

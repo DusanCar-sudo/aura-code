@@ -28,6 +28,7 @@ if (_fs.existsSync(_agentsEnv)) {
 import * as path from 'path';
 import * as readline from 'readline';
 import * as fs from 'fs';
+import * as http from 'http';
 import minimist from 'minimist';
 import chalk from 'chalk';
 
@@ -53,7 +54,8 @@ process.on('unhandledRejection', (reason) => {
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { envMaxTokens } from '../providers/openai-compatible.js';
 import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
-import { generateDashboard, openDashboard } from '../viz/index.js';
+import { generateDashboard, generateGlobalDashboard, openDashboard } from '../viz/index.js';
+import { extractGraph } from '../perception/graphify.js';
 import { runAgentLoop, costFor } from '../agent/loop.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
 import { createGazelleChat, type GazelleChat } from '../agent/gazelle-chat.js';
@@ -72,6 +74,7 @@ import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, c
 import { startServer } from '../server/index.js';
 import { runSidecar } from '../protocol/stdio.js';
 import { runDevices } from './devices-command.js';
+import { runUrl } from './url-command.js';
 import type { PermissionLevel } from '../safety/permissions.js';
 import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
 import pkg from '../../package.json';
@@ -101,6 +104,8 @@ import { createSteeringInbox, type SteeringInbox } from '../agent/steering.js';
 import { handleArchimedesCommand } from './repl-archimedes-commands.js';
 import { handleUsageCommand } from './repl-usage-commands.js';
 import { handleSkillsCommand } from './repl-skills-command.js';
+import { runCoreCommand, type CommandCtx } from '../commands/core.js';
+import { TERMINAL_SURFACE } from '../commands/surface.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import { loadGlobalConfig, saveGlobalConfig, globalConfigPath } from '../setup/global-config.js';
 import { loadKeysIntoEnv, saveKey } from '../setup/key-store.js';
@@ -951,6 +956,11 @@ async function main() {
   let activeChatId: string | undefined;
   let activeChatHistory: import('../providers/types.js').HistoryMessage[] = [];
   let activeChatTitle: string | undefined;
+  // Bumped every time :resume / :new / :clear-history swaps the conversation.
+  // A coder task captures this before it runs; if it changed by the time the
+  // task returns, the user switched sessions mid-response and the task's
+  // history must not be written back over the one they switched to.
+  let sessionEpoch = 0;
   // Runtime Archimedes toggle: undefined = defer to .aura.json, true/false = session override
   let archimedesOverride: boolean | undefined = undefined;
   // Runtime Archimedes model override: undefined = defer to .aura.json, string = session override
@@ -1583,7 +1593,10 @@ let abortController: AbortController | null = null;
 
   const refreshStatusLine = (): void => {
     setStatusLine([
-      provider.name, runtimeConfig.model, permissionLevel,
+      // The live level, not the one this process started with: `:approve`
+      // changes it mid-session, and a bar that keeps announcing the startup
+      // value makes the toggle look like a command that did nothing.
+      provider.name, runtimeConfig.model, permissions.getLevel(),
       ...(replMode === 'gazelle' ? ['gazelle'] : []),
       // Always visible while on. A feature that can move the real pointer
       // should never be running without a standing reminder that it is.
@@ -1700,6 +1713,7 @@ let abortController: AbortController | null = null;
     // Check for REPL commands
     const cmdResult = await handleReplCommand(input, replCtx);
     if (cmdResult.handled) {
+      if (cmdResult.sessionReplaced) sessionEpoch++;
       if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
       if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
       if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
@@ -1707,7 +1721,7 @@ let abortController: AbortController | null = null;
       if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
       if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
       if (cmdResult.newTurnsOverride !== undefined) turnsOverride = cmdResult.newTurnsOverride;
-      if (cmdResult.newComputerUse !== undefined) refreshStatusLine();
+      if (cmdResult.newComputerUse !== undefined || cmdResult.statusChanged) refreshStatusLine();
       // Must come after newHistory: entering gazelle seeds its chat from the
       // current history, and :resume/:new arrive as a command result too.
       if (cmdResult.newMode !== undefined) {
@@ -1777,6 +1791,12 @@ let abortController: AbortController | null = null;
 
     // Run task
     let result;
+    // Which conversation this task belongs to. If :resume/:new/:clear-history
+    // lands while it streams, these stop matching the live state and the
+    // write-back below is redirected to this id instead of clobbering the new one.
+    const taskEpoch = sessionEpoch;
+    const taskChatId = activeChatId;
+    const taskTitle = activeChatTitle;
     abortController = createAbortController();
     const abortSignal = abortController.signal;
     const steering = createSteeringInbox();
@@ -1896,6 +1916,16 @@ let abortController: AbortController | null = null;
       steeringInbox = null;
     }
 
+    // Accrue usage before any early return below — a cancelled or failed run
+    // still spent the tokens it spent, and /stats reading zero after a visibly
+    // long run is worse than an estimate. runAgentLoop estimates usage itself
+    // when a stream is cut before its `done` frame.
+    cumulative.turns += result.turns;
+    cumulative.toolCalls += result.toolCallCount;
+    cumulative.inputTokens += result.usage.inputTokens;
+    cumulative.outputTokens += result.usage.outputTokens;
+    cumulative.costUsd += result.costUsd;
+
     // Check if task was cancelled by user
     if (abortController?.signal.aborted && !result.success) {
       writeOutput(chalk.hex('#d4903a')('  ⏹ Task cancelled.'));
@@ -1907,11 +1937,21 @@ let abortController: AbortController | null = null;
 
     // Update stay-active history
     try {
-    activeChatHistory = result.history;
-
-    // Persist session
-    if (activeChatId && !noSession) {
-      await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle, sessionUsageFrom(result));
+    if (sessionEpoch !== taskEpoch) {
+      // :resume / :new / :clear-history landed while this task was streaming.
+      // Its result belongs to the conversation it started in — save it there,
+      // and leave the conversation now on screen untouched.
+      if (taskChatId && !noSession) {
+        await sessionStore.upsertSession(projectRoot, taskChatId, result.history, taskTitle, sessionUsageFrom(result));
+      }
+      tuiDisplay.warning(
+        `Switched sessions while that task ran — its result was saved to ${taskChatId ?? 'its own session'}, not this one.`,
+      );
+    } else {
+      activeChatHistory = result.history;
+      if (activeChatId && !noSession) {
+        await sessionStore.upsertSession(projectRoot, activeChatId, activeChatHistory, activeChatTitle, sessionUsageFrom(result));
+      }
     }
 
     {
@@ -1924,12 +1964,6 @@ let abortController: AbortController | null = null;
         durationMs: 0,
       });
     }
-
-    cumulative.turns += result.turns;
-    cumulative.toolCalls += result.toolCallCount;
-    cumulative.inputTokens += result.usage.inputTokens;
-    cumulative.outputTokens += result.usage.outputTokens;
-    cumulative.costUsd += result.costUsd;
 
     if (result.success) {
       tuiDisplay.summary(result.summary, result.turns, result.toolCallCount);
@@ -2280,87 +2314,22 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
   }
 }
 
+/**
+ * The terminal's half of the command set, then the shared core.
+ *
+ * Only the commands that genuinely need this process live here: the ones that
+ * drive the terminal's own stdin (the model and provider selectors,
+ * `/context tune`), the ones that mutate the REPL's live provider config
+ * (`:effort`, `:apikey`), and the ones whose effect is the terminal itself
+ * (`:quit`, `:speak`, `:approve`). Everything else moved to commands/core.ts
+ * so the engine can run it too — see that file for why the web client could
+ * previously only answer "terminal only".
+ *
+ * Order is preserved from when this was one chain: these branches all match
+ * exactly, and `:q ` (the queue) is not `:q` (quit), so hoisting them above
+ * the core shadows nothing.
+ */
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
-  const unhandled: ReplCommandResult = { handled: false };
-
-  // ── :q — Task queue (with subcommands, keep bare :q as quit) ─────────────
-  if (input.startsWith(':q ')) {
-    const sub = input.slice(3).trimStart();
-    const { addToQueue, loadQueue, removeFromQueue, clearQueue, runQueueItem, formatQueue }
-      = await import('../repl/queue.js');
-
-    if (sub.startsWith('add ')) {
-      const prompt = sub.slice(4).trim();
-      if (!prompt) {
-        c.display.warning('Usage: :q add <prompt> -- add a task to the queue.');
-        return { handled: true };
-      }
-      const item = addToQueue(prompt);
-      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Queued #${loadQueue().length}: "${prompt.slice(0, 60)}"\n`));
-      return { handled: true };
-    }
-
-    if (sub === 'list') {
-      const items = loadQueue();
-      console.log(formatQueue(items));
-      return { handled: true };
-    }
-
-    if (sub.startsWith('run ')) {
-      const n = parseInt(sub.slice(4).trim(), 10);
-      if (isNaN(n) || n < 1) {
-        c.display.warning('Usage: :q run <number> — run the task at that position (see :q list).');
-        return { handled: true };
-      }
-      const items = loadQueue();
-      if (n > items.length) {
-        c.display.warning(`Queue only has ${items.length} item(s).`);
-        return { handled: true };
-      }
-      c.display.agentThinking();
-      const result = await runQueueItem(n - 1, buildProvider(c.display), c.ctx, c.permissions, c.display);
-      if (!result) {
-        c.display.warning('Could not run that item.');
-        return { handled: true };
-      }
-      c.display.success(`Queue item #${n}: ${result.success ? 'done' : 'failed'}`);
-      if (result.output) {
-        console.log(chalk.hex(TEXT_HEX)(`  ${result.output.slice(0, 240)}`));
-      }
-      console.log(chalk.hex(FAINT_HEX)(`  ${result.turns} turn(s) · ${result.toolCalls} tool call(s).\n`));
-      return { handled: true };
-    }
-
-    if (sub.startsWith('drop ')) {
-      const n = parseInt(sub.slice(5).trim(), 10);
-      if (isNaN(n) || n < 1) {
-        c.display.warning('Usage: :q drop <number> — remove the task at that position.');
-        return { handled: true };
-      }
-      const removed = removeFromQueue(n - 1);
-      if (!removed) {
-        c.display.warning(`No item at position ${n}.`);
-        return { handled: true };
-      }
-      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Dropped #${n}: "${removed.prompt.slice(0, 60)}"\n`));
-      return { handled: true };
-    }
-
-    if (sub === 'clear') {
-      const count = loadQueue().length;
-      if (count === 0) {
-        c.display.warning('Queue is already empty.');
-        return { handled: true };
-      }
-      clearQueue();
-      console.log(chalk.hex('#5a9e6e')(`\n  ✓ Queue cleared (${count} item(s) removed).\n`));
-      return { handled: true };
-    }
-
-    c.display.warning('Usage: :q add <prompt> | :q list | :q run <n> | :q drop <n> | :q clear');
-    return { handled: true };
-  }
-
   if (input === ':quit' || input === ':q' || input === '/exit') {
     process.exit(0);
   }
@@ -2392,686 +2361,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     } else {
       console.log(chalk.hex('#5a9e6e')('  🔒 Auto-approve OFF — destructive commands will ask for confirmation again.\n'));
     }
-    return { handled: true };
-  }
-
-  if (input === ':dream' || input === ':dream full') {
-    const full = input === ':dream full';
-    const { runDream } = await import('../dream/dream.js');
-    c.display.agentThinking();
-    const res = await runDream({ projectRoot: c.ctx.root, provider: buildProvider(c.display), full });
-    if (res.skipped) {
-      c.display.warning(res.providerError
-        ? `Dream skipped (episodes preserved): ${res.providerError}`
-        : (res.reason ?? 'Nothing to consolidate.'));
-    } else {
-      c.display.success(`Dream written: ${res.path} (${res.episodeCount} episodes${full ? ', full run' : ''})`);
-      if (res.reconciled) c.display.success('Reconciliation also ran (>=3 dreams exist) -> dreams/.reconciled.md');
-    }
-    return { handled: true };
-  }
-  if (input.startsWith(':research ') || input === ':research') {
-    const topic = input.slice(':research '.length).trim();
-    if (!topic) {
-      c.display.warning('Usage: :research <topic> -- runs a multi-step research pass and saves to research/*.md.');
-      return { handled: true };
-    }
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Researching "${topic}"…\n`));
-    try {
-      const { runResearch } = await import('../research/research.js');
-      const res = await runResearch({
-        projectRoot: c.ctx.root,
-        topic,
-        provider: buildProvider(c.display),
-        context: c.ctx,
-        permissions: c.permissions,
-        display: c.display,
-      });
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
-      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
-    } catch (e) {
-      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
-    }
-    return { handled: true };
-  }
-
-  // ── :designx — design commission (routes a style direction, scrapes real
-  // references, then builds the artefact). See src/design/ for the lexicon and
-  // the reasoning behind routing before generating.
-  if (input === ':designx' || input.startsWith(':designx ')) {
-    const { parseDesignXArgs } = await import('../design/parse.js');
-    const dxArgs = parseDesignXArgs(input.slice(':designx'.length));
-
-    if (dxArgs.listStyles) {
-      const { DESIGN_STYLES } = await import('../design/styles.js');
-      console.log(chalk.hex('#cc785c').bold(`\n  Design lexicon — ${DESIGN_STYLES.length} directions\n`));
-      for (const s of DESIGN_STYLES) {
-        console.log(`  ${chalk.hex(TEXT_HEX).bold(s.name)} ${chalk.hex(FAINT_HEX)(`(${s.id})`)}`);
-        console.log(chalk.hex(TEXT_DIM_HEX)(`    risk ${s.risk}/5 · ${s.fits.join(', ')} · ${s.lineage}`));
-      }
-      console.log(chalk.hex(FAINT_HEX)('\n  Pin one with :designx <brief> --style <id>\n'));
-      return { handled: true };
-    }
-
-    if (!dxArgs.brief) {
-      c.display.warning('Usage: :designx [web|deck|pdf] <brief> [--wild|--feral|--classic] [--style <id>] [--seed <n>] [--no-scrape] [--out <dir>]');
-      c.display.warning('       :designx styles   — list the design lexicon');
-      return { handled: true };
-    }
-
-    const { routeStyles } = await import('../design/styles.js');
-    const previewStyles = routeStyles({
-      brief: dxArgs.brief, target: dxArgs.target, daring: dxArgs.daring,
-      pinned: dxArgs.pinned, seed: dxArgs.seed, count: dxArgs.count,
-    });
-    console.log(chalk.hex('#cc785c').bold(`\n  ✦ designx — ${dxArgs.target}${dxArgs.targetInferred ? chalk.hex(FAINT_HEX)(' (inferred)') : ''} · ${dxArgs.daring}`));
-    for (const s of previewStyles) {
-      console.log(chalk.hex(TEXT_HEX)(`    ▸ ${s.name}`) + chalk.hex(FAINT_HEX)(`  risk ${s.risk}/5`));
-    }
-    console.log(chalk.hex(TEXT_DIM_HEX)(`    ${dxArgs.scrape ? 'Scraping references, then building' : 'No research pass'}…\n`));
-
-    try {
-      const { runDesignX } = await import('../design/designx.js');
-      const dx = await runDesignX({
-        projectRoot: c.ctx.root,
-        args: dxArgs,
-        // Explicit budget for the artefact, so :designx works without the user
-        // having to know about AURA_MAX_TOKENS / --effort. An env-set ceiling
-        // still wins if it is higher.
-        provider: buildProvider(c.display, {
-          maxTokens: Math.max(60_000, envMaxTokens() ?? 0),
-          reasoningEffort: runtimeConfig.effort ?? 'low',
-        }),
-        context: c.ctx,
-        permissions: c.permissions,
-        display: c.display,
-      });
-      if (dx.files.length === 0) {
-        c.display.error('designx produced no files — see the agent output above.');
-      } else if (dx.problems.length > 0) {
-        // Files exist but are not finished — the placeholder-skeleton failure.
-        // Reported as an error rather than a success with a caveat, because the
-        // directory listing alone looks exactly like a completed run.
-        c.display.error(`designx wrote ${dx.files.length} file(s) but they are not finished:`);
-        for (const p of dx.problems) console.log(chalk.hex('#b15439')(`    ${p.file}: ${p.problem}`));
-        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${dx.dir}`));
-        console.log(chalk.hex(FAINT_HEX)('  Re-run to have it rebuild them in a single write.\n'));
-      } else {
-        console.log(chalk.hex('#5a9e6e')(`\n  ✓ ${dx.dir}`));
-        for (const f of dx.files) console.log(chalk.hex(TEXT_DIM_HEX)(`    ${f}`));
-        console.log(chalk.hex(FAINT_HEX)(`  ${dx.turns} turn(s) · ${dx.toolCalls} tool call(s) · led with ${dx.styles[0]?.name ?? 'no direction'}`));
-        console.log(chalk.hex(FAINT_HEX)(`  Re-roll: :designx ${dxArgs.brief} --seed ${(dxArgs.seed ?? 0) + 1}\n`));
-      }
-    } catch (e) {
-      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
-    }
-    return { handled: true };
-  }
-  if (input === ':confessions') {
-    const { listConfessions } = await import('../agent/confess.js');
-    const confs = listConfessions();
-    if (confs.length === 0) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No confessions yet. Run :confess after a high-token episode.\n'));
-    } else {
-      console.log(chalk.hex('#cc785c').bold(`\n  ${confs.length} confession(s):\n`));
-      for (const c of confs) {
-        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${c.file}`));
-        console.log(chalk.hex(FAINT_HEX)(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
-      }
-      console.log('');
-    }
-    return { handled: true };
-  }
-  if (input === ':confess') {
-    const { runConfession, findEpisodeToConfess } = await import('../agent/confess.js');
-    const targetEp = findEpisodeToConfess(c.ctx.root);
-    if (!targetEp) {
-      console.log(chalk.hex('#cc9e5c')('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
-      return { handled: true };
-    }
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
-    try {
-      // Use a different model than the one that made the mistake
-      const confessorModel = targetEp.model.startsWith('deepseek') ? 'glm-5.2' : 'deepseek/deepseek-chat';
-      const { createProvider } = await import('../providers/factory.js');
-      const provider = createProvider({ model: confessorModel });
-      const result = await runConfession({
-        projectRoot: c.ctx.root,
-        episodeId: targetEp.id,
-        provider,
-      });
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Confession written: ${result.path}`));
-      console.log(chalk.hex(TEXT_DIM_HEX)(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
-      console.log(chalk.hex('#cc9e6c')('  Permanent lesson:'));
-      console.log(chalk.hex(TEXT_HEX)(`  "${result.lesson}"\n`));
-    } catch (e) {
-      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
-    }
-    return { handled: true };
-  }
-  if (input === ':rem') {
-    const { getReconciledOrLatest } = await import('../dream/dream.js');
-    const res = getReconciledOrLatest(c.ctx.root);
-    if (!res) {
-      c.display.warning('No dreams yet. Run :dream first.');
-    } else {
-      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  ${res.isReconciled ? 'Reconciled projection' : 'Latest dream (not yet reconciled)'}:\n`));
-      console.log(res.content);
-    }
-    return { handled: true };
-  }
-  // ── :mine — Baby Archimedes experience mining (src/mining/). The base pass is
-  // zero-LLM (pure clustering over episodes/*.json); --refine additionally
-  // runs Papa Archimedes, one local-model call per qualifying concept, appending
-  // accepted lessons to training-data/<date>.jsonl; --corrections emits direct
-  // correction pairs (Path B) from escalation episodes; --stats shows row counts
-  // by provenance.
-  if (input === ':mine' || input.startsWith(':mine ')) {
-    const refine = input.includes('--refine');
-    const corrections = input.includes('--corrections');
-    const stats = input.includes('--stats');
-    if (!refine && !corrections && !stats) {
-      c.display.warning('Usage: :mine [--refine] [--corrections] [--stats] — base pass mines concepts; --refine judges them with the local model; --corrections writes direct correction pairs; --stats reports the training-data corpus by provenance.');
-      return { handled: true };
-    }
-    // --stats / --corrections work on their own; the base mine pass (concept
-    // listing + --refine) is only needed when the user asks for it.
-    if (stats) {
-      const { trainingDataStats } = await import('../mining/corpus.js');
-      const s = trainingDataStats(c.ctx.root);
-      if (s.total === 0) {
-        c.display.warning('No training-data rows yet — run :mine --refine or :mine --corrections to produce them.');
-      } else {
-        console.log(chalk.hex('#cc785c').bold(`\n  Training-data corpus (${s.total} row(s)):\n`));
-        for (const [prov, n] of Object.entries(s.byProvenance)) {
-          console.log(chalk.hex(TEXT_DIM_HEX)(`    ${prov.padEnd(12)} ${n}`));
-        }
-      }
-    }
-    if (corrections) {
-      const { collectCorrections } = await import('../mining/corrections.js');
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Collecting direct correction pairs from escalation episodes…'));
-      const res = await collectCorrections(c.ctx.root);
-      if (res.written.length > 0) {
-        console.log(chalk.hex('#5a9e6e')(`  ✓ ${res.written.length} correction pair(s) appended: ${res.outputPath}`));
-        console.log(chalk.hex(FAINT_HEX)(`    ${res.skipped} episode(s) skipped (not escalations).\n`));
-      } else {
-        c.display.warning(`No correction pairs — ${res.skipped} episode(s) skipped (not escalations).`);
-      }
-    }
-    if (refine) {
-      const { mineExperience } = await import('../mining/extract.js');
-      const mined = await mineExperience(c.ctx.root);
-      if (mined.episodeCount === 0) {
-        c.display.warning('No episodes to mine yet — run some tasks first.');
-        return { handled: true };
-      }
-      console.log(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
-      for (const con of mined.concepts.slice(0, 15)) {
-        console.log(chalk.hex(TEXT_DIM_HEX)(`  ${con.concept}`) + chalk.hex(FAINT_HEX)(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
-        if (con.keywords.length > 0) console.log(chalk.hex(FAINT_HEX)(`    keywords: ${con.keywords.join(', ')}`));
-      }
-      if (mined.concepts.length > 15) {
-        console.log(chalk.hex(FAINT_HEX)(`  … and ${mined.concepts.length - 15} more.`));
-      }
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refining with the local Archimedes model (Papa Archimedes)…'));
-      const { refineConcepts } = await import('../mining/refine.js');
-      const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
-      if (res.accepted.length > 0) {
-        console.log(chalk.hex('#5a9e6e')(`  ✓ ${res.accepted.length} training example(s) appended: ${res.outputPath}`));
-        console.log(chalk.hex(FAINT_HEX)(`    ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.\n`));
-      } else {
-        c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
-      }
-    }
-    return { handled: true };
-  }
-
-  if (input === ':doctor' || input.startsWith(':doctor')) {
-    const fix = input.includes('--fix');
-    const offline = input.includes('--offline');
-    c.display.agentThinking();
-    const report = await runDoctor({ projectRoot: c.ctx.root, fix, offline });
-    if (typeof writeOutput === 'function') {
-      writeOutput(formatDoctorReport(report));
-    } else {
-      console.log(formatDoctorReport(report));
-    }
-    return { handled: true };
-  }
-
-  if (input.startsWith(':machina ') || input === ':machina') {
-    const machinaTask = input.slice(':machina '.length).trim();
-    if (!machinaTask) {
-      c.display.warning('Usage: :machina <task> -- runs the task with self-verification (file/test checks + auto-retry).');
-      return { handled: true };
-    }
-    const { runWithVerification } = await import('../verify/index.js');
-    const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
-    const testCommand = cliTestCommand ?? fileConfig.testCommand;
-    const wrapperResult = await runWithVerification({
-      loopOpts: {
-        provider: buildProvider(c.display), task: machinaTask,
-        context: c.ctx, permissions: c.permissions, display: c.display,
-        initialHistory: c.chatState.activeChatHistory,
-        maxTurns: resolved.maxTurns,
-        spawnConfig: {
-          apiKey: c.providerConfig.apiKey,
-          baseUrl: c.providerConfig.baseUrl,
-        },
-        sessionPath: c.sessionPath,
-      },
-      config: { enabled: true, maxRetries, testCommand },
-      projectRoot: c.ctx.root,
-      display: c.display,
-    });
-    const mResult = wrapperResult.loopResult;
-    if (mResult.success) {
-      c.display.summary(mResult.summary, mResult.turns, mResult.toolCallCount);
-      printUsageFooter(c.display, mResult.usage, mResult.costUsd);
-    } else {
-      c.display.error(mResult.summary);
-    }
-    return { handled: true, newHistory: mResult.history };
-  }
-  if (input.startsWith(':council ') || input === ':council') {
-    const councilTask = input.slice(':council '.length).trim();
-    if (!councilTask) {
-      c.display.warning('Usage: :council <task> -- runs 2-3 read-only domain specialists in parallel, then synthesizes their reports.');
-      return { handled: true };
-    }
-    const { runMixtureOfAgents } = await import('../agent/mixture.js');
-    const councilResult = await runMixtureOfAgents({
-      provider: buildProvider(c.display), task: councilTask, context: c.ctx, display: c.display,
-    });
-    if (councilResult.success) {
-      c.display.summary(councilResult.summary, councilResult.turns, councilResult.toolCallCount);
-      printUsageFooter(c.display, councilResult.usage, councilResult.costUsd);
-    } else {
-      c.display.error(councilResult.summary);
-    }
-    return { handled: true };
-  }
-  // ── :ecclesia — 5-agent independent research council (research/council.ts).
-  // Distinct from :council above (mixture-of-agents over the current task):
-  // the Ecclesia runs N agents that research a topic WITHOUT seeing each
-  // other's findings, then one synthesis call reconciles them into a verdict.
-  if (input.startsWith(':ecclesia ') || input === ':ecclesia') {
-    let topic = input.slice(':ecclesia '.length).trim();
-    if (!topic) {
-      c.display.warning('Usage: :ecclesia <topic> [--panel <model>] [--seats <n>] -- N independent research agents (default 5) + a synthesis verdict, saved to council/*.md|.html.');
-      return { handled: true };
-    }
-    let panelModel: string | undefined;
-    let panelSize: number | undefined;
-    const panelMatch = topic.match(/\s--panel\s+(\S+)/);
-    if (panelMatch) { panelModel = panelMatch[1]; topic = topic.replace(panelMatch[0], '').trim(); }
-    const seatsMatch = topic.match(/\s--seats\s+(\d+)/);
-    if (seatsMatch) { panelSize = Number(seatsMatch[1]); topic = topic.replace(seatsMatch[0], '').trim(); }
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Convening the Ecclesia on "${topic}"…\n`));
-    try {
-      const { runCouncil } = await import('../research/council.js');
-      const res = await runCouncil({
-        projectRoot: c.ctx.root, topic,
-        synthesisProvider: buildProvider(c.display),
-        context: c.ctx, permissions: c.permissions, display: c.display,
-        panelSize, panelModel,
-        configuredModel: c.providerConfig.model,
-      });
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict written: ${res.path}`));
-      console.log(chalk.hex('#5a9e6e')(`    HTML: ${res.htmlPath}`));
-      console.log(chalk.hex(TEXT_DIM_HEX)(`  ${res.panelSize} seats on ${res.panelModel}.`));
-      if (res.agentFailures > 0) {
-        c.display.warning(`${res.agentFailures} of ${res.panelSize} panel agent(s) failed — verdict is based on the rest.`);
-      }
-    } catch (e) {
-      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
-    }
-    return { handled: true };
-  }
-
-  // ── :nerds — one writer at a time, readers unrestricted ─────────────────
-  if (input === ':nerds' || input.startsWith(':nerds ')) {
-    const { NerdsPolicy } = await import('../orchestration/nerds.js');
-    const arg = input.slice(':nerds'.length).trim();
-
-    if (arg === 'off') {
-      NerdsPolicy.disable();
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Nerds off — parallel tasks write without coordination again.\n'));
-      return { handled: true };
-    }
-
-    if (arg === 'status') {
-      const st = NerdsPolicy.getState();
-      console.log(st.enabled
-        ? chalk.hex('#6ed0ea')(`\n  Nerds on — writer: ${st.holder ?? 'none'}${st.waiting.length ? `, waiting: ${st.waiting.join(', ')}` : ''}\n`)
-        : chalk.hex(TEXT_DIM_HEX)('\n  Nerds off.\n'));
-      return { handled: true };
-    }
-
-    NerdsPolicy.enable();
-    console.log(chalk.hex('#6ed0ea').bold('\n  🤓 Nerds on'));
-    console.log(chalk.hex(TEXT_DIM_HEX)('  Read-only work runs in parallel; only one writer at a time, the rest queue.'));
-    console.log(chalk.hex(TEXT_DIM_HEX)("  The lease is live — board runs do not consult it yet. ':nerds off' ends it.\n"));
-
-    if (arg) {
-      return { handled: true, runTask: arg };
-    }
-    return { handled: true };
-  }
-
-  // ── :marathon — long-haul flag, with the task it was given ──────────────
-  //
-  // The banner says only what the code does. It used to announce a
-  // coordination loop, exponential backoffs and a context compactor; none of
-  // those were wired to anything, and an operator who believes a banner is an
-  // operator who debugs the difference later.
-  if (input === ':marathon' || input.startsWith(':marathon ')) {
-    const { MarathonManager, formatRemaining } = await import('../orchestration/marathon.js');
-    const arg = input.slice(':marathon'.length).trim();
-
-    if (arg === 'off') {
-      MarathonManager.deactivate();
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  Marathon mode off.\n'));
-      return { handled: true };
-    }
-
-    if (arg === 'status') {
-      const st = MarathonManager.getState();
-      console.log(st.enabled
-        ? chalk.hex('#6ed0ea')(`\n  Marathon mode on — ${formatRemaining(st.remainingMs)} left.\n`)
-        : chalk.hex(TEXT_DIM_HEX)('\n  Marathon mode off.\n'));
-      return { handled: true };
-    }
-
-    MarathonManager.activate();
-    const { remainingMs } = MarathonManager.getState();
-    console.log(chalk.hex('#6ed0ea').bold('\n  🏃 Marathon mode on'));
-    console.log(chalk.hex(TEXT_DIM_HEX)(`  Lapses on its own in ${formatRemaining(remainingMs)}. ':marathon off' ends it sooner.`));
-    console.log(chalk.hex(TEXT_DIM_HEX)('  It is a flag: nothing in the run loop reads it yet, so turns behave as usual.\n'));
-
-    if (arg) {
-      return { handled: true, runTask: arg };
-    }
-    return { handled: true };
-  }
-
-  // ── :btw — Side channel question (read-only, no history) ────────────────
-  if (input.startsWith(':btw ')) {
-    const question = input.slice(5).trim();
-    if (!question) {
-      c.display.warning('Usage: :btw <question> — ask a quick side question without interrupting the current task.');
-      return { handled: true };
-    }
-    const { runBtwQuery, renderBtwAnswer } = await import('../repl/side-channel.js');
-    c.display.agentThinking();
-    const result = await runBtwQuery(question, buildProvider(c.display), c.ctx);
-    console.log(renderBtwAnswer(result.answer, result.tokens));
-    return { handled: true };
-  }
-
-  // ── Archimedes routing ───────────────────────────────────────────────────
-  // :small1, :archon, :archoff, :archmodel. In repl-archimedes-commands.ts so
-  // they can be tested without importing this self-executing module — each one
-  // only returns an override flag, and a dropped return looks identical to a
-  // working command from the outside. Called from the exact position those
-  // branches occupied.
-  const archCmd = await handleArchimedesCommand(input, {
-    projectRoot: c.ctx.root,
-    archimedesModelOverride: c.archimedesModelOverride,
-    display: c.display,
-  });
-  if (archCmd) return archCmd;
-
-  // ── Skills ───────────────────────────────────────────────────────────────
-  // :skills reports the parsed catalog the agent routes against — see
-  // repl-skills-command.ts for why an installed skill is otherwise
-  // indistinguishable from a loaded one.
-  const skillsCmd = handleSkillsCommand(input, { projectRoot: c.ctx.root });
-  if (skillsCmd) return skillsCmd;
-
-  if (input === ':help' || input === '/help') {
-    console.log(chalk.hex(TEXT_DIM_HEX)(HELP_TEXT.join('\n')));
-    return { handled: true };
-  }
-
-  // ── Turn limit commands (:turnsoff, :turnson, :turns [n|off|on]) ─────────
-  {
-    const turnResult = handleTurnCommand(input, {
-      turnsOverride: c.turnsOverride,
-      defaultMaxTurns: c.defaultMaxTurns,
-      display: c.display,
-    });
-    if (turnResult) return turnResult;
-  }
-
-  // ── What Aura has learned (:lessons, :forget) ───────────────────────────
-  // The gap loop writes into the system prompt; these are how a human reads
-  // and corrects it. See repl-lesson-commands.ts.
-  {
-    const lessonResult = handleLessonCommand(input, {
-      display: c.display,
-      write: (text: string) => console.log(text),
-      projectRoot: c.ctx.root,
-    });
-    if (lessonResult) return lessonResult;
-  }
-
-  // ── Cost ledger (:cost) ────────────────────────────────────────────────
-  // Every Archimedes-path attempt appends a row to ~/.aura/cost-log/;
-  // this reads it back and reports whether small-first actually saves.
-  {
-    const costResult = await handleCostCommand(input);
-    if (costResult) return costResult;
-  }
-
-  // ── Computer use (:compon, :compoff, :comp) ─────────────────────────────
-  // Placed with the other toggles and, like them, reachable only from a
-  // keystroke — see repl-computer-commands.ts on why an in-session switch is
-  // a third key of equal strength rather than a way around the two-key gate.
-  {
-    const compResult = await handleComputerCommand(input, {
-      display: c.display,
-      confirm: (message: string) => confirm(message),
-      write: (text: string) => console.log(text),
-    });
-    if (compResult) return compResult;
-  }
-
-  // ── :catchthis ───────────────────────────────────────────────────────────
-  // Demonstrate a job once, get it back as a repeatable task. Records the
-  // keyboard at the kernel level, so the command says so every time it starts —
-  // see repl-catch-command.ts.
-  {
-    let caughtTask: string | undefined;
-    const computerUseAllowed = checkComputerUseGate(isComputerUseEnabled()).allowed;
-    const caught = await handleCatchCommand(input, {
-      print: (line: string) => console.log(chalk.hex(TEXT_DIM_HEX)(line)),
-      session: catchSession,
-      start: (o) => startRecorder(o),
-      // Photographing the screen goes through the same gate as moving the
-      // pointer: a click screenshot is exactly the disclosure computer use
-      // exists to make, so recording one without it would route around it.
-      shotsFor: computerUseAllowed ? (dir: string) => sidecarShots(dir) : undefined,
-      // Replay drives the real pointer, so it goes through the same gate as
-      // any other computer use rather than inventing a second way in.
-      run: computerUseAllowed ? (prompt: string) => { caughtTask = prompt; } : undefined,
-    });
-    if (caught) return { handled: true, runTask: caughtTask } as ReplCommandResult;
-  }
-
-  // ── Web client ───────────────────────────────────────────────────────────
-  // :auraweb brings up the browser surface without leaving the TUI. The server
-  // is a child of this process, so it dies with the terminal rather than
-  // stranding a port and a session token behind it.
-  {
-    const webResult = handleWebCommand(input, {
-      print: (line: string) => console.log(chalk.hex(TEXT_DIM_HEX)(line)),
-      server: webServer,
-    });
-    if (webResult) return { handled: true } as ReplCommandResult;
-  }
-
-  // ── Modes ────────────────────────────────────────────────────────────────
-  // :coder / :gazelle. The REPL owns the switch itself (see enterMode); these
-  // only report the intent. In repl-mode-commands.ts so they can be tested —
-  // being unreachable from a test is how they stayed advertised-but-unhandled.
-  {
-    const modeResult = handleModeCommand(input, { mode: c.mode, display: c.display });
-    if (modeResult) return modeResult;
-  }
-
-  // ── Session commands ─────────────────────────────────────────────────────
-
-  if (input === ':id') {
-    const cs = c.chatState;
-    if (cs.activeChatId) {
-      console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
-      if (cs.activeChatTitle) console.log(chalk.hex(TEXT_DIM_HEX)(`  Title:   ${cs.activeChatTitle}`));
-      console.log(chalk.hex(FAINT_HEX)(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
-    } else {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No active session (--no-session mode).\n'));
-    }
-    return { handled: true };
-  }
-
-  if (input === ':sessions') {
-    const sessions = sessionStore.listSessions(c.chatState.projectRoot);
-    if (sessions.length === 0) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions.\n'));
-    } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
-      for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
-        const num = chalk.hex(TEXT_DIM_HEX)(`[#${i + 1}]`.padEnd(5));
-        const updated = new Date(s.updatedAt).toLocaleString();
-        const turns = Math.floor(s.history.length / 2);
-        const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
-        console.log(
-          `  ${num} ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
-          `${chalk.hex(TEXT_HEX)(s.title.slice(0, 40).padEnd(41))} ` +
-          `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}${marker}`,
-        );
-      }
-      console.log();
-    }
-    return { handled: true };
-  }
-
-  // Session/history commands (:resume, :resume <id>, :new, :history,
-  // :clear-history, :save, :delete) live in repl-session-commands.ts so they
-  // can be tested without importing this self-executing module. Called from
-  // the exact position those branches occupied — moving this call earlier
-  // would let them shadow commands declared above.
-  const sessionCmd = await handleSessionCommand(input, c);
-  if (sessionCmd) return sessionCmd;
-
-  // ── Model / API commands ─────────────────────────────────────────────────
-
-  if (input === ':compact' || input === ':compress') {
-    const { compactHistory, estimateContextTokens, getRecapGeneration } = await import('../agent/compactor.js');
-    const { getContextWindow } = await import('../providers/factory.js');
-    const history = c.chatState.activeChatHistory;
-    if (history.length <= 1) {
-      console.log(chalk.hex('#d4903a')('\n  Nothing to compact — history is empty or has only the task.\n'));
-      return { handled: true };
-    }
-    const model = c.providerConfig.model;
-    const beforeTokens = estimateContextTokens('', history);
-    const window = getContextWindow(model) ?? 128_000;
-    const generation = getRecapGeneration(history);
-    // Force compaction by passing totalTokens = Infinity so the threshold check is bypassed.
-    const compacted = compactHistory(history, Infinity, model);
-    if (!compacted) {
-      console.log(chalk.hex('#d4903a')('\n  Compaction had no effect — history is already minimal.\n'));
-      return { handled: true };
-    }
-    const afterTokens = estimateContextTokens('', history);
-    const saved = beforeTokens > 0 ? ((1 - afterTokens / beforeTokens) * 100).toFixed(0) : '0';
-    const newGen = getRecapGeneration(history);
-    console.log(chalk.hex('#5a9e6e')(
-      `\n  ✓ Context compacted: ${beforeTokens.toLocaleString()} → ${afterTokens.toLocaleString()} tokens ` +
-      chalk.hex('#5a9e6e')(`(-${saved}%)`) +
-      ` · gen ${generation}→${newGen} · window ${(window / 1000).toFixed(0)}k\n`,
-    ));
-    c.healthTracker.recordCompaction(beforeTokens, afterTokens, newGen);
-    return { handled: true, newHistory: [...history] };
-  }
-
-  if (input === ':context') {
-    console.log(chalk.hex(TEXT_DIM_HEX)(`\n  Project: ${c.ctx.name} · ${c.ctx.language} · ${c.ctx.framework}`));
-    console.log(chalk.hex(FAINT_HEX)(`  Root: ${c.ctx.root}\n`));
-    return { handled: true };
-  }
-
-  if (input === ':graph') {
-    const summary = loadGraphSummary(c.ctx.root);
-    if (!summary) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No graph.json found. Run :graph refresh to extract.\n'));
-    } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
-      console.log(chalk.hex(TEXT_DIM_HEX)(summary));
-      console.log();
-    }
-    return { handled: true };
-  }
-
-  if (input === ':viz' || input === ':dashboard') {
-    console.log(chalk.hex(TEXT_DIM_HEX)('\n  Generating dashboard…\n'));
-    try {
-      const outPath = generateDashboard(c.ctx.root);
-      console.log(chalk.hex('#5a9e6e')(`  ✓ Dashboard written to ${outPath}`));
-      console.log(chalk.hex(TEXT_DIM_HEX)('  Opening in browser…\n'));
-      openDashboard(outPath);
-    } catch (e) {
-      console.log(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
-    }
-    return { handled: true };
-  }
-
-  if (input === ':plans') {
-    const { planStore } = await import('../orchestration/plan-store.js');
-    const plans = await planStore.list();
-    if (!plans.length) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No execution plans found.\n'));
-    } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Execution plans:\n'));
-      for (const p of plans.slice(0, 15)) {
-        const created = new Date(p.created).toLocaleString();
-        const dur = p.completed ? `${Math.round((p.completed - p.created) / 1000)}s` : '—';
-        const statusColor = p.status === 'done' ? '#5a9e6e' : p.status === 'failed' ? '#b15439' : '#cc9e5c';
-        console.log(
-          `  ${chalk.hex(statusColor)(p.status.padEnd(8))} ` +
-          `${chalk.hex('#cc785c')(p.id.slice(0, 12).padEnd(14))} ` +
-          `${chalk.hex(TEXT_HEX)(p.goal.slice(0, 50).padEnd(51))} ` +
-          `${chalk.hex(FAINT_HEX)(`${p.steps.length}s · ${dur} · ${created}`)}`,
-        );
-      }
-      console.log();
-    }
-    return { handled: true };
-  }
-
-  if (input === ':graph refresh') {
-    console.log(chalk.hex(TEXT_DIM_HEX)('\n  Refreshing codebase graph...\n'));
-    const { execSync } = await import('child_process');
-    try {
-      execSync(
-        'python3 -c "' +
-        'import json,os,re,glob; ' +
-        'root=\\\"' + c.ctx.root + '/src\\\"; ' +
-        'print(\\\"Scanning\\\", root)" ',
-        { stdio: 'inherit' }
-      );
-    } catch { /* ignore */ }
-    // Reload context graph
-    c.ctx.graphSummary = loadGraphSummary(c.ctx.root);
-    if (c.ctx.graphSummary) {
-      console.log(chalk.hex('#5a9e6e')('  ✓ Graph loaded and injected into context.\n'));
-    } else {
-      console.log(chalk.hex(TEXT_DIM_HEX)('  No graph.json found after refresh. Run graphify extract first.\n'));
-    }
-    return { handled: true };
+    // The status line carries the permission level and nothing else redraws
+    // it, so toggling auto-approve changed the behaviour while the bar kept
+    // announcing the old level — which reads exactly like a command that did
+    // nothing at all.
+    return { handled: true, statusChanged: true };
   }
 
   // ── Two-level provider → model selector ──────────────────────────────────
@@ -3216,19 +2510,6 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  // ── Usage reporting ──────────────────────────────────────────────────────
-  // /clear, /stats, /context, /cost — the commands that only read or reset the
-  // counters, never the history. In repl-usage-commands.ts so they can be
-  // tested without importing this self-executing module. /context tune stays
-  // below: it drives the shared readline, which is this loop's state.
-  const usageCmd = await handleUsageCommand(input, {
-    projectRoot: c.ctx.root,
-    cumulative: c.cumulative,
-    healthTracker: c.healthTracker,
-    display: c.display,
-  });
-  if (usageCmd) return usageCmd;
-
   if (input === '/context tune' || input === '/ct') {
     const u = c.cumulative;
     const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
@@ -3256,150 +2537,48 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     return { handled: true };
   }
 
-  // ── Workflow commands ──────────────────────────────────────────────────────
 
-  if (input === ':workflows') {
-    const workflows = await listWorkflows();
-    if (workflows.length === 0) {
-      console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
-    } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
-      for (const ws of workflows) {
-        const created = new Date(ws.definition.createdAt).toLocaleString();
-        const doneSteps = ws.stepStates.filter(s => s.status === 'done').length;
-        const totalSteps = ws.definition.steps.length;
-        const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
-        console.log(
-          `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
-          `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
-          `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
-          `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
-        );
-      }
-      console.log();
-    }
-    return { handled: true };
-  }
+  return runCoreCommand(input, coreCtxFor(c));
+}
 
-  if (input.startsWith(':workflow ')) {
-    const parts = input.slice(':workflow '.length).trim();
-    // Parse: <name> "step1" "step2" ...  or  <name> step1 step2 ...
-    const match = parts.match(/^(\S+)\s+(.+)$/);
-    if (!match) {
-      console.log(chalk.hex('#b15439')('  ✗ Usage: :workflow <name> "step 1" "step 2" ...'));
-      return { handled: true };
-    }
-    const workflowName = match[1];
-    // Split remaining by quoted strings or spaces
-    const restStr = match[2];
-    const stepTasks: string[] = [];
-    const quotedRe = /"([^"]+)"|'([^']+)'|(\S+)/g;
-    let m: RegExpExecArray | null;
-    while ((m = quotedRe.exec(restStr)) !== null) {
-      stepTasks.push(m[1] ?? m[2] ?? m[3]);
-    }
-
-    if (stepTasks.length === 0) {
-      console.log(chalk.hex('#b15439')('  ✗ At least one step task is required.'));
-      return { handled: true };
-    }
-
-    const steps: WorkflowStep[] = stepTasks.map((task: string, i: number) => ({
-      name: `step-${i + 1}`,
-      task,
-    }));
-
-    console.log(chalk.hex('#cc785c').bold(`\n  Creating workflow "${workflowName}" with ${steps.length} steps...\n`));
-
-    const state = await createWorkflow({ name: workflowName, steps });
-    console.log(chalk.hex('#5a9e6e')(`  ✓ Workflow created: ${state.definition.id}\n`));
-
-    // Build the runStep callback using the REPL context's provider
-    const runStep = async (task: string, stepIndex: number): Promise<StepResult> => {
-      console.log(chalk.hex('#cc785c')(`  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
-
-      const { createResilientProvider } = await import('../providers/resilient-factory.js');
-      const currentProvider = createResilientProvider(
-        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
-        {},
-        c.display,
-      );
-      const result = await runAgentLoop({
-        provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
-        spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
-      });
-
-      return {
-        success: result.success,
-        summary: result.summary,
-        turns: result.turns,
-        toolCallCount: result.toolCallCount,
-        tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
-      };
-    };
-
-    const finalState = await runWorkflow(state, runStep);
-    if (finalState.status === 'done') {
-      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
-    } else {
-      console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
-    }
-
-    return { handled: true };
-  }
-
-  if (input.startsWith(':resume-workflow ')) {
-    const workflowId = input.slice(':resume-workflow '.length).trim();
-    if (!workflowId) {
-      console.log(chalk.hex('#b15439')('  ✗ Usage: :resume-workflow <id>'));
-      return { handled: true };
-    }
-
-    console.log(chalk.hex('#cc785c').bold(`\n  Resuming workflow ${workflowId}...\n`));
-
-    const runStep = async (task: string, stepIndex: number): Promise<StepResult> => {
-      console.log(chalk.hex('#cc785c')(`  ▸ Step ${stepIndex + 1}: ${task}\n`));
-
-      const { createResilientProvider } = await import('../providers/resilient-factory.js');
-      const currentProvider = createResilientProvider(
-        { model: c.providerConfig.model, apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
-        {},
-        c.display,
-      );
-      const result = await runAgentLoop({
-        provider: currentProvider, task, context: c.ctx, permissions: c.permissions,
-        display: c.display, initialHistory: [], maxTurns: resolved.maxTurns,
-        spawnConfig: { apiKey: c.providerConfig.apiKey, baseUrl: c.providerConfig.baseUrl },
-      });
-
-      return {
-        success: result.success,
-        summary: result.summary,
-        turns: result.turns,
-        toolCallCount: result.toolCallCount,
-        tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
-      };
-    };
-
-    const finalState = await resumeWorkflow(workflowId, runStep);
-    if (!finalState) {
-      console.log(chalk.hex('#b15439')(`  ✗ Workflow not found: ${workflowId}\n`));
-      return { handled: true };
-    }
-
-    if (finalState.status === 'done') {
-      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
-    } else {
-      console.log(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
-      console.log(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
-    }
-
-    return { handled: true };
-  }
-
-  return unhandled;
+/**
+ * Adapts the REPL's context to the surface-agnostic one the core takes.
+ *
+ * The fields the core cannot reach on its own all come from this module's
+ * scope — the provider factory that follows the session's live model choice,
+ * the verification settings resolved from flags and .aura.json, and the two
+ * holders (`:catchthis`'s recorder, `:auraweb`'s child) that outlive a single
+ * command. TERMINAL_SURFACE writes to stdout, which the TUI has already
+ * patched to route into its scroll region.
+ */
+function coreCtxFor(c: ReplCtx): CommandCtx {
+  return {
+    ctx: c.ctx,
+    display: c.display,
+    providerConfig: c.providerConfig,
+    permissions: c.permissions,
+    cumulative: c.cumulative,
+    chatState: c.chatState,
+    sessionPath: c.sessionPath,
+    healthTracker: c.healthTracker,
+    archimedesOverride: c.archimedesOverride,
+    archimedesModelOverride: c.archimedesModelOverride,
+    small1Override: c.small1Override,
+    turnsOverride: c.turnsOverride,
+    defaultMaxTurns: resolved.maxTurns,
+    budget: c.budget,
+    mode: c.mode,
+    surface: { ...TERMINAL_SURFACE, setStatusLine },
+    buildProvider,
+    effort: runtimeConfig.effort,
+    confirm: (message: string) => confirm(message),
+    verify: {
+      maxRetries: cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries,
+      testCommand: cliTestCommand ?? fileConfig.testCommand,
+    },
+    catchSession,
+    webServer,
+  };
 }
 
 /**
@@ -3716,7 +2895,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     --verify                 Verify output after task; retry up to --max-verify-retries times
     --max-verify-retries <n> Max verification retries (default: 3)
     --test-command <cmd>     Shell command run as part of verification (e.g. "npm test")
-    --max-turns <n>          Max agent loop turns before stopping (default: 50)
+    --max-turns <n>          Max agent loop turns before stopping (default: 150; 0 = unlimited)
     --moa                    Mixture of agents: parallel read-only domain perspectives + synthesis (exploratory tasks only)
     --image <path>           Attach an image to the initial message (repeatable; png/jpg/webp/gif)
     --analyze                Mine session history for weakness patterns; save report
@@ -3762,7 +2941,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
       ],
       "rateLimitRpm": 30,
       "rateLimitTpm": 1000000,
-      "maxTurns": 50,
+      "maxTurns": 150,
       "maxRetries": 6,
       "fallbacks": ["gpt-4o-mini", "gemini-3.6-flash"],
       "ignore": ["dist/", "*.generated.ts"]
@@ -3804,7 +2983,7 @@ ${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code:
     AURA_MAX_RETRIES     Default max retry attempts
     AURA_FALLBACK_MODEL  Comma-separated fallback models
     AURA_SESSION_BUDGET  Cumulative billed input-token ceiling per conversation
-                         (default 1000000; 0 = no ceiling)
+                         (default: no ceiling; set a positive number to bound it)
 `);
 }
 
@@ -3867,6 +3046,14 @@ if (require.main !== module) {
   // approval prompts — and so one of them can be cut off without disturbing
   // the other or restarting the server.
   runDevices(String(argv._[1] ?? 'list'), argv._.slice(2).map(String), Number(argv.port ?? argv.p ?? 7337))
+    .then(code => process.exit(code))
+    .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+} else if (argv._[0] === 'url') {
+  // Prints the *current* pairing URL for a running `aura serve`. The token
+  // is regenerated every time that process starts, so a bookmarked or
+  // previously-copied URL silently goes stale on restart — this reads the
+  // live one back out instead of digging through service logs by hand.
+  runUrl(Number(argv.port ?? argv.p ?? 7337), { open: argv.open === true })
     .then(code => process.exit(code))
     .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else if (argv._[0] === 'serve') {

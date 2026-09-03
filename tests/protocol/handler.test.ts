@@ -64,6 +64,9 @@ describe('ProtocolHandler', () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-proto-'));
     fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+    // Isolate the session store — otherwise saveSession writes into the real
+    // ~/.aura/sessions and the merged listing reads every session on the box.
+    vi.stubEnv('AURA_SESSION_DIR', fs.mkdtempSync(path.join(os.tmpdir(), 'aura-proto-sessions-')));
     c = collector();
     h = new ProtocolHandler({
       defaultModel: 'deepseek/deepseek-v4-flash',
@@ -75,6 +78,7 @@ describe('ProtocolHandler', () => {
   afterEach(() => {
     h.dispose();
     fs.rmSync(tmp, { recursive: true, force: true });
+    vi.unstubAllEnvs();
     setConfirmHandler(null);
   });
 
@@ -323,6 +327,99 @@ describe('ProtocolHandler', () => {
     expect(Array.isArray(histRes.result.messages)).toBe(true);
 
     h2.dispose();
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // command.run
+  //
+  // The gap this closes: `/api/commands` advertised the whole command set to
+  // the browser while the browser could only run fourteen of them from its own
+  // state, and answered the other fifty-two with "terminal only". There was no
+  // method to call, so a command either ran locally or did not run at all.
+  //
+  // What matters here is not any one command's text but the contract: it runs,
+  // its output comes back to the client that asked (never to the process's
+  // stdout, which several clients share), and a command the engine genuinely
+  // cannot run is named as such rather than falling through to the model.
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('command.run', () => {
+    const run = async (sessionId: string, command: string) => {
+      const f = req(M.commandRun, { sessionId, command });
+      await h.handle(f);
+      const r = c.res((f as { id: string }).id);
+      return (r as { ok: true; result: Record<string, unknown> }).result;
+    };
+
+    it('runs a command and returns what it printed', async () => {
+      const s = await create();
+      const r = await run(s, ':id');
+      expect(r.handled).toBe(true);
+      expect(r.terminalOnly).toBe(false);
+      expect((r.output as string[]).join('\n')).toContain(s);
+    });
+
+    it('keeps output off the shared stdout, so one client cannot read another', async () => {
+      const s = await create();
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        const r = await run(s, ':id');
+        expect((r.output as string[]).length).toBeGreaterThan(0);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('names a terminal-only command instead of pretending to run it', async () => {
+      const s = await create();
+      const r = await run(s, ':model');
+      expect(r.handled).toBe(false);
+      expect(r.terminalOnly).toBe(true);
+      expect(typeof r.reason).toBe('string');
+      expect(r.output).toEqual([]);
+    });
+
+    it('matches a terminal-only command by its head, not the whole line', async () => {
+      const s = await create();
+      const r = await run(s, ':model glm-5.3-flash');
+      expect(r.terminalOnly).toBe(true);
+    });
+
+    it('reports an unknown command as unhandled rather than answering it', async () => {
+      const s = await create();
+      const r = await run(s, ':nosuchcommand');
+      expect(r.handled).toBe(false);
+      expect(r.terminalOnly).toBe(false);
+    });
+
+    it('rejects an empty command', async () => {
+      const s = await create();
+      const f = req(M.commandRun, { sessionId: s, command: '   ' });
+      await h.handle(f);
+      const r = c.res((f as { id: string }).id);
+      expect(r?.ok).toBe(false);
+    });
+
+    it('carries a history-replacing command back onto the session', async () => {
+      const s = await create();
+      // :clear-history empties the conversation on the engine. Without the
+      // write-back the client would see the answer and keep the old thread.
+      const r = await run(s, ':clear-history');
+      expect(r.handled).toBe(true);
+      const f = req(M.sessionState, { sessionId: s });
+      await h.handle(f);
+      const state = (c.res((f as { id: string }).id) as { ok: true; result: { messageCount: number } }).result;
+      expect(state.messageCount).toBe(0);
+    });
+
+    it('lists the command set, and which of it needs a terminal', async () => {
+      const f = req(M.commandList, {});
+      await h.handle(f);
+      const r = (c.res((f as { id: string }).id) as { ok: true; result: Record<string, unknown> }).result;
+      expect(Array.isArray(r.commands)).toBe(true);
+      expect((r.commands as unknown[]).length).toBeGreaterThan(50);
+      expect(r.terminalOnly).toHaveProperty(':model');
+    });
   });
 });
 

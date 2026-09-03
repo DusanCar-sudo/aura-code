@@ -229,10 +229,7 @@ describe('runAgentLoop', () => {
   it('stops at the flat default ceiling on a productive but overlong run', async () => {
     // More productive (non-repeating) tool turns than the cap allows —
     // nothing a stall detector would catch, since every call has a distinct
-    // signature. The only thing that bounds this run is DEFAULT_MAX_TURNS,
-    // which is the point: the 85-turn healthcheck session looked exactly like
-    // this (105 distinct calls, max 2 consecutive repeats) and ran unbounded
-    // under the old 150.
+    // signature. The only thing that bounds this run is DEFAULT_MAX_TURNS.
     const responses: LLMResponse[] = Array.from({ length: DEFAULT_MAX_TURNS + 5 }, (_, i) => ({
       text: '',
       toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
@@ -249,7 +246,7 @@ describe('runAgentLoop', () => {
     expect(result.summary).toMatch(/turns/);
   });
 
-  it('honours an explicit maxTurns above the default', async () => {
+  it('honours an explicit maxTurns and completes normally under it', async () => {
     const responses: LLMResponse[] = Array.from({ length: 33 }, (_, i) => ({
       text: '',
       toolCalls: [{ id: `c${i}`, name: 'read_file', input: { path: `f${i}.json` } }],
@@ -259,7 +256,7 @@ describe('runAgentLoop', () => {
     const provider = new FakeProvider(responses);
     const ctx = await loadProjectContext(tmpDir);
     const result = await runAgentLoop({
-      provider, task: 'hi', context: ctx, maxTurns: 50,
+      provider, task: 'hi', context: ctx, maxTurns: 40,
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
     expect(result.success).toBe(true);

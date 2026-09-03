@@ -172,6 +172,61 @@ describe('REPL session commands reset the budget', () => {
     expect(r2!.newChatId).toBe('saved-alpha');
   });
 
+  // ── sessionReplaced: the flag that stops a mid-run task clobbering the swap ──
+
+  it('flags sessionReplaced when the conversation is swapped', async () => {
+    await sessionStore.upsertSession(PROJECT, 'saved-x', historyOf(4), 'X');
+    for (const cmd of [':new', ':clear-history', ':resume', ':resume saved-x']) {
+      const r = await handleSessionCommand(cmd, spentCtx());
+      expect(r!.sessionReplaced, cmd).toBe(true);
+    }
+  });
+
+  it('does not flag sessionReplaced on a no-op or read-only command', async () => {
+    const c = spentCtx();
+    for (const cmd of [':history', ':save', ':resume no-such-id']) {
+      const r = await handleSessionCommand(cmd, c);
+      expect(r!.sessionReplaced, cmd).toBeFalsy();
+    }
+    // :delete of a non-active session: current conversation is unchanged.
+    await sessionStore.upsertSession(PROJECT, 'other-id', historyOf(2), 'Other');
+    const del = await handleSessionCommand(':delete other-id', spentCtx());
+    expect(del!.sessionReplaced).toBeFalsy();
+  });
+
+  it('bare :resume falls back to the latest session anywhere when the project has none', async () => {
+    await sessionStore.upsertSession('/elsewhere/repo', 'global-latest', historyOf(4), 'Last thing I did');
+    const c = spentCtx({ projectRoot: '/a/brand/new/dir' });
+
+    const r = await handleSessionCommand(':resume', c);
+
+    expect(r!.newChatId).toBe('global-latest');
+    expect(r!.sessionReplaced).toBe(true);
+    expect(c.budget.exhausted()).toBeNull();
+  });
+
+  it('bare :resume still says nothing when there are no sessions at all', async () => {
+    const c = spentCtx({ projectRoot: '/a/brand/new/dir' });
+    const r = await handleSessionCommand(':resume', c);
+    expect(r!.handled).toBe(true);
+    expect(r!.newChatId).toBeUndefined();
+    expect(c.budget.inputTokensUsed).toBe(1_200);   // no reset — nothing switched
+  });
+
+  it(':resume <id> finds a session saved under a different project', async () => {
+    // The reported confusion: `cd` into a new folder, and :resume / :sessions
+    // only see that folder. An explicit id should still resolve.
+    await sessionStore.upsertSession('/some/other/repo', 'cross-1', historyOf(6), 'Elsewhere');
+    const c = spentCtx({ projectRoot: '/fresh/empty/dir' });
+
+    const r = await handleSessionCommand(':resume cross-1', c);
+
+    expect(r!.newChatId).toBe('cross-1');
+    expect(r!.newTitle).toBe('Elsewhere');
+    expect(r!.sessionReplaced).toBe(true);
+    expect(c.budget.exhausted()).toBeNull();
+  });
+
   it('returns null for anything it does not own, so the caller chain continues', async () => {
     // Guards the delegation contract: index.ts falls through to its remaining
     // ~45 branches only because unmatched input yields null.

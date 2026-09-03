@@ -12,7 +12,7 @@ describe('handleTurnCommand', () => {
     warningMsg = null;
     ctx = {
       turnsOverride: undefined,
-      defaultMaxTurns: 50,
+      defaultMaxTurns: undefined,   // fall back to DEFAULT_MAX_TURNS
       display: {
         success: (msg: string) => { successMsg = msg; },
         warning: (msg: string) => { warningMsg = msg; },
@@ -46,8 +46,8 @@ describe('handleTurnCommand', () => {
       '/turn on',
     ])('turns on turn limit with %s', (cmd) => {
       const res = handleTurnCommand(cmd, ctx);
-      expect(res).toEqual({ handled: true, newTurnsOverride: 50 });
-      expect(successMsg).toContain('Turn limit: ON (50 turns cap per task)');
+      expect(res).toEqual({ handled: true, newTurnsOverride: DEFAULT_MAX_TURNS });
+      expect(successMsg).toContain(`Turn limit: ON (${DEFAULT_MAX_TURNS} turns cap per task)`);
     });
 
     it('uses configured defaultMaxTurns when provided', () => {
@@ -76,7 +76,7 @@ describe('handleTurnCommand', () => {
       expect(resOff).toEqual({ handled: true, newTurnsOverride: Infinity });
 
       const resOn = handleTurnCommand(':turns on', ctx);
-      expect(resOn).toEqual({ handled: true, newTurnsOverride: 50 });
+      expect(resOn).toEqual({ handled: true, newTurnsOverride: DEFAULT_MAX_TURNS });
     });
 
     it('warns on invalid turn count', () => {
@@ -96,7 +96,7 @@ describe('handleTurnCommand', () => {
     it('shows default status when no override is active', () => {
       const res = handleTurnCommand(':turns', ctx);
       expect(res).toEqual({ handled: true });
-      expect(successMsg).toContain('Turn limit: 50 turns per task (default)');
+      expect(successMsg).toContain(`Turn limit: ${DEFAULT_MAX_TURNS} turns per task (default)`);
     });
 
     it('shows OFF status when Infinity override is active', () => {

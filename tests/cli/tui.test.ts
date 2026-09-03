@@ -238,6 +238,22 @@ describe('TUI cursor preservation', () => {
     expect(stripAnsi(output)).not.toMatch(/hi[OB]/);
   });
 
+  it('treats ESC+letter as Alt/Meta, not Escape then a stray key', () => {
+    // xterm encodes Alt+j as "\x1bj" in one read. The bare-Escape branch used
+    // to flip on the pager and then feed "j" to scroll-mode key handling —
+    // "I type one letter and land in scroll".
+    initTui();
+    startInput();
+    process.stdin.emit('data', 'hi');
+    chunks = [];
+
+    process.stdin.emit('data', '\x1bj');
+
+    const output = chunks.join('');
+    expect(output).not.toContain('-- SCROLL --');
+    expect(stripAnsi(output)).toContain('hij');   // the letter still types
+  });
+
   it('types q when leaving scroll mode instead of swallowing it', () => {
     initTui();
     startInput();

@@ -19,7 +19,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const ASSETS = ['tools/screen/aura_screen.py', 'tools/screen/aura_record.py'];
+const ASSETS = [
+  'tools/screen/aura_screen.py', 'tools/screen/aura_record.py',
+  // Dashboard enrichment: spawned as child processes by viz/index.ts to splice
+  // the 8 relation-graph panels (bundling/chord/arc/matrix/sankey/radial/
+  // particles/hulls) into a generated dashboard.html.
+  'viz/panels/enrich-data.mjs', 'viz/panels/add-panels.mjs', 'viz/panels/panels.js',
+];
 
 const root = path.join(__dirname, '..');
 let copied = 0;

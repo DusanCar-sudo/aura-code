@@ -1,3 +1,38 @@
+/**
+ * The agent loop. It is the same four steps a coding assistant like Claude
+ * Code runs — everything else in this file is hardening around them.
+ *
+ *   1. Read the message + context.
+ *        `runAgentLoop` builds it: buildSystemPrompt(context) + initialHistory
+ *        + the user task. Then, each pass of `runLoopBody`'s `while (true)`,
+ *        before the model call: drain any mid-run steering the user typed and
+ *        compact history if it has grown past the window.
+ *
+ *   2. Think, then act — call tools.
+ *        Stream one model response; collect its text and its tool calls.
+ *
+ *   3. Observe the results, adjust, repeat.
+ *        stopReason === 'done'  → step 4.
+ *        otherwise              → run every tool call, append each result to
+ *        history, and loop back to step 2.
+ *        Guards that keep the loop honest live here: stall detection, the
+ *        "described the work instead of doing it" nudge, empty-response retry,
+ *        and the Archimedes repetition break.
+ *
+ *   4. Stop when the task is done and verified, and reply.
+ *        On stopReason === 'done': push the assistant message, persist the
+ *        session, return the summary. Verification is the `runWithVerification`
+ *        wrapper that re-runs the loop against failing tests; a bare
+ *        runAgentLoop call is steps 1–3 plus the reply.
+ *
+ * Turn-based: one runAgentLoop call is one user message carrying the whole
+ * history forward. It does not run in the background — it advances on a
+ * message, or when a spawned sub-agent returns.
+ *
+ * The cumulative guards (maxTurns per call, SessionBudget across a whole
+ * conversation) only decide when to stop early; they do not change the shape
+ * of the loop above.
+ */
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
@@ -23,7 +58,12 @@ import { compactHistoryTiered, isTieredStrategyEnabled } from './tiered-context.
 import { elideToolCallArgs, elideGoogleParts, pruneToolResultImages } from './tool-elision.js';
 import { detectFrustration } from './affect.js';
 import { createRepetitionGuard, describeRepetition, type Repetition } from './repetition-guard.js';
-import { looksPromissory, MAX_PROMISE_NUDGES, PROMISE_CORRECTION } from './promise-guard.js';
+import {
+  looksPromissory, MAX_PROMISE_NUDGES, PROMISE_CORRECTION,
+  looksLikeUnparsedToolCall, MAX_UNPARSED_NUDGES, UNPARSED_TOOLCALL_CORRECTION,
+  claimedNewFiles, claimsVerification, MAX_GROUND_NUDGES,
+  missingFilesCorrection, UNRAN_VERIFICATION_CORRECTION,
+} from './promise-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 import { formatSteering, type SteeringInbox } from './steering.js';
 
@@ -65,6 +105,23 @@ const REPETITION_CORRECTION =
   'Do not describe or narrate what you are about to write. Make the tool call directly — ' +
   'call write_file once with the complete file content. If the file is genuinely too large for one ' +
   'call, write a first section with write_file and append the rest with follow-up edit_file calls.';
+
+/** A single reply that streams this many characters of prose without ever
+ *  calling a tool is a runaway — the model has stopped working and started
+ *  free-associating (observed: an 88k-token planning monologue from
+ *  glm-5.3-flash that never produced a file). ~8k tokens; a real answer or
+ *  a pre-tool plan is a fraction of this, and cutting at 32k saves the other
+ *  ~80k of output the spiral would otherwise bill. */
+const RUNAWAY_TEXT_CHARS = 32_000;
+const MAX_RUNAWAY_RETRIES = 2;
+
+/** Sent after a runaway monologue is cut off. */
+const RUNAWAY_CORRECTION =
+  'Your previous reply ran on for thousands of words without calling a tool or finishing — it ' +
+  'drifted off the task into open-ended narration. Stop planning in prose. In this reply do exactly ' +
+  'one of: (a) make the next concrete tool call (read_file, write_file, run_shell, …) that moves the ' +
+  'task forward, or (b) if the task is done, give a summary of at most 5 sentences. Keep any reasoning ' +
+  'to two or three sentences.';
 
 /** How many times a stalled run may be nudged to change approach before it
  *  gives up. Three, because a stall is usually one wrong idea the model keeps
@@ -593,6 +650,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   let turnCeiling = maxTurns;
   let turnExtensions = 0;
   let stallCorrections = 0;
+  // Successful state-changing calls across the whole run, by kind. Used at the
+  // "done" boundary to check a completion claim against what actually ran: a
+  // reply that says it wrote a file or that the tests pass, with zero calls of
+  // the matching kind, is not to be trusted (see the ungrounded-claim gate).
+  let writeCalls = 0;   // write_file, edit_file
+  let execCalls = 0;    // run_shell, run_tests
 
   while (true) {
     if (turns >= turnCeiling) {
@@ -719,6 +782,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     // nothing usable — see repetition-guard.ts.
     const repGuard = createRepetitionGuard();
     let repetition: Repetition | null = null;
+    // Non-repeating runaway: coherent text that never stops and never calls a
+    // tool. The repetition guard misses it because every sentence is new.
+    let runaway = false;
 
     try {
       let tools = evictionEnabled
@@ -729,12 +795,20 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       streamLoop: for await (const chunk of stream) {
         switch (chunk.type) {
           case 'text':
+            // A mid-stream abort: :stop / Ctrl+C while the model is still
+            // generating. The between-turns check (top of the loop) can't help
+            // a model that is 60 seconds into one runaway response.
+            if (opts.abortSignal?.aborted) break streamLoop;
             display.streamText(chunk.text);
             responseText += chunk.text;
             // Breaking out returns the generator, which aborts the request, so
             // the provider stops generating (and billing) the rest of the loop.
             repetition = repGuard.push(chunk.text);
             if (repetition) break streamLoop;
+            if (responseText.length > RUNAWAY_TEXT_CHARS && responseToolCalls.length === 0) {
+              runaway = true;
+              break streamLoop;
+            }
             break;
           case 'tool_start':
             display.toolStart(chunk.name, chunk.id);
@@ -798,6 +872,21 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
     if (responseText) display.streamEnd();
 
+    // The stream ended without a `done` chunk — a runaway/repetition cut-off or
+    // a mid-stream abort. The provider still billed the tokens it generated, so
+    // estimate them rather than leave usage (and therefore /stats and the
+    // session budget) reading zero for a turn that plainly happened.
+    if (finalResponse === null && (responseText.length > 0 || responseToolCalls.length > 0)) {
+      // Only the LoopResult rollup and the session budget — not turnUsage,
+      // which is documented as coming straight from API responses.
+      const estIn = estimateContextTokens(system, history);
+      const estOut = Math.ceil(responseText.length / 4);
+      usage.inputTokens += estIn;
+      usage.outputTokens += estOut;
+      usage.totalTokens += estIn + estOut;
+      opts.budget?.recordCall(estIn, 0);
+    }
+
     // The reply collapsed into a repeating phrase and was cut off. Two things
     // matter here: the degenerate text must not reach history (a model shown its
     // own loop continues it), and the turn is worth one more attempt with the
@@ -831,6 +920,39 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           `The model's reply collapsed into repetition ${attempts}× in a row ` +
           `(${describeRepetition(repetition)}). This is a model failure, not a task failure — ` +
           `try a narrower step, or a stronger model with --model / :model.`,
+        turns, toolCallCount, usage, history, toolCallLog, turnUsage,
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+      };
+    }
+
+    // The reply ran away — thousands of words, no tool call, drifting off task.
+    // Same discipline as the repetition guard: keep only a short head so the
+    // model isn't shown its own spiral, name the failure, and give it a couple
+    // of tries before declaring it a model failure.
+    if (runaway) {
+      loopState._runawayRetries = ((loopState._runawayRetries as number) ?? 0) + 1;
+      const attempts = loopState._runawayRetries as number;
+      display.warning(
+        `Reply ran away (${responseText.length.toLocaleString()} chars, no tool call) — cut off` +
+        (attempts <= MAX_RUNAWAY_RETRIES ? ' and retrying with a correction…' : '.'),
+      );
+      if (attempts <= MAX_RUNAWAY_RETRIES) {
+        const head = responseText.trim().slice(0, 200);
+        history.push({
+          role: 'assistant',
+          content: `${head}\n[reply cut off: ran on for ${responseText.length.toLocaleString()} characters without calling a tool]`,
+        });
+        history.push({ role: 'user', content: RUNAWAY_CORRECTION });
+        display.agentThinking();
+        continue;
+      }
+      await persist(opts.sessionPath, history);
+      return {
+        success: false,
+        summary:
+          `The model's reply ran away ${attempts}× — long, drifting monologues with no tool call. ` +
+          `This is a model failure, not a task failure: try a narrower step, or a stronger model ` +
+          `with --model / :model (glm-*-flash is prone to this).`,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
@@ -881,13 +1003,65 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         continue;
       }
 
+      // ── Ungrounded completion: the reply says done, reality disagrees ──────
+      // All three checks are grounded in what actually ran, not in prose:
+      //   1. a tool call emitted as text — the provider parsed nothing, so it
+      //      never executed, but the model believes it did.
+      //   2. a file the reply names as created that is not on disk.
+      //   3. "the tests pass" after code changes, with nothing executed.
+      const unparsedCall =
+        responseToolCalls.length === 0 && looksLikeUnparsedToolCall(responseText);
+      const missingFiles = claimedNewFiles(responseText).filter((f) => {
+        try { return !fs.existsSync(path.resolve(opts.context.root, f)); }
+        catch { return false; }
+      });
+      const unranVerification =
+        writeCalls > 0 && execCalls === 0 && claimsVerification(responseText);
+
+      if (unparsedCall && (loopState._unparsedNudges ?? 0) < MAX_UNPARSED_NUDGES) {
+        loopState._unparsedNudges = (loopState._unparsedNudges ?? 0) + 1;
+        display.warning(
+          `A tool call was written as text and never ran — correcting ` +
+          `(${loopState._unparsedNudges}/${MAX_UNPARSED_NUDGES}).`,
+        );
+        history.push({ role: 'assistant', content: responseText });
+        history.push({ role: 'user', content: UNPARSED_TOOLCALL_CORRECTION });
+        display.agentThinking();
+        continue;
+      }
+
+      if ((missingFiles.length > 0 || unranVerification)
+          && (loopState._groundNudges ?? 0) < MAX_GROUND_NUDGES) {
+        loopState._groundNudges = (loopState._groundNudges ?? 0) + 1;
+        const parts: string[] = [];
+        if (missingFiles.length > 0) parts.push(missingFilesCorrection(missingFiles));
+        if (unranVerification) parts.push(UNRAN_VERIFICATION_CORRECTION);
+        display.warning(
+          `Completion claim not backed by what ran — pushing back ` +
+          `(${loopState._groundNudges}/${MAX_GROUND_NUDGES}).`,
+        );
+        history.push({ role: 'assistant', content: responseText });
+        history.push({ role: 'user', content: parts.join('\n\n') });
+        display.agentThinking();
+        continue;
+      }
+
+      const ungrounded = unparsedCall || missingFiles.length > 0 || unranVerification;
+      const ungroundedNote = !ungrounded ? '' :
+        unparsedCall ? 'a tool call was written as text and did not run' :
+        missingFiles.length > 0 ? `claimed file(s) not on disk: ${missingFiles.join(', ')}` :
+        'the tests were said to pass but were never run';
+
       history.push({ role: 'assistant', content: responseText });
       await persist(opts.sessionPath, history);
       return {
-        // Still not a success if it never acted: reporting "Done" for a promise
-        // is what sent the user back to retype the task.
-        success: !(toolCallCount === 0 && looksPromissory(responseText)),
-        summary: responseText,
+        // Not a success if it never acted (a promise) or if the completion
+        // claim did not survive the reality check above — a false "Done" is
+        // what sends the user back to retype the task.
+        success: !(toolCallCount === 0 && looksPromissory(responseText)) && !ungrounded,
+        summary: ungrounded
+          ? `${responseText}\n\n[Aura: unverified — ${ungroundedNote}.]`
+          : responseText,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
         costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
       };
@@ -1125,7 +1299,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           }
         }
         toolCallLog.push({ name: call.name, input: call.input });
-        if (!isError) execQueue.push(call.name, call.input, turns);
+        if (!isError) {
+          execQueue.push(call.name, call.input, turns);
+          if (call.name === 'write_file' || call.name === 'edit_file') writeCalls++;
+          else if (call.name === 'run_shell' || call.name === 'run_tests') execCalls++;
+        }
 
         if (opts.hooks && opts.hooks.length > 0) {
           const { runHooks } = await import('../plugins/hooks.js');

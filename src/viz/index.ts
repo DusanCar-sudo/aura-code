@@ -3,7 +3,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { openExternal } from '../util/open.js';
 import type { ExecutionPlan } from '../orchestration/types.js';
-import type { ChatSession } from '../agent/session-store.js';
+import { sessionStore, type ChatSession } from '../agent/session-store.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data loaders
@@ -186,7 +186,7 @@ function buildHtml(data: {
   .stat-card .lbl { color: var(--muted); font-size: 10px; margin-top: 5px; text-transform: uppercase; letter-spacing: .08em; }
 
   /* Graph panel */
-  #graph-svg { background: var(--canvas); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; cursor: grab; }
+  #graph-svg { background: radial-gradient(circle at 50% 40%, #10141c, #05070a 75%); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 0; cursor: grab; }
   #graph-svg:active { cursor: grabbing; }
   .graph-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .mode-toggle { display: flex; gap: 4px; }
@@ -385,6 +385,8 @@ function initGraph() {
       <input id="graph-search" placeholder="🔍  Search nodes, files…" oninput="filterGraph()">
       <div class="mode-toggle" id="graph-mode-toggle">
         <button class="mode-btn active" data-mode="force">Force</button>
+        <button class="mode-btn" data-mode="arc">Arc</button>
+        <button class="mode-btn" data-mode="radial">Radial</button>
         <button class="mode-btn" data-mode="treemap">Treemap</button>
       </div>
       <div class="legend" id="legend"></div>
@@ -436,6 +438,10 @@ function initGraph() {
     const edgesCopy = edges.map(e => ({ ...e, source: e.source.id || e.source, target: e.target.id || e.target }));
     if (graphMode === 'treemap') {
       filterGraph = renderTreemapGraph(svgEl, nodesCopy, edgesCopy, NODE_COLORS, activeTypes, tooltip);
+    } else if (graphMode === 'arc') {
+      filterGraph = renderArcGraph(svgEl, nodesCopy, edgesCopy, NODE_COLORS, activeTypes, tooltip);
+    } else if (graphMode === 'radial') {
+      filterGraph = renderRadialGraph(svgEl, nodesCopy, edgesCopy, NODE_COLORS, activeTypes, tooltip);
     } else {
       filterGraph = renderForceGraph(svgEl, nodesCopy, edgesCopy, NODE_COLORS, NODE_R, ALWAYS_LABEL, activeTypes, tooltip);
     }
@@ -451,10 +457,23 @@ function renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL
 
   svg.call(d3.zoom().scaleExtent([0.05, 6]).on('zoom', e => g.attr('transform', e.transform)));
 
-  svg.append('defs').append('marker')
+  const defs = svg.append('defs');
+  defs.append('marker')
     .attr('id','arr').attr('viewBox','0 -5 10 10').attr('refX',2).attr('refY',0)
     .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
     .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#484f58');
+  // Bloom — the soft glow that gives the map its "signal" look.
+  const glow = defs.append('filter').attr('id','glow').attr('x','-60%').attr('y','-60%').attr('width','220%').attr('height','220%');
+  glow.append('feGaussianBlur').attr('stdDeviation','2.4').attr('result','b');
+  const gm = glow.append('feMerge');
+  gm.append('feMergeNode').attr('in','b');
+  gm.append('feMergeNode').attr('in','SourceGraphic');
+
+  // Colour by community, not by node type — this is what separates the clusters
+  // visually the way the reference maps do.
+  const { clusterOf, colorOf } = detectCommunities(nodes, edges);
+  const deg = nodeDegrees(nodes, edges);
+  const colorFor = d => colorOf.get(clusterOf.get(d.id)) || NODE_COLORS[d.type||'node'] || '#8b949e';
 
   function filterGraph() {
     const term = (document.getElementById('graph-search').value || '').toLowerCase();
@@ -482,18 +501,16 @@ function renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL
     .force('center',    d3.forceCenter(W/2, H/2))
     .force('collision', d3.forceCollide(d => (NODE_R[d.type||'node']||7) + 6));
 
-  const gLinks = g.append('g').selectAll('line').data(edges).enter().append('line')
-    .attr('stroke','#484f58').attr('stroke-width', d => {
-      const r = d.relation || '';
-      return r === 'imports' ? 1.5 : 1;
-    })
-    .attr('opacity', 0.55)
-    .attr('marker-end','url(#arr)');
+  const gLinks = g.append('g').attr('filter','url(#glow)').selectAll('path').data(edges).enter().append('path')
+    .attr('fill','none')
+    .attr('stroke', d => colorOf.get(clusterOf.get(d.source.id||d.source)) || '#484f58')
+    .attr('stroke-width', d => (d.relation === 'imports' ? 1.4 : 0.8))
+    .attr('opacity', 0.42);
 
-  const gNodes = g.append('g').selectAll('circle').data(nodes).enter().append('circle')
-    .attr('r', d => NODE_R[d.type||'node'] || 7)
-    .attr('fill', d => NODE_COLORS[d.type||'node'] || '#8b949e')
-    .attr('stroke', '#0d1117').attr('stroke-width', 2)
+  const gNodes = g.append('g').attr('filter','url(#glow)').selectAll('circle').data(nodes).enter().append('circle')
+    .attr('r', d => (NODE_R[d.type||'node'] || 7) * 0.6 + Math.sqrt(deg.get(d.id)||0) * 1.2)
+    .attr('fill', colorFor)
+    .attr('stroke', d => NODE_COLORS[d.type||'node'] || '#0d1117').attr('stroke-width', 1)
     .style('cursor','pointer')
     .call(d3.drag()
       .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
@@ -522,8 +539,12 @@ function renderForceGraph(svgEl, nodes, edges, NODE_COLORS, NODE_R, ALWAYS_LABEL
     .attr('dy', '0.35em');
 
   sim.on('tick', () => {
-    gLinks.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-          .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    gLinks.attr('d', d => {
+      const s = d.source, t = d.target;
+      const dx = t.x - s.x, dy = t.y - s.y;
+      const mx = (s.x + t.x) / 2 - dy * 0.12, my = (s.y + t.y) / 2 + dx * 0.12;
+      return 'M' + s.x + ',' + s.y + ' Q' + mx + ',' + my + ' ' + t.x + ',' + t.y;
+    });
     gNodes.attr('cx',d=>d.x).attr('cy',d=>d.y);
     gLabels.attr('x',d=>d.x).attr('y',d=>d.y);
   });
@@ -655,6 +676,127 @@ function renderTreemapGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, toolt
   }
 
   return filterGraph;
+}
+
+// Cluster palette + label-propagation community detection. Colouring by cluster
+// (not by node type) is what turns a hairball into the readable "coloured
+// islands" look of a Gephi / GraphRAG map.
+const CLUSTER_COLORS = ['#ff7b72','#58a6ff','#3fb950','#d29922','#bc8cff','#39c5cf','#f778ba','#ffa657','#a5d6ff','#7ee787','#ffab70','#d2a8ff','#79c0ff','#56d364'];
+function detectCommunities(nodes, edges) {
+  const adj = new Map();
+  nodes.forEach(n => adj.set(n.id, []));
+  edges.forEach(e => {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    if (adj.has(s) && adj.has(t)) { adj.get(s).push(t); adj.get(t).push(s); }
+  });
+  // Seed each node with its own label; then iterate, adopting the most common
+  // label among neighbours. Converges fast on real code graphs.
+  const label = new Map(nodes.map(n => [n.id, n.project || n.id]));
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (const n of nodes) {
+      const counts = new Map();
+      for (const nb of adj.get(n.id) || []) counts.set(label.get(nb), (counts.get(label.get(nb))||0)+1);
+      if (!counts.size) continue;
+      let best = label.get(n.id), bestC = -1;
+      for (const [l, c] of counts) if (c > bestC) { best = l; bestC = c; }
+      if (best !== label.get(n.id)) { label.set(n.id, best); changed = true; }
+    }
+    if (!changed) break;
+  }
+  const order = [...new Set([...label.values()])];
+  const colorOf = new Map(order.map((l, i) => [l, CLUSTER_COLORS[i % CLUSTER_COLORS.length]]));
+  return { clusterOf: label, colorOf };
+}
+
+function nodeDegrees(nodes, edges) {
+  const d = new Map(nodes.map(n => [n.id, 0]));
+  edges.forEach(e => {
+    const s = e.source.id || e.source, t = e.target.id || e.target;
+    if (d.has(s)) d.set(s, d.get(s)+1);
+    if (d.has(t)) d.set(t, d.get(t)+1);
+  });
+  return d;
+}
+
+// Arc diagram — every node on one baseline, ordered by cluster then degree,
+// links drawn as semicircles above. Best for spotting hubs and how tightly
+// two clusters are wired together.
+function renderArcGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, tooltip) {
+  const W = svgEl.clientWidth || 900, H = svgEl.clientHeight || 580;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+  const g = svg.append('g').attr('transform', 'translate(0,' + (H*0.72) + ')');
+  svg.call(d3.zoom().scaleExtent([0.2, 8]).on('zoom', e => g.attr('transform', e.transform)));
+
+  const { clusterOf, colorOf } = detectCommunities(nodes, edges);
+  const deg = nodeDegrees(nodes, edges);
+  const shown = nodes.filter(n => activeTypes.has(n.type||'node'))
+    .sort((a,b) => String(clusterOf.get(a.id)).localeCompare(String(clusterOf.get(b.id))) || deg.get(b.id)-deg.get(a.id));
+  const step = Math.max(4, Math.min(26, W / Math.max(1, shown.length)));
+  const x = new Map(shown.map((n, i) => [n.id, i * step + 20]));
+
+  g.append('g').selectAll('path').data(edges.filter(e => x.has(e.source.id||e.source) && x.has(e.target.id||e.target)))
+    .enter().append('path').attr('fill','none')
+    .attr('stroke', d => colorOf.get(clusterOf.get(d.source.id||d.source)) || '#8b949e')
+    .attr('stroke-width', 0.7).attr('opacity', 0.4)
+    .attr('d', d => {
+      const a = x.get(d.source.id||d.source), b = x.get(d.target.id||d.target);
+      const r = Math.abs(b-a)/2;
+      return 'M'+a+',0 A'+r+','+r+' 0 0,'+(a<b?1:0)+' '+b+',0';
+    });
+
+  g.append('g').selectAll('circle').data(shown).enter().append('circle')
+    .attr('cx', d => x.get(d.id)).attr('cy', 0)
+    .attr('r', d => 2.5 + Math.sqrt(deg.get(d.id)||0) * 1.4)
+    .attr('fill', d => colorOf.get(clusterOf.get(d.id)) || '#8b949e')
+    .style('cursor','pointer')
+    .on('mouseover', (e,d) => { tooltip.style.display='block';
+      tooltip.innerHTML = '<strong>'+d.label+'</strong><br><span class="t-type">'+(d.type||'node')+' · degree '+(deg.get(d.id)||0)+'</span>'; })
+    .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
+    .on('mouseout', () => { tooltip.style.display='none'; });
+
+  return () => {};
+}
+
+// Radial / circular layout — nodes on a ring grouped by cluster, edges as
+// chords through the middle. Good for seeing the whole system at once and how
+// balanced the clusters are.
+function renderRadialGraph(svgEl, nodes, edges, NODE_COLORS, activeTypes, tooltip) {
+  const W = svgEl.clientWidth || 900, H = svgEl.clientHeight || 580;
+  const cx = W/2, cy = H/2, R = Math.min(W,H)*0.42;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+  const g = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.2, 8]).on('zoom', e => g.attr('transform', e.transform)));
+
+  const { clusterOf, colorOf } = detectCommunities(nodes, edges);
+  const deg = nodeDegrees(nodes, edges);
+  const shown = nodes.filter(n => activeTypes.has(n.type||'node'))
+    .sort((a,b) => String(clusterOf.get(a.id)).localeCompare(String(clusterOf.get(b.id))) || deg.get(b.id)-deg.get(a.id));
+  const pos = new Map(shown.map((n, i) => {
+    const ang = (i / shown.length) * Math.PI * 2 - Math.PI/2;
+    return [n.id, [cx + Math.cos(ang)*R, cy + Math.sin(ang)*R]];
+  }));
+
+  g.append('g').selectAll('path').data(edges.filter(e => pos.has(e.source.id||e.source) && pos.has(e.target.id||e.target)))
+    .enter().append('path').attr('fill','none')
+    .attr('stroke', d => colorOf.get(clusterOf.get(d.source.id||d.source)) || '#8b949e')
+    .attr('stroke-width', 0.6).attr('opacity', 0.33)
+    .attr('d', d => {
+      const s = pos.get(d.source.id||d.source), t = pos.get(d.target.id||d.target);
+      return 'M'+s[0]+','+s[1]+' Q'+cx+','+cy+' '+t[0]+','+t[1];
+    });
+
+  g.append('g').selectAll('circle').data(shown).enter().append('circle')
+    .attr('cx', d => pos.get(d.id)[0]).attr('cy', d => pos.get(d.id)[1])
+    .attr('r', d => 2.5 + Math.sqrt(deg.get(d.id)||0) * 1.4)
+    .attr('fill', d => colorOf.get(clusterOf.get(d.id)) || '#8b949e')
+    .style('cursor','pointer')
+    .on('mouseover', (e,d) => { tooltip.style.display='block';
+      tooltip.innerHTML = '<strong>'+d.label+'</strong><br><span class="t-type">'+(d.type||'node')+' · degree '+(deg.get(d.id)||0)+'</span>'; })
+    .on('mousemove', e => { tooltip.style.left=(e.clientX+15)+'px'; tooltip.style.top=(e.clientY-8)+'px'; })
+    .on('mouseout', () => { tooltip.style.display='none'; });
+
+  return () => {};
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
@@ -1466,16 +1608,152 @@ export function generateDashboard(projectRoot: string): string {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, html, 'utf8');
 
-  // Post-process: enrich DATA (code metrics, git churn/co-change, agent session
-  // mining) and splice in the extra relation-graph panels, when those scripts
-  // exist alongside the output. Best-effort — the plain dashboard still works.
-  for (const script of ['enrich-data.mjs', 'add-panels.mjs']) {
-    const scriptPath = path.join(projectRoot, 'graphify-out', script);
+  applyPanels(projectRoot);
+  return outPath;
+}
+
+/** Directory holding the bundled dashboard-enrichment scripts. */
+const PANELS_DIR = path.join(__dirname, 'panels');
+
+/**
+ * Enrich the DATA block (code metrics, git churn/co-change, agent-session
+ * mining) and splice in the 8 relation-graph panels — bundling, chord, arc,
+ * matrix, sankey, radial, particles, hulls. This is what turns the plain 2-view
+ * graph into the full board.
+ *
+ * Scripts ship with Aura (`viz/panels/`) so every project gets them; a
+ * project's own copy under `graphify-out/` still wins if present. Best-effort:
+ * the un-enriched dashboard is already written and stays valid if a step fails.
+ */
+function applyPanels(projectRoot: string, opts: { enrich?: boolean } = {}): void {
+  const enrich = opts.enrich ?? true;
+  const steps = [
+    ...(enrich ? ['enrich-data.mjs'] : []),
+    'add-panels.mjs',
+  ];
+  for (const script of steps) {
+    const local = path.join(projectRoot, 'graphify-out', script);
+    const scriptPath = fs.existsSync(local) ? local : path.join(PANELS_DIR, script);
     if (!fs.existsSync(scriptPath)) continue;
     try {
-      execSync(`node "${scriptPath}" "${projectRoot}"`, { stdio: 'ignore', timeout: 60_000 });
-    } catch { /* keep the un-enriched dashboard */ }
+      execSync(`node "${scriptPath}" "${projectRoot}"`, { stdio: 'ignore', timeout: 90_000 });
+    } catch { /* keep whatever dashboard we have */ }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global (cross-project) harvest
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface GNode { id: string; type: string; label: string; summary?: string; file?: string; project?: string }
+interface GEdge { source: string; target: string; relation?: string }
+
+/**
+ * Merge every project's `graphify-out/graph.json` into one graph.
+ *
+ * - Real code nodes are namespaced `project│id` and tagged with `project`, so
+ *   each project stays a visible cluster.
+ * - External-dependency nodes (`type: 'concept'`) are NOT namespaced — a package
+ *   used by ten projects becomes one shared hub with ten edges, which is what
+ *   makes the cross-project structure legible (the bright connectors in a
+ *   GraphRAG-style view).
+ * - One `project` hub node per project links to that project's files.
+ *
+ * Capped at `maxProjects` (newest-active first) so the merge stays renderable.
+ */
+export function harvestGlobalGraph(maxProjects = 40): { nodes: GNode[]; edges: GEdge[]; extractedAt: number; projects: string[] } {
+  const roots = new Map<string, number>();   // projectRoot -> newest updatedAt
+  const hasGraph = (r: string) => fs.existsSync(path.join(r, 'graphify-out', 'graph.json'));
+  const consider = (r: string | undefined, t: number) => {
+    if (!r || !path.isAbsolute(r) || !hasGraph(r)) return;
+    roots.set(r, Math.max(roots.get(r) ?? 0, t));
+  };
+  for (const s of sessionStore.listAllSessions()) {
+    const t = new Date(s.updatedAt).getTime();
+    consider(s.projectRoot, t);
+    // Older sessions recorded no projectRoot — reconstruct it from the dir slug
+    // (`_mnt_bigdata_x` → `/mnt/bigdata/x`). Lossy for paths that had `_`/`.` in
+    // them, but it recovers the common case, and hasGraph() gates a wrong guess.
+    if ((!s.projectRoot || !path.isAbsolute(s.projectRoot)) && s.project?.startsWith('_')) {
+      consider('/' + s.project.slice(1).replace(/_/g, '/'), t);
+    }
+  }
+  const ordered = [...roots.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxProjects).map(e => e[0]);
+
+  const nodes = new Map<string, GNode>();
+  const edges: GEdge[] = [];
+  const shortName = (r: string) => path.basename(r) || r;
+  const usedShort = new Map<string, number>();
+
+  for (const root of ordered) {
+    const g = loadGraph(root) as { nodes?: GNode[]; edges?: GEdge[] } | null;
+    if (!g?.nodes?.length) continue;
+    let proj = shortName(root);
+    const n = (usedShort.get(proj) ?? 0) + 1;
+    usedShort.set(proj, n);
+    if (n > 1) proj = `${proj}~${n}`;               // disambiguate same-basename projects
+
+    const hubId = `proj│${proj}`;
+    nodes.set(hubId, { id: hubId, type: 'project', label: proj, project: proj, summary: root });
+
+    const rid = (id: string, type: string) => type === 'concept' ? `dep│${id}` : `${proj}│${id}`;
+
+    for (const nd of g.nodes) {
+      const type = nd.type || 'node';
+      const id = rid(nd.id, type);
+      if (!nodes.has(id)) {
+        nodes.set(id, { ...nd, id, project: type === 'concept' ? undefined : proj });
+      }
+      if (type === 'file') edges.push({ source: hubId, target: id, relation: 'owns' });
+    }
+    for (const e of g.edges ?? []) {
+      const srcNode = g.nodes.find(x => x.id === e.source);
+      const tgtNode = g.nodes.find(x => x.id === e.target);
+      edges.push({
+        source: rid(e.source, srcNode?.type || 'node'),
+        target: rid(e.target, tgtNode?.type || 'node'),
+        relation: e.relation,
+      });
+    }
+  }
+
+  return {
+    nodes: [...nodes.values()],
+    edges,
+    extractedAt: Date.now(),
+    projects: ordered.map(shortName),
+  };
+}
+
+/**
+ * Build the cross-project dashboard at `~/.aura/graphify-out/dashboard.html`.
+ * Sessions are aggregated across every project; plans/memory are left to the
+ * per-project view. Returns the output path.
+ */
+export function generateGlobalDashboard(): string {
+  const graph = harvestGlobalGraph();
+  const sessions = sessionStore.listAllSessions()
+    .slice(0, 200)
+    .map(s => stripSession(s as unknown as ChatSession));
+
+  const html = buildHtml({
+    graph,
+    plans: [],
+    sessions,
+    memory: [],
+    projectName: `all projects (${graph.projects.length})`,
+    generatedAt: new Date().toLocaleString(),
+  });
+
+  const base = path.join(process.env.HOME ?? '/tmp', '.aura');
+  const outDir = path.join(base, 'graphify-out');
+  fs.mkdirSync(outDir, { recursive: true });
+  const outPath = path.join(outDir, 'dashboard.html');
+  fs.writeFileSync(outPath, html, 'utf8');
+  fs.writeFileSync(path.join(outDir, 'graph.json'), JSON.stringify(graph, null, 2), 'utf8');
+  // Panels only — enrich-data's per-file metrics / git churn don't apply to a
+  // synthetic cross-project graph.
+  applyPanels(base, { enrich: false });
   return outPath;
 }
 

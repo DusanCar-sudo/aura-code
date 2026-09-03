@@ -298,6 +298,29 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     transport: 'openai-compatible',
     baseUrl: 'https://api.sambanova.ai/v1', baseUrlEnv: ['SAMBANOVA_BASE_URL'],
   },
+  {
+    family: 'mistral', displayName: 'Mistral AI',
+    prefixes: ['mistral/'],
+    barePrefixes: ['codestral-', 'mistral-', 'pixtral-', 'open-mistral-'],
+    apiKeyEnv: ['MISTRAL_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.mistral.ai/v1', baseUrlEnv: ['MISTRAL_BASE_URL'],
+  },
+  {
+    family: 'together', displayName: 'Together AI',
+    prefixes: ['together/'],
+    apiKeyEnv: ['TOGETHER_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.together.xyz/v1', baseUrlEnv: ['TOGETHER_BASE_URL'],
+  },
+  {
+    family: 'cohere', displayName: 'Cohere',
+    prefixes: ['cohere/'],
+    barePrefixes: ['command-'],
+    apiKeyEnv: ['COHERE_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.cohere.com/v2', baseUrlEnv: ['COHERE_BASE_URL'],
+  },
 
   // ── Local backends: no vendor URL, no secret ──────────────────────────────
   {

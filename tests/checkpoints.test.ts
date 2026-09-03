@@ -9,6 +9,7 @@ import {
   restoreCheckpoint,
   pruneCheckpoints,
   deleteCheckpoint,
+  checkpointFileDiff,
   gitDirOf,
 } from '../src/checkpoints/engine.js';
 
@@ -275,5 +276,37 @@ describe('checkpoints engine', () => {
     expect(fs.readFileSync(normalFile, 'utf8')).toContain('test-app');
 
     fs.rmSync(normalFile);
+  });
+
+  describe('checkpointFileDiff', () => {
+    it('shows a unified diff of a file between the latest checkpoint and now', async () => {
+      await createCheckpoint(root, 'before edit');
+      fs.writeFileSync(path.join(root, 'a.txt'), 'original a\nplus a new line\n');
+
+      const diff = await checkpointFileDiff(root, 'a.txt');
+      expect(diff).toMatch(/^diff --git a\/a\.txt b\/a\.txt/m);
+      expect(diff).toMatch(/^\+plus a new line$/m);
+      expect(diff).not.toMatch(/b\.txt/);   // scoped to the one file
+    });
+
+    it('is empty when the file is unchanged since the checkpoint', async () => {
+      await createCheckpoint(root, 'snap');
+      expect(await checkpointFileDiff(root, 'a.txt')).toBe('');
+    });
+
+    it('is empty with no checkpoints or outside a repo', async () => {
+      expect(await checkpointFileDiff(root, 'a.txt')).toBe('');
+      const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-norepo-'));
+      expect(await checkpointFileDiff(bare, 'x')).toBe('');
+      fs.rmSync(bare, { recursive: true, force: true });
+    });
+
+    it('produces a patch git can apply in reverse (the revert-hunk path)', async () => {
+      await createCheckpoint(root, 'before');
+      fs.writeFileSync(path.join(root, 'a.txt'), 'REPLACED\n');
+      const diff = await checkpointFileDiff(root, 'a.txt');
+      execFileSync('git', ['apply', '--reverse', '--recount', '-'], { cwd: root, input: diff });
+      expect(fs.readFileSync(path.join(root, 'a.txt'), 'utf8')).toBe('original a\n');
+    });
   });
 });
