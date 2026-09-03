@@ -14,7 +14,7 @@ export function envMaxTokens(): number | undefined {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
 }
 import { clampEffort, parseEffort } from './effort.js';
-import { paramPolicyFor } from './param-policy.js';
+import { paramPolicyFor, authErrorHint } from './param-policy.js';
 import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
@@ -27,6 +27,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   model: string;
 
   private client: OpenAI;
+  private configuredKey?: string;
   private maxTokens: number;
   private temperature: number;
   private frequencyPenalty: number;
@@ -68,8 +69,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.presencePenalty = pinned.presencePenalty ?? config.presencePenalty ?? 0.3;
     this.name = providerName ?? deriveProviderName(config);
 
+    // Kept for the 401 hint only — never logged, never sent anywhere but here.
+    this.configuredKey = config.apiKey ?? resolveApiKey(config);
     this.client = new OpenAI({
-      apiKey: config.apiKey ?? resolveApiKey(config),
+      apiKey: this.configuredKey,
       baseURL: config.baseUrl ?? resolveBaseUrl(config),
       defaultHeaders: {
         'HTTP-Referer': 'https://github.com/dusan-mile/aura',
@@ -99,7 +102,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     tools: ToolDefinition[],
   ): Promise<LLMResponse> {
     const messages = toOpenAIMessages(system, history);
-    const response = await this.client.chat.completions.create({
+    const response = await this.withAuthHint(this.client.chat.completions.create({
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
@@ -110,8 +113,27 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // own benchmarks) before writing any visible content. "high" keeps useful
       // reasoning for code quality while roughly halving that token burn.
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
-    } as OpenAI.ChatCompletionCreateParamsNonStreaming);
+    } as OpenAI.ChatCompletionCreateParamsNonStreaming));
     return fromOpenAIResponse(response);
+  }
+
+  /**
+   * Append the wrong-slot hint to a 401, when the stored key's prefix gives
+   * one. The endpoint's own text — "Invalid Authentication" — cannot tell an
+   * operator anything, and the mistake it actually points at (an OpenRouter
+   * key under MOONSHOT_API_KEY) is visible from here alone.
+   */
+  private async withAuthHint<T>(p: Promise<T>): Promise<T> {
+    try {
+      return await p;
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status === 401) {
+        const hint = authErrorHint({ model: this.model, baseUrl: this.client.baseURL }, this.configuredKey);
+        if (hint) throw new Error(`401 — ${hint}`, { cause: e });
+      }
+      throw e;
+    }
   }
 
   /**
@@ -149,7 +171,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const messages = toOpenAIMessages(system, history);
     // Lets the idle guard tear down the socket instead of leaking it.
     const controller = new AbortController();
-    const rawStream = await this.client.chat.completions.create({
+    const rawStream = await this.withAuthHint(this.client.chat.completions.create({
       model: this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
@@ -159,7 +181,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       stream: true,
       stream_options: { include_usage: true },
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
-    } as OpenAI.ChatCompletionCreateParamsStreaming, { signal: controller.signal });
+    } as OpenAI.ChatCompletionCreateParamsStreaming, { signal: controller.signal }));
     const stream = withIdleTimeout(rawStream, {
       idleMs: streamIdleMs(),
       onStall: () => controller.abort(),

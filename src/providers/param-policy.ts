@@ -59,3 +59,43 @@ export function paramPolicyFor(target: { model?: string; baseUrl?: string }): Pa
   }
   return undefined;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 401s that name their own cause.
+//
+// Providers mostly issue `sk-…` keys, so a key pasted into the wrong
+// provider's slot authenticates nowhere and the endpoint's answer — a bare
+// "Invalid Authentication" — gives nothing away. The prefixes below are
+// distinctive enough to recognise, so a 401 can say what was probably
+// pasted where. Seen in the wild: an OpenRouter key under MOONSHOT_API_KEY,
+// which 401s every Kimi request until the real key is restored.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Key prefixes that identify a provider other than the one being called. */
+const KEY_PREFIXES: Array<{ prefix: string; label: string }> = [
+  { prefix: 'sk-or-v1-', label: 'an OpenRouter key' },
+  { prefix: 'sk-or-',      label: 'an OpenRouter key' },
+  { prefix: 'sk-ant-',     label: 'an Anthropic key' },
+  { prefix: 'gsk_',        label: 'a Groq key' },
+  { prefix: 'r8_',         label: 'a Replicate key' },
+  { prefix: 'AIza',        label: 'a Google API key' },
+];
+
+/**
+ * A hint for a 401 from this target, or undefined when the key looks plausible
+ * (or is hidden from us). Only ever names the *kind* of key — never any part
+ * of the key itself.
+ */
+export function authErrorHint(
+  target: { model?: string; baseUrl?: string },
+  apiKey?: string,
+): string | undefined {
+  if (!apiKey) return undefined;
+  const wrong = KEY_PREFIXES.find((k) => apiKey.startsWith(k.prefix));
+  if (!wrong) return undefined;
+  // An OpenRouter key is correct on OpenRouter — only flag it elsewhere.
+  const isOpenRouter = target.model?.startsWith('openrouter/')
+    || (target.baseUrl ?? '').includes('openrouter.ai');
+  if (wrong.label.includes('OpenRouter') && isOpenRouter) return undefined;
+  return `the stored key for this provider is ${wrong.label} — it was probably saved into the wrong provider's slot (:apikey the correct key, or Settings → Models)`;
+}

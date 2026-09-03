@@ -22,13 +22,16 @@ function stripAnsi(s: string): string {
   return s.replace(/\x1b\][^\x07]*\x07/g, '').replace(/\x1b\[[0-9;?<]*[A-Za-z~]/g, '');
 }
 
-/** SGR mouse report: ESC [ < btn ; col ; row (M press/drag, m release). */
-const press   = (row: number) => `\x1b[<0;5;${row}M`;
-const drag    = (row: number) => `\x1b[<32;5;${row}M`;
-const release = (row: number) => `\x1b[<0;5;${row}m`;
-const wheelUp   = (row: number) => `\x1b[<64;5;${row}M`;
-const wheelDown = (row: number) => `\x1b[<65;5;${row}M`;
-const rightClick = (row: number) => `\x1b[<2;5;${row}M`;
+/** SGR mouse report: ESC [ < btn ; col ; row (M press/drag, m release).
+ *  Columns are 1-based screen columns; the default of 5 lands mid-word, so
+ *  tests wanting whole lines say so with an explicit column. */
+const at = (btn: number, col: number, row: number, final: 'M' | 'm') => `\x1b[<${btn};${col};${row}${final}`;
+const press    = (row: number, col = 1) => at(0, col, row, 'M');
+const drag     = (row: number, col = 1) => at(32, col, row, 'M');
+const release  = (row: number, col = 1) => at(0, col, row, 'm');
+const wheelUp   = (row: number) => at(64, 5, row, 'M');
+const wheelDown = (row: number) => at(65, 5, row, 'M');
+const rightClick = (row: number) => at(2, 5, row, 'M');
 
 describe('TUI mouse selection', () => {
   const stdoutState = {
@@ -84,9 +87,9 @@ describe('TUI mouse selection', () => {
   });
 
   it('copies the selected lines on release, with colour stripped', async () => {
-    process.stdin.emit('data', press(4));
-    process.stdin.emit('data', drag(6));
-    process.stdin.emit('data', release(6));
+    process.stdin.emit('data', press(4, 1));
+    process.stdin.emit('data', drag(6, 7));   // col 7 = past the end of "line N"
+    process.stdin.emit('data', release(6, 7));
 
     // The copy is fire-and-forget through a dynamic import, so it lands a
     // few microtasks later rather than on the keystroke.
@@ -116,16 +119,56 @@ describe('TUI mouse selection', () => {
     expect(selectionRange()![0]).toBe(0);
   });
 
-  it('shows a live line count while selecting, then the copy confirmation', async () => {
-    process.stdin.emit('data', press(4));
-    process.stdin.emit('data', drag(7));
-    expect(stripAnsi(chunks.join(''))).toMatch(/4 lines · release to copy/);
+  it('shows the select banner while selecting, then the copy confirmation', async () => {
+    process.stdin.emit('data', press(4, 1));
+    process.stdin.emit('data', drag(7, 1));
+    expect(stripAnsi(chunks.join(''))).toMatch(/-- SELECT --.*release to copy/);
 
     chunks = [];
-    process.stdin.emit('data', release(7));
+    process.stdin.emit('data', release(7, 1));
     await vi.waitFor(() => {
-      expect(stripAnsi(chunks.join(''))).toMatch(/-- COPIED --.*copied 4 lines/);
+      expect(stripAnsi(chunks.join(''))).toMatch(/-- COPIED --.*copied \d+ chars/);
     });
+  });
+
+  it('copies exactly the highlighted characters on one line, not the whole line', async () => {
+    // "line 4": columns 2-4 spell "ine".
+    process.stdin.emit('data', press(4, 2));
+    process.stdin.emit('data', drag(4, 4));
+    process.stdin.emit('data', release(4, 4));
+    await vi.waitFor(() => expect(copied.calls).toBe(1));
+    expect(copied.text).toBe('ine');
+  });
+
+  it('a multi-line selection takes partial first and last lines, whole middle ones', async () => {
+    // The view is bottom-anchored, so which line numbers sit under rows 4-6
+    // depends on the buffer — what the assertion pins is the shape: a partial
+    // tail of the first line, a whole middle line, a partial head of the last.
+    process.stdin.emit('data', press(4, 5));
+    process.stdin.emit('data', drag(6, 3));
+    process.stdin.emit('data', release(6, 3));
+    await vi.waitFor(() => expect(copied.calls).toBe(1));
+    expect(copied.text).toMatch(/^ \d+\nline \d+\nlin$/);
+  });
+
+  it('selecting backwards copies the same characters as forwards', async () => {
+    // Anchor at the later line, drag up to the earlier one — the copy is the
+    // normalised range, identical to dragging the other way.
+    process.stdin.emit('data', press(6, 3));
+    process.stdin.emit('data', drag(4, 5));
+    process.stdin.emit('data', release(4, 5));
+    await vi.waitFor(() => expect(copied.calls).toBe(1));
+    expect(copied.text).toMatch(/^ \d+\nline \d+\nlin$/);
+  });
+
+  it('paints only the selected columns on the boundary lines', () => {
+    chunks = [];
+    process.stdin.emit('data', press(4, 2));
+    process.stdin.emit('data', drag(4, 4));
+    const out = chunks.join('');
+    // Reverse video wraps just "ine"; the rest of the row stays plain.
+    expect(out).toMatch(/l\x1b\[7mine\x1b\[27m \d+/);
+    expect(out).not.toMatch(/\x1b\[7mline \d+/);
   });
 
   it('highlights the selected rows with reverse video', () => {

@@ -1557,8 +1557,6 @@ let abortController: AbortController | null = null;
     },
   });
 
-  let tuiInputHistory = [];
-
   // One budget for the whole REPL process, not one per user message. Each
   // message starts a fresh runAgentLoop whose own turn counter restarts at
   // zero, while the history — and therefore the input cost of every call —

@@ -43,6 +43,41 @@ const RUBY = RUBY_ACCENT;
 
 let inputBuffer = '';
 let cursorPos = 0;
+
+// ── Input-box history ───────────────────────────────────────────────────────
+// Every line submitted from this box comes back with a single Arrow-Up, the
+// way a shell recalls its last command. Pressing Arrow-Up a second time in a
+// row is read as "I actually wanted to scroll": the recall is undone and the
+// scrollback opens. Arrow-Down puts a recalled line back (un-recall) without
+// the detour through scroll mode.
+const inputHistory: string[] = [];
+const INPUT_HISTORY_MAX = 200;
+let lastKeyWasUp = false;
+/** What the box held before the recall — normally empty, which is what a
+ *  second Arrow-Up or Arrow-Down puts back. */
+let bufferBeforeRecall: string | null = null;
+
+/** Any edit or submit after a recall ends its undo window — the box content is
+ *  then the user's own, not the recalled line. */
+function endRecall(): void {
+  bufferBeforeRecall = null;
+}
+
+/** Test hook: the history is module state and outlives destroyTui. */
+export function clearInputHistory(): void {
+  inputHistory.length = 0;
+  lastKeyWasUp = false;
+  bufferBeforeRecall = null;
+}
+
+function recordInputLine(line: string): void {
+  const t = line.replace(/\n+$/, '').trim();
+  if (!t) return;
+  // A consecutive duplicate carries no information the last entry lacks.
+  if (inputHistory[inputHistory.length - 1] === t) return;
+  inputHistory.push(t);
+  if (inputHistory.length > INPUT_HISTORY_MAX) inputHistory.shift();
+}
 let inputActive = false;
 export { inputActive };
 let stdinHandler: ((data: string) => void) | null = null;
@@ -114,8 +149,12 @@ const SCROLL_REENTRY_GRACE_MS = 500;
  */
 let selecting = false;
 /** Indices into liveScrollLines(); anchor is where the drag began. */
-let selAnchor: number | null = null;
-let selHead: number | null = null;
+/** One end of a selection: which scrollback line, and which visible column of
+ *  it (0-based, the character under the pointer). Selection is character-exact —
+ *  copy hands over exactly the highlighted range, not the whole lines. */
+interface SelCell { line: number; col: number }
+let selAnchor: SelCell | null = null;
+let selHead: SelCell | null = null;
 /** Cleared on the next keypress, so the confirmation doesn't linger. */
 let selToast: string | null = null;
 let pendingG = false;
@@ -633,19 +672,10 @@ function renderScrollView(): void {
   if (bannerRowCount > 0) {
     bannerLines.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
   }
-  const sel = selectionRange();
+  const span = selectionSpan();
   visible.forEach((line, i) => {
     const idx = start + i;
-    const hit = sel !== null && idx >= sel[0] && idx <= sel[1];
-    // Reverse video for the whole row rather than around the text: padding to
-    // the view width is what makes a multi-line selection read as one block
-    // instead of a ragged column of highlighted words.
-    if (hit) {
-      const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
-      rawWrite('\x1b[7m' + truncVisible(plain, width).padEnd(width) + '\x1b[27m');
-    } else {
-      rawWrite(truncVisible(line, width));
-    }
+    rawWrite(paintLine(line, idx, span, width));
     rawWrite('\n');
   });
   for (let i = visible.length; i < vh; i++) rawWrite('\n');
@@ -659,16 +689,55 @@ function renderScrollView(): void {
 
   const bottom = start + visible.length;
   const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, liveLines.length)) * 100)}%`;
-  const selCount = sel ? sel[1] - sel[0] + 1 : 0;
+  const hasSelection = selectionSpan() !== null;
   const indicator = selToast
     ? ACCENT.bold(' -- COPIED -- ') + TEXT_DIM(selToast + ' · drag to select again · Esc insert')
-    : selCount > 0
+    : hasSelection
       ? ACCENT.bold(' -- SELECT -- ')
-        + TEXT_DIM(`${selCount} line${selCount === 1 ? '' : 's'} · release to copy · drag past the edge to scroll`)
+        + TEXT_DIM('release to copy · drag past the edge to scroll')
       : ACCENT.bold(' -- SCROLL -- ')
         + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · drag to select · wheel · j/k · gg/G · Shift+drag = terminal select`);
   rawWrite(`\x1b[${sr};1H`);
   rawWrite(truncVisible(indicator, width));
+}
+
+/**
+ * Paint one scrollback line, highlighting exactly the selected columns.
+ *
+ * Interior lines of a selection reverse the whole row — padding to the view
+ * width is what makes a multi-line selection read as one block. The two
+ * boundary lines reverse only the columns actually under the selection, so
+ * what looks highlighted is what copy will hand over — no more whole-line
+ * grabs when a few words were what was wanted. Boundary lines are painted
+ * from their plain text (colour stripped) because reverse-video segments
+ * cannot be cut into an arbitrary escape sequence without corrupting it.
+ */
+function paintLine(line: string, idx: number, span: { lo: SelCell; hi: SelCell } | null, width: number): string {
+  if (!span || idx < span.lo.line || idx > span.hi.line) {
+    return truncVisible(line, width);
+  }
+  const plain = plainLine(line);
+  const padded = plain.padEnd(width).slice(0, Math.max(width, plain.length));
+  let from: number;
+  let to: number;   // inclusive
+  if (span.lo.line === span.hi.line) {
+    from = Math.min(span.lo.col, span.hi.col);
+    to = Math.max(span.lo.col, span.hi.col);
+  } else if (idx === span.lo.line) {
+    from = span.lo.col;
+    to = plain.length;
+  } else if (idx === span.hi.line) {
+    from = 0;
+    to = span.hi.col;
+  } else {
+    from = 0;
+    to = Math.max(0, width - 1);
+  }
+  from = Math.max(0, Math.min(from, padded.length));
+  to = Math.max(from - 1, Math.min(to, padded.length - 1));
+  return padded.slice(0, from)
+    + '\x1b[7m' + padded.slice(from, to + 1) + '\x1b[27m'
+    + padded.slice(to + 1);
 }
 
 /** Screen row (1-based) of the first content line, below the banner. */
@@ -689,10 +758,51 @@ function rowToLineIndex(row: number): number | null {
   return idx < lines.length ? idx : null;
 }
 
-/** The selected range as [lo, hi] inclusive, or null when nothing is selected. */
-export function selectionRange(): [number, number] | null {
+/** The two ends ordered first-to-last in reading order. */
+function selectionSpan(): { lo: SelCell; hi: SelCell } | null {
   if (selAnchor === null || selHead === null) return null;
-  return selAnchor <= selHead ? [selAnchor, selHead] : [selHead, selAnchor];
+  const fwd = selAnchor.line < selHead.line
+    || (selAnchor.line === selHead.line && selAnchor.col <= selHead.col);
+  return fwd ? { lo: selAnchor, hi: selHead } : { lo: selHead, hi: selAnchor };
+}
+
+/** The selected lines as [lo, hi] inclusive, or null when nothing is selected. */
+export function selectionRange(): [number, number] | null {
+  const span = selectionSpan();
+  return span ? [span.lo.line, span.hi.line] : null;
+}
+
+/** The visible text of a scrollback line — escape codes stripped, trailing
+ *  whitespace trimmed. This is what selection addresses by column. */
+function plainLine(line: string): string {
+  return line.replace(/\x1b\[[0-9;]*m/g, '').replace(/\s+$/, '');
+}
+
+/**
+ * The exact text a selection stands for: the range runs from the character
+ * under the anchor to the character under the head, so the boundary lines
+ * contribute partial text and the lines between contribute themselves whole.
+ */
+function selectionText(): string | null {
+  const span = selectionSpan();
+  if (!span) return null;
+  const lines = liveScrollLines();
+  const { lo, hi } = span;
+  if (hi.line >= lines.length || lo.line < 0) return null;
+  let text: string;
+  if (lo.line === hi.line) {
+    const a = Math.min(lo.col, hi.col);
+    const b = Math.max(lo.col, hi.col);
+    text = plainLine(lines[lo.line]).slice(a, b + 1);
+  } else {
+    const parts: string[] = [
+      plainLine(lines[lo.line]).slice(lo.col),
+      ...lines.slice(lo.line + 1, hi.line).map(plainLine),
+      plainLine(lines[hi.line]).slice(0, hi.col + 1),
+    ];
+    text = parts.join('\n');
+  }
+  return text.trim() ? text : null;
 }
 
 function clearSelection(): void {
@@ -708,20 +818,15 @@ function clearSelection(): void {
  * terminal but land as literal bytes in whatever the text is pasted into.
  */
 function copySelection(): void {
-  const range = selectionRange();
-  if (!range) return;
-  const [lo, hi] = range;
-  const text = liveScrollLines().slice(lo, hi + 1)
-    .map(l => l.replace(/\x1b\[[0-9;]*m/g, '').replace(/\s+$/, ''))
-    .join('\n');
-  const count = hi - lo + 1;
+  const text = selectionText();
+  if (!text) { clearSelection(); return; }
 
   void import('../tools/clipboard.js')
     .then(m => m.clipboardTool({ action: 'copy', text }))
     .then(res => {
       selToast = res.startsWith('Error')
         ? res
-        : `copied ${count} line${count === 1 ? '' : 's'} (${text.length} chars)`;
+        : `copied ${text.length} char${text.length === 1 ? '' : 's'}`;
       if (scrollMode) renderScrollView();
     })
     .catch(() => { /* a failed copy must not take the TUI down */ });
@@ -750,7 +855,7 @@ function pasteFromClipboard(): void {
  * SGR mouse report: ESC [ < b ; x ; y (M=press/drag, m=release).
  * Returns true when the sequence was consumed.
  */
-function handleMouse(button: number, _col: number, row: number, pressed: boolean): void {
+function handleMouse(button: number, col: number, row: number, pressed: boolean): void {
   const wheel = button & 64;
   const motion = button & 32;
   const btn = button & 3;
@@ -799,8 +904,10 @@ function handleMouse(button: number, _col: number, row: number, pressed: boolean
       enterScrollMode(0);
     }
     selecting = true;
-    selAnchor = idx;
-    selHead = idx;
+    // SGR columns are 1-based; the cell under the pointer is col-1.
+    const cell = { line: idx, col: Math.max(0, col - 1) };
+    selAnchor = cell;
+    selHead = cell;
     selToast = null;
     renderScrollView();
     return;
@@ -819,7 +926,7 @@ function handleMouse(button: number, _col: number, row: number, pressed: boolean
       scrollOffset -= 1;
     }
     const idx = rowToLineIndex(Math.min(Math.max(row, top), top + vh - 1));
-    if (idx !== null) selHead = idx;
+    if (idx !== null) selHead = { line: idx, col: Math.max(0, col - 1) };
     renderScrollView();
     return;
   }
@@ -841,6 +948,7 @@ function enterScrollMode(initialOffset: number): void {
 
 function exitScrollMode(): void {
   scrollMode = false;
+  lastKeyWasUp = false;
   leftScrollAt = Date.now();
   pendingG = false;
   scrollOffset = 0;
@@ -1115,9 +1223,11 @@ function handleChar(ch: string): void {
       echoUserLine(line);
     }
     const expanded = expandPastes(line);
+    recordInputLine(line);
     inputBuffer = '';
     cursorPos = 0;
     clearPastes();
+    endRecall();
     drawPromptBottom();
     if (expanded && onEnter) onEnter(expanded);
     return;
@@ -1177,6 +1287,7 @@ function handleChar(ch: string): void {
     }
     inputBuffer = inputBuffer.slice(0, cursorPos) + ch + inputBuffer.slice(cursorPos);
     cursorPos++;
+    endRecall();
     if (fullscreenPrompt && pendingInput) {
       // Echo typed char directly in fullscreen mode
       rawWrite(ch);
@@ -1212,6 +1323,12 @@ function handleScrollKey(key: string): void {
 }
 
 function handleKey(key: string): void {
+  // "Consecutive Arrow-Up" means the key before this one was also Arrow-Up —
+  // no key in between. Setting it here, before the branch maze below, is what
+  // makes typing after a recall break the chain instead of leaving a stale
+  // flag that a much later Arrow-Up would act on.
+  const prevWasUp = lastKeyWasUp;
+  lastKeyWasUp = key === '\x1b[A';
   if (scrollMode) {
     // Any printable character leaves scroll mode and is then typed normally —
     // it falls through to the input handling below rather than being consumed.
@@ -1239,7 +1356,33 @@ function handleKey(key: string): void {
     enterScrollMode(0);
     return;
   }
-  if (key === '\x1b[A' && inputBuffer.length === 0) {
+  if (overlay === 'none' && key === '\x1b[A' && prevWasUp && bufferBeforeRecall !== null) {
+    // Two Arrow-Ups in a row: scrolling is what was wanted. Put the box back
+    // the way the recall found it first — leaving the recalled text in the
+    // input would make the next Enter resubmit an old line.
+    inputBuffer = bufferBeforeRecall;
+    cursorPos = inputBuffer.length;
+    enterScrollMode(1);
+    return;
+  }
+  if (overlay === 'none' && key === '\x1b[B' && prevWasUp && bufferBeforeRecall !== null) {
+    // Arrow-Down right after a recall puts the box back, without opening
+    // scroll mode the way a second Arrow-Up does.
+    inputBuffer = bufferBeforeRecall;
+    cursorPos = inputBuffer.length;
+    drawPromptBottom();
+    return;
+  }
+  if (key === '\x1b[A' && inputBuffer.length === 0 && overlay === 'none') {
+    const last = inputHistory[inputHistory.length - 1];
+    if (last !== undefined) {
+      bufferBeforeRecall = inputBuffer;
+      inputBuffer = last;
+      cursorPos = inputBuffer.length;
+      drawPromptBottom();
+      return;
+    }
+    // Nothing typed yet this session — Arrow-Up keeps its old job.
     enterScrollMode(1);
     return;
   }
@@ -1453,6 +1596,14 @@ export function initTui(): void {
 export function destroyTui(): void {
   stopToolSpinner();
   scrollMode = false;
+  // The pager's position is per-view. Leaving it set means the next view in
+  // this process starts scrolled to where the last one died — invisible in a
+  // real exit, but exactly the kind of stale state that makes a reused
+  // process (and a reused test file) disagree with a fresh one.
+  scrollOffset = 0;
+  selecting = false;
+  selAnchor = null;
+  selHead = null;
   lastPromptStartRow = null;
   lastPromptScreenRows = null;
   stopInput();

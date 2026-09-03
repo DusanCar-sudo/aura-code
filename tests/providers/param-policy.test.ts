@@ -77,3 +77,22 @@ describe('OpenAICompatibleProvider sampling parameters', () => {
     expect(sampling({ model: 'deepseek-v4-flash', temperature: 0.9 }).temperature).toBe(0.9);
   });
 });
+
+import { authErrorHint } from '../../src/providers/param-policy.js';
+
+describe('authErrorHint', () => {
+  it('recognises a key saved into the wrong provider\'s slot', () => {
+    // Seen in the wild: an OpenRouter key under MOONSHOT_API_KEY — every Kimi
+    // request 401s with a bare "Invalid Authentication" that says nothing.
+    expect(authErrorHint({ model: 'kimi/kimi-k3' }, 'sk-or-v1-6abc…5ed6'))
+      .toContain('OpenRouter key');
+  });
+
+  it('stays quiet when the key belongs to the provider being called', () => {
+    expect(authErrorHint({ model: 'openrouter/moonshotai/kimi-k3' }, 'sk-or-v1-6abc…5ed6'))
+      .toBeUndefined();
+    // Moonshot's own keys are bare `sk-…` — no prefix matches, no hint.
+    expect(authErrorHint({ model: 'kimi/kimi-k3' }, 'sk-0123456789abcdef')).toBeUndefined();
+    expect(authErrorHint({ model: 'kimi/kimi-k3' }, undefined)).toBeUndefined();
+  });
+});

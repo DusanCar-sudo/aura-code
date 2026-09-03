@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildBannerLines } from '../../src/cli/diamond.js';
 import {
+  clearInputHistory,
   createTuiDisplay,
   destroyTui,
   initTui,
@@ -387,5 +388,148 @@ describe('TUI cursor preservation', () => {
     expect(output).toContain('a');
     // Ensure we are back in insert mode / returned cursor to output region
     expect(output).toContain('\x1b[17;1H');
+  });
+});
+
+describe('input-box history', () => {
+  const stdoutState = {
+    columns: Object.getOwnPropertyDescriptor(process.stdout, 'columns'),
+    rows: Object.getOwnPropertyDescriptor(process.stdout, 'rows'),
+  };
+
+  let chunks: string[] = [];
+  let writeSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    chunks = [];
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 80 });
+    Object.defineProperty(process.stdout, 'rows', { configurable: true, value: 24 });
+    writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => {
+      chunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+  });
+
+  afterEach(() => {
+    try {
+      setBannerLines([]);
+      stopInput();
+      destroyTui();
+    } catch {
+      // Best-effort cleanup for module-level TUI state.
+    }
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    writeSpy.mockRestore();
+
+    if (stdoutState.columns) {
+      Object.defineProperty(process.stdout, 'columns', stdoutState.columns);
+    }
+    if (stdoutState.rows) {
+      Object.defineProperty(process.stdout, 'rows', stdoutState.rows);
+    }
+  });
+
+  const submit = (line: string) => {
+    for (const ch of line) process.stdin.emit('data', ch);
+    process.stdin.emit('data', '\r');
+    chunks = [];
+  };
+
+  beforeEach(() => {
+    // The history is module state and outlives destroyTui — without this,
+    // earlier tests' submissions leak into later recall assertions.
+    clearInputHistory();
+  });
+
+  it('Arrow-Up recalls the last line submitted from the box', () => {
+    initTui();
+    startInput();
+    submit(':model glm-5.3-flash');
+
+    process.stdin.emit('data', '\x1b[A');
+
+    expect(chunks.join('')).toContain(':model glm-5.3-flash');
+  });
+
+  it('a second consecutive Arrow-Up undoes the recall and opens scroll mode', () => {
+    initTui();
+    startInput();
+    writeOutput('scrollback line so scroll mode has something to show');
+    submit('first task');
+
+    process.stdin.emit('data', '\x1b[A');
+    chunks = [];
+    process.stdin.emit('data', '\x1b[A');
+    expect(chunks.join('')).toContain('-- SCROLL --');
+
+    // Leaving scroll mode shows an empty box: the recall was undone, so the
+    // next Enter cannot resubmit the old line by accident.
+    process.stdin.emit('data', 'i');
+    chunks = [];
+    process.stdin.emit('data', 'z');
+    expect(chunks.join('')).toContain('│ z');
+    expect(chunks.join('')).not.toContain('first task');
+  });
+
+  it('Arrow-Down right after a recall restores the box without scroll mode', () => {
+    initTui();
+    startInput();
+    submit('some task');
+
+    process.stdin.emit('data', '\x1b[A');
+    chunks = [];
+    process.stdin.emit('data', '\x1b[B');
+
+    const output = chunks.join('');
+    expect(output).not.toContain('-- SCROLL --');
+    expect(output).not.toContain('│ some task');
+  });
+
+  it('typing after a recall breaks the chain, so a later Arrow-Up neither scrolls nor undoes', () => {
+    initTui();
+    startInput();
+    submit('task one');
+
+    process.stdin.emit('data', '\x1b[A');
+    process.stdin.emit('data', 'x');
+    chunks = [];
+    // Arrow-Up with a non-empty buffer takes no action at all — in particular
+    // it must not read as "consecutive" and open scroll mode over the edit.
+    process.stdin.emit('data', '\x1b[A');
+    expect(chunks.join('')).not.toContain('-- SCROLL --');
+
+    // The edit is still in the box: one more character redraws it intact.
+    process.stdin.emit('data', 'y');
+    expect(chunks.join('')).toContain('task onexy');
+  });
+
+  it('with nothing ever submitted, Arrow-Up keeps its old job: scrollback', () => {
+    initTui();
+    startInput();
+    // More lines than the view is tall — otherwise there is nothing to
+    // scroll to and scroll mode declines to open.
+    for (let i = 0; i < 25; i++) writeOutput(`scrollback line ${i}`);
+    chunks = [];
+
+    process.stdin.emit('data', '\x1b[A');
+
+    expect(chunks.join('')).toContain('-- SCROLL --');
+  });
+
+  it('a second submit of the same line is not recorded twice', () => {
+    initTui();
+    startInput();
+    submit('same line');
+    submit('same line');
+    // Recall once, then again after the second submit would still show it —
+    // the dedupe is observable as: recall, down, up still shows one entry.
+    process.stdin.emit('data', '\x1b[A');
+    chunks = [];
+    process.stdin.emit('data', '\x1b[B');
+    process.stdin.emit('data', '\x1b[A');
+
+    expect(chunks.join('')).toContain('same line');
   });
 });
