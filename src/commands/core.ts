@@ -16,10 +16,12 @@
  * stdout and a command's answer belongs only to the client that asked.
  *
  * What deliberately stays in index.ts: `:quit`, `:speak`, `:approve`, the
- * `:model`/`:provider`/`:apikey`/`:effort` selectors and `/context tune`.
+ * `:model`/`:provider`/`:apikey` selectors and `/context tune`.
  * Each drives the terminal's own stdin or mutates the REPL process's live
  * provider config, and the web client already has real UI for the model and
- * key choices. `unknownCoreCommand()` names them so a remote caller is told
+ * key choices. `:effort` is NOT in that set — the engine owns it per session
+ * (`Session.effort`), the same way it owns `:turns`. `unknownCoreCommand()`
+ * names the rest so a remote caller is told
  * where they live instead of being handed silence.
  */
 
@@ -33,6 +35,7 @@ import { runAgentLoop } from '../agent/loop.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { createProvider } from '../providers/factory.js';
+import { EFFORT_LEVELS, parseEffort, clampEffort, wasClamped } from '../providers/effort.js';
 import { generateDashboard, generateGlobalDashboard, openDashboard } from '../viz/index.js';
 import { extractGraph } from '../perception/graphify.js';
 import { loadPerception, isStale, extractPerception } from '../perception/index.js';
@@ -116,7 +119,6 @@ export const TERMINAL_ONLY_COMMANDS: Record<string, string> = {
   ':model': 'opens an interactive selector — use the model picker here instead',
   ':provider': 'opens an interactive selector — use the model picker here instead',
   ':apikey': 'writes to the key store — use Settings → Provider here instead',
-  ':effort': 'changes the terminal session’s reasoning effort — use Settings here instead',
   '/context tune': 'drives the terminal’s shared readline',
   // Archimedes routing is a REPL-loop decision: the engine's turn path runs
   // runAgentLoop directly and never consults the alternator, so accepting
@@ -675,6 +677,16 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     return { handled: true };
   }
 
+  // :stop / :cancel while a task runs never reach here — the REPL's onEnter
+  // intercepts them against the live abortController (see setCallbacks in
+  // index.ts). This branch is the idle case: the help text advertises both
+  // spellings unconditionally, so typing one between tasks must answer as a
+  // command, not fall through to "Unknown command".
+  if (input === ':stop' || input === ':cancel') {
+    emit(chalk.hex(TEXT_DIM_HEX)('  Nothing is running — :stop/:cancel abort a running task.'));
+    return { handled: true };
+  }
+
   // ── Turn limit commands (:turnsoff, :turnson, :turns [n|off|on]) ─────────
   {
     const turnResult = handleTurnCommand(input, {
@@ -763,6 +775,40 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
 
   // ── Session commands ─────────────────────────────────────────────────────
 
+  // :effort reads and sets this session's reasoning-effort rung. The caller
+  // carries newEffort back onto the session and the next per-turn provider
+  // build sends it — the same live-apply contract as the TUI's :effort, which
+  // mutates its runtimeConfig directly and stays in index.ts.
+  if (input === ':effort' || input === '/effort'
+      || input.startsWith(':effort ') || input.startsWith('/effort ')) {
+    const arg = input.replace(/^[:/]effort\s*/, '').trim();
+    const target = { model: c.providerConfig.model, baseUrl: c.providerConfig.baseUrl };
+    if (!arg) {
+      const cur = parseEffort(c.effort);
+      const sent = cur ? clampEffort(cur, target) : undefined;
+      emit(chalk.hex(TEXT_DIM_HEX)(
+        `  effort: ${cur ?? 'provider default'}`
+        + (cur && sent !== cur ? chalk.hex('#d4903a')(`  (sent as "${sent}" — ${c.providerConfig.model} tops out there)`) : '')
+        + `\n  ladder: ${EFFORT_LEVELS.join(' · ')}`
+        + `\n  usage:  :effort <level>`));
+      return { handled: true };
+    }
+    const level = parseEffort(arg);
+    if (!level) {
+      emit(chalk.hex('#b15439')(
+        `  ✗ Unknown effort "${arg}". Expected one of: ${EFFORT_LEVELS.join(', ')}`));
+      return { handled: true };
+    }
+    emit(chalk.hex('#5a9e6e')(`  ✓ Effort: ${level} — live from the next task.`)
+      + (wasClamped(level, target)
+        ? chalk.hex('#d4903a')(` Sent as "${clampEffort(level, target)}", the ceiling for ${c.providerConfig.model}.`)
+        : ''));
+    if (level === 'none') {
+      emit(chalk.hex(TEXT_DIM_HEX)('  Thinking disabled — the model answers without a chain of thought.'));
+    }
+    return { handled: true, newEffort: level };
+  }
+
   if (input === ':id') {
     const cs = c.chatState;
     if (cs.activeChatId) {
@@ -793,8 +839,16 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         hereOnly ? '\n  Saved sessions (this project):\n'
                  : `\n  Saved sessions (${sessions.length} across ${otherProjects} project${otherProjects === 1 ? '' : 's'}):\n`,
       ));
-      for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
+      // One TUI page, not the whole store. The TUI's scroll region is
+      // screenRows minus the fixed bottom block (7) and the compact banner
+      // (4), and this command's own frame (title, hint, blanks) costs 4 more —
+      // so the list gets rows-15, floored for tiny/non-TTY stdout. listAllSessions()
+      // is newest-first, so the newest page is the one shown.
+      const pageRows = Math.max(10, (process.stdout.rows ?? 24) - 15);
+      const shown = sessions.slice(0, pageRows);
+      const hidden = sessions.length - shown.length;
+      for (let i = 0; i < shown.length; i++) {
+        const s = shown[i];
         const num = chalk.hex(TEXT_DIM_HEX)(`[#${i + 1}]`.padEnd(5));
         const updated = new Date(s.updatedAt).toLocaleString();
         const turns = Math.floor(s.history.length / 2);
@@ -807,6 +861,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
           `${chalk.hex(TEXT_HEX)(s.title.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}${proj}${marker}`,
         );
+      }
+      if (hidden > 0) {
+        // Numbering (#N) only covers what is on screen — it indexes the same
+        // newest-first list this page was sliced from — so anything past the
+        // page must be reached by id, not by number.
+        emit(chalk.hex(TEXT_DIM_HEX)(
+          `  … ${hidden} older session${hidden === 1 ? '' : 's'} not shown — :resume/:delete by id still reach them.`,
+        ));
       }
       emit(chalk.hex(TEXT_DIM_HEX)('\n  Resume any with :resume <id>.'
         + (hereOnly ? '' : '  ·  :sessions here for this project only.')));
@@ -944,6 +1006,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     cumulative: c.cumulative,
     healthTracker: c.healthTracker,
     display: c.display,
+    model: c.providerConfig.model,
   });
   if (usageCmd) return usageCmd;
 

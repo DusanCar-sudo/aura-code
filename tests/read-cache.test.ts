@@ -281,26 +281,32 @@ describe('redundant-read cache', () => {
   });
 
   it('does not elide a read of a line only partially present after char truncation', async () => {
-    // ~200-char lines: the first full read (1–60) gets char-truncated mid-way
-    // through line ~20, leaving the last numbered line only partially in
-    // context. A later read of that exact line must NOT be elided.
+    // ~200-char lines: the first full read (1–200) gets char-truncated at the
+    // loop's 24K normal-result cap, mid-way through line ~112, leaving that
+    // numbered line only partially in context. A later read of that exact
+    // line must NOT be elided.
     const longLine = (n: number) => `line ${n}: ` + 'x'.repeat(200);
-    const lines = Array.from({ length: 60 }, (_, i) => longLine(i + 1)).join('\n');
+    const lines = Array.from({ length: 200 }, (_, i) => longLine(i + 1)).join('\n');
     fs.writeFileSync(path.join(tmpDir, 'data.txt'), lines);
     const provider = new FakeProvider([
-      { text: '', toolCalls: [{ id: 'c1', name: 'read_file', input: { path: 'data.txt', start_line: 1, end_line: 60 } }], stopReason: 'tools' },
-      { text: '', toolCalls: [{ id: 'c2', name: 'read_file', input: { path: 'data.txt', start_line: 20, end_line: 20 } }], stopReason: 'tools' },
+      { text: '', toolCalls: [{ id: 'c1', name: 'read_file', input: { path: 'data.txt', start_line: 1, end_line: 200 } }], stopReason: 'tools' },
+      { text: '', toolCalls: [{ id: 'c2', name: 'read_file', input: { path: 'data.txt', start_line: 112, end_line: 112 } }], stopReason: 'tools' },
       { text: 'done', toolCalls: [], stopReason: 'done' },
     ]);
     const ctx = await loadProjectContext(tmpDir);
+    // A real big-window model id: compaction keys off the model's context
+    // window, and an unknown id falls back to a small default whose threshold
+    // a 24K tool result crosses — the compactor would rewrite the very turn
+    // this test is trying to observe.
+    provider.model = 'claude-sonnet-4-5-20251001';
     const result = await runAgentLoop({
       provider, task: 'hi', context: ctx,
       permissions: new PermissionSystem('auto'), display: noopDisplay,
     });
     const texts = toolResultTexts(result.history);
     expect(texts[0]).toContain('truncated');
-    // Line 20 is only partially in context — the read must execute, not elide.
+    // Line 112 is only partially in context — the read must execute, not elide.
     expect(texts[1]).not.toContain('within the earlier read');
-    expect(texts[1]).toContain('20: line 20:');
+    expect(texts[1]).toContain('112: line 112:');
   });
 });

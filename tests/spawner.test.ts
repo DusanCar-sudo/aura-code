@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { registerSpawner, clearSpawner, executeSpawnTask, makeDefaultSpawner } from '../src/agent/spawner.js';
+import { registerSpawner, clearSpawner, executeSpawnTask, makeDefaultSpawner, resolveSubagentModel } from '../src/agent/spawner.js';
 import type { Spawner } from '../src/agent/spawner.js';
 
 describe('executeSpawnTask', () => {
@@ -28,5 +28,30 @@ describe('executeSpawnTask', () => {
 
   it('makeDefaultSpawner is a function (not undefined)', () => {
     expect(typeof makeDefaultSpawner).toBe('function');
+  });
+});
+
+describe('resolveSubagentModel', () => {
+  const env = {};
+
+  it('an explicit pick from the spawning model wins', () => {
+    expect(resolveSubagentModel('gpt-4o-mini', env, 'session-model')).toBe('gpt-4o-mini');
+  });
+
+  it('AURA_SUBAGENT_MODEL beats the session model', () => {
+    expect(resolveSubagentModel(undefined, { AURA_SUBAGENT_MODEL: 'z-ai/glm-5.3-flash' }, 'session-model'))
+      .toBe('z-ai/glm-5.3-flash');
+  });
+
+  it('falls back to the session model', () => {
+    expect(resolveSubagentModel(undefined, env, 'z-ai/glm-5.3-flash')).toBe('z-ai/glm-5.3-flash');
+  });
+
+  it('whitespace-padded values are trimmed', () => {
+    expect(resolveSubagentModel('  ', { AURA_SUBAGENT_MODEL: ' x ' }, undefined)).toBe('x');
+  });
+
+  it('returns undefined when nothing is set — spawn reports it instead of guessing', () => {
+    expect(resolveSubagentModel(undefined, env, undefined)).toBeUndefined();
   });
 });

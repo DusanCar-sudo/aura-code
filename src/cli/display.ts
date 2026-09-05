@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
 import { formatContextBar as formatContextBarFromHealth, formatContextDashboard } from './context-health.js';
-import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX } from './diamond.js';
+import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX, gradient } from './diamond.js';
 
 // The Display interface — used by the loop, easy to swap (web UI later)
 export interface Display {
@@ -39,6 +39,8 @@ export interface Display {
   steering?(messages: string[]): void;
   /** The agent produced a previewable artifact (HTML, SVG, Markdown). */
   artifact?(a: { id: string; name: string; content: string; contentType: string }): void;
+  /** A sub-agent was spawned via spawn_task — the surface announces it. */
+  subagentSpawned?(info: { model: string; task: string; readonly: boolean }): void;
   /** Stop the thinking spinner. Called when the loop exits. */
   stopThinking?(): void;
 }
@@ -100,7 +102,8 @@ export function createTerminalDisplay(): Display {
     },
 
     toolResult(name: string, result: string, elapsedMs: number) {
-      const lines = result.split('\n');
+      // Cap pathological single lines (base64 blobs) — see MAX_RESULT_LINE.
+      const lines = result.split('\n').map(clampLine);
       const preview = lines.length > 8
         ? lines.slice(0, 8).join('\n') + chalk.hex(FAINT_HEX)(`\n  ... (${lines.length - 8} more lines)`)
         : result;
@@ -131,6 +134,12 @@ export function createTerminalDisplay(): Display {
 
     success(msg: string) {
       console.log('\n' + chalk.hex('#5a9e6e')(`  ✓  ${msg}`));
+    },
+
+    subagentSpawned(info) {
+      const task = info.task.replace(/\s+/g, ' ').slice(0, 64);
+      console.log('\n' + gradient('  ⛓ sub-agent spawned')
+        + chalk.hex(TEXT_DIM_HEX)(` · ${info.model}${info.readonly ? ' · read-only' : ''} — ${task}`));
     },
 
     error(msg: string) {
@@ -222,6 +231,15 @@ export function createTerminalDisplay(): Display {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Longest raw line shown in a tool-result preview before it is elided. */
+const MAX_RESULT_LINE = 400;
+
+function clampLine(line: string): string {
+  return line.length > MAX_RESULT_LINE
+    ? line.slice(0, MAX_RESULT_LINE) + `… (+${line.length - MAX_RESULT_LINE} chars)`
+    : line;
+}
 
 function toolIcon(name: string): string {
   const icons: Record<string, string> = {

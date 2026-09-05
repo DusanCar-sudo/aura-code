@@ -36,21 +36,44 @@ export function clearSpawner(): void {
 }
 
 /**
+ * Which model a spawned sub-agent runs on.
+ *
+ * The caller's explicit pick wins (the model that asked to delegate knows its
+ * sub-problem), then AURA_SUBAGENT_MODEL (a user pins their provider's cheap
+ * rung — on OpenRouter's z-ai that is glm-5.3-flash today), then the session's
+ * own model. No hardcoded fallback: a name like `mimo-v2-flash` is a private
+ * arrangement with one provider — other users have no such model, and their
+ * spawn_task calls would 404.
+ */
+export function resolveSubagentModel(
+  explicit: string | undefined,
+  env: { AURA_SUBAGENT_MODEL?: string },
+  sessionModel: string | undefined,
+): string | undefined {
+  const pin = explicit?.trim() || env.AURA_SUBAGENT_MODEL?.trim() || '';
+  return pin || sessionModel?.trim() || undefined;
+}
+
+/**
  * Default spawner — spins up a fresh provider, runs the agent loop, returns summary.
  */
 export function makeDefaultSpawner(
   ctx: ProjectContext,
-  baseConfig: { apiKey?: string; baseUrl?: string; sessionId?: string },
+  baseConfig: { apiKey?: string; baseUrl?: string; model?: string; sessionId?: string },
   display: Display,
 ): Spawner {
   return {
     async spawn(opts: SpawnOptions): Promise<string> {
-      const model = opts.model ?? 'mimo-v2-flash';
+      const model = resolveSubagentModel(opts.model, process.env, baseConfig.model);
+      if (!model) {
+        return 'Error: no sub-agent model — the session has none and AURA_SUBAGENT_MODEL is unset.';
+      }
       const provider: LLMProvider = createProvider({
         model,
         apiKey: baseConfig.apiKey,
-        baseUrl: opts.cwd ? baseConfig.baseUrl : baseConfig.baseUrl,
+        baseUrl: baseConfig.baseUrl,
       });
+      display.subagentSpawned?.({ model, task: opts.task, readonly: opts.readonly === true });
       // Lazy import to avoid a cycle (loop imports us; we import loop)
       const { runAgentLoop } = await import('./loop.js');
       const { PermissionSystem } = await import('../safety/permissions.js');
@@ -90,7 +113,7 @@ export const SPAWN_TASK_DEFINITION = {
     type: 'object' as const,
     properties: {
       task:    { type: 'string',  description: 'The task description for the sub-agent' },
-      model:   { type: 'string',  description: 'Model id to use (default: mimo-v2-flash — fast & cheap)' },
+      model:   { type: 'string',  description: 'Model id to use (default: this session\'s model, or AURA_SUBAGENT_MODEL when set)' },
       readonly:{ type: 'boolean', description: 'Run sub-agent in read-only mode (no file writes or shell). Default: false (auto mode)' },
       cwd:     { type: 'string',  description: 'Optional working directory for the sub-agent' },
     },

@@ -117,6 +117,15 @@ interface Session {
    * it did not make is worse than one that says it cannot.
    */
   maxTurns?: number;
+
+  /**
+   * The reasoning-effort rung this session sends, set remotely with
+   * `:effort <level>`. Undefined sends the provider's default. Lives on the
+   * session rather than a cached provider for the same reason maxTurns does:
+   * every turn builds its own provider, and each must pick up the rung set
+   * since the last one.
+   */
+  effort?: string;
 }
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
@@ -464,6 +473,7 @@ export class ProtocolHandler {
         model: s.model,
         apiKey: s.apiKey,
         baseUrl: s.baseUrl,
+        ...(s.effort ? { reasoningEffort: s.effort } : {}),
       });
 
       // Only well-formed image data URIs are forwarded. Anything else is
@@ -488,6 +498,9 @@ export class ProtocolHandler {
         ...(s.maxTurns !== undefined ? { maxTurns: s.maxTurns } : {}),
         initialHistory: s.history,
         abortSignal: abort.signal,
+        // Sub-agents inherit this session's credentials; the loop defaults
+        // their model to the session's own.
+        spawnConfig: { apiKey: s.apiKey, baseUrl: s.baseUrl },
       }));
 
       s.history = result.history;
@@ -763,9 +776,13 @@ export class ProtocolHandler {
       mode: 'coder',
       surface,
       buildProvider: (_d, override) => createProvider({
-        model: s.model, apiKey: s.apiKey, baseUrl: s.baseUrl, ...override,
+        model: s.model, apiKey: s.apiKey, baseUrl: s.baseUrl,
+        // A session-set rung is the default for sub-tasks; an explicit
+        // override (:designx's cheaper artefact rung) still wins.
+        ...(s.effort && !override?.reasoningEffort ? { reasoningEffort: s.effort } : {}),
+        ...override,
       }),
-      effort: undefined,
+      effort: s.effort,
       confirm: async () => false,
       verify: {},
       catchSession: { handle: null, startedAt: 0 },
@@ -785,6 +802,7 @@ export class ProtocolHandler {
     if (result.newHistory !== undefined) s.history = result.newHistory;
     if (result.newTitle !== undefined) s.name = result.newTitle;
     if (result.newTurnsOverride !== undefined) s.maxTurns = result.newTurnsOverride;
+    if (result.newEffort !== undefined) s.effort = result.newEffort;
 
     this.ok(req.id, {
       handled: result.handled,

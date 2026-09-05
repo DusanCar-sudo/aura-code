@@ -1616,6 +1616,15 @@ export function destroyTui(): void {
 
 // ── TUI-aware Display ──────────────────────────────────────────────────────
 
+/** Longest raw line shown in a tool-result preview before it is elided. */
+const MAX_RESULT_LINE = 400;
+
+function clampLine(line: string): string {
+  return line.length > MAX_RESULT_LINE
+    ? line.slice(0, MAX_RESULT_LINE) + `… (+${line.length - MAX_RESULT_LINE} chars)`
+    : line;
+}
+
 function toolIcon(name: string): string {
   const icons: Record<string, string> = {
     read_file: '📄', list_dir: '📁', edit_file: '✏️',
@@ -1726,7 +1735,9 @@ export function createTuiDisplay(): Display {
 
     toolResult(name: string, result: string, elapsedMs: number) {
       stopToolSpinner();
-      const lines = result.split('\n');
+      // Base64 blobs and friends arrive as one gigantic line; cap any single
+      // line so a tool result can never wallpaper the screen.
+      const lines = result.split('\n').map(clampLine);
       const preview = lines.length > 8
         ? lines.slice(0, 8).join('\n') + TEXT_DIM(`\n  ... (${lines.length - 8} more lines)`)
         : result;
@@ -1755,6 +1766,12 @@ export function createTuiDisplay(): Display {
 
     success(msg: string) {
       writeOutput('\n' + chalk.hex('#5a9e6e')(`  ✓  ${msg}`));
+    },
+
+    subagentSpawned(info) {
+      const task = info.task.replace(/\s+/g, ' ').slice(0, 64);
+      writeOutput('\n' + gradient('  ⛓ sub-agent spawned')
+        + TEXT_DIM(` · ${info.model}${info.readonly ? ' · read-only' : ''} — ${task}`));
     },
 
     error(msg: string) {

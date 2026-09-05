@@ -46,6 +46,12 @@ import type { Display } from '../cli/display.js';
 import { sessionStore, type TurnUsage } from './session-store.js';
 export type { TurnUsage };
 import { registerSpawner, clearSpawner, makeDefaultSpawner } from './spawner.js';
+
+// Default per-result ceiling for normal tool output — sized to cover a whole
+// read_file result (read-file.ts caps full-file reads at ~15K chars), so the
+// loop never re-cuts what the tool already sized. Small-model sessions pass
+// toolResultMaxChars to narrow it.
+const DEFAULT_TOOL_RESULT_CHARS = 24_000;
 import type { VerificationConfig } from '../verify/types.js';
 import { getLoopProfile, detectStall, type LoopProfile, type StallKind } from './loop-profile.js';
 import { describeBudgetStop, type BudgetStop } from './session-budget.js';
@@ -176,8 +182,10 @@ export interface LoopOptions {
   initialHistory?: HistoryMessage[];
   /** Base64 data URIs attached to the initial user message (multimodal input). */
   images?: string[];
-  /** Base config passed to spawned sub-agents. If undefined, spawn_task returns an error. */
-  spawnConfig?: { apiKey?: string; baseUrl?: string };
+  /** Base config passed to spawned sub-agents: credentials for the session's
+   *  provider, and an optional default model (the loop falls back to the
+   *  session's own model when unset). */
+  spawnConfig?: { apiKey?: string; baseUrl?: string; model?: string };
   /** Disables subagent tool entirely (e.g. for tests) */
   disableSpawn?: boolean;
   /** Internal: skip post-task verification (used by runWithVerification wrapper). */
@@ -530,7 +538,14 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 };
 
   if (!opts.disableSpawn) {
-    registerSpawner(makeDefaultSpawner(context, opts.spawnConfig ?? {}, display));
+    // The session's own model is the sub-agent default — a hardcoded name is a
+    // private deal with one provider and 404s for everyone else. A caller may
+    // still pin a different default via spawnConfig.model.
+    registerSpawner(makeDefaultSpawner(
+      context,
+      { model: provider.model, ...(opts.spawnConfig ?? {}) },
+      display,
+    ));
   }
 
   display.agentThinking();
@@ -1259,7 +1274,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         // dead weight. Errors get a higher ceiling so diagnostics survive.
         // toolResultMaxChars narrows the normal limit for small-model sessions
         // (e.g. Archimedes at 1,500 chars) without affecting error diagnostics.
-        const normalLimit = opts.toolResultMaxChars ?? 4_000;
+        // The default covers a whole read_file result (read-file.ts caps
+        // full-file reads at ~15K chars): a cap below that re-cuts what the
+        // tool already sized, and the model pays a full extra turn per chunk
+        // to re-read what one call could have carried.
+        const normalLimit = opts.toolResultMaxChars ?? DEFAULT_TOOL_RESULT_CHARS;
         const RESULT_TRUNCATE_AT = result.startsWith('Error:') || result.startsWith('Tool error') ? 8_000 : normalLimit;
         if (result.length > RESULT_TRUNCATE_AT) {
           result = result.slice(0, RESULT_TRUNCATE_AT)
@@ -1314,10 +1333,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         isError = true;
         display.error(result);
       }
-      // Safety net: prevent any single tool result from consuming excessive
-      // context. 8K chars (~2K tokens) is enough for any meaningful output;
-      // larger results mean the agent should narrow its query or use ranges.
-      const MAX_TOOL_RESULT_CHARS = 8_000;
+      // Safety net: a misbehaving tool that ignores its own output caps must
+      // not eat the context in one bite. It sits above the normal limit, so
+      // legitimate results (reads, searches) pass untouched and only a tool
+      // bug ever reaches it.
+      const MAX_TOOL_RESULT_CHARS = Math.max(8_000, (opts.toolResultMaxChars ?? DEFAULT_TOOL_RESULT_CHARS) + 8_000);
       if (result.length > MAX_TOOL_RESULT_CHARS) {
         result = result.slice(0, MAX_TOOL_RESULT_CHARS)
           + `\n[result truncated: ${result.length.toLocaleString()} chars total — narrow the query or read the file in ranges]`;

@@ -45,6 +45,11 @@ export interface ReplCommandResult {
   newSmall1Override?: boolean;
   newMode?: ReplMode;
   newTurnsOverride?: number | undefined;
+  /** The reasoning effort rung a `:effort <level>` set, for the caller to
+   *  carry onto the session so the next provider build sends it. Mirrors
+   *  newTurnsOverride: reporting a change without carrying it would leave the
+   *  surface announcing a rung no turn will honour. */
+  newEffort?: string | undefined;
   /** The REPL's conversation was swapped for a different one (:resume, :new,
    *  :clear-history, deleting the active session) — as opposed to being edited
    *  in place (:compact). A coder task still streaming when this lands must not
