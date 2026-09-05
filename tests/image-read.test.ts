@@ -42,9 +42,22 @@ describe('imageRead — info', () => {
 });
 
 describe('imageRead — base64', () => {
-  it('returns base64 data', async () => {
+  it('attaches the image instead of inlining base64 as text', async () => {
     const r = await imageRead({ path: path.join(testDir, 'test.png'), action: 'base64' });
-    expect(r).toContain('data:image/png;base64,');
+    expect(typeof r).toBe('object');
+    const att = r as { text: string; images: string[] };
+    expect(att.images).toHaveLength(1);
+    expect(att.images[0]).toContain('data:image/png;base64,');
+    // The visible text stays short — no base64 blob.
+    expect(att.text).not.toContain('base64,');
+    expect(att.text.length).toBeLessThan(300);
+  });
+
+  it('returns oversized-image errors as plain text', async () => {
+    fs.writeFileSync(path.join(testDir, 'big.png'), Buffer.alloc(600_000));
+    const r = await imageRead({ path: path.join(testDir, 'big.png'), action: 'base64' });
+    expect(typeof r).toBe('string');
+    expect(r as string).toContain('Error: image too large');
   });
 });
 

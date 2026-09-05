@@ -34,7 +34,7 @@ export const IMAGE_READ_DEFINITION: ToolDefinition = {
   name: 'image_read',
   description:
     'Read an image file. Actions: info (dimensions, size, format), ocr (extract text using tesseract), ' +
-    'base64 (return base64-encoded data for LLM vision). Useful for screenshots, documents, diagrams.',
+    'base64 (attach the image for LLM vision). Useful for screenshots, documents, diagrams.',
   parameters: {
     type: 'object',
     properties: {
@@ -88,18 +88,27 @@ function doOcr(filePath: string): string {
 /** Max raw file size (bytes) allowed for base64 — larger images would flood context. */
 const MAX_BASE64_BYTES = 500_000;  // ~670 KB base64 output
 
-function doBase64(filePath: string): string {
+/** Vision attachment — mirrors the computer screenshot shape ({ text, images })
+ *  so the base64 travels as an image block, never as visible text. */
+export interface ImageAttachment {
+  text: string;
+  images: string[];
+}
+
+function doBase64(filePath: string): ImageAttachment {
   const stat = fs.statSync(filePath);
   if (stat.size > MAX_BASE64_BYTES) {
     const kb = (stat.size / 1024).toFixed(1);
     const limit = (MAX_BASE64_BYTES / 1024).toFixed(0);
-    return [
+    // Errors stay plain strings (callers sniff the "Error:" prefix).
+    const err = [
       `Error: image too large for base64 (${kb} KB > ${limit} KB limit).`,
       `To use this image for vision:`,
       `  1. Resize:   convert "${filePath}" -resize 50% /tmp/smaller.png`,
       `  2. Then:     image_read path=/tmp/smaller.png action=base64`,
       `Or use action=info to inspect it without encoding.`,
     ].join('\n');
+    return { text: err, images: [] };
   }
 
   const buffer = fs.readFileSync(filePath);
@@ -111,10 +120,15 @@ function doBase64(filePath: string): string {
   };
   const mime = mimeMap[ext] ?? 'application/octet-stream';
   const b64 = buffer.toString('base64');
-  return `data:${mime};base64,${b64}`;
+  const sizeKB = (stat.size / 1024).toFixed(1);
+  return {
+    text: `Image attached for vision: ${filePath} (${sizeKB} KB, ${mime}). `
+      + 'It is attached to this result as an image — never print base64 data.',
+    images: [`data:${mime};base64,${b64}`],
+  };
 }
 
-export async function imageRead(input: ImageReadInput): Promise<string> {
+export async function imageRead(input: ImageReadInput): Promise<string | ImageAttachment> {
   const filePath = normalizeImagePath(input.path);
 
   if (!fs.existsSync(filePath)) {
@@ -126,7 +140,9 @@ export async function imageRead(input: ImageReadInput): Promise<string> {
 
   // For base64, allow any file
   if (action === 'base64') {
-    return doBase64(filePath);
+    const out = doBase64(filePath);
+    // Errors flow back as plain text so the usual "Error:" handling applies.
+    return out.images.length ? out : out.text;
   }
 
   // For info/ocr, check it's an image

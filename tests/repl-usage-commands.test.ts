@@ -77,7 +77,27 @@ describe('REPL usage commands', () => {
 
   it('/usage is the same command as /stats', async () => {
     expect(await handleUsageCommand('/usage', makeCtx())).toEqual({ handled: true });
-    expect(out()).toContain('Session usage:');
+    expect(out()).toContain('Session status:');
+  });
+
+  it(':stats is the same command as /stats — both prefixes work', async () => {
+    // The whole family answers to both prefixes. It did not before, and the
+    // fall-through for an unclaimed command hands the line to the model as a
+    // task — a provider round-trip researching the word "stats".
+    for (const form of [':stats', ':usage', ':clear', ':reset', ':context']) {
+      const c = makeCtx();
+      expect(await handleUsageCommand(form, c)).toEqual({ handled: true });
+    }
+    const reset = makeCtx();
+    await handleUsageCommand(':clear', reset);
+    expect(reset.cumulative.turns).toBe(0);
+  });
+
+  it(':stats shows which model the session ran on', async () => {
+    // "Status of the session" includes where the turns went, not only how many.
+    const c = makeCtx({ model: 'kimi/kimi-k3' });
+    await handleUsageCommand(':stats', c);
+    expect(out()).toContain('kimi/kimi-k3');
   });
 
   it('/context hands the dashboard the session turn and tool counts', async () => {

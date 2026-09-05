@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { LOCALES, type Locale } from '../i18n';
 import type { PermissionLevel, Settings as S } from '../lib/settings';
 
@@ -208,18 +208,18 @@ interface SkillItem {
   id: string;
   name: string;
   type: 'skill' | 'plugin';
-  version: string;
   desc: string;
-  on: boolean;
+  source: string;
 }
 
-const DEFAULT_SKILLS: SkillItem[] = [
-  { id: 's1', name: 'read-pdf', type: 'skill', version: '1.4.0', desc: 'Extract text and tables from PDFs into markdown.', on: true },
-  { id: 's2', name: 'playwright-verify', type: 'plugin', version: '0.9.2', desc: 'Registers a browser tool so I can verify UI claims by clicking.', on: true },
-  { id: 's3', name: 'sql-explain', type: 'skill', version: '2.0.1', desc: 'Run EXPLAIN ANALYZE and read the plan before proposing an index.', on: true },
-  { id: 's4', name: 'mesh-debate', type: 'plugin', version: '0.4.7', desc: 'Fan a decision out to three providers and diff their reasoning.', on: false },
-  { id: 's5', name: 'changelog-writer', type: 'skill', version: '1.1.0', desc: 'Writes Was:/Fixed: entries from the verified diff.', on: true },
-];
+/** One entry of the real catalog as the engine reports it at /api/skills. */
+interface ServerSkill {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  type?: 'skill' | 'plugin';
+}
 
 export function SettingsPanel({
   settings,
@@ -255,9 +255,117 @@ export function SettingsPanel({
   const [keySavedStatus, setKeySavedStatus] = useState<Record<string, 'saved' | 'cleared' | boolean>>({});
   // Per-provider: show a free-text model-id field instead of the dropdown.
   const [customModelMode, setCustomModelMode] = useState<Record<string, boolean>>({});
-  const [skills, setSkills] = useState<SkillItem[]>(DEFAULT_SKILLS);
+  const [skills, setSkills] = useState<SkillItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [dropStatus, setDropStatus] = useState('nothing staged');
+  const [uploading, setUploading] = useState(false);
+  const [marketSpec, setMarketSpec] = useState('');
+  const dirInputRef = useRef<HTMLInputElement | null>(null);
+  /** Files staged for upload, with their path inside the skill folder. */
+  const stagedRef = useRef<Array<{ path: string; content: string }>>([]);
+
+  const refreshSkills = useCallback(() => {
+    void fetch('/api/skills')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { skills?: ServerSkill[] } | null) => {
+        if (!Array.isArray(data?.skills)) return;
+        setSkills(data!.skills.map((sk) => ({
+          id: sk.id,
+          name: sk.name,
+          type: sk.type === 'plugin' ? 'plugin' : 'skill',
+          desc: sk.description,
+          source: sk.source,
+        })));
+      })
+      .catch(() => { /* the list is informational; keep whatever we have */ });
+  }, []);
+
+  useEffect(() => { refreshSkills(); }, [refreshSkills]);
+
+  /** Base64 for one file, promise-shaped. */
+  const readBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result ?? '');
+      resolve(url.slice(url.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(new Error(`could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
+  /** Upload the staged files and show the outcome where the promise used to be. */
+  const uploadStaged = useCallback(async () => {
+    const files = stagedRef.current;
+    if (files.length === 0) return;
+    setUploading(true);
+    setDropStatus(`installing ${files.length} file${files.length === 1 ? '' : 's'}…`);
+    try {
+      const res = await fetch('/api/skills/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDropStatus(`✗ ${data.error || `upload failed (${res.status})`}`);
+      } else {
+        setDropStatus(`✓ installed "${data.name}" — ${data.installed} file(s) into ${data.dir}`);
+        stagedRef.current = [];
+        refreshSkills();
+      }
+    } catch (e) {
+      setDropStatus(`✗ ${String(e)}`);
+    } finally {
+      setUploading(false);
+    }
+  }, [refreshSkills]);
+
+  /** Stage a batch of files, keeping each one's path inside its skill folder. */
+  const stageFiles = useCallback(async (list: Array<{ file: File; path: string }>) => {
+    if (list.length === 0) return;
+    stagedRef.current = [];
+    for (const { file, path } of list) {
+      try {
+        stagedRef.current.push({ path, content: await readBase64(file) });
+      } catch (e) {
+        setDropStatus(`✗ ${String(e)}`);
+        return;
+      }
+    }
+    const hasSkillMd = stagedRef.current.some((f) => f.path.split('/').pop() === 'SKILL.md');
+    if (!hasSkillMd) {
+      stagedRef.current = [];
+      setDropStatus('✗ not a skill — the folder needs a SKILL.md at its top level');
+      return;
+    }
+    const top = stagedRef.current[0].path.split('/')[0];
+    setDropStatus(`staged "${top}" (${stagedRef.current.length} files) — installing…`);
+    await uploadStaged();
+  }, [uploadStaged]);
+
+  /** A dropped directory arrives as an entry tree, not a file list — walk it. */
+  const walkEntry = async (entry: FileSystemEntry, prefix: string,
+                           out: Array<{ file: File; path: string }>): Promise<void> => {
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((res) =>
+        (entry as FileSystemFileEntry).file(res, () => res(null)));
+      if (file) out.push({ file, path: prefix + file.name });
+      return;
+    }
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    const readAll = async (): Promise<FileSystemEntry[]> => {
+      const all: FileSystemEntry[] = [];
+      for (;;) {
+        const batch = await new Promise<FileSystemEntry[]>((res) =>
+          reader.readEntries(res, () => res([])));
+        if (batch.length === 0) return all;
+        all.push(...batch);
+      }
+    };
+    for (const child of await readAll()) {
+      await walkEntry(child, `${prefix}${entry.name}/`, out);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/models')
@@ -476,10 +584,6 @@ export function SettingsPanel({
         body: JSON.stringify({ model: chosenModel }),
       }).catch(() => {});
     }
-  };
-
-  const toggleSkill = (id: string) => {
-    setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, on: !s.on } : s)));
   };
 
   // Group models by provider for dropdown optgroups
@@ -816,44 +920,107 @@ export function SettingsPanel({
                   A skill is a folder with a SKILL.md and its scripts. A plugin registers new tools with the loop. Both are read from your machine and mounted into the current work.
                 </p>
 
-                <label
+                <div
                   className={`skill-dropzone ${dragOver ? 'drag-over' : ''}`}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragOver(false);
-                    const files = e.dataTransfer?.files;
-                    if (files && files.length > 0) {
-                      setDropStatus(`staged ${files[0].name} — click save to mount`);
+                    if (uploading) return;
+                    // A folder arrives as an entry tree, so walk the items
+                    // first; plain files take the fallback path.
+                    const items = Array.from(e.dataTransfer?.items ?? []);
+                    const entries = items
+                      .map((it) => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null))
+                      .filter((en): en is FileSystemEntry => en !== null);
+                    if (entries.length > 0) {
+                      const out: Array<{ file: File; path: string }> = [];
+                      Promise.all(entries.map((en) => walkEntry(en, '', out)))
+                        .then(() => stageFiles(out))
+                        .catch((err) => setDropStatus(`✗ ${String(err)}`));
+                      return;
                     }
+                    const files = Array.from(e.dataTransfer?.files ?? []);
+                    void stageFiles(files.map((file) => ({ file, path: file.name })));
                   }}
+                  onClick={() => dirInputRef.current?.click()}
+                  role="button"
+                  aria-label="Install a skill folder"
                 >
                   <div className="dropzone-plus">+</div>
-                  <div className="dropzone-text">Drop a skill folder or plugin .ts here</div>
+                  <div className="dropzone-text">Drop a skill folder here to install it</div>
                   <div className="dropzone-sub">
-                    or select a file from <span className="underline">your machine</span>
+                    or click to pick a folder from <span className="underline">your machine</span>
                   </div>
                   <div className="dropzone-status">{dropStatus}</div>
-                  <input type="file" style={{ display: 'none' }} />
-                </label>
+                  {/* webkitdirectory opens an OS folder picker — a skill is a
+                      folder, and a folder is what this has to accept. */}
+                  <input
+                    ref={dirInputRef}
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      const root = files[0]?.webkitRelativePath.split('/')[0] ?? '';
+                      void stageFiles(files.map((file) => ({
+                        file,
+                        path: file.webkitRelativePath || `${root}/${file.name}`,
+                      })));
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+
+                <div className="section-label" style={{ marginTop: '22px' }}>
+                  Install from a marketplace or git
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    className="field-input"
+                    placeholder="owner/repo · name@marketplace · https://git…"
+                    value={marketSpec}
+                    onChange={(e) => setMarketSpec(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && marketSpec.trim()) {
+                        const spec = marketSpec.trim();
+                        setMarketSpec('');
+                        setDropStatus(`installing ${spec}…`);
+                        void fetch('/api/plugins/install', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ spec }),
+                        })
+                          .then(async (res) => {
+                            const data = await res.json().catch(() => ({}));
+                            setDropStatus(res.ok
+                              ? `✓ installed ${data.plugin?.name || spec}`
+                              : `✗ ${data.error || `install failed (${res.status})`}`);
+                            refreshSkills();
+                          })
+                          .catch((err) => setDropStatus(`✗ ${String(err)}`));
+                      }
+                    }}
+                  />
+                </div>
 
                 <div className="section-label" style={{ marginTop: '22px' }}>Installed on this machine</div>
                 <div className="skills-list">
+                  {skills.length === 0 && (
+                    <div className="skill-desc" style={{ opacity: 0.6 }}>
+                      No skills installed yet. The engine reads .agents/skills/&lt;name&gt;/SKILL.md and .claude/skills/&lt;name&gt;/SKILL.md.
+                    </div>
+                  )}
                   {skills.map((s) => (
                     <div key={s.id} className="skill-card">
                       <div className="skill-head">
                         <span className="skill-name">{s.name}</span>
-                        <span className="skill-ver">v{s.version}</span>
                         <span className={`skill-type-tag type-${s.type}`}>{s.type}</span>
                         <div className="spacer" />
-                        <button
-                          type="button"
-                          className={`skill-toggle-switch ${s.on ? 'on' : 'off'}`}
-                          onClick={() => toggleSkill(s.id)}
-                        >
-                          <span className="toggle-knob" />
-                        </button>
+                        <span className="skill-ver">{s.source}</span>
                       </div>
                       <div className="skill-desc">{s.desc}</div>
                     </div>

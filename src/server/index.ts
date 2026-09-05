@@ -42,6 +42,7 @@ import { routeTask, createPlan, executePlan } from '../orchestration/index.js';
 import type { Display } from '../cli/display.js';
 import { openExternal } from '../util/open.js';
 import { loadAllPlugins } from '../plugins/loader.js';
+import { loadProjectSkills } from '../plugins/project-skills.js';
 import { auraHome, auraPath } from '../util/aura-home.js';
 import { installPlugin, removePlugin } from '../plugins/market.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
@@ -670,17 +671,123 @@ export async function startServer(opts: ServeOptions): Promise<void> {
    */
   app.get('/api/skills', (_req, res) => {
     try {
-      const skills = loadAllPlugins().flatMap((plugin) =>
+      // The real catalog: project skills the agent actually routes against,
+      // plus the skills that ship inside installed plugins. The browser used
+      // to show a hardcoded list of five skills that existed nowhere.
+      const project = loadProjectSkills(opts.cwd).map((skill) => ({
+        id: `skill:${skill.name}`,
+        name: skill.name,
+        description: skill.description,
+        source: 'this project',
+        type: 'skill' as const,
+      }));
+      const plugins = loadAllPlugins().flatMap((plugin) =>
         plugin.skills.map((skill) => ({
           id: `${plugin.name}:${skill.name}`,
           name: skill.name,
           description: skill.description,
           source: plugin.name,
+          type: 'plugin' as const,
         })));
-      res.json({ skills });
+      res.json({ skills: [...project, ...plugins] });
     } catch {
       res.json({ skills: [] });
     }
+  });
+
+  /**
+   * Install an uploaded skill folder into .agents/skills/<name>/.
+   *
+   * The browser cannot hand over a directory, so it walks the dropped folder
+   * itself and posts every file with its path inside the skill. The server's
+   * job is mostly refusal: a folder without SKILL.md is not a skill, a path
+   * that escapes the skill directory is not an install, and a name with
+   * anything but plain filename characters is a traversal wearing a name.
+   */
+  app.post('/api/skills/upload', express.json({ limit: '25mb' }), (req, res) => {
+    // Deliberately NOT behind allowPluginInstall: this only writes files the
+    // way /api/file/write does, and is contained to .agents/skills/<name>/
+    // besides. The marketplace/git installer stays gated because it runs
+    // code at install time; dropping a folder you already have does not.
+    const body = (req.body ?? {}) as {
+      files?: Array<{ path?: unknown; content?: unknown }>;
+    };
+    const files = Array.isArray(body.files) ? body.files : [];
+    if (files.length === 0) {
+      res.status(400).json({ error: 'No files in the upload.' });
+      return;
+    }
+
+    // Every path must be `<skill>/<rest>`; the skill name doubles as the
+    // directory, so it is validated like one rather than trusted.
+    let skillName: string | undefined;
+    const cleaned: Array<{ rel: string; data: Buffer }> = [];
+    for (const f of files) {
+      if (typeof f.path !== 'string' || typeof f.content !== 'string') {
+        res.status(400).json({ error: 'Each file needs a path and base64 content.' });
+        return;
+      }
+      const rel = f.path.replace(/\\/g, '/').replace(/^\.\//, '');
+      const parts = rel.split('/').filter((p) => p && p !== '.');
+      if (parts.length < 2 || parts.some((p) => p === '..')) {
+        res.status(400).json({ error: `Refusing unsafe path in upload: ${rel}` });
+        return;
+      }
+      const top = parts[0];
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(top)) {
+        res.status(400).json({ error: `Invalid skill folder name: ${top}` });
+        return;
+      }
+      skillName ??= top;
+      if (top !== skillName) {
+        res.status(400).json({ error: 'Drop one skill folder at a time.' });
+        return;
+      }
+      let data: Buffer;
+      try {
+        data = Buffer.from(f.content, 'base64');
+      } catch {
+        res.status(400).json({ error: `Could not decode ${rel}.` });
+        return;
+      }
+      if (data.length > 10 * 1024 * 1024) {
+        res.status(413).json({ error: `${rel} is over 10 MB.` });
+        return;
+      }
+      cleaned.push({ rel: parts.slice(1).join('/'), data });
+    }
+
+    // The SKILL.md is what makes the folder a skill — the loader skips any
+    // directory without one, so accepting the upload would mount nothing and
+    // the user would never learn why.
+    if (!cleaned.some((f) => f.rel === 'SKILL.md')) {
+      res.status(400).json({ error: 'Not a skill: no SKILL.md at the top of the folder.' });
+      return;
+    }
+    if (!skillName) return;
+
+    const dir = path.join(opts.cwd, '.agents', 'skills', skillName);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      for (const f of cleaned) {
+        const target = path.join(dir, f.rel);
+        if (!target.startsWith(dir)) {
+          res.status(400).json({ error: `Refusing path outside the skill: ${f.rel}` });
+          return;
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, f.data);
+      }
+    } catch (e) {
+      res.status(500).json({ error: String(e instanceof Error ? e.message : e) });
+      return;
+    }
+    res.json({
+      ok: true,
+      name: skillName,
+      installed: cleaned.length,
+      dir: path.join('.agents', 'skills', skillName),
+    });
   });
 
   /**

@@ -1,5 +1,7 @@
 /**
- * The REPL's usage-reporting commands: /clear, /stats, /context and /cost.
+ * The REPL's usage-reporting commands: stats, context, cost and clear —
+ * each answering to both prefixes (`/stats` and `:stats` are the same
+ * command; see the normalisation at the top of handleUsageCommand).
  *
  * What makes these one unit is that every one of them only *reads or resets
  * the counters* — none of them changes what the next turn actually sends. That
@@ -42,6 +44,9 @@ export interface UsageCommandCtx {
   cumulative: SessionCounters;
   healthTracker: ContextHealthTracker;
   display: Pick<Display, 'contextDashboard'>;
+  /** The session's live model, shown by :stats — "status of the session"
+   *  includes which provider the turns went to, not only how many. */
+  model?: string;
 }
 
 /**
@@ -56,7 +61,15 @@ export async function handleUsageCommand(
   input: string,
   c: UsageCommandCtx,
 ): Promise<ReplCommandResult | null> {
-  if (input === '/clear' || input === '/reset') {
+  // Both prefixes mean the same thing. This family was documented as
+  // /stats-only, and a user who typed :stats — the prefix every other command
+  // uses — got silence from the chain and their line handed to the model as a
+  // task, which for a stats query means a provider round-trip that fails or
+  // answers a question nobody asked.
+  const norm = `:${input.replace(/^[:/]/, '')}`;
+  input = norm;
+
+  if (input === ':clear' || input === ':reset') {
     c.cumulative.turns = 0;
     c.cumulative.toolCalls = 0;
     c.cumulative.inputTokens = 0;
@@ -71,12 +84,13 @@ export async function handleUsageCommand(
     return { handled: true };
   }
 
-  if (input === '/stats' || input === '/usage') {
+  if (input === ':stats' || input === ':usage') {
     const u = c.cumulative;
     const total = u.inputTokens + u.outputTokens;
     emit(chalk.hex(TEXT_DIM_HEX)([
       '',
-      `  Session usage:`,
+      `  Session status:`,
+      `    Model:        ${c.model ?? 'unknown'}`,
       `    Turns:        ${u.turns}`,
       `    Tool calls:   ${u.toolCalls}`,
       `    Input tokens: ${u.inputTokens.toLocaleString()}`,
@@ -88,7 +102,7 @@ export async function handleUsageCommand(
     return { handled: true };
   }
 
-  if (input === '/context') {
+  if (input === ':context') {
     const u = c.cumulative;
     const h = c.healthTracker.snapshot(u.inputTokens, u.outputTokens);
     h.turnCount = u.turns;
@@ -97,9 +111,9 @@ export async function handleUsageCommand(
     return { handled: true };
   }
 
-  if (input === '/cost' || input.startsWith('/cost ')) {
+  if (input === ':cost' || input.startsWith(':cost ')) {
     const { readTokenLog, formatCostReport } = await import('./cost-report.js');
-    const arg = input.startsWith('/cost ') ? input.slice('/cost '.length).trim() : '';
+    const arg = input.startsWith(':cost ') ? input.slice(':cost '.length).trim() : '';
     const recent = /^\d+$/.test(arg) ? Number(arg) : 20;
     emit(formatCostReport(readTokenLog(c.projectRoot), recent));
     return { handled: true };

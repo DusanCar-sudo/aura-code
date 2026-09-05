@@ -1710,6 +1710,18 @@ let abortController: AbortController | null = null;
 
     // Check for REPL commands
     const cmdResult = await handleReplCommand(input, replCtx);
+    if (!cmdResult.handled && looksLikeCommand(input)) {
+      // A `:` line is REPL machinery by definition (see the steering note in
+      // setCallbacks), so one no command claims is a typo or a guess — and
+      // sending it to the model as a task is the worst possible answer: it
+      // burns a provider round-trip researching the word "stats". Name the
+      // miss and point at the list instead.
+      writeOutput(chalk.hex('#b15439')(
+        `  ✗ Unknown command: ${input.trim().split(/\s+/)[0]}` +
+        ` — :help lists everything. (:stats and /stats are the same.)`,
+      ));
+      return;
+    }
     if (cmdResult.handled) {
       if (cmdResult.sessionReplaced) sessionEpoch++;
       if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
@@ -2327,6 +2339,20 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
  * exactly, and `:q ` (the queue) is not `:q` (quit), so hoisting them above
  * the core shadows nothing.
  */
+/**
+ * Whether a line is *shaped* like a REPL command, and so must never fall
+ * through to the model. A `:` prefix is machinery by design — the steering
+ * path in setCallbacks already refuses to queue such lines mid-run for the
+ * same reason. A single-word `/word` is the slash form of a command; a `/`
+ * line with more slashes or a space in it is more likely a pasted absolute
+ * path, which is a legitimate task and keeps the old behaviour.
+ */
+function looksLikeCommand(input: string): boolean {
+  const t = input.trim();
+  if (t.startsWith(':')) return true;
+  return t.startsWith('/') && !t.includes(' ') && !t.slice(1).includes('/');
+}
+
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
   if (input === ':quit' || input === ':q' || input === '/exit') {
     process.exit(0);
