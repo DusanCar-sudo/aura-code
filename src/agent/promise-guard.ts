@@ -194,3 +194,102 @@ export const PROMISE_CORRECTION =
   'right now in this reply — read what you need, then write the change with write_file or ' +
   'edit_file. If the task is already complete, say specifically what you verified and how. ' +
   'If you cannot proceed, say exactly what is blocking you.';
+
+/**
+ * The third failure shape: the model invents a code-level obstacle, then
+ * negotiates with it. Observed over a three-hour redesign task, verbatim:
+ *
+ *   "check_target refuses because existing dashboard.html is a bundle …
+ *    I should remove/adjust BUNDLE_MARKERS refusal for this deliberate republish"
+ *
+ * `check_target` and `BUNDLE_MARKERS` exist nowhere in that repo — the agent
+ * grepped for an unrelated class name, got nothing back, and promoted the
+ * empty result into a fictional guard that then consumed hours of "deliberate
+ * resolution". This is the false-completion failure inverted: instead of
+ * claiming work that never happened, it claims a *blocker* that does not
+ * exist, and legitimate-sounding negotiation with it replaces the task.
+ *
+ * Like the guards above this is deliberately narrow, and the caller grounds
+ * it: only replies that BOTH assert a code-level refusal AND propose to work
+ * around it are suspect. Merely reporting a real refusal and stopping is fine
+ * — that is an honest decline, which must never be flagged. The loop then
+ * searches the repo for the named symbols; if nothing defines them, the
+ * obstacle was invented.
+ */
+
+/** A named mechanism asserting a rule: guard, check, marker, validator… */
+const BLOCKER_NOUN = String.raw`(?:guard|check(?:_target)?|validator|validation|sanity\s+check|marker|refusal|assert(?:ion)?|precondition|gate|safeguard|interlock)`;
+
+/** The mechanism refusing / blocking / demanding human sign-off. */
+const BLOCKER_VERB = String.raw`(?:refus(?:es?|ing|ed)|blocks?|blocked|prevents?|prevented|forbids?|forbidden|won'?t\s+(?:let|allow|permit)|not\s+allowed\s+to|requires?\s+(?:a\s+|an\s+)?(?:deliberate|manual|explicit|human)|(?:deliberate|manual|explicit)\s+(?:resolution|override|decision|intervention)\s+(?:is|was)\s+required)`;
+
+/** Suppression verbs, base and gerund — shared by both predicates. */
+const WORKAROUND_VERB = String.raw`(?:remove|adjust|relax|bypass|disable|delete|drop|weaken|override|patch|loosen|neutral[iz]se?|removing|adjusting|relaxing|bypassing|disabling|deleting|dropping|weakening|overriding|patching|loosening|neutral[iz]sing)`;
+
+/** True when the reply asserts that a named piece of code refuses or blocks.
+ *  Planning to *remove a guard* is itself an assertion that it blocks, so the
+ *  workaround-verb + blocker-noun pair counts here too. */
+export function claimsCodeBlocker(text: string): boolean {
+  const t = text.slice(0, 4_000);
+  return (
+    new RegExp(String.raw`\b${BLOCKER_NOUN}\b[^.\n]{0,48}\b${BLOCKER_VERB}\b`, 'i').test(t)
+    || new RegExp(String.raw`\b${BLOCKER_VERB}\b[^.\n]{0,48}\b${BLOCKER_NOUN}\b`, 'i').test(t)
+    || /\brefus(?:es?|ing|ed)\s+to\s+(?:overwrite|write|delete|remove|replace|publish|proceed|continue|regenerate)\b/i.test(t)
+    || new RegExp(String.raw`\bblocked\s+by\s+(?:the\s+|a\s+|an\s+)?${BLOCKER_NOUN}\b`, 'i').test(t)
+    || new RegExp(String.raw`\b${WORKAROUND_VERB}\b[^.\n]{0,40}\b${BLOCKER_NOUN}s?\b`, 'i').test(t)
+  );
+}
+
+/** Working around / suppressing the obstacle, rather than honouring or
+ *  reporting it. This is what separates "negotiating with a guard" (flag)
+ *  from "reporting a refusal and stopping" (legitimate). */
+export function proposesGuardWorkaround(text: string): boolean {
+  const t = text.slice(0, 4_000);
+  return (
+    new RegExp(String.raw`\b${WORKAROUND_VERB}\b[^.\n]{0,40}\b(?:guard|check|marker|refusal|validator|validation|assert(?:ion)?|gate|safeguard|precondition)s?\b`, 'i').test(t)
+    || /\b(?:guard|check|marker|refusal|validator|gate)s?\b[^.\n]{0,32}\b(?:remov(?:e|al)|adjust(?:ment)?|relax(?:ation)?|bypass|disabl\w+|override|weaken\w*|loosen\w*)\b/i.test(t)
+    || /\bdeliberate(?:ly)?\s+(?:resolut?ion|resolve|overwrite|republish|replace|repopulat\w+|decis?ion|unblock)\b/i.test(t)
+    || /\b(?:until|after|pending|for)\s+(?:that|this|the)\s+(?:is|was|are)?\s*resolved\s+deliberately\b/i.test(t)
+  );
+}
+
+/**
+ * Identifier-like tokens in the reply that could name the claimed obstacle:
+ * snake_case, camelCase or SCREAMING_CASE, ≥5 chars — `check_target`,
+ * `BUNDLE_MARKERS`. Plain english words ("dashboard", "bundle") are excluded:
+ * they name the *subject*, not the mechanism, and searching for them would
+ * almost always "find" something and silence the guard.
+ */
+export function blockerSymbolNames(text: string): string[] {
+  const t = text.slice(0, 4_000);
+  const out = new Set<string>();
+  const re = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t)) !== null) {
+    const s = m[0];
+    if (s.length < 5) continue;
+    const isSnake = s.includes('_');
+    const isCamel = /[a-z][A-Z]/.test(s);
+    const isScreaming = /^[A-Z][A-Z0-9_]*[A-Z0-9]$/.test(s) && /[A-Z]/.test(s.slice(1));
+    if (isSnake || isCamel || isScreaming) out.add(s);
+    if (out.size >= 8) break;
+  }
+  return [...out];
+}
+
+/** How many times a run may be pushed back on an invented blocker. */
+export const MAX_BLOCKER_NUDGES = 2;
+
+/** The correction for negotiating with a guard that does not exist. */
+export function inventedBlockerCorrection(symbols: string[]): string {
+  const list = symbols.slice(0, 4).map((s) => `"${s}"`).join(', ');
+  return (
+    `Your reply treats ${list} as real code-level obstacle(s) that refuse or block the task, ` +
+    `and proposes to work around them — but a search of this repository finds no code defining ` +
+    `any of them. Do not negotiate with, adjust, or "deliberately resolve" an obstacle you have not ` +
+    `read. Before acting on any claimed guard or refusal: call read_file on the file that defines it ` +
+    `and quote the exact lines in your reply. If you inferred the refusal from an empty search result, ` +
+    `a comment, or another summary, say so explicitly — an empty grep is not a guard. Then continue ` +
+    `the actual task.`
+  );
+}

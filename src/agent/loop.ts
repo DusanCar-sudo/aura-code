@@ -69,6 +69,8 @@ import {
   looksLikeUnparsedToolCall, MAX_UNPARSED_NUDGES, UNPARSED_TOOLCALL_CORRECTION,
   claimedNewFiles, claimsVerification, MAX_GROUND_NUDGES,
   missingFilesCorrection, UNRAN_VERIFICATION_CORRECTION,
+  claimsCodeBlocker, proposesGuardWorkaround, blockerSymbolNames,
+  MAX_BLOCKER_NUDGES, inventedBlockerCorrection,
 } from './promise-guard.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 import { formatSteering, type SteeringInbox } from './steering.js';
@@ -134,6 +136,58 @@ const RUNAWAY_CORRECTION =
  *  re-deriving, and naming it back is often enough to break it — but a model
  *  that ignores three explicit corrections is not going to obey a fourth. */
 const MAX_STALL_CORRECTIONS = 3;
+
+/** No-progress ("spin") guard. A run that keeps calling tools turn after turn
+ *  without ever changing state (no write_file/edit_file/run_shell/run_tests)
+ *  and without reading anything *new* is re-verifying an already-reached state
+ *  rather than moving forward. Observed as a 300+ turn / 5.5-hour run that
+ *  removed one modal then spent ~50 turns re-screenshotting and re-reading the
+ *  already-done page (session 24eebc25) — each call differed, so detectStall
+ *  never fired, but every one returned the same artifact.
+ *
+ *  Reading a resource that has not been seen this run is exploration and resets
+ *  the streak: a real task surveys new files before it writes. Only re-checking
+ *  already-seen targets (the same file at a different window, the same page at
+ *  a different selector) is a spin. */
+const NO_PROGRESS_LIMIT = 8;
+
+/** How many times a spinning run may be nudged before it is stopped. The
+ *  streak is not reset by a nudge (see the guard in the loop body), so a pure
+ *  spin hard-stops a turn after these run out: NO_PROGRESS_LIMIT turns to
+ *  first fire, then one turn per correction. */
+const MAX_NO_PROGRESS_CORRECTIONS = 2;
+
+/** Sent when the no-progress guard fires. Names the loop concretely, then lets
+ *  the model keep working if it genuinely has an open question, but demands it
+ *  either conclude or make a state-changing call. */
+function noProgressCorrection(turnsSpun: number): string {
+  return `You have now spent ${turnsSpun} turns calling tools without changing anything on disk ` +
+    'or running anything — you are only reading and re-verifying. If the task is complete, stop ' +
+    'calling tools and give your final summary now. If you are still gathering information, say in ' +
+    'one sentence the specific open question you are resolving, then make the call that resolves it. ' +
+    'Do not run another verification pass of the same already-confirmed state.';
+}
+
+/** The stable resource a read-only call inspects, when the spin guard can name
+ *  one — else nothing. Keyed by the target path/URL only, ignoring the call's
+ *  other parameters, so re-reading a file at different line ranges or
+ *  re-screenshotting a page at different selectors still collapses to the same
+ *  resource: that is the re-verification shape (session 24eebc25). Calls with
+ *  no identifiable target — search queries, directory listings, everything
+ *  else — return nothing, so the guard treats them as new input and never fires
+ *  on calls it cannot see are repeats. */
+function spinResourceKeys(calls: readonly ToolCall[]): string[] {
+  const keys: string[] = [];
+  for (const c of calls) {
+    const target = typeof c.input?.path === 'string' && c.input.path
+      ? c.input.path
+      : typeof c.input?.url === 'string' && c.input.url
+        ? c.input.url
+        : undefined;
+    if (target !== undefined) keys.push(`${c.name}:${target}`);
+  }
+  return keys;
+}
 
 /** How many times the per-invocation turn ceiling may be extended before it
  *  becomes hard again. Twenty windows of the default 50 is 1,000 turns — far
@@ -278,6 +332,44 @@ export interface TokenUsage {
  * Deliberately excludes non-deterministic tools (web_fetch, web_search,
  * http_request, browser) and anything with side effects.
  */
+/**
+ * Does any file under `root` define/mention any of `symbols`? Grounding for
+ * the invented-blocker check: a reply that negotiates with "check_target"
+ * when nothing in the repo defines check_target is negotiating with fiction.
+ * Bounded walk — this only runs when the prose predicate already matched, so
+ * the cost is paid rarely. Fails OPEN: if the tree cannot be searched we
+ * assume the symbol exists rather than nudge on our own blindness.
+ */
+const BLOCKER_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv']);
+async function repoDefinesAnySymbol(root: string, symbols: string[]): Promise<boolean> {
+  const needles = symbols.map((sym) => sym.toLowerCase());
+  let visited = 0;
+  const walk = async (dir: string, depth: number): Promise<boolean> => {
+    if (depth > 8 || visited > 20_000) return false;
+    let entries: import('fs').Dirent[];
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return false; }
+    for (const e of entries) {
+      if (visited > 20_000) return false;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (BLOCKER_SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
+        if (await walk(full, depth + 1)) return true;
+      } else if (e.isFile()) {
+        visited++;
+        try {
+          const stat = await fs.promises.stat(full);
+          if (stat.size > 2_000_000) continue;
+          const text = await fs.promises.readFile(full, 'utf8');
+          const low = text.toLowerCase();
+          if (needles.some((n) => low.includes(n))) return true;
+        } catch { /* unreadable file — skip */ }
+      }
+    }
+    return false;
+  };
+  try { return await walk(root, 0); } catch { return true; }
+}
+
 const CACHEABLE_READ_TOOLS = new Set([
   'read_file', 'list_dir', 'git_diff', 'git_status', 'search_code', 'search_semantic',
 ]);
@@ -665,6 +757,17 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   let turnCeiling = maxTurns;
   let turnExtensions = 0;
   let stallCorrections = 0;
+  // No-progress ("spin") detection. Consecutive tool-calling turns that change
+  // no state and read nothing new (see NO_PROGRESS_LIMIT above); reset by any
+  // mutating turn or by a read of a not-yet-seen resource.
+  let spinStreak = 0;
+  let spinCorrections = 0;
+  let spinStopped = false;
+  // Read targets seen so far. A no-mutation turn whose calls all hit targets
+  // already in here is re-verification; one that touches anything new is
+  // exploration and clears the streak (the set is kept so a later re-read of
+  // an earlier target still counts as a repeat).
+  const spinSeen = new Set<string>();
   // Successful state-changing calls across the whole run, by kind. Used at the
   // "done" boundary to check a completion claim against what actually ran: a
   // reply that says it wrote a file or that the tests pass, with zero calls of
@@ -1033,6 +1136,15 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       const unranVerification =
         writeCalls > 0 && execCalls === 0 && claimsVerification(responseText);
 
+      // 4. an invented obstacle: the reply asserts a code-level refusal AND
+      //    plans to work around it, but no file in the repo defines the named
+      //    mechanism — the guard is fiction (see promise-guard.ts).
+      const blockerSymbols = blockerSymbolNames(responseText);
+      const inventedBlocker = claimsCodeBlocker(responseText)
+        && proposesGuardWorkaround(responseText)
+        && blockerSymbols.length > 0
+        && !(await repoDefinesAnySymbol(opts.context.root, blockerSymbols));
+
       if (unparsedCall && (loopState._unparsedNudges ?? 0) < MAX_UNPARSED_NUDGES) {
         loopState._unparsedNudges = (loopState._unparsedNudges ?? 0) + 1;
         display.warning(
@@ -1041,6 +1153,18 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         );
         history.push({ role: 'assistant', content: responseText });
         history.push({ role: 'user', content: UNPARSED_TOOLCALL_CORRECTION });
+        display.agentThinking();
+        continue;
+      }
+
+      if (inventedBlocker && (loopState._blockerNudges ?? 0) < MAX_BLOCKER_NUDGES) {
+        loopState._blockerNudges = (loopState._blockerNudges ?? 0) + 1;
+        display.warning(
+          `Reply negotiates with a code guard the repo does not define — correcting ` +
+          `(${loopState._blockerNudges}/${MAX_BLOCKER_NUDGES}).`,
+        );
+        history.push({ role: 'assistant', content: responseText });
+        history.push({ role: 'user', content: inventedBlockerCorrection(blockerSymbols) });
         display.agentThinking();
         continue;
       }
@@ -1061,10 +1185,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         continue;
       }
 
-      const ungrounded = unparsedCall || missingFiles.length > 0 || unranVerification;
+      const ungrounded = unparsedCall || missingFiles.length > 0 || unranVerification || inventedBlocker;
       const ungroundedNote = !ungrounded ? '' :
         unparsedCall ? 'a tool call was written as text and did not run' :
         missingFiles.length > 0 ? `claimed file(s) not on disk: ${missingFiles.join(', ')}` :
+        inventedBlocker ? `negotiated with guard(s) no repo code defines: ${blockerSymbols.slice(0, 3).join(', ')}` :
         'the tests were said to pass but were never run';
 
       history.push({ role: 'assistant', content: responseText });
@@ -1122,6 +1247,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     // One checkpoint per turn, taken lazily before the first mutating call —
     // a turn's writes form one burst, and the engine dedupes identical trees.
     let checkpointedThisTurn = false;
+
+    // Snapshot the state-change counters so this turn's mutation (if any) can
+    // be told apart from the run's cumulative total — the no-progress ("spin")
+    // guard keys on turns that change nothing.
+    const turnStartWrites = writeCalls + execCalls;
 
     for (const call of responseToolCalls) {
       toolCallCount++;
@@ -1366,6 +1496,11 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           `(nudge ${stallCorrections}/${MAX_STALL_CORRECTIONS}).`,
         );
         history.push({ role: 'user', content: stallCorrection(stall, profile.stallThreshold) });
+        // A repeat/cycle is the stall detector's to manage — it owns identical
+        // and alternating calls and gives the model three chances to change
+        // before stopping. Reset the spin streak so a same-two-calls loop is
+        // resolved by stall at its gentler cadence, not pre-empted here.
+        spinStreak = 0;
         // The signatures that triggered this are still the tail of the list, so
         // without clearing them the very next turn re-fires the detector and
         // burns every remaining nudge on one stall.
@@ -1374,6 +1509,55 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
       } else {
         display.warning(`${what}, and ${MAX_STALL_CORRECTIONS} corrections did not change it — stopping loop.`);
         break;
+      }
+    }
+
+    // No-progress ("spin") guard: this turn called tools but changed nothing
+    // (no write/edit/shell/test) and read nothing new. Enough such turns in a
+    // row means the run is re-verifying an already-reached state rather than
+    // moving forward. Nudge, then hard-stop after the nudges run out — mirrors
+    // the stall path above. The streak is NOT reset by a nudge: once it clears
+    // NO_PROGRESS_LIMIT it stays past it, so an unheeding spinner is nudged on
+    // the following turns too and hard-stopped a turn after the corrections are
+    // exhausted, instead of buying itself another NO_PROGRESS_LIMIT turns per
+    // nudge. Reading a brand-new resource resets it — that is exploration.
+    if (responseToolCalls.length > 0) {
+      if ((writeCalls + execCalls) === turnStartWrites) {
+        const keys = spinResourceKeys(responseToolCalls);
+        let sawNew = false;
+        for (const k of keys) {
+          if (!spinSeen.has(k)) sawNew = true;
+          spinSeen.add(k);
+        }
+        // No keyable target at all (calls the guard cannot classify) is treated
+        // as new input too — fail open, never fire on something we cannot see
+        // is a repeat.
+        if (keys.length === 0 || sawNew) {
+          spinStreak = 0;
+        } else {
+          spinStreak++;
+          if (spinStreak >= NO_PROGRESS_LIMIT) {
+            if (spinCorrections < MAX_NO_PROGRESS_CORRECTIONS) {
+              spinCorrections++;
+              display.warning(
+                `${NO_PROGRESS_LIMIT}+ straight turns with no change to disk — telling the model to ` +
+                `conclude or act (nudge ${spinCorrections}/${MAX_NO_PROGRESS_CORRECTIONS}).`,
+              );
+              history.push({ role: 'user', content: noProgressCorrection(spinStreak) });
+            } else {
+              display.warning(
+                `${NO_PROGRESS_LIMIT}+ straight turns with no change to disk, and ` +
+                `${MAX_NO_PROGRESS_CORRECTIONS} corrections did not break the loop — stopping.`,
+              );
+              spinStopped = true;
+              break;
+            }
+          }
+        }
+      } else {
+        // A mutating turn resets the streak and forgets what has been read.
+        spinStreak = 0;
+        spinSeen.clear();
       }
     }
 
@@ -1398,6 +1582,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const resumeHint = resumeHintFor(opts.sessionPath);
   const capDesc = turnCeiling === Infinity ? 'none' : String(turnCeiling);
   const reason = primaryArgLoopReason ? primaryArgLoopReason
+    : spinStopped ? `stopped (${NO_PROGRESS_LIMIT}+ straight turns with no change to disk; ${MAX_NO_PROGRESS_CORRECTIONS} corrections ignored)`
     : stall === 'repeat' ? `stalled (repeated identical tool calls; ${MAX_STALL_CORRECTIONS} corrections ignored)`
     : stall === 'cycle' ? `stalled (cycling between the same two tool calls; ${MAX_STALL_CORRECTIONS} corrections ignored)`
     : budgetStop ? describeBudgetStop(budgetStop)

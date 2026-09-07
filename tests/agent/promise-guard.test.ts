@@ -4,6 +4,9 @@ import {
   looksLikeUnparsedToolCall,
   claimedNewFiles,
   claimsVerification,
+  claimsCodeBlocker,
+  proposesGuardWorkaround,
+  blockerSymbolNames,
 } from '../../src/agent/promise-guard.js';
 
 /**
@@ -142,5 +145,70 @@ describe('claimsVerification — "the tests pass"', () => {
     ]) {
       expect(claimsVerification(s), s).toBe(false);
     }
+  });
+});
+
+/**
+ * The invented-blocker strings are verbatim from a real three-hour session in
+ * which the agent grepped for an unrelated class name, got nothing, and spent
+ * the rest of the task negotiating with `check_target` / `BUNDLE_MARKERS` —
+ * neither of which existed anywhere in the repo.
+ */
+describe('claimsCodeBlocker — negotiating with an obstacle', () => {
+  it('catches the observed fiction', () => {
+    for (const s of [
+      'check_target refuses because existing dashboard.html is a bundle.',
+      "which check_target() refuses to overwrite until that is resolved deliberately",
+      'So I should remove/adjust BUNDLE_MARKERS refusal for this deliberate republish.',
+      'check_target() refuses to overwrite until that mix-up is resolved deliberately',
+      ' regeneration is blocked by the bundle marker check.',
+    ]) {
+      expect(claimsCodeBlocker(s), s).toBe(true);
+    }
+  });
+
+  it('must not flag honest refusals or unrelated prose', () => {
+    for (const s of [
+      'The pre-commit hook refused the commit, so I left the file untouched.',
+      'The API returns 401, so the token is stale — nothing code-side blocks us.',
+      'I read generate_dashboard.py; there is no guard, so I regenerated the pages.',
+      'The linter passes and the tests are green.',
+    ]) {
+      expect(claimsCodeBlocker(s), s).toBe(false);
+    }
+  });
+});
+
+describe('proposesGuardWorkaround — the tell that separates negotiating from reporting', () => {
+  it('catches plans to suppress the obstacle', () => {
+    for (const s of [
+      'I should remove/adjust BUNDLE_MARKERS refusal for this deliberate republish.',
+      'relaxing the bundle guard deliberately',
+      'the cleanest fix is to bypass the validation and publish anyway',
+      'that refusal needs a deliberate resolution before we can republish',
+    ]) {
+      expect(proposesGuardWorkaround(s), s).toBe(true);
+    }
+  });
+
+  it('does not flag honour-the-refusal replies', () => {
+    for (const s of [
+      'check_target refuses, so I will read it before changing anything.',
+      'The guard is doing its job; I will not touch it.',
+    ]) {
+      expect(proposesGuardWorkaround(s), s).toBe(false);
+    }
+  });
+});
+
+describe('blockerSymbolNames — identifiers that could name the obstacle', () => {
+  it('extracts the observed symbols, not english words', () => {
+    const syms = blockerSymbolNames(
+      'check_target refuses because dashboard.html is a bundle; remove BUNDLE_MARKERS refusal.',
+    );
+    expect(syms).toContain('check_target');
+    expect(syms).toContain('BUNDLE_MARKERS');
+    expect(syms).not.toContain('dashboard');
+    expect(syms).not.toContain('because');
   });
 });
