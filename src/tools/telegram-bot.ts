@@ -783,8 +783,23 @@ function flushApprovals(chatId: string, approved: boolean): number {
   return n;
 }
 
+// ── Per-command approval: off when an allowlist exists (Hermes parity) ───────
+// Hermes gates its Telegram agent at PAIRING — an approved user simply gets to
+// act — and does not prompt per command. Aura now matches that: authorization
+// is ALLOWED_USER_IDS, and a user who passed it does not re-prove themselves
+// on every command. The prompt it replaces was not free: an unanswered tap
+// expired after 5 minutes into a DENIAL, so a command sent while Dušan was
+// away failed with "Approval timed out" and the turn was lost.
+//
+// The gate stays armed for one case: no allowlist configured. That bot answers
+// anyone who finds it, and there the prompt is the only thing between a
+// stranger and a shell on this PC. isCatastrophic() is unaffected either way —
+// `rm -rf /` and friends are refused outright, approval or not.
+const PER_COMMAND_APPROVAL = ALLOWED_USER_IDS.length === 0;
+
 /** Ask Dušan to approve a command; resolves true/false (false on timeout). */
 async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
+  if (!PER_COMMAND_APPROVAL) return true;
   if (autoApproveChats.has(String(chatId))) return true;
   const id = `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   const keyboard = {
@@ -1030,10 +1045,30 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
       // assistant turn carrying tool_calls that nothing responds to); the
       // fallback dialects have no call id, so they stay on the prose shape.
       if (nativeCall) {
-        history.push({ role: 'assistant', content: text, toolCalls: [nativeCall] });
+        // Replay the assistant turn EXACTLY as the model produced it — every
+        // tool call, not just the one this step ran. A turn that emitted two
+        // calls and is replayed carrying one is a doctored history, and
+        // DeepSeek rejects the next request with a misleading
+        // "`reasoning_content` in the thinking mode must be passed back to the
+        // API" (verified: replaying all calls succeeds with no reasoning_content
+        // anywhere, replaying one of two fails). That 400 killed every turn
+        // after a tool call, which is what made the bot unusable.
+        //
+        // Only one action runs per step, so the calls we did not execute are
+        // answered truthfully rather than silently dropped: every tool_call id
+        // must have a result or the API rejects the turn for the other reason.
+        // The model re-issues anything it still needs on the next step.
+        const calls = response.toolCalls;
+        history.push({ role: 'assistant', content: text, toolCalls: calls });
         history.push({
           role: 'tool_result',
-          results: [{ id: nativeCall.id, name: nativeCall.name, content: toolOut }],
+          results: calls.map(c => ({
+            id: c.id,
+            name: c.name,
+            content: c.id === nativeCall.id
+              ? toolOut
+              : 'Not executed: this agent runs one action per step. Ask again if you still need it.',
+          })),
         });
       } else {
         history.push({ role: 'assistant', content: `${verb}: ${arg}` });
@@ -1213,7 +1248,11 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       ``,
       `🎛 Task control:`,
       `/stop — Stop the task currently running in this chat`,
-      `/approve-all — ⚠️ Auto mode: approve all pending confirmations AND all future commands without asking (including destructive ones). Lasts until you send /new.`,
+      ...(PER_COMMAND_APPROVAL
+        ? [`/approve-all — ⚠️ Auto mode: approve all pending confirmations AND all future commands without asking (including destructive ones). Lasts until you send /new.`]
+        // Listing a command that now returns immediately would be a lie: with an
+        // allowlist configured there is nothing left to approve.
+        : [`(Commands run without per-command approval — you are on the allowlist. Catastrophic commands are still refused.)`]),
       `/new — New session: clears history and turns off auto-approve mode`,
       ``,
       `💡 I remember conversations permanently — whatever you ask me, I'll recall it next time!`,
@@ -1606,6 +1645,12 @@ async function poll(): Promise<void> {
     console.error(`[${ts()}]   ⚠️ getMe failed: ${e.message}`);
   }
   console.log(`   Bot: ${who}`);
+  // Whether a stranger can reach a shell on this PC is the single most
+  // important fact about a given start, so it goes in the banner rather than
+  // being inferred from the config file.
+  console.log(`   Auth: ${ALLOWED_USER_IDS.length > 0
+    ? `${ALLOWED_USER_IDS.length} allowed user id(s) · per-command approval OFF (Hermes parity)`
+    : '⚠️ NO ALLOWLIST — open to anyone · per-command approval ON'}`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Long-polling Telegram (30s)…`);
   console.log('');
