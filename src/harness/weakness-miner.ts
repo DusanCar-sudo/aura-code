@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
+import { stripTaskGuidance } from '../agent/task-guidance.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -103,7 +104,9 @@ function parseSessionFile(filePath: string): RawSession | null {
 function getUserTask(history: HistoryMessage[]): string {
   const first = history.find(m => m.role === 'user');
   if (!first) return '(unknown task)';
-  return typeof first.content === 'string' ? first.content.slice(0, 120) : '(unknown task)';
+  // Strip appended task guidance (task-guidance.ts) so reported tasks name the
+  // user's request, not the checklist keywords that rode along with it.
+  return typeof first.content === 'string' ? stripTaskGuidance(first.content).slice(0, 120) : '(unknown task)';
 }
 
 function getTimestamp(session: RawSession): string {

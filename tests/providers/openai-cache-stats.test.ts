@@ -86,3 +86,30 @@ describe('billing impact of the fix', () => {
     expect(before / after).toBeLessThan(5.5);
   });
 });
+
+describe('costFor — cache-write pricing', () => {
+  // Anthropic bills cache_control writes at 1.25x input and its input_tokens
+  // excludes them, so a write-heavy session's reported cost used to understate
+  // spend by the entire write volume.
+  it('prices Anthropic cache writes at 1.25x the input rate', () => {
+    const base = costFor('claude-sonnet-4-5-20251001', 100_000, 200);
+    const withWrite = costFor('claude-sonnet-4-5-20251001', 100_000, 200, 0, 50_000);
+    // 50k written tokens at $3.75/M = $0.1875
+    expect(withWrite - base).toBeCloseTo(0.1875, 10);
+  });
+
+  it('adds write cost on top of an already-read-cached call', () => {
+    // 50k read from cache, 10k freshly written at 1.25x input: the write line
+    // is additive, independent of how reads are priced on that call.
+    const withReads = costFor('claude-sonnet-4-5-20251001', 100_000, 200, 50_000);
+    const withReadsAndWrites = costFor('claude-sonnet-4-5-20251001', 100_000, 200, 50_000, 10_000);
+    expect(withReadsAndWrites - withReads).toBeCloseTo(0.0375, 10);
+  });
+
+  it('does not double-price writes for auto-cache providers without a write row', () => {
+    // GLM/DeepSeek auto-cache: creation tokens are not a separate billing line
+    // and are never reported, so passing them must not change the figure.
+    const base = costFor('glm-5.2', 100_000, 200);
+    expect(costFor('glm-5.2', 100_000, 200, undefined, 10_000)).toBe(base);
+  });
+});

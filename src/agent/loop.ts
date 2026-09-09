@@ -41,6 +41,7 @@ import { selectTools, selectToolsWithEviction, executeTool } from '../tools/inde
 import { PermissionSystem } from '../safety/permissions.js';
 import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
+import { buildTaskGuidance, TASK_GUIDANCE_DELIMITER } from './task-guidance.js';
 import type { ProjectContext } from './context.js';
 import type { Display } from '../cli/display.js';
 import { sessionStore, type TurnUsage } from './session-store.js';
@@ -324,6 +325,7 @@ export interface TokenUsage {
   outputTokens: number;
   totalTokens: number;
   cachedTokens: number;
+  cacheCreationTokens?: number;
 }
 
 /**
@@ -542,10 +544,13 @@ export function resumeHintFor(sessionPath: string | undefined): string {
     : ' Type :resume to continue the most recent session.';
 }
 
-const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number }> = {
-  'claude-opus-4-5-20251001':   { in: 15,  out: 75  },
-  'claude-sonnet-4-5-20251001': { in: 3,   out: 15  },
-  'claude-haiku-4-5-20251001':  { in: 0.8, out: 4   },
+const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?: number; cacheWriteIn?: number }> = {
+  // cacheWriteIn = 1.25x input: Anthropic bills cache_control writes at 1.25x
+  // the base input rate, and its usage.input_tokens excludes both written and
+  // read cache tokens — see costFor below.
+  'claude-opus-4-5-20251001':   { in: 15,  out: 75,  cacheWriteIn: 18.75 },
+  'claude-sonnet-4-5-20251001': { in: 3,   out: 15,  cacheWriteIn: 3.75  },
+  'claude-haiku-4-5-20251001':  { in: 0.8, out: 4,   cacheWriteIn: 1     },
   'gpt-4o':                     { in: 2.5, out: 10  },
   'gpt-4o-mini':                { in: 0.15,out: 0.6 },
   'gemini-pro-latest':          { in: 1.25,out: 10  },
@@ -569,12 +574,20 @@ const PRICING_USD_PER_MTOK: Record<string, { in: number; out: number; cachedIn?:
   'deepseek-v4-pro':            { in: 0.435, out: 0.87, cachedIn: 0.0435 },
 };
 
-export function costFor(model: string, input: number, output: number, cachedTokens?: number): number {
+export function costFor(model: string, input: number, output: number, cachedTokens?: number, cacheCreationTokens?: number): number {
   const p = PRICING_USD_PER_MTOK[model] ?? PRICING_USD_PER_MTOK[Object.keys(PRICING_USD_PER_MTOK).find(k => model.includes(k.split('-')[1] ?? '') && k.startsWith(model.split('-')[0] ?? '')) ?? ''] ?? { in: 0, out: 0 };
   const cached = Math.min(cachedTokens ?? 0, input);
   const billable = input - cached;
   const cachedRate = p.cachedIn ?? p.in / 10;
-  return (billable / 1_000_000) * p.in + (cached / 1_000_000) * cachedRate + (output / 1_000_000) * p.out;
+  // Cache writes are only billed as a separate line by Anthropic (1.25x input,
+  // input_tokens excluding them), and only its adapter reports
+  // cacheCreationTokens. Other providers auto-cache — writes are plain input
+  // there or not billed at all — so without a cacheWriteIn row entry the
+  // tokens are not re-priced, avoiding double counting an input figure that
+  // already includes them.
+  const created = Math.max(0, cacheCreationTokens ?? 0);
+  const writeRate = p.cacheWriteIn ?? 0;
+  return (billable / 1_000_000) * p.in + (cached / 1_000_000) * cachedRate + (created / 1_000_000) * writeRate + (output / 1_000_000) * p.out;
 }
 
 /**
@@ -619,15 +632,27 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const profile = getLoopProfile(opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name, finalTask);
+  const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name);
+  // Task-derived guidance (domain expertise, conditional plugin skills) rides
+  // on the kickoff user message rather than the system prompt — see
+  // task-guidance.ts. Skipped when the caller owns the prompt (orchestration
+  // specialists), whose tasks were never the source of these blocks. The
+  // history copy only is wrapped: the caller's `task` string stays clean for
+  // display, tools gating and budget messages, and selectTools() re-gates on
+  // this message below via stripTaskGuidance-cleaned history.
+  const useDefaultPrompt = !opts.systemPromptOverride;
+  const guidance = useDefaultPrompt ? buildTaskGuidance(task) : '';
+  const kickoffContent = guidance
+    ? `${finalTask}${TASK_GUIDANCE_DELIMITER}${guidance}`
+    : finalTask;
   const history: HistoryMessage[] = [
     ...(opts.initialHistory ?? []),
-    { role: 'user', content: finalTask, ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}) },
+    { role: 'user', content: kickoffContent, ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}) },
   ];
 
   let turns = 0;
   let toolCallCount = 0;
-  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 };
+  const usage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0, cacheCreationTokens: 0 };
 
   if (!opts.disableSpawn) {
     // The session's own model is the sub-agent default — a hardcoded name is a
@@ -950,11 +975,12 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
               usage.outputTokens += outT;
               usage.totalTokens += inT + outT;
               usage.cachedTokens += cachedT;
+              usage.cacheCreationTokens = (usage.cacheCreationTokens ?? 0) + (u.cacheCreationTokens ?? 0);
               // Net of cache hits, not raw prompt size — this is the ceiling
               // that actually tracks cost across conversation segments.
               opts.budget?.recordCall(inT, cachedT);
               const at = new Date().toISOString();
-              const turnCost = costFor(pricingModel, inT, outT, cachedT);
+              const turnCost = costFor(pricingModel, inT, outT, cachedT, u.cacheCreationTokens ?? 0);
               turnUsage.push({
                 turn: turns,
                 at,
@@ -984,7 +1010,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         success: false,
         summary: `Provider error on turn ${turns}: ${errMsg}`,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens),
       };
     }
 
@@ -1039,7 +1065,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           `(${describeRepetition(repetition)}). This is a model failure, not a task failure — ` +
           `try a narrower step, or a stronger model with --model / :model.`,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens),
       };
     }
 
@@ -1072,7 +1098,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           `This is a model failure, not a task failure: try a narrower step, or a stronger model ` +
           `with --model / :model (glm-*-flash is prone to this).`,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens),
       };
     }
 
@@ -1098,7 +1124,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
         success: false,
         summary: 'Provider returned empty response after 4 attempts — likely rate-limited or filtered',
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens),
       };
     }
 
@@ -1203,7 +1229,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           ? `${responseText}\n\n[Aura: unverified — ${ungroundedNote}.]`
           : responseText,
         turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+        costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens),
       };
     }
 
@@ -1640,8 +1666,9 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           outputTokens: usage.outputTokens + resumed.usage.outputTokens,
           totalTokens:  usage.totalTokens  + resumed.usage.totalTokens,
           cachedTokens: (usage.cachedTokens ?? 0) + (resumed.usage.cachedTokens ?? 0),
+          cacheCreationTokens: (usage.cacheCreationTokens ?? 0) + (resumed.usage.cacheCreationTokens ?? 0),
         },
-        costUsd: (costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens) ?? 0)
+        costUsd: (costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens) ?? 0)
                + (resumed.costUsd ?? 0),
       };
     }
@@ -1651,7 +1678,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
     success: false,
     summary: `Loop ${reason}.${resumeHint}`,
     turns, toolCallCount, usage, history, toolCallLog, turnUsage,
-    costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens),
+    costUsd: costFor(pricingModel, usage.inputTokens, usage.outputTokens, usage.cachedTokens, usage.cacheCreationTokens),
   };
 }
 

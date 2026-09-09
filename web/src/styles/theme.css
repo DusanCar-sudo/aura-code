@@ -17,11 +17,11 @@
   --text: #e8e6e3;
   --text-primary: #f3ece4;
   --text-dim: #8a94a6;
-  --ink: #f3ece4;
-  --txt: #aebccd;
-  --mut: #73849a;
-  --dim: #56657a;
-  --faint: #56657a;
+  --ink: #f7f4ef;
+  --txt: #dbe3ec;
+  --mut: #9aaabb;
+  --dim: #6b7c90;
+  --faint: #6b7c90;
 
   /* ── Status, from src/cli/display.ts ── */
   --ok: #5a9e6e;
@@ -82,7 +82,7 @@
   /* ── Type ── */
   --font-serif: 'Cormorant Garamond', Georgia, serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-  --font-sans: 'Space Grotesk', ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: var(--font-mono);
   --sans: var(--font-sans);
   --serif: var(--font-serif);

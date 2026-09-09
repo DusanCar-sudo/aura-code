@@ -112,12 +112,27 @@ export function searchCode(input: SearchCodeInput, cwd: string): string {
     // tokens into history in a single tool result and poisoned the context
     // for the rest of the session.
     const MAX_LINE_CHARS = 500;
-    const relative = lines.map(l => {
+    const clipped = lines.map(l => {
       const rel = l.replace(searchDir + '/', '').replace(searchDir + path.sep, '');
       return rel.length > MAX_LINE_CHARS ? rel.slice(0, MAX_LINE_CHARS) + ' …[line clipped]' : rel;
     });
-    const truncated = allLines.length > lines.length ? ` (showing first ${lines.length} of ${allLines.length})` : '';
-    return `Found ${allLines.length} result${allLines.length > 1 ? 's' : ''} for "${input.pattern}"${truncated}:\n\n${relative.join('\n')}`;
+    // Total-budget guard on top of the per-line one: 50 matches at up to 500
+    // chars each is ~25 KB of context for a tool whose only job is to point at
+    // the right lines — the model re-reads the interesting files in ranges.
+    const MAX_TOTAL_CHARS = 12_000;
+    const kept: string[] = [];
+    let used = 0;
+    for (const l of clipped) {
+      if (kept.length > 0 && used + l.length > MAX_TOTAL_CHARS) break;
+      kept.push(l);
+      used += l.length;
+    }
+    const reasons: string[] = [];
+    if (allLines.length > lines.length) reasons.push(`showing first ${lines.length} of ${allLines.length} matches`);
+    const cutByBudget = lines.length - kept.length;
+    if (cutByBudget > 0) reasons.push(`${cutByBudget} more cut at the ${MAX_TOTAL_CHARS / 1000}K-char cap — narrow the pattern or glob`);
+    const note = reasons.length > 0 ? ` (${reasons.join('; ')})` : '';
+    return `Found ${allLines.length} result${allLines.length > 1 ? 's' : ''} for "${input.pattern}"${note}:\n\n${kept.join('\n')}`;
   } catch (e: unknown) {
     // Exit code 1 from grep/rg means no results
     if (typeof e === 'object' && e !== null && 'status' in e && (e as { status: number }).status === 1) {
@@ -232,6 +247,18 @@ export function gitDiff(input: GitDiffInput, cwd: string): string {
     const staged = input.staged ? '--staged ' : '';
     const file   = input.path ? `-- ${JSON.stringify(input.path)}` : '';
     const diff   = execSync(rtkWrap(`git diff ${staged}${file}`), { cwd, encoding: 'utf8' });
-    return diff.trim() || `No ${input.staged ? 'staged ' : ''}changes${input.path ? ` in ${input.path}` : ''}`;
-  } catch (e) { return `Git error: ${String(e)}`; }
+    const text = diff.trim();
+    if (!text) return `No ${input.staged ? 'staged ' : ''}changes${input.path ? ` in ${input.path}` : ''}`;
+    // A whole-tree diff runs to hundreds of KB. Cap it here with a head + tail
+    // window: the loop's own cap would keep only the head, silently dropping
+    // every hunk near the bottom of the diff the model had not read yet.
+    const MAX_DIFF_CHARS = 20_000;
+    const TAIL_CHARS = 8_000;
+    if (text.length > MAX_DIFF_CHARS) {
+      const head = text.slice(0, MAX_DIFF_CHARS - TAIL_CHARS);
+      const tail = text.slice(-TAIL_CHARS);
+      return `${head}\n\n... [truncated: ${(text.length - MAX_DIFF_CHARS).toLocaleString()} chars omitted — diff a file or directory in smaller pieces] ...\n\n${tail}`;
+    }
+    return text;
+  } catch (e) { return `Git error: ${String(e).slice(0, 2000)}`; }
 }

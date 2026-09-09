@@ -3,6 +3,7 @@ import type { HistoryMessage } from '../providers/types.js';
 import { createProvider } from '../providers/factory.js';
 import { resolveSummaryModel } from './tiered-context.js';
 import { conversationalFile } from './unified-memory.js';
+import { stripTaskGuidance } from './task-guidance.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gazelle conversational-memory writer — session-end only, one write.
@@ -37,7 +38,7 @@ const REWRITE_SYSTEM =
 function transcript(history: HistoryMessage[]): string {
   const lines: string[] = [];
   for (const m of history) {
-    if (m.role === 'user') lines.push(`Dušan: ${m.content}`);
+    if (m.role === 'user') lines.push(`Dušan: ${stripTaskGuidance(m.content)}`);
     else if (m.role === 'assistant' && m.content) lines.push(`Aura: ${m.content}`);
   }
   const full = lines.join('\n');

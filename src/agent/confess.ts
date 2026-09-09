@@ -19,6 +19,7 @@ import type { LLMProvider, HistoryMessage } from '../providers/types.js';
 import type { Episode } from '../dream/episode.js';
 import { listEpisodes } from '../dream/episode.js';
 import { auraPath } from '../util/aura-home.js';
+import { stripTaskGuidance } from './task-guidance.js';
 
 function CONFESSIONS_DIR(): string { return auraPath('confessions'); }
 const DEFAULT_THRESHOLD = 500_000; // 500K tokens
@@ -89,7 +90,7 @@ function summariseHistory(history: HistoryMessage[]): string {
   const capped = history.slice(-MAX_HISTORY_MESSAGES);
   return capped.map(m => {
     if (m.role === 'user') {
-      return `**USER:** ${m.content.slice(0, 200)}`;
+      return `**USER:** ${stripTaskGuidance(m.content).slice(0, 200)}`;
     }
     if (m.role === 'assistant') {
       const text = m.content.slice(0, 300);

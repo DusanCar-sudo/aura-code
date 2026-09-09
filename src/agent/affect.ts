@@ -5,6 +5,7 @@
  * No LLM call; false positives cost a single recap line.
  */
 import type { HistoryMessage } from '../providers/types.js';
+import { stripTaskGuidance } from './task-guidance.js';
 
 // Seeded from the dream reconciler's NEGATIVE_WORDS plus frustration-specific
 // terms. Kept local: the agent core must not depend on src/dream/.
@@ -30,8 +31,8 @@ export function detectFrustration(history: HistoryMessage[], lookback = 3): stri
   if (userMessages.length === 0) return null;
 
   let total = 0;
-  for (const m of userMessages) total += hits(m.content);
-  const lastHit = hits(userMessages[userMessages.length - 1].content) > 0;
+  for (const m of userMessages) total += hits(stripTaskGuidance(m.content));
+  const lastHit = hits(stripTaskGuidance(userMessages[userMessages.length - 1].content)) > 0;
 
   if (total >= 2 || lastHit) {
     return 'Note: recent user messages show signs of frustration — prioritize directness, verify before claiming success.';

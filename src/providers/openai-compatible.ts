@@ -75,7 +75,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       apiKey: this.configuredKey,
       baseURL: config.baseUrl ?? resolveBaseUrl(config),
       defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/dusan-mile/aura',
+        'HTTP-Referer': 'https://github.com/DusanCar-sudo/aura-code',
         'X-Title': 'Aura CLI'
       },
     });

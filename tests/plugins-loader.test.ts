@@ -106,6 +106,26 @@ describe('plugin loader', () => {
     expect(pre.pluginRoot).toBe(dir);
   });
 
+  it('parses always-on skills from frontmatter', () => {
+    const dir = writePlugin('lazy-dev', {
+      '.claude-plugin/plugin.json': JSON.stringify({ name: 'lazy-dev', version: '1.0.0' }),
+      'skills/ponytail/SKILL.md': '---\nname: ponytail\ndescription: Laziest solution that works\nalways-on: true\n---\nBe lazy.',
+    });
+    const plugin = loadPlugin(dir)!;
+    expect(plugin.skills).toHaveLength(1);
+    expect(plugin.skills[0].name).toBe('ponytail');
+    expect(plugin.skills[0].alwaysOn).toBe(true);
+  });
+
+  it('defaults skills to not always-on', () => {
+    const dir = writePlugin('normal', {
+      '.claude-plugin/plugin.json': JSON.stringify({ name: 'normal', version: '1.0.0' }),
+      'skills/tdd/SKILL.md': '---\nname: tdd\ndescription: TDD\n---\nWrite tests first.',
+    });
+    const plugin = loadPlugin(dir)!;
+    expect(plugin.skills[0].alwaysOn).toBe(false);
+  });
+
   it('falls back to the directory name when the manifest is missing', () => {
     const dir = writePlugin('bare-plugin', {
       'commands/hello.md': 'Say hello.',

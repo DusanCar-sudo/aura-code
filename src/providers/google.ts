@@ -89,11 +89,7 @@ export class GoogleProvider implements LLMProvider {
     }
 
     const finalResponse = await result.response.catch(() => null);
-    const meta = finalResponse?.usageMetadata;
-    const usage = meta ? {
-      inputTokens: meta.promptTokenCount ?? 0,
-      outputTokens: meta.candidatesTokenCount ?? 0,
-    } : undefined;
+    const usage = googleUsage(finalResponse?.usageMetadata);
 
     const stopReason = toolCalls.length > 0 ? 'tools' : 'done';
     yield {
@@ -165,15 +161,39 @@ export function fromGoogleResponse(response: any): LLMResponse & { googleParts?:
     }
   }
 
-  const meta = response?.usageMetadata;
   return {
     text,
     toolCalls,
     googleParts: parts,
     stopReason: toolCalls.length > 0 ? 'tools' : 'done',
-    usage: meta ? {
-      inputTokens: meta.promptTokenCount ?? 0,
-      outputTokens: meta.candidatesTokenCount ?? 0,
-    } : undefined,
+    usage: googleUsage(response?.usageMetadata),
+  };
+}
+
+/**
+ * Gemini reports context-cache hits in usageMetadata.cachedContentTokenCount
+ * (explicit cachedContent) and, on newer APIs, per-modality cachedTokenCount
+ * inside promptTokensDetails. Without reading either, every cached turn was
+ * reported — and priced — as full-rate input, so cache savings were invisible
+ * in /stats and the session budget.
+ *
+ * Like OpenAI, Gemini's promptTokenCount includes the cached portion, so the
+ * cached figure is reported alongside (not instead of) the input total and
+ * costFor bills only the uncached remainder at the input rate.
+ */
+function googleUsage(meta: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  cachedContentTokenCount?: number;
+  promptTokensDetails?: Array<{ cachedTokenCount?: number }>;
+} | undefined): { inputTokens: number; outputTokens: number; cachedTokens?: number } | undefined {
+  if (!meta) return undefined;
+  const input = meta.promptTokenCount ?? 0;
+  const cached = (meta.cachedContentTokenCount ?? 0)
+    + (meta.promptTokensDetails ?? []).reduce((n, d) => n + (d.cachedTokenCount ?? 0), 0);
+  return {
+    inputTokens: input,
+    outputTokens: meta.candidatesTokenCount ?? 0,
+    ...(cached > 0 ? { cachedTokens: cached } : {}),
   };
 }

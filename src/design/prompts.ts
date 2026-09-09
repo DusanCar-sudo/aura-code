@@ -145,20 +145,16 @@ export function buildDesignXPrompt(o: BuildPromptOpts): string {
 
   parts.push(
     `\nHOW TO WRITE THE FILE — this is where these runs fail, so read it twice.\n` +
-    `- Use the write_file tool, with the ENTIRE finished document as the content, in ONE call.\n` +
-    `- Do NOT write a skeleton with placeholders like /* INSERT_CSS_HERE */ or <!-- BODY --> and\n` +
-    `  then fill them in afterwards. Every run that has done this has ended with the placeholders\n` +
-    `  still in the file: the follow-up step fails or gets cut off, and the artefact ships as an\n` +
-    `  empty shell that looks finished from the outside.\n` +
-    `- Do NOT author the file through the shell — no 'cat > file <<EOF', no echo-append, no sed\n` +
-    `  patching. write_file exists for this and is the only reliable path.\n` +
-    `- If the document feels too large to emit in one call: it is not. Emit it. A long single\n` +
-    `  write always beats a sequence of patches.\n` +
-    `- After the write, your own copy of what you sent is replaced by a size stub — you will NOT be\n` +
-    `  able to re-read your draft from the conversation. Read the file back from disk with read_file\n` +
-    `  when you need to check it. Plan the whole document before you start writing, not during.\n` +
+    `- Use write_file with the ENTIRE finished document as the content, in ONE call.\n` +
+    `- No skeleton-then-fill: every run that wrote /* INSERT_CSS_HERE */ or <!-- BODY --> shipped\n` +
+    `  with the placeholders still in it, because the follow-up step got cut off.\n` +
+    `- Not through the shell — no heredoc, no echo-append, no sed patching. write_file is the only\n` +
+    `  reliable path.\n` +
+    `- If the document feels too large for one call: it is not. Emit it.\n` +
+    `- After the write your draft is replaced by a size stub in your context — you cannot re-read it\n` +
+    `  from the conversation, only from disk with read_file. Plan the whole document before writing.\n` +
     `- Before reporting done, read the file back and confirm: it parses, it contains no placeholder\n` +
-    `  markers, and the body is real content rather than a stub.`,
+    `  markers, and the body is real content rather than a stub.\n`,
   );
 
   parts.push(

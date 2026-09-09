@@ -1,4 +1,5 @@
 import type { ToolDefinition, HistoryMessage } from '../providers/types.js';
+import { stripTaskGuidance } from '../agent/task-guidance.js';
 import { readFile } from './read-file.js';
 import { listDir } from './list-dir.js';
 import { editFile } from './edit-file.js';
@@ -230,11 +231,14 @@ const CONDITIONAL_TOOL_TRIGGERS: Record<string, RegExp> = {
   ftp_upload:   /\bftp\b|upload to|deploy via ftp|ftp upload/i,
 };
 
-/** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy). */
+/** Text the gate scans: task + user/assistant messages (tool results excluded — huge and noisy).
+ *  The kickoff user message may carry appended task guidance (see task-guidance.ts); its
+ *  domain/plugin keywords must not trigger conditional tools the task itself never asked for,
+ *  so it is stripped before scanning. */
 function gateText(task: string, history: HistoryMessage[]): string {
   const parts = [task];
   for (const msg of history) {
-    if (msg.role === 'user') parts.push(msg.content);
+    if (msg.role === 'user') parts.push(stripTaskGuidance(msg.content));
     else if (msg.role === 'assistant' && msg.content) parts.push(msg.content);
   }
   return parts.join('\n').toLowerCase();
@@ -300,12 +304,13 @@ export function selectToolsWithEviction(
 ): ToolDefinition[] {
   const text = gateText(task, history);
   const lastUserMsg = [...history].reverse()
-    .find(m => m.role === 'user')?.content?.toLowerCase() ?? '';
+    .find(m => m.role === 'user');
+  const lastUserText = stripTaskGuidance(lastUserMsg?.content ?? '').toLowerCase();
 
   for (const [name, trigger] of Object.entries(CONDITIONAL_TOOL_TRIGGERS)) {
     if (included.has(name)) continue;
     if (evicted.has(name)) {
-      if (trigger.test(lastUserMsg)) {
+      if (trigger.test(lastUserText)) {
         evicted.delete(name);
         included.add(name);
         lastUsedTurn.set(name, currentTurn);

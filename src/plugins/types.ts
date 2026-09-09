@@ -52,6 +52,8 @@ export interface PluginSkill {
   description?: string;
   body: string;
   dir: string;
+  /** Injected into every prompt, not only web/UI tasks (skill frontmatter `always-on: true`). */
+  alwaysOn?: boolean;
 }
 
 export type HookEvent = 'PreToolUse' | 'PostToolUse';

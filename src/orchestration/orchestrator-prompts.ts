@@ -114,25 +114,12 @@ GOOD EXAMPLE — 3-step plan for "Add rate limiting to the API":
   ]
 }
 
-BAD EXAMPLE — over-decomposed 8-step plan for the same task (do NOT do this):
-
-{
-  "goal": "Add rate limiting to the API.",
-  "steps": [
-    { "id": "step-1", "specialist": "researcher", "task": "Read the project README.", "context": "", "dependsOn": [] },
-    { "id": "step-2", "specialist": "researcher", "task": "List all files in src/server/.", "context": "", "dependsOn": ["step-1"] },
-    { "id": "step-3", "specialist": "researcher", "task": "Read src/server/index.ts.", "context": "", "dependsOn": ["step-2"] },
-    { "id": "step-4", "specialist": "planner",    "task": "Decide which rate-limit library to use.", "context": "", "dependsOn": ["step-3"] },
-    { "id": "step-5", "specialist": "coder",      "task": "Install the library.", "context": "", "dependsOn": ["step-4"] },
-    { "id": "step-6", "specialist": "coder",      "task": "Write the middleware.", "context": "", "dependsOn": ["step-5"] },
-    { "id": "step-7", "specialist": "coder",      "task": "Write the test.", "context": "", "dependsOn": ["step-6"] },
-    { "id": "step-8", "specialist": "reviewer",   "task": "Review everything.", "context": "", "dependsOn": ["step-7"] }
-  ]
-}
-
-The bad example splits trivially sequential work into micro-steps, uses planner
-where a researcher note would suffice, and separates implementation from testing
-unnecessarily. Combine related actions into single, well-contextualised steps.
+BAD EXAMPLE — do NOT produce an 8-step plan for the same task: "read the README",
+"list src/server/", "read index.ts", planner "decide which library", "install it",
+"write the middleware", "write the test", "review everything". That splits trivially
+sequential work into micro-steps, uses planner where a researcher note suffices, and
+separates implementation from its test. Combine related actions into single,
+well-contextualised steps.
 
 Do NOT include any text, explanation, or formatting outside the JSON object.`;
 }

@@ -44,6 +44,15 @@ describe('memoryTool — remember/recall', () => {
     const r = await memoryTool({ action: 'recall', key: 'nonexistent' });
     expect(r).toContain('No memory found');
   });
+
+  it('caps an oversized recall value so one big entry cannot flood context', async () => {
+    const big = 'v'.repeat(5_000);
+    await memoryTool({ action: 'remember', key: 'blob', value: big });
+    const r = await memoryTool({ action: 'recall', key: 'blob' });
+    expect(r).toContain('v'.repeat(600));
+    expect(r).toMatch(/truncated: 4,400 chars omitted/);
+    expect(r).not.toContain('v'.repeat(700));
+  });
 });
 
 describe('memoryTool — forget', () => {

@@ -7522,7 +7522,7 @@ body.theme-light .chat-input {
    clicking a card — only a click, not a drag — expands it in place to show
    the whole task. */
 .kanban-column-cards .kanban-card {
-  height: 150px;
+  height: 210px;
 }
 
 .kanban-column-cards .kanban-card .card-clickable-area {
@@ -7530,6 +7530,8 @@ body.theme-light .chat-input {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* text never touches the box edge — a full gutter on every side */
+  padding: 14px 16px;
 }
 
 /* Action buttons pin to the tile's bottom edge so they stay reachable even
@@ -7540,7 +7542,7 @@ body.theme-light .chat-input {
 
 .kanban-column-cards .kanban-card.expanded {
   height: auto;
-  min-height: 150px;
+  min-height: 210px;
   z-index: 200;
 }
 
@@ -7643,4 +7645,191 @@ body.theme-light .chat-input {
 .kanban-card.glow-failed {
   border-color: rgba(230, 57, 70, 0.5) !important;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(230, 57, 70, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ── Kanban card typography ─────────────────────────────────────────────
+   Every text element inside a task box. Cards are uniform 150px tiles with
+   overflow hidden, so nothing may rely on clipping to look finished: titles
+   and notes line-clamp with ellipses, and a soft fade marks where content
+   continues. Explicit line-heights everywhere — sliced letter rows were the
+   "broken letters" bug. */
+.kanban-card .card-header-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 9px;
+}
+
+.kanban-card .card-id-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--mut);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.kanban-card .card-badges-right {
+  min-width: 0;
+}
+
+.kanban-card .card-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.002em;
+  color: var(--ink);
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kanban-card .card-notes {
+  margin: 8px 0 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--txt);
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kanban-card .card-tools-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 9px;
+}
+
+.kanban-card .card-tool-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--acc);
+  background: rgba(194, 103, 76, 0.1);
+  border: 1px solid rgba(194, 103, 76, 0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.kanban-card .card-files-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.kanban-card .card-file-chip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--acc2);
+  background: rgba(110, 208, 234, 0.08);
+  border: 1px solid rgba(110, 208, 234, 0.22);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Expanded tiles show the whole text — clamps off. */
+.kanban-card.expanded .card-title,
+.kanban-card.expanded .card-notes {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+/* Soft fade at the cut line so clipped tiles read intentional, not broken. */
+.kanban-card:not(.expanded) .card-clickable-area {
+  position: relative;
+}
+
+.kanban-card:not(.expanded) .card-clickable-area::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34px;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, transparent, rgba(23, 24, 34, 0.92));
+  pointer-events: none;
+}
+
+/* ── Feather drag ───────────────────────────────────────────────────────
+   All motion is JS-driven (exponential ease toward the pointer), so the
+   card must NOT transition its own transform — a CSS transition fighting
+   the per-frame updates is what made dragging feel sticky. */
+.kanban-card {
+  will-change: transform;
+  transition: border-color 0.15s, box-shadow 0.2s;
+}
+
+.kanban-card.dragging {
+  transition: border-color 0.15s, box-shadow 0.2s;
+}
+
+:root[data-theme='light'] .kanban-card:not(.expanded) .card-clickable-area::after,
+body.theme-light .kanban-card:not(.expanded) .card-clickable-area::after {
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.94));
+}
+
+
+/* ── Header theme toggle (right of the model picker) ── */
+.aura-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #22242e 0%, #181921 100%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.15s, filter 0.15s;
+}
+
+.aura-theme-toggle:hover {
+  border-color: var(--acc);
+  filter: brightness(1.15);
+}
+
+body.theme-light .aura-theme-toggle {
+  background: linear-gradient(180deg, #f8fafc 0%, #edf0f4 100%);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+}
+
+/* Board-level failure notice — a rejected write must never be silent. */
+.board-error-strip {
+  margin: 8px 16px 0;
+  padding: 7px 12px;
+  border: 1px solid var(--err);
+  border-radius: 7px;
+  background: rgba(177, 84, 57, 0.12);
+  color: var(--err);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
 }

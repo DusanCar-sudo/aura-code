@@ -384,6 +384,15 @@ export function App() {
 
         <button
           type="button"
+          className="aura-theme-toggle"
+          title={settings.theme === 'light' ? 'Switch to dark' : 'Switch to light'}
+          onClick={() => patch({ theme: settings.theme === 'light' ? 'dark' : 'light' })}
+        >
+          {settings.theme === 'light' ? '🌙' : '☀️'}
+        </button>
+
+        <button
+          type="button"
           className="aura-conn-button"
           title="Toggle or inspect connection"
           onClick={() => {

@@ -2,6 +2,36 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.18.0] — 2026-09-09
+
+### Changed — Prompt-Cache Stability & Context Budget
+
+The system prompt is now **task-independent**, and every tool that could return an unbounded blob now has a ceiling. Both changes target the same bill: a conversation's cost is dominated by re-sending history, so anything that flips the cacheable prefix or dumps 25 KB into a tool result is paid on every subsequent turn, not once.
+
+- **Task-derived guidance moved out of the system prompt** (`src/agent/task-guidance.ts`): domain-expertise checklists and conditional plugin-skill bodies used to be compiled into the system prompt from the *current task text*. In a multi-segment conversation that changed the prefix byte-for-byte whenever one message classified differently from the last ("fix the parser" → "thanks"), re-billing the whole history at full input price. Guidance is now appended to the kickoff user message and stays there — history is never rewritten — so the prefix is byte-identical for the session and still cache-hits on `--resume`.
+- **`stripTaskGuidance` at every reader of user-message text**: session titles, the conditional-tool gate, the compactor, confessions, the Gazelle memory writer, affect detection and the weakness miner all strip the appended block first, so its domain keywords cannot leak into titles or spuriously trigger conditional tools.
+- **Orchestration and design prompts trimmed** — router, orchestrator, specialist and design prompt bodies cut by roughly half (109 lines removed, 48 added) with no behaviour change.
+- **`search_code` total-output budget**: a 12K-char cap on top of the existing 500-char-per-line clip. 50 matches at 500 chars each was ~25 KB of context for a tool whose only job is to point at the right lines.
+- **`git_diff` head + tail window**: whole-tree diffs run to hundreds of KB. Capped at 20K chars keeping both ends — the loop's own cap kept only the head, silently dropping every hunk near the bottom.
+- **PDF reads capped like text reads**: 250-line ceiling with a first-120 + last-40 window, and 500-char row clipping (`pdftotext -layout` keeps whole columns on one row).
+- **`memory` recall capped at 600 chars**, matching the search path — one large `remember()` value used to flood the context whole.
+
+### Added — Memory Search & Topic Packs
+
+- **`memory` action `search`**: free-text search scoring key + value term overlap across every namespace, returning the best few hits. The prompt now carries only a short identity summary, so exact-key `recall` (which requires already knowing the key) was not a usable escalation path; retrieved text lands in the conversation rather than the cacheable prefix.
+- **Topic packs — `:study`, `:learn`, `:unlearn`** (`src/agent/topics.ts`): curated per-subject facts stored as `~/.aura/memory/topic-<name>.json`, reachable through the existing `memory` tool. Every fact carries provenance and a date; nothing is injected unless a topic is explicitly pinned, so packs cost nothing on unrelated tasks.
+- **`always-on: true` skill frontmatter**: a plugin skill can opt into every prompt instead of being gated on web/UI keywords.
+
+### Added — Cache-Aware Cost Accounting
+
+- **Gemini cache hits are now read** from `usageMetadata.cachedContentTokenCount` and per-modality `promptTokensDetails.cachedTokenCount`. Every cached Gemini turn was previously reported — and priced — as full-rate input, making cache savings invisible in `/stats` and the session budget.
+- **Anthropic cache writes are priced separately** at 1.25× input (`cacheWriteIn`), tracked through `TokenUsage.cacheCreationTokens`. Providers that auto-cache have no `cacheWriteIn` entry, so their tokens are not re-priced and cannot be double-counted.
+
+### Fixed
+
+- OpenRouter `HTTP-Referer` pointed at a dead repo URL; now `DusanCar-sudo/aura-code`.
+- `git_diff` error text is truncated at 2K chars instead of interpolating an unbounded exception.
+
 ## [0.17.9] — 2026-08-31
 
 ### Fixed — Kanban Sub-Tab Containers Scroll Overflow

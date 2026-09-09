@@ -37,4 +37,10 @@ describe('detectFrustration', () => {
   it('returns null for empty history', () => {
     expect(detectFrustration([])).toBeNull();
   });
+
+  it('ignores frustration words inside appended task guidance', () => {
+    const guidance = '\n\n---\n## Task guidance\n\n**Security expertise:**\n- Treat any credential found in code as compromised. Never log secrets or passwords. A leaked token is a bug.';
+    const hint = detectFrustration([user(`add oauth validation${guidance}`)]);
+    expect(hint).toBeNull();
+  });
 });

@@ -1,6 +1,7 @@
 import type { HistoryMessage } from '../providers/types.js';
 import { getContextWindow } from '../providers/factory.js';
 import { thresholdRatioFor, compactionThreshold, retentionBudget } from './context-policy.js';
+import { stripTaskGuidance } from './task-guidance.js';
 
 export const ROLLOVER_AT_GENERATION = 3;
 /** Re-exported from context-policy (its home) so existing importers — notably
@@ -139,8 +140,12 @@ function extractRecapBodyLines(msg: HistoryMessage & { role: 'assistant' }): str
 
 function summariseMessage(msg: HistoryMessage): string {
   switch (msg.role) {
-    case 'user':
-      return `User: ${msg.content.slice(0, 120)}${msg.content.length > 120 ? '…' : ''}`;
+    case 'user': {
+      // Guidance appended to the kickoff message (task-guidance.ts) is
+      // annotation, not conversation — the recap should carry the request.
+      const text = stripTaskGuidance(msg.content);
+      return `User: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`;
+    }
     case 'assistant': {
       const text = msg.content ? `Assistant: ${msg.content.slice(0, 120)}${msg.content.length > 120 ? '…' : ''}` : '';
       const calls = msg.toolCalls?.length ? `Called: ${msg.toolCalls.map(c => c.name).join(', ')}` : '';

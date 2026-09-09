@@ -61,14 +61,21 @@ const reply = (text: string, inputTokens: number, cachedTokens = 0): LLMResponse
 
 describe('REPL session budget', () => {
   let tmpDir: string;
+  let tmpHome: string;
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-repl-budget-'));
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
     vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
     vi.stubEnv('AURA_SESSION_BUDGET', '');   // ignore an exported override
+    // Isolate AURA_HOME: an installed always-on plugin skill rides on the
+    // kickoff user message (task-guidance.ts) and would inflate the projected
+    // prompt past this suite's small token ceilings.
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-repl-budget-home-'));
+    vi.stubEnv('AURA_HOME', tmpHome);
   });
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
     vi.unstubAllEnvs();
   });
 

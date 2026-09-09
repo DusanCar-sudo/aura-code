@@ -101,11 +101,27 @@ async function readPdf(filePath: string, input: ReadFileInput): Promise<string> 
   }
 
   const lines = text.split('\n');
+
+  // A layout row can run very long (pdftotext -layout keeps whole columns on
+  // one row) and a document has no 200-line ceiling like the text path — clip
+  // rows and cap the read the same way read_file caps a text file, so a single
+  // long document cannot flood the context.
+  const MAX_PDF_LINE_CHARS = 500;
+  const clipRow = (l: string) => l.length > MAX_PDF_LINE_CHARS ? l.slice(0, MAX_PDF_LINE_CHARS) + ' …[row clipped]' : l;
+
   if (input.start_line !== undefined || input.end_line !== undefined) {
     const start = Math.max(1, input.start_line ?? 1) - 1;
     const end = Math.min(lines.length, input.end_line ?? lines.length);
-    return lines.slice(start, end).map((l, i) => `${start + i + 1}\t${l}`).join('\n');
+    return lines.slice(start, end).map((l, i) => `${start + i + 1}\t${clipRow(l)}`).join('\n');
+  }
+
+  const MAX_PDF_LINES = 250;
+  if (lines.length > MAX_PDF_LINES) {
+    const head = lines.slice(0, 120).map((l, i) => `${i + 1}\t${clipRow(l)}`).join('\n');
+    const tail = lines.slice(-40).map((l, i) => `${lines.length - 39 + i}\t${clipRow(l)}`).join('\n');
+    return `PDF text (${lines.length} lines, via ${via} — showing first 120 + last 40):\n`
+      + head + `\n\n... [${lines.length - 160} rows omitted — pass start_line/end_line to read specific ranges] ...\n\n` + tail;
   }
   return `PDF text (${lines.length} lines, via ${via}):\n`
-    + lines.map((l, i) => `${i + 1}\t${l}`).join('\n');
+    + lines.map((l, i) => `${i + 1}\t${clipRow(l)}`).join('\n');
 }

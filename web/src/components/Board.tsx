@@ -480,6 +480,46 @@ export function Board({
 
   const [dragCard, setDragCard] = useState<{ id: string; x0: number; y0: number; cx: number; cy: number } | null>(null);
   const [cardPositions, setCardPositions] = useState<Record<string, { x: number; y: number }>>({});
+  // Feather drag: the rendered position chases the pointer through an
+  // exponential ease (fast while holding, soft on release) instead of
+  // snapping to raw cursor deltas — the card acquires a sense of weight.
+  // A CSS transform transition is deliberately absent: it fights the
+  // per-frame updates and reads as lag, not smoothness.
+  const dragAnimRef = useRef<{
+    id: string;
+    cur: { x: number; y: number };
+    tgt: { x: number; y: number };
+    mode: 'drag' | 'settle';
+    raf: number;
+    last: number;
+    running: boolean;
+  } | null>(null);
+  const runFeatherLoop = () => {
+    const anim = dragAnimRef.current;
+    if (!anim || anim.running) return;
+    anim.running = true;
+    anim.last = performance.now();
+    const tick = (t: number) => {
+      const a = dragAnimRef.current;
+      if (!a) return;
+      const dt = Math.min(0.048, Math.max(0.001, (t - a.last) / 1000));
+      a.last = t;
+      const k = a.mode === 'drag' ? 26 : 10; // chase briskly, settle like a feather
+      const f = 1 - Math.exp(-k * dt);
+      a.cur.x += (a.tgt.x - a.cur.x) * f;
+      a.cur.y += (a.tgt.y - a.cur.y) * f;
+      const done = a.mode === 'settle' && Math.hypot(a.tgt.x - a.cur.x, a.tgt.y - a.cur.y) < 0.4;
+      if (done) {
+        setCardPositions((prev) => ({ ...prev, [a.id]: { x: 0, y: 0 } }));
+        a.running = false;
+        dragAnimRef.current = null;
+        return;
+      }
+      setCardPositions((prev) => ({ ...prev, [a.id]: { x: a.cur.x, y: a.cur.y } }));
+      a.raf = requestAnimationFrame(tick);
+    };
+    anim.raf = requestAnimationFrame(tick);
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [targetTaskId, setTargetTaskId] = useState<string | null>(null);
   // Cards are uniform fixed-size boxes; a click (not a drag) expands one in
@@ -581,7 +621,13 @@ export function Board({
     }, 1200);
   };
 
-  const allTasks = board.tasks.length > 0 ? board.tasks : (DEFAULT_MOCK_CARDS as unknown as BoardTask[]);
+  // Sample cards live only in this component, so deleting one cannot go to
+  // the engine — it would answer no_such_task and the refresh would put the
+  // card straight back. Dismissing it locally is the honest equivalent.
+  const [dismissedMocks, setDismissedMocks] = useState<Set<string>>(new Set());
+  const allTasks = board.tasks.length > 0
+    ? board.tasks
+    : (DEFAULT_MOCK_CARDS as unknown as BoardTask[]).filter((t) => !dismissedMocks.has(t.id as string));
   allTasksRef.current = allTasks;
   stepDraftsRef.current = stepDrafts;
 
@@ -703,13 +749,24 @@ export function Board({
         });
       }
     } else if (dragCard) {
-      setCardPositions((prev) => ({
-        ...prev,
-        [dragCard.id]: {
-          x: dragCard.x0 + (e.clientX - dragCard.cx),
-          y: dragCard.y0 + (e.clientY - dragCard.cy),
-        },
-      }));
+      const tx = dragCard.x0 + (e.clientX - dragCard.cx);
+      const ty = dragCard.y0 + (e.clientY - dragCard.cy);
+      const anim = dragAnimRef.current;
+      if (anim && anim.id === dragCard.id && anim.mode === 'drag') {
+        anim.tgt = { x: tx, y: ty };
+      } else {
+        const pos = cardPositions[dragCard.id] || { x: dragCard.x0, y: dragCard.y0 };
+        dragAnimRef.current = {
+          id: dragCard.id,
+          cur: { ...pos },
+          tgt: { x: tx, y: ty },
+          mode: 'drag',
+          raf: 0,
+          last: performance.now(),
+          running: false,
+        };
+      }
+      runFeatherLoop();
     }
   };
 
@@ -751,10 +808,15 @@ export function Board({
         }
       }
 
-      setCardPositions((prev) => ({
-        ...prev,
-        [dragCard.id]: { x: 0, y: 0 },
-      }));
+      // Settle the card home through the same ease — no snap. The loop
+      // clears the position itself once the card is visually back.
+      const anim = dragAnimRef.current;
+      if (anim && anim.id === dragCard.id && anim.mode === 'drag') {
+        anim.mode = 'settle';
+        anim.tgt = { x: 0, y: 0 };
+      } else {
+        setCardPositions((prev) => ({ ...prev, [dragCard.id]: { x: 0, y: 0 } }));
+      }
     }
 
     setPointerStart(null);
@@ -884,6 +946,25 @@ export function Board({
     }
   };
 
+
+  /**
+   * Delete one card from the bin in its corner.
+   *
+   * A sample card has no counterpart in the engine: board.remove would fail
+   * with no_such_task, the failure path would refresh from the file, and the
+   * card would reappear — which is exactly the "bin does nothing" the board
+   * showed. Sample cards are therefore dismissed in local state, and only a
+   * real task is sent to the engine.
+   */
+  const deleteCard = async (id: string): Promise<void> => {
+    const isReal = board.tasks.some((t) => t.id === id);
+    if (!isReal) {
+      setDismissedMocks((prev) => new Set(prev).add(id));
+      return;
+    }
+    await board.remove(id);
+  };
+
   /**
    * Edit one step of the task's attached pipeline.
    *
@@ -977,6 +1058,11 @@ export function Board({
 
   return (
     <div className="kanban-view" onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
+      {/* A rejected write used to fail in silence — the card simply stayed put
+          and the board looked broken. Say what happened instead. */}
+      {board.error && (
+        <div className="board-error-strip" role="status">{board.error}</div>
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -1116,8 +1202,9 @@ export function Board({
                           })()) : landingTasks.has(tItem.id) ? 'glow-landing' : tItem.column === 'finished' ? (tItem.failed ? 'glow-failed' : 'glow-done') : tItem.column === 'planning' ? 'glow-plan' : tItem.column === 'preparation' ? 'glow-prep' : ''}`}
                           style={{
                             transform: cardPositions[tItem.id]
-                              ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)`
+                              ? `translate3d(${cardPositions[tItem.id].x}px, ${cardPositions[tItem.id].y}px, 0)${dragCard?.id === tItem.id ? ' scale(1.03)' : ''}`
                               : undefined,
+                            willChange: cardPositions[tItem.id] ? 'transform' : undefined,
                             cursor: dragCard?.id === tItem.id ? 'grabbing' : 'grab',
                             touchAction: 'none',
                             userSelect: 'none',
@@ -1380,7 +1467,7 @@ export function Board({
                             className="card-trash-btn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              void board.remove(tItem.id);
+                              void deleteCard(tItem.id);
                             }}
                             title="Delete task"
                           >

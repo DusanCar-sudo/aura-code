@@ -89,16 +89,23 @@ const noopDisplay = new Proxy({} as Display, { get: () => () => {} });
 
 describe('a reply that collapses into repetition', () => {
   let tmpDir: string;
+  let tmpHome: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-loop-rep-'));
     fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
     vi.stubEnv('AURA_CONTEXT_STRATEGY', '');
     vi.stubEnv('AURA_SESSION_BUDGET', '');
+    // Isolate AURA_HOME: an installed web plugin skill rides on the kickoff
+    // user message for a web task like this one (task-guidance.ts), and the
+    // history-length assertions below measure model-authored content, not it.
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-loop-rep-home-'));
+    vi.stubEnv('AURA_HOME', tmpHome);
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
     vi.unstubAllEnvs();
   });
 

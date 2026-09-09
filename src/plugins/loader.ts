@@ -148,6 +148,7 @@ function loadSkills(pluginDir: string, pluginName: string): PluginSkill[] {
         description: str(data.description),
         body: body.trim(),
         dir: path.join(dir, entry),
+        alwaysOn: data['always-on'] === true || data['always_on'] === true,
       });
     } catch { /* no SKILL.md or malformed — skip */ }
   }

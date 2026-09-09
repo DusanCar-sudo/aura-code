@@ -49,6 +49,7 @@ import { handleCatchCommand } from '../cli/repl-catch-command.js';
 import { handleTurnCommand } from '../cli/repl-turn-commands.js';
 import { handleComputerCommand } from '../cli/repl-computer-commands.js';
 import { handleLessonCommand } from '../cli/repl-lesson-commands.js';
+import { handleStudyCommand } from '../cli/repl-study-commands.js';
 import { handleCostCommand } from '../cli/repl-cost-command.js';
 import { handleArchimedesCommand } from '../cli/repl-archimedes-commands.js';
 import { handleUsageCommand } from '../cli/repl-usage-commands.js';
@@ -707,6 +708,17 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       projectRoot: c.ctx.root,
     });
     if (lessonResult) return lessonResult;
+  }
+
+  // ── Topic packs (:study, :learn, :unlearn) ─────────────────────────────
+  // Curated per-subject facts. Pinned topics are injected into the system
+  // prompt; everything else stays reachable through memory search.
+  {
+    const studyResult = handleStudyCommand(input, {
+      display: c.display,
+      write: (text: string) => emit(text),
+    });
+    if (studyResult) return studyResult;
   }
 
   // ── Cost ledger (:cost) ────────────────────────────────────────────────

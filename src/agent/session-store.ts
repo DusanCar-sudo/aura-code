@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import type { HistoryMessage } from '../providers/types.js';
+import { stripTaskGuidance } from './task-guidance.js';
 
 /** Usage for a single provider API call, straight from the API response —
  *  never estimated. cost is computed from the same pricing table /stats uses.
@@ -95,11 +96,13 @@ export const sessionStore = {
     );
   },
 
-  /** Derive a short title from the first user message. */
+  /** Derive a short title from the first user message. Task guidance appended
+   *  to the kickoff message (task-guidance.ts) is stripped first — its
+   *  checklist keywords would otherwise leak into the title. */
   titleFromHistory(history: HistoryMessage[]): string {
     const first = history.find(m => m.role === 'user');
     if (!first) return 'Untitled';
-    const text = typeof first.content === 'string' ? first.content : '';
+    const text = stripTaskGuidance(typeof first.content === 'string' ? first.content : '');
     return text.slice(0, 60).replace(/\n/g, ' ') || 'Untitled';
   },
 
