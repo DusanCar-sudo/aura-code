@@ -36,6 +36,11 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     models: [
       { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', speed: 'Fast', contextWindow: 1_000_000 },
       { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', speed: 'Powerful', contextWindow: 1_000_000 },
+      // Vision + reasoning. Experimental build, so the context window is the
+      // conservative documented figure rather than flash's 1M. Note it spends
+      // completion budget on reasoning tokens before emitting any content — a
+      // small max_tokens comes back empty, not short.
+      { id: 'deepseek-v4-flash-vision-exp', label: 'DeepSeek V4 Flash Vision (exp)', speed: 'Vision · reasoning', contextWindow: 128_000 },
     ],
   },
   {

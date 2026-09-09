@@ -256,6 +256,7 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
     { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner (R1)' },
     { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
     { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+    { id: 'deepseek/deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision (exp)' },
   ],
   kimi: [
     { id: 'kimi/kimi-k3', name: 'Kimi K3' },

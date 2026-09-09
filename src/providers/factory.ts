@@ -504,6 +504,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner (R1)', provider: 'DeepSeek', speed: 'Reasoning · flagship' },
   { id: 'deepseek-v4-pro',            name: 'DeepSeek V4 Pro',    provider: 'DeepSeek', speed: 'Powerful · 1M context' },
   { id: 'deepseek-v4-flash',          name: 'DeepSeek V4 Flash',  provider: 'DeepSeek', speed: 'Fast · 1M context' },
+  { id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision (exp)', provider: 'DeepSeek', speed: 'Vision · reasoning' },
 
   // ── Qwen (DashScope Cloud API) ───────────────────────────────────────────
   { id: 'qwen/qwen3-coder-plus',           name: 'Qwen3 Coder Plus',   provider: 'Qwen', speed: 'Powerful · code flagship' },
