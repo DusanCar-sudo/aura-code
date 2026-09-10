@@ -231,12 +231,14 @@ describe('TUI cursor preservation', () => {
     process.stdin.emit('data', 'hi');
     chunks = [];
 
+    // Arrow-Left, because Arrow-Down now opens scroll mode on purpose — a
+    // torn read misparsed as a bare Esc is what must not open it here.
     process.stdin.emit('data', '\x1bO');   // torn read — no final byte yet
-    process.stdin.emit('data', 'B');
+    process.stdin.emit('data', 'D');
 
     const output = chunks.join('');
     expect(output).not.toContain('-- SCROLL --');
-    expect(stripAnsi(output)).not.toMatch(/hi[OB]/);
+    expect(stripAnsi(output)).not.toMatch(/hi[OD]/);
   });
 
   it('treats ESC+letter as Alt/Meta, not Escape then a stray key', () => {
@@ -259,9 +261,9 @@ describe('TUI cursor preservation', () => {
     initTui();
     startInput();
     writeOutput('one line');
-    // Up-arrow on an empty input enters scroll mode directly. (Entering via a
-    // lone Esc would leave a second Esc buffered, which exits again.)
-    process.stdin.emit('data', '\x1b[A');
+    // Down-arrow on an empty input enters scroll mode directly. (Entering via
+    // a lone Esc would leave a second Esc buffered, which exits again.)
+    process.stdin.emit('data', '\x1b[B');
     chunks = [];
 
     process.stdin.emit('data', 'q');
@@ -274,7 +276,7 @@ describe('TUI cursor preservation', () => {
     initTui();
     startInput();
     writeOutput('one line');
-    process.stdin.emit('data', '\x1b[A');
+    process.stdin.emit('data', '\x1b[B');
     chunks = [];
 
     process.stdin.emit('data', 'i');
@@ -453,83 +455,109 @@ describe('input-box history', () => {
     expect(chunks.join('')).toContain(':model glm-5.3-flash');
   });
 
-  it('a second consecutive Arrow-Up undoes the recall and opens scroll mode', () => {
+  it('repeated Arrow-Up walks back through history instead of scrolling', () => {
     initTui();
     startInput();
     writeOutput('scrollback line so scroll mode has something to show');
     submit('first task');
+    submit('second task');
 
     process.stdin.emit('data', '\x1b[A');
     chunks = [];
     process.stdin.emit('data', '\x1b[A');
-    expect(chunks.join('')).toContain('-- SCROLL --');
-
-    // Leaving scroll mode shows an empty box: the recall was undone, so the
-    // next Enter cannot resubmit the old line by accident.
-    process.stdin.emit('data', 'i');
-    chunks = [];
-    process.stdin.emit('data', 'z');
-    expect(chunks.join('')).toContain('│ z');
-    expect(chunks.join('')).not.toContain('first task');
+    const output = chunks.join('');
+    expect(output).toContain('first task');
+    expect(output).not.toContain('-- SCROLL --');
   });
 
-  it('Arrow-Down right after a recall restores the box without scroll mode', () => {
+  it('Arrow-Up stops at the oldest of the last 10 lines', () => {
     initTui();
     startInput();
-    submit('some task');
+    for (let i = 0; i < 12; i++) submit(`task ${i}`);
 
+    for (let i = 0; i < 9; i++) process.stdin.emit('data', '\x1b[A');
+    chunks = [];
+    process.stdin.emit('data', '\x1b[A');
+    expect(chunks.join('')).toContain('task 2');
+
+    // One more Up has nowhere to go — task 1 and task 0 fell off the end.
+    chunks = [];
+    process.stdin.emit('data', '\x1b[A');
+    expect(chunks.join('')).not.toContain('task 1');
+    expect(chunks.join('')).not.toContain('-- SCROLL --');
+  });
+
+  it('Arrow-Down walks forward, then restores the box without scroll mode', () => {
+    initTui();
+    startInput();
+    writeOutput('scrollback line so scroll mode has something to show');
+    submit('older task');
+    submit('newer task');
+
+    process.stdin.emit('data', '\x1b[A');
     process.stdin.emit('data', '\x1b[A');
     chunks = [];
     process.stdin.emit('data', '\x1b[B');
+    expect(chunks.join('')).toContain('newer task');
 
+    chunks = [];
+    process.stdin.emit('data', '\x1b[B');
     const output = chunks.join('');
     expect(output).not.toContain('-- SCROLL --');
-    expect(output).not.toContain('│ some task');
+    expect(output).not.toContain('│ newer task');
   });
 
-  it('typing after a recall breaks the chain, so a later Arrow-Up neither scrolls nor undoes', () => {
+  it('Arrow-Down with no recall on show opens scroll mode', () => {
     initTui();
     startInput();
+    for (let i = 0; i < 25; i++) writeOutput(`scrollback line ${i}`);
+    submit('some task');
+
+    process.stdin.emit('data', '\x1b[B');
+
+    expect(chunks.join('')).toContain('-- SCROLL --');
+  });
+
+  it('typing after a recall ends browsing, so a later Arrow-Up leaves the edit alone', () => {
+    initTui();
+    startInput();
+    submit('task zero');
     submit('task one');
 
     process.stdin.emit('data', '\x1b[A');
     process.stdin.emit('data', 'x');
     chunks = [];
-    // Arrow-Up with a non-empty buffer takes no action at all — in particular
-    // it must not read as "consecutive" and open scroll mode over the edit.
     process.stdin.emit('data', '\x1b[A');
     expect(chunks.join('')).not.toContain('-- SCROLL --');
+    expect(chunks.join('')).not.toContain('task zero');
 
     // The edit is still in the box: one more character redraws it intact.
     process.stdin.emit('data', 'y');
     expect(chunks.join('')).toContain('task onexy');
   });
 
-  it('with nothing ever submitted, Arrow-Up keeps its old job: scrollback', () => {
+  it('Arrow-Up never opens scroll mode, even with nothing submitted', () => {
     initTui();
     startInput();
-    // More lines than the view is tall — otherwise there is nothing to
-    // scroll to and scroll mode declines to open.
     for (let i = 0; i < 25; i++) writeOutput(`scrollback line ${i}`);
     chunks = [];
 
     process.stdin.emit('data', '\x1b[A');
 
-    expect(chunks.join('')).toContain('-- SCROLL --');
+    expect(chunks.join('')).not.toContain('-- SCROLL --');
   });
 
   it('a second submit of the same line is not recorded twice', () => {
     initTui();
     startInput();
+    submit('other line');
     submit('same line');
     submit('same line');
-    // Recall once, then again after the second submit would still show it —
-    // the dedupe is observable as: recall, down, up still shows one entry.
+    // Two Ups land on the entry before the duplicate, not on its twin.
     process.stdin.emit('data', '\x1b[A');
     chunks = [];
-    process.stdin.emit('data', '\x1b[B');
     process.stdin.emit('data', '\x1b[A');
 
-    expect(chunks.join('')).toContain('same line');
+    expect(chunks.join('')).toContain('other line');
   });
 });

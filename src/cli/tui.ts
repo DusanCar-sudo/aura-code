@@ -45,29 +45,31 @@ let inputBuffer = '';
 let cursorPos = 0;
 
 // ── Input-box history ───────────────────────────────────────────────────────
-// Every line submitted from this box comes back with a single Arrow-Up, the
-// way a shell recalls its last command. Pressing Arrow-Up a second time in a
-// row is read as "I actually wanted to scroll": the recall is undone and the
-// scrollback opens. Arrow-Down puts a recalled line back (un-recall) without
-// the detour through scroll mode.
+// Arrow-Up walks back through the last INPUT_HISTORY_MAX lines submitted from
+// this box, the way a shell does; Arrow-Down walks forward again and, past the
+// newest entry, puts back what the box held before browsing began. Arrow-Up
+// never scrolls — the scrollback opens from Arrow-Down (when not browsing),
+// the mouse wheel, PageUp or Esc.
 const inputHistory: string[] = [];
-const INPUT_HISTORY_MAX = 200;
-let lastKeyWasUp = false;
-/** What the box held before the recall — normally empty, which is what a
- *  second Arrow-Up or Arrow-Down puts back. */
-let bufferBeforeRecall: string | null = null;
+const INPUT_HISTORY_MAX = 10;
+/** Index into inputHistory of the line on show while browsing; null when not
+ *  browsing. */
+let historyIndex: number | null = null;
+/** What the box held before browsing began — normally empty, which is what
+ *  Arrow-Down past the newest entry puts back. */
+let bufferBeforeRecall = '';
 
-/** Any edit or submit after a recall ends its undo window — the box content is
- *  then the user's own, not the recalled line. */
+/** Any edit or submit after a recall ends browsing — the box content is then
+ *  the user's own, not the recalled line. */
 function endRecall(): void {
-  bufferBeforeRecall = null;
+  historyIndex = null;
+  bufferBeforeRecall = '';
 }
 
 /** Test hook: the history is module state and outlives destroyTui. */
 export function clearInputHistory(): void {
   inputHistory.length = 0;
-  lastKeyWasUp = false;
-  bufferBeforeRecall = null;
+  endRecall();
 }
 
 function recordInputLine(line: string): void {
@@ -948,7 +950,6 @@ function enterScrollMode(initialOffset: number): void {
 
 function exitScrollMode(): void {
   scrollMode = false;
-  lastKeyWasUp = false;
   leftScrollAt = Date.now();
   pendingG = false;
   scrollOffset = 0;
@@ -1323,12 +1324,6 @@ function handleScrollKey(key: string): void {
 }
 
 function handleKey(key: string): void {
-  // "Consecutive Arrow-Up" means the key before this one was also Arrow-Up —
-  // no key in between. Setting it here, before the branch maze below, is what
-  // makes typing after a recall break the chain instead of leaving a stale
-  // flag that a much later Arrow-Up would act on.
-  const prevWasUp = lastKeyWasUp;
-  lastKeyWasUp = key === '\x1b[A';
   if (scrollMode) {
     // Any printable character leaves scroll mode and is then typed normally —
     // it falls through to the input handling below rather than being consumed.
@@ -1356,34 +1351,41 @@ function handleKey(key: string): void {
     enterScrollMode(0);
     return;
   }
-  if (overlay === 'none' && key === '\x1b[A' && prevWasUp && bufferBeforeRecall !== null) {
-    // Two Arrow-Ups in a row: scrolling is what was wanted. Put the box back
-    // the way the recall found it first — leaving the recalled text in the
-    // input would make the next Enter resubmit an old line.
-    inputBuffer = bufferBeforeRecall;
-    cursorPos = inputBuffer.length;
-    enterScrollMode(1);
-    return;
-  }
-  if (overlay === 'none' && key === '\x1b[B' && prevWasUp && bufferBeforeRecall !== null) {
-    // Arrow-Down right after a recall puts the box back, without opening
-    // scroll mode the way a second Arrow-Up does.
-    inputBuffer = bufferBeforeRecall;
+  if (overlay === 'none' && key === '\x1b[A') {
+    // History only. Browsing starts from an empty box so a half-typed line is
+    // never replaced; an edit ends browsing (endRecall), after which Arrow-Up
+    // leaves the edit alone too.
+    if (historyIndex === null) {
+      if (inputBuffer.length > 0 || inputHistory.length === 0) return;
+      bufferBeforeRecall = inputBuffer;
+      historyIndex = inputHistory.length - 1;
+    } else if (historyIndex > 0) {
+      historyIndex--;
+    } else {
+      return;   // already at the oldest entry
+    }
+    inputBuffer = inputHistory[historyIndex];
     cursorPos = inputBuffer.length;
     drawPromptBottom();
     return;
   }
-  if (key === '\x1b[A' && inputBuffer.length === 0 && overlay === 'none') {
-    const last = inputHistory[inputHistory.length - 1];
-    if (last !== undefined) {
-      bufferBeforeRecall = inputBuffer;
-      inputBuffer = last;
-      cursorPos = inputBuffer.length;
-      drawPromptBottom();
+  if (overlay === 'none' && key === '\x1b[B') {
+    if (historyIndex === null) {
+      // Not browsing — Arrow-Down opens the scrollback.
+      enterScrollMode(0);
       return;
     }
-    // Nothing typed yet this session — Arrow-Up keeps its old job.
-    enterScrollMode(1);
+    if (historyIndex < inputHistory.length - 1) {
+      historyIndex++;
+      inputBuffer = inputHistory[historyIndex];
+    } else {
+      // Past the newest entry: back to what the box held before browsing, so
+      // the next Enter cannot resubmit an old line by accident.
+      inputBuffer = bufferBeforeRecall;
+      endRecall();
+    }
+    cursorPos = inputBuffer.length;
+    drawPromptBottom();
     return;
   }
   if (key === '\x1b[5~') {
