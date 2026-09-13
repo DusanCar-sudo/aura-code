@@ -61,6 +61,7 @@ class Portal:
         self.height = 0
         self.sink = None
         self.pipeline = None
+        self.last_sample = None     # see frame(): reused when the screen is unchanged
 
     def _token(self):
         return "aura%d" % random.randint(0, 2 ** 31)
@@ -91,25 +92,40 @@ class Portal:
             raise RuntimeError(f"{method}: refused (code {out['code']}; 1 = cancelled)")
         return out["results"]
 
+    def _has(self, iface):
+        """Whether the portal backend implements an interface at all."""
+        try:
+            self.bus.call_sync(PORTAL, PATH, "org.freedesktop.DBus.Properties", "Get",
+                               GLib.Variant("(ss)", (iface, "version")), None, 0, -1, None)
+            return True
+        except GLib.Error:
+            return False
+
     def start(self):
+        # KDE/GNOME: a RemoteDesktop session, because that is what makes their
+        # portals hand back a screen stream. wlroots compositors (sway) have no
+        # RemoteDesktop portal, only ScreenCast — and a plain ScreenCast session
+        # is all we need there, since input goes through our own uinput device.
+        owner = RD if self._has(RD) else SC
         stok = self._token()
-        r = self._call(RD, "CreateSession", lambda t: GLib.Variant("(a{sv})", ({
+        r = self._call(owner, "CreateSession", lambda t: GLib.Variant("(a{sv})", ({
             "handle_token": GLib.Variant("s", t),
             "session_handle_token": GLib.Variant("s", stok)},)))
         self.session = r["session_handle"]
 
-        # KEYBOARD|POINTER. We do not use the portal's input methods (see the
-        # module docstring), but selecting devices is what makes it hand back a
-        # session that also carries a screen stream.
-        self._call(RD, "SelectDevices", lambda t: GLib.Variant("(oa{sv})", (
-            self.session, {"handle_token": GLib.Variant("s", t),
-                           "types": GLib.Variant("u", 3)})))
+        if owner == RD:
+            # KEYBOARD|POINTER. We do not use the portal's input methods (see the
+            # module docstring), but selecting devices is what makes it hand back a
+            # session that also carries a screen stream.
+            self._call(RD, "SelectDevices", lambda t: GLib.Variant("(oa{sv})", (
+                self.session, {"handle_token": GLib.Variant("s", t),
+                               "types": GLib.Variant("u", 3)})))
         self._call(SC, "SelectSources", lambda t: GLib.Variant("(oa{sv})", (
             self.session, {"handle_token": GLib.Variant("s", t),
                            "types": GLib.Variant("u", 1),        # MONITOR
                            "multiple": GLib.Variant("b", False),
                            "cursor_mode": GLib.Variant("u", 2)})))  # EMBEDDED
-        res = self._call(RD, "Start", lambda t: GLib.Variant("(osa{sv})", (
+        res = self._call(owner, "Start", lambda t: GLib.Variant("(osa{sv})", (
             self.session, "", {"handle_token": GLib.Variant("s", t)})))
 
         streams = res.get("streams") or []
@@ -129,11 +145,21 @@ class Portal:
 
     def frame(self):
         """Newest frame as (rgb_bytes, width, height), rows already de-padded."""
+        # Take the newest buffered frame (drain the rest). wlroots compositors
+        # (sway) only send a frame when the screen changes, so on a static
+        # screen nothing new arrives — the last frame is then still exact.
+        # KDE/GNOME stream continuously and always have a fresh one.
+        first_wait = Gst.SECOND * 5 if self.last_sample is None else Gst.MSECOND * 300
         sample = None
-        for _ in range(6):          # drain stale buffers so we get current state
-            sample = self.sink.emit("try-pull-sample", Gst.SECOND * 5) or sample
+        s = self.sink.emit("try-pull-sample", first_wait)
+        while s is not None:
+            sample = s
+            s = self.sink.emit("try-pull-sample", 0)
+        if sample is None:
+            sample = self.last_sample
         if sample is None:
             raise RuntimeError("no frame from the screen stream")
+        self.last_sample = sample
         caps = sample.get_caps().get_structure(0)
         w, h = caps.get_value("width"), caps.get_value("height")
         buf = sample.get_buffer()
