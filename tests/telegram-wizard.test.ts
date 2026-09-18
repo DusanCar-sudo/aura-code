@@ -46,37 +46,38 @@ afterEach(() => {
 });
 
 describe('testBotToken', () => {
+  // fetch, not a shelled-out curl: the token never becomes shell text or argv
+  const reply = (body: string) => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    expect(String(url)).toMatch(/^https:\/\/api\.telegram\.org\/bot123:ABC\/getMe$/);
+    return { json: async () => JSON.parse(body) };
+  }));
+  afterEach(() => { vi.unstubAllGlobals(); });
+
   it('returns the username on a successful getMe response', async () => {
-    execMock.mockImplementationOnce((cmd: string, _opts: any, cb: any) => {
-      expect(cmd).toContain('getMe');
-      cb(null, JSON.stringify({ ok: true, result: { username: 'MyTestBot' } }), '');
-    });
-    const result = await testBotToken('fake-token');
-    expect(result).toBe('MyTestBot');
+    reply(JSON.stringify({ ok: true, result: { username: 'MyTestBot' } }));
+    expect(await testBotToken('123:ABC')).toBe('MyTestBot');
   });
 
   it('returns null on an invalid token response', async () => {
-    execMock.mockImplementationOnce((_cmd: string, _opts: any, cb: any) => {
-      cb(null, JSON.stringify({ ok: false, description: 'Unauthorized' }), '');
-    });
-    const result = await testBotToken('bad-token');
-    expect(result).toBeNull();
+    reply(JSON.stringify({ ok: false, description: 'Unauthorized' }));
+    expect(await testBotToken('123:ABC')).toBeNull();
   });
 
-  it('returns null (not a throw) if curl itself fails', async () => {
-    execMock.mockImplementationOnce((_cmd: string, _opts: any, cb: any) => {
-      cb(new Error('curl: command not found'), '', '');
-    });
-    const result = await testBotToken('fake-token');
-    expect(result).toBeNull();
+  it('returns null (not a throw) if the request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    expect(await testBotToken('123:ABC')).toBeNull();
   });
 
   it('returns null on unparseable output rather than throwing', async () => {
-    execMock.mockImplementationOnce((_cmd: string, _opts: any, cb: any) => {
-      cb(null, 'not json', '');
-    });
-    const result = await testBotToken('fake-token');
-    expect(result).toBeNull();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => { throw new SyntaxError('not json'); } })));
+    expect(await testBotToken('123:ABC')).toBeNull();
+  });
+
+  it('never sends something that is not token-shaped', async () => {
+    const f = vi.fn();
+    vi.stubGlobal('fetch', f);
+    expect(await testBotToken('x"; $(id) "')).toBeNull();
+    expect(f).not.toHaveBeenCalled();
   });
 });
 

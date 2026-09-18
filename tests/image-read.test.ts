@@ -63,8 +63,9 @@ describe('imageRead — base64', () => {
 
 describe('imageRead — ocr', () => {
   it('returns error when tesseract not installed', async () => {
-    vi.mock('child_process', () => ({
-      execSync: vi.fn().mockImplementation(() => { throw new Error('not found'); }),
+    vi.mock('../src/util/exec.js', () => ({
+      hasCommand: () => false,
+      run: () => ({ status: 127, stdout: '', stderr: '', error: new Error('not found') }),
     }));
     const r = await imageRead({ path: path.join(testDir, 'test.png'), action: 'ocr' });
     expect(r).toContain('Error');
