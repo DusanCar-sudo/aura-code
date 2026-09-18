@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { run, hasCommand } from '../util/exec.js';
 import type { ToolDefinition } from '../providers/types.js';
 
 /**
@@ -55,7 +55,7 @@ function getInfo(filePath: string): string {
   let dimensions = 'unknown';
   try {
     // Try using `file` command for basic info
-    const fileInfo = execSync(`file "${filePath}"`, { encoding: 'utf8' }).trim();
+    const fileInfo = run('file', ['--', filePath], { timeoutMs: 10_000 }).stdout.trim();
     // Extract dimensions from file output if available
     const dimMatch = fileInfo.match(/(\d+)\s*x\s*(\d+)/);
     if (dimMatch) dimensions = `${dimMatch[1]}x${dimMatch[2]}`;
@@ -71,18 +71,29 @@ function getInfo(filePath: string): string {
 }
 
 function doOcr(filePath: string): string {
-  try {
-    execSync('which tesseract', { stdio: 'pipe' });
-  } catch {
+  if (!hasCommand('tesseract')) {
     return 'Error: tesseract not installed. Install with: sudo apt install tesseract-ocr';
   }
-
-  try {
-    const text = execSync(`tesseract "${filePath}" stdout 2>/dev/null`, { encoding: 'utf8' });
-    return `OCR result:\n${text.trim()}`;
-  } catch (e: any) {
-    return `OCR error: ${e?.message}`;
+  const r = run('tesseract', [filePath, 'stdout'], { timeoutMs: 120_000 });
+  if (r.error || r.status !== 0) {
+    return `OCR error: ${r.error?.message ?? (r.stderr.trim().split('\n').pop() || `exit ${r.status}`)}`;
   }
+  return `OCR result:\n${r.stdout.trim()}`;
+}
+
+/** The image type from the file's first bytes, or null when it isn't one. */
+export function sniffImage(b: Buffer): string | null {
+  const hex = b.subarray(0, 12).toString('hex');
+  if (hex.startsWith('89504e470d0a1a0a')) return 'image/png';
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+  if (hex.startsWith('47494638')) return 'image/gif';
+  if (hex.startsWith('424d')) return 'image/bmp';
+  if (hex.startsWith('52494646') && hex.slice(16, 24) === '57454250') return 'image/webp';
+  if (hex.startsWith('49492a00') || hex.startsWith('4d4d002a')) return 'image/tiff';
+  if (hex.startsWith('00000100')) return 'image/x-icon';
+  const head = b.subarray(0, 1024).toString('utf8').trimStart().toLowerCase();
+  if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!doctype svg[^>]*>\s*)?<svg[\s>]/.test(head)) return 'image/svg+xml';
+  return null;
 }
 
 /** Max raw file size (bytes) allowed for base64 — larger images would flood context. */
@@ -112,13 +123,12 @@ function doBase64(filePath: string): ImageAttachment {
   }
 
   const buffer = fs.readFileSync(filePath);
-  const ext = path.extname(filePath).toLowerCase().slice(1);
-  const mimeMap: Record<string, string> = {
-    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-    gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp',
-    svg: 'image/svg+xml', tiff: 'image/tiff', ico: 'image/x-icon',
-  };
-  const mime = mimeMap[ext] ?? 'application/octet-stream';
+  // The bytes decide, not the name: this branch used to encode any readable
+  // file (a key, a config) and hand it to the model as an "image".
+  const mime = sniffImage(buffer);
+  if (!mime) {
+    return { text: `Error: ${filePath} is not an image (its contents don't match any supported image format).`, images: [] };
+  }
   const b64 = buffer.toString('base64');
   const sizeKB = (stat.size / 1024).toFixed(1);
   return {
@@ -138,7 +148,7 @@ export async function imageRead(input: ImageReadInput): Promise<string | ImageAt
   const ext = path.extname(filePath).toLowerCase();
   const action = input.action ?? 'info';
 
-  // For base64, allow any file
+  // base64 checks the bytes itself (sniffImage), so any extension is fine here
   if (action === 'base64') {
     const out = doBase64(filePath);
     // Errors flow back as plain text so the usual "Error:" handling applies.
