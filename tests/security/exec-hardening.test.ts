@@ -244,3 +244,23 @@ describe('browser', () => {
     expect(p.check('browser', { action: 'goto', url: 'https://x' }).needsConfirm).toBeFalsy();
   });
 });
+
+describe(':catchthis recordings', () => {
+  it('masks credential-shaped typed text but keeps paths and prose', async () => {
+    const { redactSecrets } = await import('../../src/record/store.js');
+    expect(redactSecrets('export OPENAI_API_KEY=sk-proj-AbCdEf0123456789xyzXYZ')).not.toContain('AbCdEf0123456789');
+    expect(redactSecrets('ghp_1234567890abcdefghijABCDEFGHIJ12')).toBe('[redacted token]');
+    expect(redactSecrets('token 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 ok')).toBe('token [redacted secret] ok');
+    for (const keep of ['/home/dusan/Projects/coastline-drive/Assets/Scripts/PlayerController.cs',
+      'open the invoices folder and rename every file', 'git commit -m "fix: thing"']) {
+      expect(redactSecrets(keep)).toBe(keep);
+    }
+  });
+
+  it('keeps the recordings folder private to the user', async () => {
+    vi.stubEnv('AURA_HOME', dir);
+    const { saveRecording, buildRecording, recordingsDir } = await import('../../src/record/store.js');
+    saveRecording(buildRecording([], { title: 't' }));
+    expect(fs.statSync(recordingsDir()).mode & 0o777).toBe(0o700);
+  });
+});

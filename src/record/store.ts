@@ -44,7 +44,8 @@ export function buildRecording(
   events: RawEvent[],
   opts: { title?: string; shots?: string[]; id?: string } = {},
 ): Recording {
-  const steps = compile(events, { shots: opts.shots });
+  const steps = compile(events, { shots: opts.shots })
+    .map(st => (st.kind === 'type' ? { ...st, text: redactSecrets(st.text) } : st));
   const durationMs = events.length ? events[events.length - 1].t : 0;
   return {
     id: opts.id ?? newRecordingId(),
@@ -53,7 +54,7 @@ export function buildRecording(
     durationMs,
     steps,
     shots: opts.shots ?? [],
-    typedText: typedRuns(steps),
+    typedText: typedRuns(steps).map(redactSecrets),
   };
 }
 
@@ -68,9 +69,32 @@ function firstMeaningfulStep(steps: Step[]): string | null {
   return null;
 }
 
+/**
+ * Typed text that looks like a credential, masked. A demonstration is
+ * recorded across every window, so a password or key typed during it would
+ * otherwise sit in the recording, be printed back, and be replayed to the
+ * model as part of the task.
+ */
+export function redactSecrets(text: string): string {
+  return text
+    // provider/API key shapes: sk-…, ghp_…, xoxb-…, AKIA…, long hex/base64 runs
+    .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{16,}/g, '[redacted key]')
+    .replace(/\b(ghp|gho|ghs|ghu|github_pat|glpat|xox[abprs])[-_][A-Za-z0-9_-]{16,}/g, '[redacted token]')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[redacted key]')
+    // 32+ key-alphabet chars mixing letters and digits, no '/': keys, not paths
+    .replace(/(?<![A-Za-z0-9+_/-])(?=[A-Za-z0-9+_-]*\d)(?=[A-Za-z0-9+_-]*[A-Za-z])[A-Za-z0-9+_-]{32,}={0,2}(?![A-Za-z0-9+_/-])/g, '[redacted secret]');
+}
+
+/** The recordings directory, private to this user (screenshots show the screen). */
+export function ensurePrivateDir(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // mkdir's mode is ignored for a directory that already exists
+  try { fs.chmodSync(dir, 0o700); } catch { /* not ours to change */ }
+}
+
 export function saveRecording(rec: Recording): string {
   const file = recordingPath(rec.id);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  ensurePrivateDir(path.dirname(file));
   // 0600, and it matters more here than for most files Aura writes: a
   // recording can contain whatever was typed while it ran.
   fs.writeFileSync(file, JSON.stringify(rec, null, 2) + '\n', { mode: 0o600 });
