@@ -86,6 +86,7 @@ Tauri rewrite is mechanical:
 | `list_tools` | `tools.list` |
 | `get_workspace_state` | `session.state` |
 | — | `session.list`, `session.destroy`, `turn.cancel`, `usage.get` |
+| — | `learning.frames` (the learning journey, sized for a terminal) |
 
 ### `session.create`
 
@@ -212,6 +213,39 @@ definitions.
 ```
 
 `maxInputTokens` is `null` when the session is uncapped.
+
+### `learning.frames`
+
+The learning journey (what Aura did and learned, day by day), already laid
+out for a terminal of the given size. No session needed.
+
+```json
+{ "kind": "req", "id": "10", "method": "learning.frames",
+  "params": { "cols": 80, "rows": 24, "selected": 0, "days": 30 } }
+{ "kind": "res", "id": "10", "ok": true, "result": {
+  "chart": ["journey 2026-08-21 → 2026-09-19   runs 454 (57% ok)   lessons 0   memories 22", "", "332     ░", "…"],
+  "list": ["> 09-18 ✓ run    speak serbian", "  09-18 ✗ run    хелло"],
+  "total": 476, "offset": 0,
+  "item": { "id": "…", "at": "2026-09-18T11:02:00.000Z", "kind": "run", "title": "speak serbian",
+            "text": "speak serbian", "ok": true, "source": "deepseek/deepseek-flash" } } }
+```
+
+| Param | | |
+|---|---|---|
+| `cols`, `rows` | required | Positive integers; the frame never exceeds them (`chart` + one separator line + `list` ≤ `rows`) |
+| `selected` | optional | Index of the highlighted item (default 0); `offset` comes back clamped so it is visible |
+| `offset` | optional | First list row to show |
+| `days`, `since`, `until` | optional | Window: `days` 1–366 (default 30), dates as `YYYY-MM-DD` |
+| `detail` | optional | `true` adds `detailLines`: the selected item's full text wrapped to `cols` |
+
+Lines are plain text; the client colors them. Chart glyphs: `█` a successful
+run, `░` a failed one, `+` under a day that gained a lesson or memory, `|` a
+data reset (an archived era). `item` is the selected item (`null` when the
+window is empty). The same data as JSON: `GET /api/learning/graph` on
+`aura serve` (same `days`/`since`/`until` query).
+
+Errors: `bad_params` when `cols`/`rows` are missing or not positive
+integers, or a date/`days`/`selected`/`offset` is malformed.
 
 ---
 

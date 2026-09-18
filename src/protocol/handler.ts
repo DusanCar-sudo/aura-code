@@ -32,6 +32,7 @@ import {
   type SessionSummary,
   type ToolInfo,
 } from './types.js';
+import { buildLearningGraph, learningFrames, journeyDetail, isDate } from '../agent/learning-graph.js';
 
 /** Answers one approval, for one turn. */
 type Ask = (message: string, ctx?: ConfirmContext) => Promise<boolean>;
@@ -206,6 +207,7 @@ export class ProtocolHandler {
       case M.boardRun:        return this.boardRun(req, p);
       case M.commandRun:      return this.commandRun(req, p);
       case M.commandList:     return this.ok(req.id, { commands: PALETTE_COMMANDS, terminalOnly: TERMINAL_ONLY_COMMANDS });
+      case M.learningFrames:  return this.learningFrames(req, p);
       default:
         return this.fail(req.id, { code: 'unknown_method', message: `Unknown method: ${req.method}` });
     }
@@ -337,6 +339,38 @@ export class ProtocolHandler {
       tools: this.listTools(),
       usage: this.usageOf(s),
     });
+  }
+
+  private learningFrames(req: ReqFrame, p: Record<string, unknown>): void {
+    const int = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
+    if (!int(p.cols) || !int(p.rows) || (p.cols as number) < 1 || (p.rows as number) < 1) {
+      return this.fail(req.id, { code: 'bad_params', message: 'cols and rows must be positive integers' });
+    }
+    for (const k of ['selected', 'offset'] as const) {
+      if (p[k] !== undefined && (!int(p[k]) || (p[k] as number) < 0)) {
+        return this.fail(req.id, { code: 'bad_params', message: `${k} must be a non-negative integer` });
+      }
+    }
+    for (const k of ['since', 'until'] as const) {
+      if (p[k] !== undefined && !isDate(p[k])) {
+        return this.fail(req.id, { code: 'bad_params', message: `${k} must be YYYY-MM-DD` });
+      }
+    }
+    if (p.days !== undefined && (!int(p.days) || (p.days as number) < 1 || (p.days as number) > 366)) {
+      return this.fail(req.id, { code: 'bad_params', message: 'days must be an integer 1–366' });
+    }
+    const g = buildLearningGraph({
+      since: p.since as string | undefined, until: p.until as string | undefined,
+      days: p.days as number | undefined, projectRoot: this.opts.defaultProjectRoot,
+    });
+    const f = learningFrames(g, {
+      cols: p.cols as number, rows: p.rows as number,
+      selected: p.selected as number | undefined, offset: p.offset as number | undefined,
+    });
+    const item = g.items[Math.min(Math.max(0, (p.selected as number | undefined) ?? 0), g.items.length - 1)] ?? null;
+    const result: Record<string, unknown> = { ...f, item };
+    if (p.detail === true) result.detailLines = item ? journeyDetail(item, p.cols as number) : [];
+    this.ok(req.id, result);
   }
 
   private usageGet(req: ReqFrame, p: Record<string, unknown>): void {

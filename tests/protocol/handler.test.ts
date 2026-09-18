@@ -89,6 +89,58 @@ describe('ProtocolHandler', () => {
     return (r as { ok: true; result: { sessionId: string } }).result.sessionId;
   };
 
+  describe('learning.frames', () => {
+    let home: string;
+    beforeEach(() => {
+      home = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-proto-home-'));
+      vi.stubEnv('AURA_HOME', home);
+      const dir = path.join(home, 'episodes', 'p');
+      fs.mkdirSync(dir, { recursive: true });
+      const now = new Date(); now.setHours(12, 0, 0, 0);
+      for (let i = 0; i < 30; i++) {
+        const ts = now.getTime() + i;
+        fs.writeFileSync(path.join(dir, `${ts}.json`),
+          JSON.stringify({ id: `r${i}`, timestamp: ts, task: `task ${i}`, model: 'm', success: i % 2 === 0, tokens: 1, durationMs: 0 }));
+      }
+    });
+    afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+
+    const call = async (params: Record<string, unknown>) => {
+      const f = req(M.learningFrames, params);
+      await h.handle(f);
+      return c.res((f as { id: string }).id)!;
+    };
+
+    it('returns frames that fit the requested size', async () => {
+      const r = await call({ cols: 50, rows: 16, selected: 3 });
+      expect(r.ok).toBe(true);
+      const res = (r as { ok: true; result: { chart: string[]; list: string[]; total: number; item: { id: string } } }).result;
+      expect(res.total).toBe(30);
+      expect(res.chart.length + 1 + res.list.length).toBeLessThanOrEqual(16);
+      for (const l of [...res.chart, ...res.list]) expect(l.length).toBeLessThanOrEqual(50);
+      expect(res.item.id).toBe('r26'); // newest first: index 3 is the 4th newest
+    });
+
+    it('adds the wrapped text when asked for detail', async () => {
+      const r = await call({ cols: 40, rows: 12, detail: true });
+      expect((r as { ok: true; result: { detailLines: string[] } }).result.detailLines.join(' ')).toContain('task 29');
+    });
+
+    it.each([
+      [{}],
+      [{ cols: 80 }],
+      [{ cols: 0, rows: 24 }],
+      [{ cols: 80, rows: 24.5 }],
+      [{ cols: 80, rows: 24, since: 'last week' }],
+      [{ cols: 80, rows: 24, days: 0 }],
+      [{ cols: 80, rows: 24, selected: -1 }],
+    ])('rejects bad params %j', async (params) => {
+      const r = await call(params);
+      expect(r.ok).toBe(false);
+      expect((r as { ok: false; error: { code: string } }).error.code).toBe('bad_params');
+    });
+  });
+
   it('announces readiness with a protocol version', () => {
     h.ready();
     const [evt] = c.evts(M.engineReady);

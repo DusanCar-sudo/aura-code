@@ -239,6 +239,8 @@ export const M = {
   commandRun: 'command.run',
   /** Which commands this engine can run, and which need the terminal. */
   commandList: 'command.list',
+  /** The learning journey laid out for a terminal of {cols, rows}. */
+  learningFrames: 'learning.frames',
   // engine → client (request)
   approvalRequest: 'approval.request',
   // engine → client (events)

@@ -34,6 +34,7 @@ import {
   pickLanAddress, ensureLanCert, shortFingerprint, tailscaleAddress, tailscaleDnsName,
 } from './lan.js';
 import { addEpisode, recentEpisodes } from '../agent/episodic-memory.js';
+import { buildLearningGraph, isDate } from '../agent/learning-graph.js';
 import { Session } from './session.js';
 import { SessionBudget } from '../agent/session-budget.js';
 import { ProtocolHandler } from '../protocol/handler.js';
@@ -1524,6 +1525,26 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   });
 
   app.get('/api/memos', (_req, res) => res.json(recentEpisodes(50)));
+
+  // The learning journey as JSON (src/agent/learning-graph.ts). Query:
+  // since/until = YYYY-MM-DD, days = window length (1–366, default 30).
+  app.get('/api/learning/graph', (req, res) => {
+    const q = req.query as Record<string, unknown>;
+    for (const k of ['since', 'until'] as const) {
+      if (q[k] !== undefined && !isDate(q[k])) {
+        res.status(400).json({ error: `${k} must be YYYY-MM-DD` });
+        return;
+      }
+    }
+    const days = q.days === undefined ? 30 : Number(q.days);
+    if (!Number.isInteger(days) || days < 1 || days > 366) {
+      res.status(400).json({ error: 'days must be an integer 1–366' });
+      return;
+    }
+    res.json(buildLearningGraph({
+      since: q.since as string | undefined, until: q.until as string | undefined, days, projectRoot: opts.cwd,
+    }));
+  });
 
   app.post('/api/reset', (req, res) => {
     const state = stateFor(clientOf(req));
