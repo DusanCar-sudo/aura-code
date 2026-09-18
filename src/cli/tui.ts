@@ -554,6 +554,19 @@ function drawPromptBottom(): void {
 // The wizard's own readline handles input; the TUI's input box is hidden.
 let fullscreenPrompt = false;
 
+/** Whether the TUI is drawing on the terminal's alternate screen. */
+export function isAltScreen(): boolean { return altScreenActive; }
+
+/**
+ * Repaint everything after a full-screen view (the journey) drew over the
+ * whole terminal: restore the scroll region and redraw banner, output tail,
+ * input box and footer from the TUI's own buffers.
+ */
+export function repaintScreen(): void {
+  setScrollRegion();
+  redrawLiveView();
+}
+
 export function enterFullscreenPrompt(): void {
   fullscreenPrompt = true;
   resetScrollRegion();

@@ -76,6 +76,7 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: ':research', label: 'Research', description: 'Multi-step research pass', category: 'Memory' },
   { id: ':btw', label: 'Side question', description: 'Quick read-only question', category: 'Memory' },
   { id: ':lessons', label: 'Lessons learned', description: 'What Aura learned and now tells herself', category: 'Memory' },
+  { id: ':journey', label: 'Learning journey', description: 'Chart + list of everything Aura did and learned; Enter opens one', category: 'Memory' },
   { id: ':lessons timeline', label: 'Learning timeline', description: 'When lessons were learned, per day', category: 'Memory' },
   { id: ':forget', label: 'Forget a lesson', description: 'Remove one learned lesson from the prompt', category: 'Memory' },
   { id: ':confess', label: 'Confess', description: 'Auto-detect and confess an anomalous episode', category: 'Memory' },

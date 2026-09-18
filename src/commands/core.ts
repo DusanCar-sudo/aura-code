@@ -117,6 +117,7 @@ export const TERMINAL_ONLY_COMMANDS: Record<string, string> = {
   ':quit': 'ends the terminal process',
   ':speak': 'reads replies aloud through the terminal’s audio',
   ':approve': 'sets the permission level of the terminal session',
+  ':journey': 'a full-screen terminal view — use learning.frames or GET /api/learning/graph here instead',
   ':model': 'opens an interactive selector — use the model picker here instead',
   ':provider': 'opens an interactive selector — use the model picker here instead',
   ':apikey': 'writes to the key store — use Settings → Provider here instead',

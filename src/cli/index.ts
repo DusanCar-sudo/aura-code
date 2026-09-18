@@ -70,7 +70,7 @@ import { applyModelOverride } from '../archimedes/endpoint.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler, confirm } from '../safety/permissions.js';
 import { inSandbox, sandboxPreflight, sandboxBanner, reexecSandboxed } from '../safety/sandbox.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController } from './tui.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController, isAltScreen, repaintScreen } from './tui.js';
 import { startServer } from '../server/index.js';
 import { runSidecar } from '../protocol/stdio.js';
 import { runDevices } from './devices-command.js';
@@ -99,6 +99,7 @@ import type { ChildProcess } from 'child_process';
 import { handleTurnCommand } from './repl-turn-commands.js';
 import { handleComputerCommand } from './repl-computer-commands.js';
 import { handleLessonCommand } from './repl-lesson-commands.js';
+import { runJourneyView } from './journey-view.js';
 import { handleCostCommand } from './repl-cost-command.js';
 import { createSteeringInbox, type SteeringInbox } from '../agent/steering.js';
 import { handleArchimedesCommand } from './repl-archimedes-commands.js';
@@ -2393,6 +2394,19 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
   }
 
   // ── Two-level provider → model selector ──────────────────────────────────
+  // :journey [days] — the learning journey, full screen (cli/journey-view.ts).
+  if (input === ':journey' || input === '/journey' || /^[:/]journey \d+$/.test(input)) {
+    const days = Number(input.split(' ')[1] ?? 30);
+    const wasInputActive = inputActive;
+    if (wasInputActive) stopInput();
+    try {
+      await runJourneyView({ projectRoot: c.ctx.root, days: Math.min(366, Math.max(1, days)), altScreen: !isAltScreen() });
+    } finally {
+      if (wasInputActive) { repaintScreen(); startInput(); }
+    }
+    return { handled: true };
+  }
+
   if (input === ':provider' || input === '/provider') {
     // Same stdin-collision fix as showModelSelector: stop TUI input, let the
     // selector own stdin completely, then restart TUI input.
@@ -3071,6 +3085,17 @@ if (require.main !== module) {
   // the other or restarting the server.
   runDevices(String(argv._[1] ?? 'list'), argv._.slice(2).map(String), Number(argv.port ?? argv.p ?? 7337))
     .then(code => process.exit(code))
+    .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
+} else if (argv._[0] === 'journey') {
+  // `aura journey [days]`: the learning journey on its own, full screen —
+  // what Super+J opens on Aura OS. Reads files only; no model needed.
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error('aura journey needs a terminal (for JSON: GET /api/learning/graph on aura serve)');
+    process.exit(2);
+  }
+  const days = Number(argv._[1] ?? 30);
+  runJourneyView({ projectRoot: cwd, days: Number.isInteger(days) ? Math.min(366, Math.max(1, days)) : 30, altScreen: true })
+    .then(() => process.exit(0))
     .catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else if (argv._[0] === 'url') {
   // Prints the *current* pairing URL for a running `aura serve`. The token
