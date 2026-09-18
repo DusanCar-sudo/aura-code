@@ -14,8 +14,11 @@
  * Security note: hooks are user-installed code and run unsandboxed with the
  * user's privileges by design — installing a plugin is trusting its author,
  * exactly like installing an npm package. Documented in docs/SECURITY.md.
+ * They do not inherit Aura's environment, though (util/exec minimalEnv):
+ * API keys loaded from ~/.aura stay out of every hook.
  */
 import { spawn } from 'child_process';
+import { minimalEnv } from '../util/exec.js';
 import type { HookEntry, HookEvent } from './types.js';
 
 export interface HookOutcome {
@@ -115,14 +118,17 @@ function execHook(
     const timeoutMs = (entry.timeout ?? DEFAULT_TIMEOUT_S) * 1000;
     let child;
     try {
+      // shell:true stays — hook commands are shell strings by the Claude Code
+      // contract, and installing the plugin is the trust decision. The
+      // environment is not part of that deal: hooks get a desktop's worth of
+      // variables plus the plugin ones, never the provider keys Aura loaded.
       child = spawn(command, {
         shell: true, cwd,
-        env: {
-          ...process.env,
+        env: minimalEnv({
           CLAUDE_PROJECT_DIR: cwd,
           AURA_PROJECT_DIR: cwd,
           CLAUDE_PLUGIN_ROOT: entry.pluginRoot,
-        },
+        }),
       });
     } catch (e) {
       resolve({ blocked: false, warning: `hook failed to start: ${String(e)}` });

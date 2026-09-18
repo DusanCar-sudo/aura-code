@@ -208,3 +208,19 @@ describe('verify: only pure test-runner calls are re-run', () => {
     }
   });
 });
+
+describe('plugin hooks', () => {
+  it('run without the provider keys in Aura\'s environment, but with the plugin vars', async () => {
+    const { runHooks } = await import('../../src/plugins/hooks.js');
+    vi.stubEnv('OPENAI_API_KEY', 'sk-should-not-leak');
+    const out = await runHooks('PreToolUse', 'run_shell', { command: 'ls' }, [{
+      event: 'PreToolUse', matcher: 'Bash', pluginName: 'p', pluginRoot: dir,
+      command: 'echo "key=${OPENAI_API_KEY:-none} root=${CLAUDE_PLUGIN_ROOT}" >&2; exit 2',
+    }], dir);
+    expect(out.block).toBe(true);
+    const msg = out.messages.join(' ');
+    expect(msg).toContain('key=none');
+    expect(msg).toContain(`root=${dir}`);
+    expect(msg).not.toContain('sk-should-not-leak');
+  });
+});
