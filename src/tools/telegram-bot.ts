@@ -495,12 +495,11 @@ async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: s
   try {
     const args = [
       '-s', '--max-time', '60',
-      '-F', `chat_id=${chatId}`,
+      '--form-string', `chat_id=${chatId}`,
       '-F', `${fieldName}=@${sendPath};type=${partMime}`,
     ];
-    if (caption) args.push('-F', `caption=${caption}`);
-    args.push(`https://api.telegram.org/bot${TOKEN}/${method}`);
-    const out = execFileSync('curl', args, { encoding: 'utf8', timeout: 65000 });
+    if (caption) args.push('--form-string', `caption=${caption}`);
+    const out = curlTelegram(args, method);
     const parsed = JSON.parse(out);
     if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
   } finally {
@@ -511,13 +510,25 @@ async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: s
 
 // ─── Photo + camera ─────────────────────────────────────────────────────────
 
+/**
+ * curl against the Bot API. The URL carries the bot token, so it goes to
+ * curl on stdin (-K -), not argv, where `ps` shows it to every local user.
+ * Text fields use --form-string: with -F a value starting with < or @ is a
+ * file to read, so a caption "<~/.ssh/id_ed25519" uploaded the key.
+ */
+function curlTelegram(args: string[], method: string): string {
+  const url = `https://api.telegram.org/bot${TOKEN}/${method}`;
+  return execFileSync('curl', [...args, '-K', '-'], {
+    encoding: 'utf8', timeout: 65000, input: `url = "${url}"\n`,
+  });
+}
+
 /** Send an image file as a Telegram photo (via curl — same reliable path as voice). */
 async function sendPhoto(chatId: string | number, imagePath: string, caption?: string): Promise<void> {
   if (!fs.existsSync(imagePath)) throw new Error(`image not found: ${imagePath}`);
-  const args = ['-s', '--max-time', '60', '-F', `chat_id=${chatId}`, '-F', `photo=@${imagePath}`];
-  if (caption) args.push('-F', `caption=${caption}`);
-  args.push(`https://api.telegram.org/bot${TOKEN}/sendPhoto`);
-  const out = execFileSync('curl', args, { encoding: 'utf8', timeout: 65000 });
+  const args = ['-s', '--max-time', '60', '--form-string', `chat_id=${chatId}`, '-F', `photo=@${imagePath}`];
+  if (caption) args.push('--form-string', `caption=${caption}`);
+  const out = curlTelegram(args, 'sendPhoto');
   const parsed = JSON.parse(out);
   if (!parsed.ok) throw new Error(`Telegram: ${parsed.description} (${parsed.error_code})`);
 }
