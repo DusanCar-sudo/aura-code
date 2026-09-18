@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '../providers/types.js';
 import { findChrome } from '../util/chrome.js';
+import { loadPuppeteer } from '../util/optional-deps.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Browser — headless Chrome automation via Puppeteer
@@ -51,7 +52,7 @@ export const BROWSER_DEFINITION: ToolDefinition = {
 async function ensureBrowser(): Promise<import('puppeteer-core').Browser> {
   if (browser?.connected) return browser;
 
-  const puppeteer = await import('puppeteer-core');
+  const puppeteer = await loadPuppeteer('The browser tool');
   const chromePath = findChrome();
   if (!chromePath) {
     throw new Error(

@@ -11,6 +11,7 @@ import { findChrome, CHROME_MISSING_MESSAGE } from '../util/chrome.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import { execSync, spawn } from 'child_process';
+import { loadPuppeteer } from '../util/optional-deps.js';
 
 export interface RenderOptions {
   htmlPath: string;
@@ -48,7 +49,7 @@ export async function renderVideo(options: RenderOptions): Promise<string> {
   const framePattern = path.join(tmpDir, 'frame-%06d.png');
 
   // Puppeteer
-  const puppeteer = await import('puppeteer-core');
+  const puppeteer = await loadPuppeteer('Video rendering');
   const browser = await puppeteer.launch({
     executablePath: requireChrome(),
     headless: true,
