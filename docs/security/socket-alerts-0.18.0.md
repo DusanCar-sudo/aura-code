@@ -111,6 +111,28 @@ for(const l of fs.readFileSync("alerts.ndjson","utf8").split("\n").filter(Boolea
 
 Official route: `npm i -g socket`, log in, use its scan commands with `--json`.
 
-## Progress
+## Progress (2026-09-19, branch security-hardening → 0.19.1)
 
-(filled in as the work lands)
+1. Done. image-size, jszip and https came only through pptxgenjs, which
+   nothing imported; node-domexception came through @anthropic-ai/sdk.
+2. Done, plus: @xterm/* and @tauri-apps/api are web-only (bundled by
+   Vite) → devDependencies; glob was unused → removed.
+3. Done: openai 7, @anthropic-ai/sdk 0.127, @google/generative-ai 0.24.
+   Checked live with one real turn.
+4. Reviewed jszip 3.10.2 (benign: matches its changelog, no risky APIs
+   added), then removed with pptxgenjs.
+5. util/exec.ts added. Fixed: image-read, ftp-upload, cron, telegram-bot,
+   verify/checks, plugins/hooks (env), browser, repl-catch-command,
+   email and viz (found while fixing), telegram-wizard. Reviewed and left:
+   clipboard (fixed commands), dictate (fixed commands, text on stdin),
+   doctor/* (their own fixed commands), research/council (no exec),
+   tools/index (its one caller, the agent loop, checks permissions first).
+   **Open: tools/mcp.ts** (minimal env for spawned servers) — another
+   session had a large uncommitted rewrite of that file.
+6. Done: fail closed with a pairing message; /run and /cam opt-in.
+7. Done inside PermissionSystem: shellCommandOf() (cron screened like
+   run_shell), browser evaluate confirms.
+8. **Not applied**: `socket optimize` would swap 5 remaining express
+   transitives for Socket-registry packages — a new party in the supply
+   chain; Dusan's decision.
+9–10. 0.19.1: CHANGELOG entry, `npm pack --dry-run` checked.
