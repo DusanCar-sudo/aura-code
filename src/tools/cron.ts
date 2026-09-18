@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { run } from '../util/exec.js';
 import type { ToolDefinition } from '../providers/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ function resolveSchedule(input: string): string {
   if (PRESETS[lower]) return PRESETS[lower];
   // Validate cron expression (5 fields)
   const parts = input.trim().split(/\s+/);
-  if (parts.length === 5) return input;
+  if (parts.length === 5 && parts.every(p => /^[0-9A-Za-z*\/,-]+$/.test(p))) return parts.join(' ');
   throw new Error(`Invalid schedule: "${input}". Use a preset (${Object.keys(PRESETS).join(', ')}) or a 5-field cron expression.`);
 }
 
@@ -73,15 +73,18 @@ function tagFor(label: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getCrontab(): string {
-  try {
-    return execSync('crontab -l 2>/dev/null', { encoding: 'utf8' });
-  } catch {
-    return '';
-  }
+  // exit 1 = "no crontab for user": an empty table, not an error
+  const r = run('crontab', ['-l'], { timeoutMs: 10_000 });
+  return r.status === 0 ? r.stdout : '';
 }
 
 function setCrontab(content: string): void {
-  execSync(`echo ${JSON.stringify(content)} | crontab -`);
+  // The table goes on stdin. It used to be `echo "<content>" | crontab -`,
+  // and inside double quotes the shell still runs $(…) and `…` — so a job
+  // containing either executed right there, while being saved.
+  const r = run('crontab', ['-'], { input: content, timeoutMs: 10_000 });
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error(`crontab failed: ${r.stderr.trim() || `exit ${r.status}`}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,6 +97,9 @@ function doAdd(input: CronInput): string {
 
   const schedule = resolveSchedule(input.schedule);
   const label = input.label ?? `job-${Date.now().toString(36)}`;
+  // One job = one crontab line. A line break would add lines of its own.
+  if (/[\r\n]/.test(input.command)) return 'Error: command must be a single line';
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(label)) return 'Error: label may only use letters, digits, . _ - (max 64)';
 
   const existing = getCrontab();
   const lines = existing.split('\n').filter(l => l.trim());
@@ -165,10 +171,13 @@ function doRemoveAll(): string {
 function doRun(input: CronInput): string {
   if (!input.command) return 'Error: command is required for run';
   try {
-    const output = execSync(input.command, { encoding: 'utf8', timeout: 30_000 });
-    return `Command output:\n${output}`;
+    // A shell on purpose (this action runs a shell command), with the same
+    // permission screen as run_shell — see shellCommandOf in safety/permissions.
+    const r = run('sh', ['-c', input.command], { env: process.env, timeoutMs: 30_000 });
+    if (r.error || r.status !== 0) return `Command error:\n${r.stderr || r.error?.message || `exit ${r.status}`}`;
+    return `Command output:\n${r.stdout}`;
   } catch (e: any) {
-    return `Command error:\n${e?.stderr ?? e?.message ?? String(e)}`;
+    return `Command error:\n${e?.message ?? String(e)}`;
   }
 }
 
