@@ -224,3 +224,23 @@ describe('plugin hooks', () => {
     expect(msg).not.toContain('sk-should-not-leak');
   });
 });
+
+describe('browser', () => {
+  it('opens web pages only', async () => {
+    const { refuseUrl } = await import('../../src/tools/browser.js');
+    expect(refuseUrl('https://example.com/a?b=1')).toBeNull();
+    expect(refuseUrl('http://localhost:5173/')).toBeNull();
+    expect(refuseUrl('about:blank')).toBeNull();
+    for (const bad of ['file:///etc/passwd', 'FILE:///home/u/.ssh/id_rsa', 'chrome://settings', 'javascript:alert(1)',
+      'data:text/html,<script>1</script>', 'view-source:https://x', 'not a url']) {
+      expect(refuseUrl(bad), bad).not.toBeNull();
+    }
+  });
+
+  it('page scripts (evaluate) ask first in normal mode', async () => {
+    const { PermissionSystem } = await import('../../src/safety/permissions.js');
+    const p = new PermissionSystem('normal');
+    expect(p.check('browser', { action: 'evaluate', script: 'document.cookie' }).needsConfirm).toBe(true);
+    expect(p.check('browser', { action: 'goto', url: 'https://x' }).needsConfirm).toBeFalsy();
+  });
+});

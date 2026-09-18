@@ -96,13 +96,36 @@ async function doLaunch(): Promise<string> {
   return `Browser launched (Chrome). Connected: ${b.connected}`;
 }
 
+/**
+ * The web, nothing else. A file:// page can read other local files, and
+ * `evaluate` would hand them to the model; chrome:// and friends reach
+ * browser internals. Returns why a URL is refused, or null when it's fine.
+ */
+export function refuseUrl(url: string): string | null {
+  if (url === 'about:blank') return null;
+  let u: URL;
+  try { u = new URL(url); } catch { return `not a valid URL: ${url}`; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    return `only http(s) pages can be opened (got ${u.protocol}) — use read_file for local files`;
+  }
+  return null;
+}
+
 async function doGoto(url: string, waitUntil?: string, timeout?: number): Promise<string> {
+  const refused = refuseUrl(url);
+  if (refused) return `Error: ${refused}`;
   const p = await ensurePage();
   const waitOpt = (waitUntil ?? 'load') as any;
   const response = await p.goto(url, { waitUntil: waitOpt, timeout: timeout ?? 30_000 });
   const status = response?.status() ?? 0;
-  const title = await p.title();
   const currentUrl = p.url();
+  // a redirect can land somewhere goto() itself would have refused
+  const landed = refuseUrl(currentUrl);
+  if (landed) {
+    await p.goto('about:blank').catch(() => {});
+    return `Error: the page redirected to a refused location (${landed})`;
+  }
+  const title = await p.title();
   return `Navigated to: ${currentUrl}\nHTTP ${status}\nTitle: ${title}`;
 }
 

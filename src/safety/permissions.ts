@@ -98,6 +98,11 @@ export class PermissionSystem {
       }
     }
 
+    // Page scripts run with the page's cookies and session; ask first.
+    if (toolName === 'browser' && input.action === 'evaluate') {
+      return { allowed: true, needsConfirm: true };
+    }
+
     // Writing a file is destructive — it overwrites whatever was there — and
     // this was returning plain `allowed` on both branches, so the session
     // lookup below decided nothing and no write was ever confirmed. The intent
