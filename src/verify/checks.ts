@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { run } from '../util/exec.js';
 import type { Check } from './types.js';
 
 export interface CheckContext {
@@ -223,29 +224,36 @@ function parseFailingTests(output: string): Set<string> {
   return names;
 }
 
+/**
+ * A tool-call command that is purely a test-runner invocation, as argv — or
+ * null. Verification re-runs these, silently, after the task: so it must
+ * never re-run anything else. It used to re-run any command that merely
+ * CONTAINED "npm test" or "pytest", e.g. `rm -rf build; npm test`.
+ */
+export function testRunnerArgv(cmd: string): string[] | null {
+  const c = cmd.trim();
+  // plain words only: no ; | & $ ` ( ) < > quotes, globs or newlines
+  if (!/^[\w./:=@+,-]+( [\w./:=@+,-]+)*$/.test(c)) return null;
+  const argv = c.split(' ');
+  const head = argv.slice(0, 3).join(' ');
+  const runners = ['npm test', 'npm run test', 'npx vitest', 'npx jest', 'vitest', 'jest', 'pytest', 'python -m pytest', 'python3 -m pytest', 'go test', 'cargo test'];
+  return runners.some(r => head === r || head.startsWith(r + ' ')) ? argv : null;
+}
+
 function verifyShellTests(
   ctx: CheckContext,
   calls: Array<{ name: string; input: Record<string, unknown> }>,
 ): Check[] {
   const checks: Check[] = [];
-  const testPatterns = ['npm test', 'pytest', 'jest', 'vitest', 'go test', 'cargo test', 'npx vitest run'];
 
   for (const call of calls) {
     const cmd = String(call.input.command ?? '');
-    const isTest = testPatterns.some(p => cmd.includes(p));
-    if (!isTest) continue;
+    const argv = testRunnerArgv(cmd);
+    if (!argv) continue;
 
-    try {
-      execSync(cmd, {
-        cwd: ctx.projectRoot,
-        encoding: 'utf8',
-        timeout: 60_000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      checks.push({ name: 'shell test', passed: true, detail: `"${cmd}" — passed` });
-    } catch {
-      checks.push({ name: 'shell test', passed: false, detail: `"${cmd}" — failed` });
-    }
+    const r = run(argv[0], argv.slice(1), { cwd: ctx.projectRoot, env: process.env, timeoutMs: 60_000 });
+    const passed = !r.error && r.status === 0;
+    checks.push({ name: 'shell test', passed, detail: `"${cmd}" — ${passed ? 'passed' : 'failed'}` });
   }
   return checks;
 }

