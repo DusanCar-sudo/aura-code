@@ -4,7 +4,6 @@ import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
 import OpenAI from 'openai';
-import * as https from 'https';
 import { auraPath } from '../util/aura-home.js';
 
 const SAMPLE_RATE = 16000;
@@ -71,10 +70,9 @@ function buildClient(api: { key: string; baseURL: string }): OpenAI {
     // api.z.ai silently drops requests that arrive without a User-Agent
     // (see the zai-edge memory) — always send one.
     defaultHeaders: { 'User-Agent': 'aura-dic/1.0' },
-    // OpenAI SDK v4 uses agentkeepalive by default, which hangs on some
-    // endpoints (e.g. Xiaomi MiMo Token Plan). A plain https.Agent with
-    // keepAlive: false avoids the issue.
-    httpAgent: new https.Agent({ keepAlive: false }),
+    // (SDK v4 needed httpAgent: a plain https.Agent, because its default
+    // agentkeepalive hung on some endpoints, e.g. Xiaomi MiMo Token Plan.
+    // v5+ uses Node's built-in fetch and has no agentkeepalive.)
   };
 
   return new OpenAI(opts);
