@@ -34,7 +34,7 @@
     "Be concise; use markdown code blocks for commands and code.\n\n" +
     "=== KNOWLEDGE ===\n" + (window.AURA_KB || "(knowledge base not loaded)");
 
-  // ── UI (shadow DOM: the host site's CSS can't touch it, ours can't leak) ──
+  // \u2500\u2500 UI (shadow DOM: the host site's CSS can't touch it, ours can't leak) \u2500\u2500
   var host = document.createElement("div");
   host.id = "aura-chat";
   document.body.appendChild(host);
@@ -42,53 +42,58 @@
   root.innerHTML =
     '<style>' +
     ':host{all:initial}' +
-    '*{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}' +
-    '.w{--bg:#faf9f5;--fg:#141413;--mut:#6b6860;--line:#e3e0d6;--acc:#d97757;--me:#f2d3c4;--code:#f0eee6}' +
-    '@media (prefers-color-scheme:dark){.w{--bg:#1f1e1d;--fg:#e8e6dc;--mut:#9c998f;--line:#3a3834;--acc:#d97757;--me:#5a3a2e;--code:#2b2a27}}' +
-    '.btn{position:fixed;right:18px;bottom:14px;z-index:2147483000;border:0;background:none;padding:0;' +
-    'width:72px;height:66px;cursor:pointer;filter:drop-shadow(0 6px 14px rgba(0,0,0,.3));transition:transform .15s}' +
-    '.btn:hover{transform:translateY(-2px) scale(1.05)}.btn svg{width:100%;height:100%;display:block}' +
-    '.p{position:fixed;right:20px;bottom:88px;z-index:2147483000;width:min(420px,calc(100vw - 32px));' +
-    'height:min(620px,calc(100vh - 110px));display:none;flex-direction:column;background:var(--bg);color:var(--fg);' +
-    'border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.3);overflow:hidden}' +
+    // Aura OS popup look: square, hard 2px border, monospace, gruvbox
+    '*{box-sizing:border-box;border-radius:0;font-family:"JetBrains Mono","JetBrainsMono Nerd Font",ui-monospace,"SF Mono",Menlo,Consolas,monospace}' +
+    '.w{--bg:#1d2021;--bg2:#282828;--sel:#3c3836;--fg:#ebdbb2;--hi:#fbf1c7;--mut:#928374;--acc:#fe8019;--ok:#b8bb26;--y:#fabd2f}' +
+    '.btn{position:fixed;right:18px;bottom:18px;z-index:2147483000;cursor:pointer;background:var(--bg);color:var(--acc);' +
+    'border:2px solid var(--acc);padding:8px 12px;font-size:14px;font-weight:700;letter-spacing:.04em;' +
+    'box-shadow:4px 4px 0 rgba(0,0,0,.45)}' +
+    '.btn:hover,.btn[aria-expanded="true"]{background:var(--acc);color:var(--bg)}' +
+    '.p{position:fixed;right:18px;bottom:66px;z-index:2147483000;width:min(460px,calc(100vw - 24px));' +
+    'height:min(600px,calc(100vh - 96px));display:none;flex-direction:column;background:var(--bg);color:var(--fg);' +
+    'border:2px solid var(--acc);box-shadow:6px 6px 0 rgba(0,0,0,.45);font-size:13px}' +
     '.p.open{display:flex}' +
-    '.h{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}' +
-    '.h b{flex:1;font-size:15px}.h small{color:var(--mut);font-size:12px}' +
-    '.x{background:none;border:0;color:var(--mut);font-size:20px;cursor:pointer;line-height:1}' +
-    '.log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.5}' +
-    '.m{max-width:92%;padding:9px 12px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}' +
-    '.u{align-self:flex-end;background:var(--me)}' +
-    '.a{align-self:flex-start;background:var(--code)}' +
-    '.a pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;overflow-x:auto;white-space:pre;margin:6px 0}' +
-    '.a code{font-family:ui-monospace,"JetBrains Mono",monospace;font-size:13px}' +
-    '.note{color:var(--mut);font-size:12px;text-align:center}' +
-    '.f{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}' +
-    '.f textarea{flex:1;resize:none;height:44px;border:1px solid var(--line);border-radius:10px;padding:10px;' +
-    'background:var(--bg);color:var(--fg);font-size:14px}' +
-    '.f button{border:0;border-radius:10px;background:var(--acc);color:#fff;padding:0 16px;font-weight:600;cursor:pointer}' +
-    '.f button:disabled{opacity:.5;cursor:default}' +
-    '@media (max-width:480px){.p{right:8px;left:8px;width:auto;bottom:84px}.btn{right:10px;bottom:10px}}' +
+    '.h{display:flex;align-items:center;background:var(--acc);color:var(--bg);font-weight:700;padding:3px 8px}' +
+    '.h b{flex:1}.h small{font-weight:400;margin-right:10px;opacity:.8}' +
+    '.x{background:none;border:0;color:var(--bg);font-size:14px;font-weight:700;cursor:pointer;padding:0 2px}' +
+    '.x:hover{background:var(--bg);color:var(--acc)}' +
+    '.log{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:8px;line-height:1.5;' +
+    'scrollbar-color:var(--sel) var(--bg)}' +
+    '.m{white-space:pre-wrap;word-wrap:break-word;padding:0 0 0 10px;border-left:2px solid var(--sel)}' +
+    '.m::before{display:block;font-weight:700;margin-bottom:1px}' +
+    '.u{border-left-color:var(--y);color:var(--hi)}.u::before{content:"you";color:var(--y)}' +
+    '.a{border-left-color:var(--acc)}.a::before{content:"aura";color:var(--acc)}' +
+    '.a pre{background:var(--bg2);border:1px solid var(--sel);padding:6px 8px;overflow-x:auto;white-space:pre;margin:4px 0}' +
+    '.a code{color:var(--ok)}' +
+    '.note{color:var(--mut);border:1px dashed var(--sel);padding:6px 8px}' +
+    '.f{display:flex;border-top:2px solid var(--acc)}' +
+    '.f span{color:var(--acc);padding:9px 0 0 8px;font-weight:700}' +
+    '.f textarea{flex:1;resize:none;height:40px;border:0;outline:0;padding:9px 8px;background:var(--bg);color:var(--hi);font-size:13px}' +
+    '.f button{border:0;border-left:2px solid var(--acc);background:var(--bg);color:var(--acc);padding:0 14px;font-weight:700;cursor:pointer}' +
+    '.f button:hover{background:var(--acc);color:var(--bg)}' +
+    '.f button:disabled{color:var(--mut);cursor:default;background:var(--bg)}' +
+    '@media (max-width:480px){.p{right:6px;left:6px;width:auto;bottom:62px}.btn{right:10px;bottom:10px}}' +
     '</style>' +
     '<div class="w">' +
-    '<button class="btn" part="button" aria-label="Ask Aura" title="Ask Aura">' +
-    // a speech cloud with a tail and a question mark
-    '<svg viewBox="0 0 72 66" aria-hidden="true">' +
-    '<path fill="var(--acc)" d="M36 4c17.7 0 32 11.2 32 25s-14.3 25-32 25c-3.3 0-6.5-.4-9.5-1.1L12 62l3.3-13.2C8.4 44.3 4 37.1 4 29 4 15.2 18.3 4 36 4z"/>' +
-    '<text x="36" y="40" text-anchor="middle" font-size="30" font-weight="700" fill="#fff" ' +
-    'font-family="ui-sans-serif,system-ui,sans-serif">?</text></svg></button>' +
+    '<button class="btn" part="button" aria-label="Ask Aura" aria-expanded="false">[?] ASK AURA</button>' +
     '<div class="p" role="dialog" aria-label="Ask Aura">' +
-    '<div class="h"><b>Aura</b><small>free · via Puter</small><button class="x" aria-label="Close">×</button></div>' +
+    '<div class="h"><b>\u258c ASK AURA</b><small>free \u00b7 puter</small><button class="x" aria-label="Close">[x]</button></div>' +
     '<div class="log"><div class="note">Ask anything about ' + esc(PRODUCT) +
-    ' or any Aura product.<br>The first message asks you to sign in to Puter (free); ' +
-    'your Puter account covers the chat.</div></div>' +
-    '<form class="f"><textarea placeholder="How does Aura Code sandbox tools?" aria-label="Message"></textarea>' +
-    '<button type="submit">Send</button></form>' +
+    ' or any Aura product.\nFirst message: sign in to Puter (free) \u2014 your Puter account covers the chat.</div></div>' +
+    '<form class="f"><span>&gt;</span><textarea placeholder="how does aura code sandbox tools?" aria-label="Message"></textarea>' +
+    '<button type="submit">SEND</button></form>' +
     '</div></div>';
 
   var $ = function (s) { return root.querySelector(s); };
   var panel = $(".p"), log = $(".log"), form = $(".f"), input = $("textarea"), send = $(".f button");
-  $(".btn").onclick = function () { panel.classList.toggle("open"); if (panel.classList.contains("open")) input.focus(); };
-  $(".x").onclick = function () { panel.classList.remove("open"); };
+  var btn = $(".btn");
+  function setOpen(on) {
+    panel.classList.toggle("open", on);
+    btn.setAttribute("aria-expanded", on ? "true" : "false");
+    if (on) input.focus();
+  }
+  btn.onclick = function () { setOpen(!panel.classList.contains("open")); };
+  $(".x").onclick = function () { setOpen(false); };
   input.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
   });
@@ -116,7 +121,7 @@
     input.value = "";
     add("u", q);
     history.push({ role: "user", content: q });
-    var bubble = add("a", "…");
+    var bubble = add("a", "\u2026");
     send.disabled = true;
     var text = "";
     try {
