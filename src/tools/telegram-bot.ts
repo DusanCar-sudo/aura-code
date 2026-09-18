@@ -7,7 +7,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
-import { exec, execSync, execFileSync } from 'child_process';
+import { exec, execFileSync } from 'child_process';
+import { run } from '../util/exec.js';
+import { isSecretPath } from '../safety/secret-paths.js';
 import { createProvider, registerCustomProviders, getAllModels, isModelConfigured } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { rtkWrap } from '../util/rtk.js';
@@ -41,6 +43,10 @@ interface TelegramConfig {
   /** Telegram user IDs allowed to use the bot. If set, everyone else is
    *  refused (the bot can run shell commands, so this gate is mandatory). */
   allowed_user_ids?: string | string[];
+  /** Enable /run (a shell over Telegram). Default off. */
+  allow_run?: boolean;
+  /** Enable /cam (webcam snapshots over Telegram). Default off. */
+  allow_cam?: boolean;
   /** Voice-note replies: 'off' | 'voice-only' | 'auto' (default) | 'always'.
    *  'auto' = text always, plus a voice note for voice-in messages and for
    *  substantial conversational replies (≥ audio_min_chars). */
@@ -73,8 +79,16 @@ function OFFSET_FILE(): string { return auraPath('telegram.offset'); }
 const ALLOWED_USER_IDS: string[] = (() => {
   const raw = config.allowed_user_ids;
   if (!raw) return [];
-  return (Array.isArray(raw) ? raw : [raw]).map(String);
+  // The setup wizard saves "id1,id2" as one string; split it, or a second
+  // id makes the whole list match nobody.
+  return (Array.isArray(raw) ? raw : [raw]).flatMap(v => String(v).split(',')).map(v => v.trim()).filter(Boolean);
 })();
+
+// /run and /cam are off unless telegram.json turns them on: a shell and a
+// camera are the two things a stranger holding the owner's Telegram most
+// wants. (Free-text requests still go to the agent, under its permissions.)
+const ALLOW_RUN = config.allow_run === true;
+const ALLOW_CAM = config.allow_cam === true;
 
 // ── Audio replies: when to attach a voice note alongside the text reply ──────
 const AUDIO_MODE: AudioReplyMode = normalizeAudioMode(config.audio_replies);
@@ -84,8 +98,21 @@ const AUDIO_MIN_CHARS: number =
     : DEFAULT_AUDIO_MIN_CHARS;
 
 function isAuthorized(userId: string | number | undefined): boolean {
-  if (ALLOWED_USER_IDS.length === 0) return true; // no allowlist configured → open (logged as a warning at startup)
+  // Fail closed. With no allowlist this used to answer anyone who found the
+  // bot (behind an approval tap); now nobody gets in until the owner pairs.
   return userId != null && ALLOWED_USER_IDS.includes(String(userId));
+}
+
+/** What an unauthorized sender is told. Unpaired, it says how to pair. */
+function refusalFor(userId: string | number | undefined): string {
+  if (ALLOWED_USER_IDS.length > 0) return '🚫 Not authorized.';
+  return [
+    '🔒 This bot is not paired with anyone yet, so it answers no one.',
+    `Your Telegram user ID is ${userId ?? 'unknown'}.`,
+    'If this is your bot: on the PC add it to ~/.aura/telegram.json as',
+    `  "allowed_user_ids": ["${userId ?? 'YOUR_ID'}"]`,
+    'and restart the bot.',
+  ].join('\n');
 }
 
 // Register custom providers from project's .aura.json (needed for deepseek/ etc.)
@@ -449,10 +476,8 @@ async function sendVoice(chatId: string | number, wavBuffer: Buffer, caption?: s
   const tmpOgg = tmpWav.replace(/\.wav$/, '.ogg');
   fs.writeFileSync(tmpWav, wavBuffer);
   try {
-    execSync(
-      `ffmpeg -y -i "${tmpWav}" -ac 1 -ar 48000 -c:a libopus -b:a 24k -application voip "${tmpOgg}" 2>/dev/null`,
-      { stdio: 'pipe', timeout: 20000 },
-    );
+    const r = run('ffmpeg', ['-y', '-i', tmpWav, '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '24k', '-application', 'voip', tmpOgg], { timeoutMs: 20_000 });
+    if (r.status !== 0) throw r.error ?? new Error(`ffmpeg exit ${r.status}`);
   } catch {
     // No opus encoder — fall back to sending the WAV as an audio file.
     try { fs.unlinkSync(tmpOgg); } catch {}
@@ -505,10 +530,9 @@ function captureWebcam(device = '/dev/video0'): string {
   const out = path.join(os.tmpdir(), `cam-${Date.now()}.jpg`);
   // -update 1 lets a single-image output overwrite cleanly; small warmup helps
   // the sensor auto-expose before the grab.
-  execSync(
-    `ffmpeg -y -f v4l2 -i "${device}" -frames:v 1 -update 1 "${out}" 2>/dev/null`,
-    { stdio: 'pipe', timeout: 20000 },
-  );
+  // The device name comes from the chat message: only a real video node.
+  if (!/^\/dev\/video\d{1,2}$/.test(device)) throw new Error(`not a camera device: ${device}`);
+  run('ffmpeg', ['-y', '-f', 'v4l2', '-i', device, '-frames:v', '1', '-update', '1', out], { timeoutMs: 20_000 });
   if (!fs.existsSync(out) || fs.statSync(out).size < 1000) {
     throw new Error(`camera capture failed (${device})`);
   }
@@ -1125,6 +1149,7 @@ function execShell(command: string, cwd?: string): Promise<{ stdout: string; std
 
 function readFileTool(filePath: string): string {
   const resolved = path.isAbsolute(filePath) ? filePath : path.join(DEFAULT_CWD, filePath);
+  if (isSecretPath(resolved)) return `🔒 ${filePath} holds credentials; not readable over Telegram.`;
   if (!fs.existsSync(resolved)) return `❌ File not found: ${filePath}`;
   try {
     const content = fs.readFileSync(resolved, 'utf8');
@@ -1138,6 +1163,7 @@ function readFileTool(filePath: string): string {
 
 function listDirTool(dirPath: string): string {
   const resolved = path.isAbsolute(dirPath) ? dirPath : path.join(DEFAULT_CWD, dirPath);
+  if (isSecretPath(resolved)) return `🔒 ${dirPath} holds credentials; not listable over Telegram.`;
   if (!fs.existsSync(resolved)) return `❌ Directory not found: ${dirPath}`;
   try {
     const entries = fs.readdirSync(resolved, { withFileTypes: true });
@@ -1155,15 +1181,13 @@ function searchCodeTool(pattern: string, searchPath?: string): string {
   const resolved = searchPath
     ? (path.isAbsolute(searchPath) ? searchPath : path.join(DEFAULT_CWD, searchPath))
     : DEFAULT_CWD;
-  try {
-    const result = execSync(
-      `rg -n --no-heading -i "${pattern.replace(/"/g, '\\"')}" "${resolved}" 2>/dev/null | head -30`,
-      { timeout: 10_000, encoding: 'utf8' }
-    );
-    return result.trim() || `No matches for "${pattern}"`;
-  } catch {
-    return `No matches for "${pattern}" (or rg not installed)`;
-  }
+  if (isSecretPath(resolved)) return `🔒 ${resolved} holds credentials; not searchable over Telegram.`;
+  // argv, not a shell string: the pattern used to be pasted into one with
+  // only " escaped, so $(…) in a /search ran on the PC.
+  const r = run('rg', ['-n', '--no-heading', '-i', '--glob', '!.env*', '--', pattern, resolved], { timeoutMs: 10_000 });
+  if (r.error) return `No matches for "${pattern}" (or rg not installed)`;
+  const lines = r.stdout.split('\n').filter(Boolean).slice(0, 30).join('\n');
+  return lines || `No matches for "${pattern}"`;
 }
 
 /**
@@ -1242,8 +1266,8 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/read <file> — Read a file from your PC`,
       `/sendfile <path> — Send a file from your PC to Telegram`,
       `/find <pattern> — Find files on your PC`,
-      `/run <cmd> — Run a shell command on your PC`,
-      `/cam — Capture and send a camera image (surveillance)`,
+      ALLOW_RUN ? `/run <cmd> — Run a shell command on your PC` : `/run — off (allow_run in telegram.json)`,
+      ALLOW_CAM ? `/cam — Capture and send a camera image (surveillance)` : `/cam — off (allow_cam in telegram.json)`,
       `/git — Git status`,
       ``,
       `🎛 Task control:`,
@@ -1456,6 +1480,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   if (lower.startsWith('/run')) {
+    if (!ALLOW_RUN) return '🔒 /run is off. To allow a shell over Telegram, set "allow_run": true in ~/.aura/telegram.json and restart the bot.';
     const cmd = text.slice(4).trim();
     if (!cmd) return '❌ Usage: /run <command>';
 
@@ -1527,6 +1552,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
     if (!filePath) return '❌ Usage: /sendfile <path> or /send <path>';
 
     const resolved = path.isAbsolute(filePath) ? filePath : path.join(DEFAULT_CWD, filePath);
+    if (isSecretPath(resolved)) return `🔒 ${filePath} holds credentials; not sent over Telegram.`;
     if (!fs.existsSync(resolved)) {
       return `❌ File not found: ${filePath}`;
     }
@@ -1549,6 +1575,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
   // /cam or /photo — capture a webcam snapshot and send it (surveillance).
   if (lower === '/cam' || lower === '/photo' || lower.startsWith('/cam ') || lower.startsWith('/photo ')) {
+    if (!ALLOW_CAM) return '🔒 /cam is off. To allow webcam snapshots over Telegram, set "allow_cam": true in ~/.aura/telegram.json and restart the bot.';
     const device = text.split(/\s+/)[1] || '/dev/video0';
     try {
       await sendMessage(chatId, '📷 Capturing snapshot…');
@@ -1567,9 +1594,9 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
     try {
       const searchDir = DEFAULT_CWD;
-      const cmd = `find "${searchDir}" -name "*${pattern}*" -type f 2>/dev/null | head -20`;
-      const result = await execShell(cmd);
-      const files = result.stdout.trim().split('\n').filter(f => f);
+      // argv: the pattern is one -name value, never shell text
+      const result = run('find', [searchDir, '-name', `*${pattern}*`, '-type', 'f'], { timeoutMs: 30_000 });
+      const files = result.stdout.trim().split('\n').filter(f => f && !isSecretPath(f)).slice(0, 20);
 
       if (files.length === 0 || files[0] === '') {
         return `🔍 No files found matching "${pattern}"`;
@@ -1650,7 +1677,8 @@ async function poll(): Promise<void> {
   // being inferred from the config file.
   console.log(`   Auth: ${ALLOWED_USER_IDS.length > 0
     ? `${ALLOWED_USER_IDS.length} allowed user id(s) · per-command approval OFF (Hermes parity)`
-    : '⚠️ NO ALLOWLIST — open to anyone · per-command approval ON'}`);
+    : '🔒 NO ALLOWLIST — answers no one; the first message gets its sender ID for pairing'}`
+    + ` · /run ${ALLOW_RUN ? 'ON' : 'off'} · /cam ${ALLOW_CAM ? 'ON' : 'off'}`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Long-polling Telegram (30s)…`);
   console.log('');
@@ -1749,7 +1777,7 @@ async function poll(): Promise<void> {
         // PC, so this is the primary security boundary.
         if (!isAuthorized(msg.from?.id)) {
           console.error(`[${ts()}] 🚫 Unauthorized ${from} (id ${msg.from?.id}) — refused: ${(msg.text ?? '(non-text)').slice(0, 60)}`);
-          try { await sendMessage(chatId, '🚫 Not authorized.'); } catch { /* ignore */ }
+          try { await sendMessage(chatId, refusalFor(msg.from?.id)); } catch { /* ignore */ }
           persistWatermark();
           continue;
         }

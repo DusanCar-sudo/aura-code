@@ -172,3 +172,25 @@ describe('permissions: shell-running tools are all screened', () => {
     expect(p.check('run_shell', { command: 'ls' }).needsConfirm).toBeFalsy();
   });
 });
+
+describe('secret paths (Telegram /read /ls /sendfile /search)', () => {
+  it('flags credential stores and files, not ordinary ones', async () => {
+    const { isSecretPath } = await import('../../src/safety/secret-paths.js');
+    const home = '/home/u';
+    for (const p of ['/home/u/.ssh', '/home/u/.ssh/id_ed25519', '/home/u/.aura/telegram.json',
+      '/home/u/proj/.env', '/home/u/proj/.env.local', '/srv/tls/server.key', '/home/u/.npmrc', '/tmp/id_rsa']) {
+      expect(isSecretPath(p, home), p).toBe(true);
+    }
+    for (const p of ['/home/u/proj/README.md', '/home/u/Pictures/a.png', '/home/u/.aura-notes.md', '/home/u/proj/environment.ts']) {
+      expect(isSecretPath(p, home), p).toBe(false);
+    }
+  });
+
+  it('follows symlinks to the real file', async () => {
+    const { isSecretPath } = await import('../../src/safety/secret-paths.js');
+    fs.mkdirSync(path.join(dir, '.ssh'));
+    fs.writeFileSync(path.join(dir, '.ssh', 'config'), 'x');
+    fs.symlinkSync(path.join(dir, '.ssh', 'config'), path.join(dir, 'harmless.txt'));
+    expect(isSecretPath(path.join(dir, 'harmless.txt'), dir)).toBe(true);
+  });
+});
