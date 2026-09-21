@@ -117,27 +117,27 @@ Aura features a web client interface (`web/`) with visual drag-and-drop Kanban e
 
 | Visual Kanban Board | Execution List Manager |
 |---|---|
-| ![Kanban Board](assets/screenshots/01-kanban-board.png) | ![Execution List](assets/screenshots/02-execution-list.png) |
+| ![Visual Kanban Board](assets/screenshots/01-kanban-board.png "Visual Kanban Board") | ![Execution List Manager](assets/screenshots/02-execution-list.png "Execution List Manager") |
 
 | Third-Party Automation Hub (n8n, Zapier, Make) | Linear Zapier Workflow Builder |
 |---|---|
-| ![Third-Party Providers](assets/screenshots/03-third-party-providers.png) | ![Zapier Workflow](assets/screenshots/04-workflow-zapier-visual.png) |
+| ![Third-Party Automation Hub](assets/screenshots/03-third-party-providers.png "Third-Party Automation Hub") | ![Linear Zapier Workflow Builder](assets/screenshots/04-workflow-zapier-visual.png "Linear Zapier Workflow Builder") |
 
 | Interactive Web & Canvas Preview | Archimedes Competence Engine |
 |---|---|
-| ![Canvas Preview](assets/screenshots/05-canvas-web-preview.png) | ![Archimedes Competence](assets/screenshots/06-archimedes-competence.png) |
+| ![Interactive Web and Canvas Preview](assets/screenshots/05-canvas-web-preview.png "Interactive Web and Canvas Preview") | ![Archimedes Competence Engine](assets/screenshots/06-archimedes-competence.png "Archimedes Competence Engine") |
 
 | Resilient Provider Mesh Settings | Swarm Multi-Agent Orchestrator |
 |---|---|
-| ![Provider Settings](assets/screenshots/07-model-mesh-settings.png) | ![Swarm Orchestrator](assets/screenshots/08-swarm-orchestrator.png) |
+| ![Resilient Provider Mesh Settings](assets/screenshots/07-model-mesh-settings.png "Resilient Provider Mesh Settings") | ![Swarm Multi-Agent Orchestrator](assets/screenshots/08-swarm-orchestrator.png "Swarm Multi-Agent Orchestrator") |
 
 | DAG Workflow Architecture | Retro Task Detail Inspector |
 |---|---|
-| ![System Architecture](assets/screenshots/09-system-architecture.png) | ![Task Detail Modal](assets/screenshots/10-task-detail-modal.png) |
+| ![DAG Workflow Architecture](assets/screenshots/09-system-architecture.png "DAG Workflow Architecture") | ![Retro Task Detail Inspector](assets/screenshots/10-task-detail-modal.png "Retro Task Detail Inspector") |
 
 | Code Editor & Canvas | Multi-Agent TUI Terminal |
 |---|---|
-| ![Code Editor Canvas](assets/screenshots/11-code-editor-canvas.png) | ![Multi Agent TUI](assets/screenshots/12-multi-agent-tui.png) |
+| ![Code Editor and Canvas](assets/screenshots/11-code-editor-canvas.png "Code Editor and Canvas") | ![Multi-Agent TUI Terminal](assets/screenshots/12-multi-agent-tui.png "Multi-Agent TUI Terminal") |
 
 ---
 
