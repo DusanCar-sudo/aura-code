@@ -36,7 +36,7 @@ export const CHROME_DIM = chalk.hex('#8a5a48');
  * TERRACOTTA_HEX. Used for every line that separates fields/panels/sections
  * (box borders, rules, column dividers) — per the fixed palette rule,
  * dividers get this same four-stop gradient rather than a single flat hue.
- * (The ruby stops above remain for the mark/wordmark branding only.)
+ * (The ruby stops remain for accents and the banner motto.)
  */
 const GRADIENT_HEXES = ['#7a4636', '#a05a44', TERRACOTTA_HEX, '#e29a80'] as const;
 const GRADIENT_STOPS = GRADIENT_HEXES.map(hex => chalk.hex(hex));
@@ -87,59 +87,44 @@ export function gradientStopFor(row: number, total: number): chalk.Chalk {
 }
 
 /**
- * The Aura mark: a burst struck through a vertical axis — the shape of a
- * beacon that has just been lit. Hand-drawn at 47×22 and used only at that
- * size: the ray texture is carried by single characters, so any downscale
- * (box-filtering 2×2 cells into one) collapses it into noise. The narrower
- * banner tiers therefore drop the mark rather than shrink it.
+ * The Aura mark: lowercase "aura" and the four Sinclair stripes, from the
+ * ∞K retro identity (aura-retro-design, brand/glyphs.py). One glyph unit is
+ * one pixel — 10-unit x-height, 3-unit stroke — and each text row carries two
+ * pixel rows as half blocks, so the mark prints 5 rows × 59 columns. `#` is
+ * letter ink; `r y g c` are the stripes, which lean one pixel every two rows
+ * so that no cell ever needs two colours. The counters are square: at this
+ * size a round one reads as a "+".
  */
-const MARK: string[] = [
-  '           .              #@#              .',
-  '           .*             :@=             *:',
-  '            ##.           :@=           .##.',
-  '            *##:          :@=          .###',
-  '         *. =###-    #*=--***=-=*#.   :###+  +',
-  '         =#= +###=       :@:@-       -###* =#+',
-  '          *##:.###+      :@:@-      =###:.###',
-  '          =####:*##*     .@:@-     +##*.*###=',
-  '        ==. =###*-###    .@:@-    *##=+###+  -+',
-  '         :##+ :###+###.  .@:@:   *##+###- +##-',
-  '          .####+:*#####. .@:@: .#####*:+####:',
-  '         :   .-###*=###* .%.#: *###+*###=.   :',
-  '          :*###*+-=+###+  .*.. +###+=-=*###*:',
-  '             :-=+######*  *##  *######*=-:',
-  '              :-+###**##:##-##.##**###+-:',
-  '                   =*#*=##. .##++#*+',
-  '                      :###= -###-',
-  '                     -#* -###= *#-',
-  '                      =   *.#   -',
-  '                          *:#',
-  '                          ==+',
-  '                          .+:',
+const MARK_PIXELS: string[] = [
+  '...#######..###....###..#######......#######.......rryyggcc',
+  '.#########..###....###..#########..#########.......rryyggcc',
+  '.#########..###....###..#########..#########......rryyggcc.',
+  '###....###..###....###..####......###....###......rryyggcc.',
+  '###....###..###....###..###.......###....###.....rryyggcc..',
+  '###....###..###....###..###.......###....###.....rryyggcc..',
+  '###....###..###....###..###.......###....###....rryyggcc...',
+  '.#########...#########..###........#########....rryyggcc...',
+  '.#########...#########..###........#########...rryyggcc....',
+  '...#######.....#######..###..........#######...rryyggcc....',
 ];
-const MARK_WIDTH = 47;
-/** The mark's optical center: the axis column, and the burst core — which
- *  sits above the geometric middle, since the tail hangs below it. */
-const MARK_CX = 27;
-const MARK_CY = 9;
+const MARK_WIDTH = 59;
+/** The mark's text rows, plus the "CODE" row under the stripes. */
+const LOCKUP_ROWS = MARK_PIXELS.length / 2 + 1;
 
 /**
- * The mark's glow ramp, core → tips: white-hot at the strike point, through
- * hot ruby, out to the brand ruby at the ray ends. It bottoms out at
- * RUBY_HEX rather than the deep wine so the outermost rays stay legible
+ * The stripe colours, in Sinclair order. Fixed, not themed: they are the
+ * logo, and they read on dark and light grounds alike.
+ */
+const STRIPE_HEXES: Record<string, string> = {
+  r: '#e4312b', y: '#f8b91e', g: '#2fae4e', c: '#1aa6e0',
+};
+
+/**
+ * The glow ramp for the motto: white-hot through hot ruby to the brand ruby.
+ * It bottoms out at RUBY_HEX rather than the deep wine so it stays legible
  * against BG_HEX.
  */
 const GLOW_STOPS = ['#fff3f5', '#ffc2cd', '#ff7d92', '#ee4463', '#cc2846', RUBY_HEX] as const;
-
-/**
- * How much ink each glyph of the mark carries. The art shades itself by
- * character weight; feeding that back into the color ramp keeps the drawn
- * highlights bright instead of flattening them under the radial falloff.
- */
-const INK: Record<string, number> = {
-  '@': 1, '%': 0.95, '#': 0.85, '*': 0.6, '+': 0.45,
-  '=': 0.4, '-': 0.28, ':': 0.22, '.': 0.12,
-};
 
 export interface BannerInfo {
   version: string;
@@ -198,65 +183,51 @@ function fullRule(): string {
 }
 
 /**
- * Light the mark: distance from the burst core drives the ramp, and each
- * glyph's ink weight biases it back toward the bright end, so the drawn
- * highlights survive the falloff. Terminal cells are about twice as tall
- * as they are wide, hence the doubled vertical term.
+ * Print the mark: each pair of pixel rows becomes one text row of half
+ * blocks, with runs of same-coloured cells painted in one go. Letters take
+ * TEXT; stripe cells are always full blocks, since both of their pixel rows
+ * share a shift.
  */
-function shadeMark(): string[] {
-  const maxR = Math.hypot(MARK_CX, MARK_CY * 2);
-  return MARK.map((row, y) => {
+function markLines(): string[] {
+  const lines: string[] = [];
+  for (let y = 0; y < MARK_PIXELS.length; y += 2) {
+    const top = MARK_PIXELS[y];
+    const bottom = MARK_PIXELS[y + 1];
     let out = '';
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x];
-      if (ch === ' ') { out += ' '; continue; }
-      const radial = Math.min(1, Math.pow(Math.hypot(x - MARK_CX, (y - MARK_CY) * 2) / maxR, 0.85) * 1.15);
-      out += ramp(GLOW_STOPS, Math.min(1, radial * 0.72 + (1 - (INK[ch] ?? 0.5)) * 0.28))(ch);
+    let run = '';
+    let runInk = '.';
+    const flush = () => {
+      if (run) out += runInk === '.' ? run : runInk === '#' ? TEXT(run) : chalk.hex(STRIPE_HEXES[runInk])(run);
+      run = '';
+    };
+    for (let x = 0; x < MARK_WIDTH; x++) {
+      const t = top[x];
+      const b = bottom[x];
+      const ink = t !== '.' ? t : b;
+      const cell = t === '.' && b === '.' ? ' ' : t === '.' ? '▄' : b === '.' ? '▀' : '█';
+      if (ink !== runInk) { flush(); runInk = ink; }
+      run += cell;
     }
-    return out;
-  });
+    flush();
+    lines.push(out.replace(/\s+$/, ''));
+  }
+  return lines;
 }
 
-// ── Wordmark ────────────────────────────────────────────────────────────────
-// 5×5 block capitals — the only letterforms in the app drawn as artwork
-// rather than text. AURA carries the ruby (the brand), CODE the terracotta
-// (the tooling), per the palette split used everywhere else in the CLI.
-const GLYPHS: Record<string, string[]> = {
-  A: [' ███ ', '█   █', '█████', '█   █', '█   █'],
-  U: ['█   █', '█   █', '█   █', '█   █', ' ███ '],
-  R: ['████ ', '█   █', '████ ', '█  █ ', '█   █'],
-  C: [' ███ ', '█    ', '█    ', '█    ', ' ███ '],
-  O: [' ███ ', '█   █', '█   █', '█   █', ' ███ '],
-  D: ['████ ', '█   █', '█   █', '█   █', '████ '],
-  E: ['█████', '█    ', '████ ', '█    ', '█████'],
-};
-const WORDMARK_ROWS = 5;
-/** "AURA" + three-column word gap + "CODE", both at 5×5 with 1-column tracking. */
-const WORDMARK_WIDTH = 23 * 2 + 3;
-
-/** Paint one word's rows with `stops` swept from `t0` (left) to `t1` (right). */
-function shadeWord(text: string, stops: readonly string[], t0: number, t1: number): string[] {
-  const rows = Array.from({ length: WORDMARK_ROWS }, () => '');
-  const width = text.length * 6 - 1;
-  [...text].forEach((ch, i) => {
-    const glyph = GLYPHS[ch];
-    for (let r = 0; r < WORDMARK_ROWS; r++) {
-      const cells = (i ? ' ' : '') + glyph[r];
-      const originX = i * 6 - (i ? 1 : 0);
-      for (let c = 0; c < cells.length; c++) {
-        rows[r] += cells[c] === ' '
-          ? ' '
-          : ramp(stops, t0 + (t1 - t0) * ((originX + c) / (width - 1))).bold(cells[c]);
-      }
-    }
-  });
-  return rows;
+/**
+ * The mark with "CODE" set under the stripes, spread across them from their
+ * foot to their top edge, the way the lockup has it.
+ */
+function lockupLines(): string[] {
+  const stripeStart = MARK_PIXELS[MARK_PIXELS.length - 1].search(/[rygc]/);
+  return [...markLines(), ' '.repeat(stripeStart + 1) + TEXT.bold('C  O  D  E')];
 }
 
-function wordmarkLines(): string[] {
-  const aura = shadeWord('AURA', GLOW_STOPS, 0.25, 0.68);
-  const code = shadeWord('CODE', GRADIENT_HEXES, 0.85, 0.3);
-  return aura.map((row, i) => row + '   ' + code[i]);
+/** The stripes alone in one text row: each ▟ in the next colour on the one before. */
+function stripeRun(): string {
+  const [r, y, g, c] = ['r', 'y', 'g', 'c'].map(k => STRIPE_HEXES[k]);
+  return chalk.hex(r)('▟') + chalk.hex(y).bgHex(r)('▟') + chalk.hex(g).bgHex(y)('▟')
+    + chalk.hex(c).bgHex(g)('▟') + chalk.hex(c)('▘');
 }
 
 // ── Banner ──────────────────────────────────────────────────────────────────
@@ -268,22 +239,24 @@ function visibleWidth(s: string): number {
 }
 
 /**
- * `hero` is the full lockup (mark + wordmark + session card) and needs a
- * terminal that can actually hold it; `standard` drops the mark; `compact`
- * is a single line, for narrow terminals and for the TUI's pinned header,
- * where every banner row is permanently subtracted from the scroll region.
+ * `hero` sets the session card beside the mark and needs a terminal that can
+ * hold both; `standard` stacks the card under it; `compact` is a single
+ * line, for narrow terminals and for the TUI's pinned header, where every
+ * banner row is permanently subtracted from the scroll region.
  */
 export type BannerTier = 'hero' | 'standard' | 'compact';
 
-const HERO_MIN_COLS = MARK_WIDTH + WORDMARK_WIDTH + 4;  // 100
-const HERO_MIN_ROWS = MARK.length + 8;                  // room left to work in
+const TAGLINE = 'praktess · she who acts and executes';
+/** Indent, mark, gutter and bar, then the version + tagline line beside it. */
+const HERO_MIN_COLS = 2 + MARK_WIDTH + 6 + 'v00.00.00   '.length + TAGLINE.length;  // 115
+const HERO_MIN_ROWS = 24;  // the mark greets you without being the whole view
 
 /** The largest tier the current terminal has room for. */
 export function preferredBannerTier(): BannerTier {
   const cols = process.stdout.columns ?? 80;
   const rows = process.stdout.rows ?? 0;
   if (cols >= HERO_MIN_COLS && rows >= HERO_MIN_ROWS) return 'hero';
-  if (cols >= WORDMARK_WIDTH + 4) return 'standard';
+  if (cols >= MARK_WIDTH + 4) return 'standard';
   return 'compact';
 }
 
@@ -303,54 +276,60 @@ function metaLines(info: BannerInfo): string[] {
   ].filter(line => visibleWidth(line) > 0);
 }
 
-/** Wordmark, rule, version/tagline, session facts, motto — the right column. */
-function cardLines(info: BannerInfo): string[] {
-  return [
-    ...wordmarkLines(),
-    '',
-    chromeRule(WORDMARK_WIDTH),
-    chalk.hex(TERRACOTTA_HEX).bold(`v${info.version}`)
-      + FAINT('   praktess · she who acts and executes'),
-    '',
-    ...metaLines(info),
-    '',
-    ramp(GLOW_STOPS, 0.2).italic('"I don\'t try. I verify."'),
-  ];
+function versionLine(info: BannerInfo): string {
+  return chalk.hex(TERRACOTTA_HEX).bold(`v${info.version}`) + FAINT(`   ${TAGLINE}`);
 }
 
-/** Mark on the left, card on the right, card centered against the mark. */
+const MOTTO = ramp(GLOW_STOPS, 0.2).italic('"I don\'t try. I verify."');
+
+/**
+ * Mark on the left; version, session facts and motto on the right, behind
+ * a terracotta bar and centered against the mark.
+ */
 function heroLines(info: BannerInfo): string[] {
-  const mark = shadeMark();
-  const card = cardLines(info);
+  const mark = lockupLines();
+  const card = [versionLine(info), ...metaLines(info), MOTTO];
   const height = Math.max(mark.length, card.length);
   const cardOffset = Math.floor((height - card.length) / 2);
 
   const lines = [''];
   for (let i = 0; i < height; i++) {
-    const markRow = i < mark.length ? mark[i] : '';
-    const gutter = ' '.repeat(MARK_WIDTH - (i < MARK.length ? MARK[i].length : 0) + 2);
+    const markRow = mark[i] ?? '';
+    const gutter = ' '.repeat(MARK_WIDTH - visibleWidth(markRow) + 3);
+    const bar = ramp(GRADIENT_HEXES, i / Math.max(1, height - 1))('│');
     const cardRow = card[i - cardOffset] ?? '';
-    lines.push((' ' + markRow + gutter + cardRow).replace(/\s+$/, ''));
+    lines.push(('  ' + markRow + gutter + bar + '  ' + cardRow).replace(/\s+$/, ''));
   }
   lines.push('');
   lines.push(fullRule());
   return lines;
 }
 
+/** The mark, then the card under it: rule, version/tagline, facts, motto. */
 function standardLines(info: BannerInfo): string[] {
-  return ['', ...cardLines(info).map(line => (line ? '  ' + line : '')), fullRule()];
+  const card = [
+    ...lockupLines(),
+    '',
+    chromeRule(MARK_WIDTH),
+    versionLine(info),
+    '',
+    ...metaLines(info),
+    '',
+    MOTTO,
+  ];
+  return ['', ...card.map(line => (line ? '  ' + line : '')), fullRule()];
 }
 
 /**
- * One line, for narrow terminals and for the TUI's pinned header. Fields are
- * appended only while they fit: at this size the wordmark has to survive, the
- * model name is the next most useful thing to know, and everything after that
- * is a bonus.
+ * One line, for narrow terminals and for the TUI's pinned header: the mark
+ * as "aura", one row of stripes and "CODE". Fields are appended only while
+ * they fit: at this size the mark has to survive, the model name is the next
+ * most useful thing to know, and everything after that is a bonus.
  */
 function compactLines(info: BannerInfo): string[] {
   const width = Math.max(10, process.stdout.columns ?? 80);
-  let line = ramp(GLOW_STOPS, 0.1).bold('AURA') + ' ' + chalk.hex(TERRACOTTA_HEX).bold('CODE');
-  let used = 2 + 'AURA CODE'.length;
+  let line = TEXT.bold('aura') + ' ' + stripeRun() + ' ' + TEXT.bold('CODE');
+  let used = 2 + 'aura ▟▟▟▟▘ CODE'.length;
 
   for (const [gap, part, plain] of [
     ['  ', FAINT(`v${info.version}`), `v${info.version}`],
@@ -390,7 +369,7 @@ export function renderMark(): void {
   const indent = Math.max(0, Math.floor(((process.stdout.columns ?? 80) - MARK_WIDTH) / 2));
   const pad = ' '.repeat(indent);
   console.log('');
-  shadeMark().forEach(row => console.log(pad + row));
+  lockupLines().forEach(row => console.log(pad + row));
   console.log('');
 }
 
