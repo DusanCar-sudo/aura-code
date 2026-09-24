@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Aura adOS &#xb7; the agent driven operating system</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Aura adOS is a developer's desktop that an AI agent operates. Aura installs, themes, fixes and backs it up, and takes a snapshot before every change. Arch Linux and sway, under 350 MB idle.">
+<meta name="author" content="Du&#x161;an Milosavljevi&#x107;">
+<meta name="theme-color" content="#0B0A10">
+<link rel="canonical" href="https://www.leanproiq.com/ados">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.leanproiq.com/ados">
+<meta property="og:title" content="Aura adOS &#xb7; You ask. She does it.">
+<meta property="og:description" content="The agent driven operating system: Aura installs, themes, fixes and backs up your laptop, and takes a snapshot first.">
+<meta property="og:image" content="https://www.leanproiq.com/ados/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Aura adOS &#xb7; You ask. She does it.">
+<meta name="twitter:description" content="The agent driven operating system. Snapshot first.">
+<meta name="twitter:image" content="https://www.leanproiq.com/ados/og-image.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Press+Start+2P&display=swap">
+<style>
+/* Aura adOS: the same world as the Aura Code page, the Spectrum at night. */
+:root{
+  color-scheme:dark;
+  --ink:#0B0A10; --ink-2:#121019; --ink-3:#1A1823; --line:#2B2836; --dim:#57536A;
+  --paper:#F2F1F5; --mute:#A29EB2;
+  --red:#E4312B; --yellow:#F8B91E; --green:#2FAE4E; --cyan:#1AA6E0;
+  --red-text:#F0584F; --green-text:#3CC45E; --violet-text:#9C8CF0;
+  --display:"Saira","Arial Narrow",system-ui,sans-serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --pixel:"Press Start 2P",ui-monospace,monospace;
+  --gutter:clamp(16px,3.2vw,44px);
+}
+body{margin:0;background:var(--ink);color:var(--paper);font:400 17px/1.6 var(--sans);padding-inline:var(--gutter);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.col{max-width:1180px;margin-inline:auto}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--yellow);outline-offset:3px}
+code,pre{font-family:var(--mono)}
+p code,li code,dd code{font-size:.92em;color:var(--paper);background:var(--ink-3);padding:.08em .35em;border-radius:3px;overflow-wrap:anywhere}
+::selection{background:var(--yellow);color:var(--ink)}
+[hidden]{display:none!important}
+
+.kicker{font:10px/1.6 var(--pixel);color:var(--mute);text-transform:uppercase;margin:0 0 20px}
+h1,h2,h3{font-family:var(--display);font-style:italic;text-wrap:balance}
+h2{font-weight:800;font-stretch:87.5%;font-size:clamp(34px,4.8vw,62px);line-height:.98;letter-spacing:-.01em;margin:0;max-width:17ch}
+.intro{color:var(--mute);max-width:60ch;margin:24px 0 0;font-size:clamp(17px,1.35vw,19px)}
+.intro strong{color:var(--paper);font-weight:500}
+section{padding-block:clamp(56px,8vw,112px)}
+.btn-pixel{font:10px/1 var(--pixel);color:var(--paper);background:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:12px 14px;cursor:pointer}
+.btn-pixel:hover{border-color:var(--yellow)}
+
+/* ---------------- header */
+.top{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-block:22px}
+.brand{display:block;color:var(--paper)}
+.brand svg{display:block;width:140px;height:auto}
+.top nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px 22px;font:500 14px/1 var(--sans)}
+.top nav a{color:var(--mute);text-decoration:none;padding-block:6px}
+.top nav a:hover{color:var(--paper)}
+@media (max-width:720px){.top nav .sec{display:none}}
+
+/* ---------------- hero */
+.hero{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:clamp(32px,5vw,64px);align-items:center;padding-block:clamp(28px,5vw,64px) clamp(56px,7vw,104px)}
+.eyebrow{font:10px/1.6 var(--pixel);color:var(--cyan);margin:0 0 24px}
+h1{font-weight:800;font-stretch:87.5%;font-size:clamp(52px,6.6vw,96px);line-height:.9;letter-spacing:-.012em;margin:0 0 28px}
+h1 .s{color:var(--yellow)}
+.lede{font-size:clamp(17px,1.45vw,20px);color:var(--mute);max-width:34em;margin:0 0 30px}
+.lede strong{color:var(--paper);font-weight:500}
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin:0}
+.chip{font:8px/1 var(--pixel);padding:7px 7px 6px;border:1px solid currentColor;border-radius:3px;white-space:nowrap}
+.chip.test{color:var(--yellow)}
+.status a{font:500 15px/1.4 var(--sans);color:var(--paper)}
+@media (max-width:980px){.hero{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------------- the desk mock (fictional data, drawn in CSS) */
+.desk-wrap{margin:0;container-type:inline-size}
+.desk{font:400 clamp(8.5px,1.7cqi,13px)/1.5 var(--mono);color:var(--mute);background:#07060b;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px rgba(242,241,245,.04),0 40px 90px -40px rgba(26,166,224,.35)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:1.4em;padding:.55em 1em;background:#0d0c14;border-bottom:1px solid var(--line);white-space:nowrap}
+.bar .tabs,.bar .tray{display:flex;gap:1.1em}
+.bar .tabs span{color:var(--t)}
+.bar .tabs .on{box-shadow:0 2px 0 var(--t)}
+.bar .mid{color:var(--dim)}
+.bar .mid b{font-weight:500;color:var(--paper)}
+.bar .bat{color:var(--green-text)}
+.bar .clock{color:var(--violet-text)}
+.desk-body{display:grid;grid-template-columns:15.5em minmax(0,1fr);height:28em}
+.side{padding:.9em 1.1em;border-right:1px solid var(--line);background:#0a0911;overflow:hidden}
+.side h4{margin:0 0 .15em;font:inherit;color:var(--dim)}
+.side ul{list-style:none;margin:0 0 1em;padding:0 0 0 .8em}
+.side li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side li b{font-weight:400;color:var(--cyan);margin-right:.6em}
+.side .me{color:var(--paper)}
+.meter{display:grid;grid-template-columns:2.6em minmax(0,1fr) 3.4em;gap:.5em;align-items:end;margin:0 0 .15em;padding-left:.8em}
+.meter span:last-child{text-align:right;color:var(--paper)}
+.spark{display:flex;align-items:flex-end;gap:1px;height:1.05em;margin-bottom:.22em}
+.spark i{flex:1;background:#6f6a8c;height:var(--h,10%);transition:height .5s}
+.side .agent{padding-left:.8em;margin:0 0 .55em;white-space:normal}
+.side .agent b{font-weight:500;color:var(--a)}
+.panes{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:1px;background:var(--line);min-height:0}
+.pane{background:#050408;display:flex;flex-direction:column;min-width:0;min-height:0}
+.pane-h{display:flex;justify-content:space-between;align-items:center;gap:1em;padding:.35em .9em;border-bottom:1px solid var(--line);color:var(--dim);white-space:nowrap;overflow:hidden}
+.pane-h svg{height:.9em;width:auto;flex:none}
+.pane-b{padding:.8em .9em;overflow:hidden;flex:1;position:relative}
+.pane-b p{margin:0 0 .15em;white-space:pre-wrap;overflow-wrap:anywhere}
+.prompt{color:var(--green-text)}
+.cmd{color:var(--paper)}
+.err{color:var(--red-text)}
+.exit{display:inline-block;margin-top:.5em;padding:.05em .5em;border:1px solid var(--red-text);color:var(--red-text);border-radius:2px}
+.keycap{position:absolute;right:.9em;bottom:.9em;padding:.35em .6em;border-radius:4px;background:linear-gradient(#434752,#33363F);color:var(--paper);box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 2px 0 #1a1b20}
+.ask .pane-h{color:var(--paper)}
+.ask p{color:var(--mute)}
+.ask .sug{margin-top:.8em;padding:.5em .7em;border:1px solid var(--line);border-left:2px solid var(--yellow);color:var(--paper);background:#0e0d14}
+.ask .hint{margin-top:.6em;color:var(--dim)}
+.caret::after{content:"";display:inline-block;width:.55em;height:1.05em;margin-left:1px;vertical-align:-.2em;background:var(--paper);animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.desk-cap{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin-top:14px;font:10px/1.5 var(--pixel);color:var(--mute)}
+.desk-cap #desk-status{flex:1;min-width:16ch;color:var(--paper)}
+@container (max-width:620px){
+  .desk{font-size:clamp(8px,2.6cqi,12px)}
+  .desk-body{grid-template-columns:minmax(0,1fr);height:auto}
+  .side{display:none}
+  .bar .mid,.bar .tabs span:nth-child(n+4){display:none}
+  .panes{grid-template-columns:minmax(0,1fr)}
+  .pane-b{min-height:11em}
+}
+@media (prefers-reduced-motion:reduce){.caret::after{animation:none}.spark i{transition:none}}
+
+/* ---------------- why */
+.why-grid{list-style:none;padding:0;margin:56px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 64px}
+.why-grid li{display:grid;grid-template-columns:3.2rem 1fr;column-gap:18px}
+.why-grid .n{font:italic 800 64px/.8 var(--display);color:var(--c);grid-row:span 2}
+.why-grid h3{font-weight:700;font-size:25px;line-height:1.15;margin:4px 0 10px}
+.why-grid p{margin:0;color:var(--mute);max-width:46ch}
+@media (max-width:760px){.why-grid{grid-template-columns:1fr;gap:40px}}
+
+/* ---------------- two-column blocks */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(36px,6vw,88px);align-items:start}
+@media (max-width:880px){.split{grid-template-columns:minmax(0,1fr)}}
+.legend{margin:0;display:grid;max-width:620px}
+.legend div{display:grid;grid-template-columns:minmax(0,12.5rem) 1fr;gap:4px 20px;padding-block:13px;border-top:1px solid var(--line);align-items:baseline}
+.legend div:last-child{border-bottom:1px solid var(--line)}
+.legend dt{font:500 15px/1.4 var(--mono);color:var(--paper)}
+.legend dd{margin:0;color:var(--mute);font-size:15px}
+.legend dt.lbl{font:600 12px/1.4 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--mute)}
+@media (max-width:560px){.legend div{grid-template-columns:1fr}}
+kbd{font:500 .9em var(--mono);color:var(--paper);background:var(--ink-3);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:.02em .4em;white-space:nowrap}
+
+.rules{list-style:none;margin:0;padding:0}
+.rules li{display:grid;grid-template-columns:7.4rem 1fr;gap:14px;padding-block:15px;border-top:1px solid var(--line);align-items:baseline}
+.rules li:last-child{border-bottom:1px solid var(--line)}
+.rules b{display:block;font-weight:500;color:var(--paper)}
+.rules div span{color:var(--mute);font-size:15px}
+.rules .chip{justify-self:start}
+.chip.read{color:var(--green-text)}
+.chip.rev{color:var(--cyan)}
+.chip.no{color:var(--red-text)}
+.chip.later{color:var(--yellow)}
+@media (max-width:480px){.rules li{grid-template-columns:1fr;gap:8px}}
+
+.term{background:#000;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.term-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);font:10px/1 var(--pixel);color:var(--mute)}
+.term-bar .btn-pixel{padding:9px 11px;font-size:9px}
+.term pre{margin:0;padding:20px;font:400 14px/1.8 var(--mono);overflow-x:auto;color:var(--paper)}
+.term .p{color:var(--dim);user-select:none}
+.term .c{color:var(--dim)}
+.note{color:var(--mute);font-size:15px;margin:22px 0 0;max-width:56ch}
+
+/* ---------------- boot */
+.panel{margin:0}
+.bezel{padding:clamp(8px,1.2vw,14px);background:linear-gradient(#1b1a22,#111016);border:1px solid var(--line);border-radius:14px}
+.screen16{aspect-ratio:16/10;background:#000;display:grid;place-items:center;border-radius:4px;overflow:hidden}
+.screen16 img{display:block;width:66.667%;height:auto}
+.panel figcaption{color:var(--mute);font-size:14px;margin-top:14px;max-width:70ch}
+.spec{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:28px 0 0;font:400 13px/1.5 var(--mono)}
+.spec dt{color:var(--dim)}
+.spec dd{margin:0;color:var(--mute)}
+
+/* ---------------- specs */
+.sheet{margin:56px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:64px}
+.sheet div{display:grid;grid-template-columns:9.5rem 1fr;gap:4px 18px;padding-block:14px;border-top:1px solid var(--line);align-items:baseline}
+.sheet dt{font:8px/1.6 var(--pixel);color:var(--mute);text-transform:uppercase}
+.sheet dd{margin:0;font-size:16px}
+.sheet dd small{display:block;color:var(--mute);font-size:14px}
+@media (max-width:760px){.sheet{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:420px){.sheet div{grid-template-columns:1fr}}
+
+/* ---------------- get it */
+.install{display:inline-flex;max-width:100%;border:1px solid var(--line);background:var(--ink-2);border-radius:6px;overflow:hidden;margin-top:30px}
+.install code{font:500 15px/1 var(--mono);padding:15px 16px;white-space:nowrap;overflow-x:auto;min-width:0}
+.install code::before{content:"$ ";color:var(--dim)}
+.install .copy{border:0;border-left:1px solid var(--line);border-radius:0;flex:none}
+.more{display:inline-block;margin-top:22px;font:500 16px/1.4 var(--sans)}
+
+/* ---------------- footer */
+.foot{padding-block:clamp(56px,8vw,96px) 0;border-top:1px solid var(--line)}
+.sign{display:flex;justify-content:space-between;align-items:flex-end;gap:28px}
+.sign p{margin:0 0 28px;color:var(--mute);font-size:14px;max-width:70ch}
+.sign p a{color:var(--paper)}
+.sign .corner{height:clamp(64px,9vw,120px);width:auto;flex:none;display:block}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="stripes" viewBox="0 0 146 100"><path fill="#E4312B" d="M0 100L24 100L74 0L50 0Z"/><path fill="#F8B91E" d="M24 100L48 100L98 0L74 0Z"/><path fill="#2FAE4E" d="M48 100L72 100L122 0L98 0Z"/><path fill="#1AA6E0" d="M72 100L96 100L146 0L122 0Z"/></symbol>
+  <symbol id="lockup" viewBox="54 54 626 170">
+    <path fill="currentColor" d="M160 110A50 50 0 1 0 60 110A50 50 0 1 0 160 110ZM130 110A20 20 0 1 1 90 110A20 20 0 1 1 130 110ZM130 160H160V60H130ZM178 110H208V60H178ZM178 110A50 50 0 0 0 278 110L248 110A20 20 0 0 1 208 110ZM248 160H278V60H248ZM296 160H326V60H296ZM388.402 83.504A50 50 0 0 0 296 110L326 110A20 20 0 0 1 362.961 99.402ZM501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402ZM570.722 206.1A11.9 11.9 0 1 0 546.922 206.1A11.9 11.9 0 1 0 570.722 206.1ZM563.922 206.1A5.1 5.1 0 1 1 553.722 206.1A5.1 5.1 0 1 1 563.922 206.1ZM563.922 218H570.722V194.2H563.922ZM602.682 206.1A11.9 11.9 0 1 0 578.882 206.1A11.9 11.9 0 1 0 602.682 206.1ZM595.882 206.1A5.1 5.1 0 1 1 585.682 206.1A5.1 5.1 0 1 1 595.882 206.1ZM595.882 218H602.682V184H595.882ZM644.842 201A17 17 0 1 0 610.842 201A17 17 0 1 0 644.842 201ZM638.042 201A10.2 10.2 0 1 1 617.642 201A10.2 10.2 0 1 1 638.042 201ZM672.787 190.711A10.2 10.2 0 1 0 663.202 204.4L663.202 197.6A3.4 3.4 0 1 1 666.397 193.037ZM653.618 211.289A10.2 10.2 0 1 0 663.202 197.6L663.202 204.4A3.4 3.4 0 1 1 660.007 208.963Z"/>
+    <path fill="#E4312B" d="M527.402 160L551.402 160L601.402 60L577.402 60Z"/><path fill="#F8B91E" d="M551.402 160L575.402 160L625.402 60L601.402 60Z"/><path fill="#2FAE4E" d="M575.402 160L599.402 160L649.402 60L625.402 60Z"/><path fill="#1AA6E0" d="M599.402 160L623.402 160L673.402 60L649.402 60Z"/>
+  </symbol>
+</svg>
+
+<header class="top col" id="top">
+  <a class="brand" href="#top" aria-label="Aura adOS, back to top"><svg viewBox="0 0 626 170" role="img" aria-label="aura adOS"><use href="#lockup"/></svg></a>
+  <nav aria-label="Sections">
+    <a class="sec" href="#desk">Desk</a>
+    <a class="sec" href="#terminal">Terminal</a>
+    <a class="sec" href="#agents">Agents</a>
+    <a class="sec" href="#boot">Boot</a>
+    <a class="sec" href="#specs">Specs</a>
+    <a href="/">Aura Code</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero col" aria-labelledby="h1">
+    <div>
+      <p class="eyebrow">AURA adOS &#xb7; AGENT DRIVEN OPERATING SYSTEM</p>
+      <h1 id="h1">You ask. She does it. <span class="s">Snapshot first.</span></h1>
+      <p class="lede">Finally, <strong>your own OS on your own laptop</strong>: running what you need, nothing you don't. Aura built it for herself. She installs, themes, fixes and backs it up, and before she changes anything she takes a snapshot you can roll back to.</p>
+      <p class="status"><span class="chip test">IN PRIVATE TESTING</span><a href="#get">How to get it</a></p>
+    </div>
+    <figure class="desk-wrap" id="demo">
+      <div class="desk" role="img" aria-label="A mock-up of the Aura adOS desktop. A top bar with four coloured desktop tabs, the toggles silent, hotspot, record, cast and tiles, battery and clock. A left sidebar lists the spaces, live cpu, ram, gpu and power, and each agent's latest step. In the terminal, npm run build fails because the sharp module is missing. Ctrl+Shift+A opens Ask Aura in a split beside it, which explains the error and suggests npm install sharp and npm run build, to run only when Enter is pressed.">
+        <div class="bar" aria-hidden="true">
+          <div class="tabs"><span class="on" style="--t:#9C8CF0">1 code</span><span style="--t:#6FB7F0">2 web</span><span style="--t:#E8C47A">3 docs</span><span style="--t:#5FD0B0">4 media</span></div>
+          <div class="mid">silent &#xb7; hotspot &#xb7; record &#xb7; cast &#xb7; <b>tiles</b></div>
+          <div class="tray"><span class="bat">&#x26a1; 82%</span><span class="clock">14:32</span></div>
+        </div>
+        <div class="desk-body" aria-hidden="true">
+          <aside class="side">
+            <h4>spaces</h4>
+            <ul><li class="me"><b>1</b>code</li><li><b>2</b>web</li><li><b>3</b>docs</li><li><b>4</b>media</li></ul>
+            <div class="meter"><span>cpu</span><span class="spark" id="spark-cpu"></span><span id="cpu-v">14%</span></div>
+            <div class="meter"><span>ram</span><span class="spark" id="spark-ram"></span><span>2.1G</span></div>
+            <div class="meter"><span>gpu</span><span class="spark" id="spark-gpu"></span><span>3%</span></div>
+            <div class="meter"><span>pwr</span><span class="spark" id="spark-pwr"></span><span>&#x2248;7W</span></div>
+            <h4 style="margin-top:1em">agents</h4>
+            <p class="agent" style="--a:var(--cyan)"><b>aura</b> &#xb7; snapshot 212, then installed ffmpeg</p>
+            <p class="agent" style="--a:var(--yellow)"><b>claude</b> &#xb7; read system_status</p>
+          </aside>
+          <div class="panes">
+            <div class="pane">
+              <div class="pane-h"><span>aura-term &#xb7; ~/shop</span><span>1</span></div>
+              <div class="pane-b" id="term-b">
+                <p><span class="prompt">~/shop $ </span><span class="cmd" data-step data-type="45" data-wait="500">npm run build</span></p>
+                <p data-step data-wait="450">&gt; shop@1.0.0 build
+&gt; vite build</p>
+                <p class="err" data-step data-wait="700">error: Cannot find module 'sharp'</p>
+                <p data-step data-wait="150"><span class="exit">exit 1</span></p>
+                <p data-step data-wait="500"><span class="prompt">~/shop $ </span><span class="caret"></span></p>
+                <span class="keycap" data-step data-wait="700" data-flash>Ctrl+Shift+A</span>
+              </div>
+            </div>
+            <div class="pane ask">
+              <div class="pane-h"><span>Ask Aura</span><svg viewBox="0 0 146 100"><use href="#stripes"/></svg></div>
+              <div class="pane-b">
+                <p data-step data-type="14" data-wait="350">The build imports sharp, an image library with native code, and it isn't installed in this project. Add it, then build again:</p>
+                <p class="sug" data-step data-wait="300">npm install sharp &amp;&amp; npm run build</p>
+                <p class="hint" data-step data-wait="250">Enter runs it &#xb7; q closes</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption class="desk-cap">
+        <button class="btn-pixel" type="button" id="replay" aria-label="Play the demo again">REPLAY</button>
+        <span id="desk-status">Nothing runs until you press Enter.</span>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="col" id="why" aria-labelledby="why-h">
+    <p class="kicker">Why adOS</p>
+    <h2 id="why-h">A desk for developers and their agents.</h2>
+    <p class="intro">A dev OS, not a polished one: text over icons, square panes, and the numbers that matter one glance away. If it doesn't help you ship, it isn't on screen.</p>
+    <ol class="why-grid">
+      <li style="--c:var(--red)"><span class="n" aria-hidden="true">1</span><h3>She operates it</h3><p>Aura, the agent from Aura Code, is the operator. She installs packages, applies themes, fixes what broke and keeps the backups, through a small set of <code>aura-os-*</code> commands that are the only way she may change the system.</p></li>
+      <li style="--c:var(--yellow)"><span class="n" aria-hidden="true">2</span><h3>Snapshot first</h3><p>Root is btrfs with snapper. Every system change is preceded by a snapshot, and <code>aura-os-reset</code> takes the system back to any of them. Your files in <code>/home</code> are never rolled back with it.</p></li>
+      <li style="--c:var(--green)"><span class="n" aria-hidden="true">3</span><h3>Under 350 MB, runs everything</h3><p>A bare sway desktop that idles under 350 MB, and still runs what you run today: browsers, dev tools, media and games.</p></li>
+      <li style="--c:var(--cyan)"><span class="n" aria-hidden="true">4</span><h3>Agents are first-class</h3><p>Any agent that speaks MCP gets the desktop through <code>aura-os-mcp</code>: read tools and reversible actions, no shell, and every call logged with the agent's name.</p></li>
+    </ol>
+  </section>
+
+  <section class="col split" id="desk" aria-labelledby="desk-h">
+    <div>
+      <p class="kicker">The desk</p>
+      <h2 id="desk-h">Text over icons. Square panes.</h2>
+      <p class="intro">Sway tiles every window, and the bars around them are plain text in one font. The sidebar is where you look to see what the machine, and every agent on it, is doing right now.</p>
+    </div>
+    <dl class="legend">
+      <div><dt class="lbl">Top bar</dt><dd>Desktop tabs, each renamable and in its own colour. In the centre, the toggles: silent &#xb7; hotspot &#xb7; record &#xb7; cast &#xb7; tiles.</dd></div>
+      <div><dt class="lbl">Sidebar</dt><dd>Every space, live cpu, ram, gpu and power, minimized windows, the last things you used, and each agent's latest step.</dd></div>
+      <div><dt><kbd>Super</kbd> <kbd>Enter</kbd></dt><dd>A terminal.</dd></div>
+      <div><dt><kbd>Super</kbd> <kbd>D</kbd></dt><dd>The app menu. Every app, Aura's included, has an entry.</dd></div>
+      <div><dt><kbd>Super</kbd> <kbd>Esc</kbd></dt><dd>Reboot, power off, log out, or reboot into the firmware setup.</dd></div>
+    </dl>
+  </section>
+
+  <section class="col split" id="terminal" aria-labelledby="term-h">
+    <div>
+      <p class="kicker">aura-term</p>
+      <h2 id="term-h">A terminal that knows what failed.</h2>
+      <p class="intro">aura-term is a fork of foot 1.28 in server mode: one <code>aura-termd</code> for every window, about <strong>2 MB per window</strong>. It also knows where each command starts and ends, so it can hand the last failure straight to Aura.</p>
+      <p class="note">Her answer opens in a split beside the terminal, never inside the running program. A command she suggests is shown and runs only when you press Enter.</p>
+    </div>
+    <dl class="legend">
+      <div><dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd></dt><dd>Ask Aura about the selection, or else the last failed command.</dd></div>
+      <div><dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>&#x2191;</kbd> <kbd>&#x2193;</kbd></dt><dd>Jump to the previous or next command block.</dd></div>
+      <div><dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Y</kbd></dt><dd>Copy the last command's output.</dd></div>
+      <div><dt><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>arrow</kbd></dt><dd>Split: a new terminal on that side, in the same directory.</dd></div>
+    </dl>
+  </section>
+
+  <section class="col split" id="agents" aria-labelledby="ag-h">
+    <div>
+      <p class="kicker">aura-os-mcp</p>
+      <h2 id="ag-h">Agents get an API, not a shell.</h2>
+      <p class="intro">A local MCP server over stdio. It runs only while an agent is connected, with no daemon, and it writes every call, with the agent's name, to <code>~/.local/state/aura-os/mcp.log</code>.</p>
+      <div class="term" style="margin-top:32px">
+        <div class="term-bar"><span>CONNECT AN AGENT</span><button class="btn-pixel" type="button" data-copy="claude mcp add --scope user aura-os -- /usr/local/bin/aura-os-mcp" data-select="mcp-code">COPY</button></div>
+<pre id="mcp-code"><span class="c"># Claude Code; any stdio MCP client works the same way</span>
+<span class="p">$ </span>claude mcp add --scope user aura-os -- /usr/local/bin/aura-os-mcp</pre>
+      </div>
+    </div>
+    <ul class="rules">
+      <li><span class="chip read">READ</span><div><b>See the desk</b><span>windows, desks, system status, agents, recent items, apps, themes</span></div></li>
+      <li><span class="chip rev">REVERSIBLE</span><div><b>Arrange it</b><span>focus and move windows, switch desks, open apps and web pages, rename and colour tabs, apply a theme or wallpaper, notify</span></div></li>
+      <li><span class="chip no">NO TOOL</span><div><b>No shell, on purpose</b><span>There is no command tool to ask for. Opening an app takes only a .desktop id, and opening a page only an http or https link.</span></div></li>
+      <li><span class="chip later">PHASE 2</span><div><b>Behind your click</b><span>Closing windows, the clipboard, packages, snapshots and reboot come later, each behind a confirmation you click yourself.</span></div></li>
+    </ul>
+  </section>
+
+  <section class="col split" id="boot" aria-labelledby="boot-h">
+    <div>
+      <p class="kicker">Boot</p>
+      <h2 id="boot-h">It even boots in character.</h2>
+      <p class="intro">The splash is baked into the unified kernel image, so the firmware hands straight over to it: the lockup lit like a phosphor screen, scanlines and all.</p>
+      <p class="note">systemd-boot's stub centres a splash unscaled on black, and shows nothing at all if it is bigger than the screen. So this one is 1280 &#xd7; 720 with pure-black edges: it fits every screen from 720p up, and melts into the black on all of them.</p>
+      <dl class="spec">
+        <dt>Loader</dt><dd>systemd-boot</dd>
+        <dt>Image</dt><dd>unified kernel image, .splash section</dd>
+        <dt>Canvas</dt><dd>1280 &#xd7; 720, 24-bit BMP</dd>
+      </dl>
+    </div>
+    <figure class="panel">
+      <div class="bezel"><div class="screen16"><img src="/ados/splash.webp" width="1280" height="720" loading="lazy" alt="The boot splash: a glowing white aura wordmark with four rainbow stripes and adOS set beneath them, the line AGENT DRIVEN OPERATING SYSTEM in grey pixel type, and &#xa9; 2026 Aura adOS at the bottom, over faint scanlines on black."></div></div>
+      <figcaption>As it lands on a 1920 &#xd7; 1200 laptop panel: unscaled, centred, black into black.</figcaption>
+    </figure>
+  </section>
+
+  <section class="col" id="key" aria-labelledby="key-h">
+    <p class="kicker">Your model, your key</p>
+    <h2 id="key-h">The API key is the owner's responsibility.</h2>
+    <p class="intro">The installer can ask for a base URL, a model and an API key: <strong>any OpenAI-compatible endpoint</strong>, cloud or local. Skip it and add one later. The key is written for that user only, to <code>~/.aura/.env</code> with mode 600.</p>
+  </section>
+
+  <section class="col" id="specs" aria-labelledby="specs-h">
+    <p class="kicker">Specs</p>
+    <h2 id="specs-h">What's in the box.</h2>
+    <dl class="sheet">
+      <div><dt>Base</dt><dd>Arch Linux<small>rolling, the whole Arch repository</small></dd></div>
+      <div><dt>Desktop</dt><dd>sway on Wayland<small>Waybar, fuzzel, mako</small></dd></div>
+      <div><dt>Operator</dt><dd>Aura, preinstalled<small>the aura CLI from Aura Code</small></dd></div>
+      <div><dt>Agent API</dt><dd>aura-os-mcp<small>local stdio MCP, logged, no shell</small></dd></div>
+      <div><dt>Terminal</dt><dd>aura-term<small>a foot 1.28 fork, about 2 MB per window</small></dd></div>
+      <div><dt>Filesystem</dt><dd>btrfs with snapper<small>a snapshot before every change</small></dd></div>
+      <div><dt>Boot</dt><dd>systemd-boot<small>unified kernel image with the adOS splash</small></dd></div>
+      <div><dt>Idle desktop</dt><dd>under 350 MB</dd></div>
+      <div><dt>Ships as</dt><dd>an installer ISO</dd></div>
+      <div><dt>Licence</dt><dd>proprietary<small>open-source parts keep their own licences</small></dd></div>
+    </dl>
+  </section>
+
+  <section class="col split" id="get" aria-labelledby="get-h">
+    <div>
+      <p class="kicker">Get it</p>
+      <h2 id="get-h">The ISO is in private testing.</h2>
+      <p class="intro">There is no public download yet, so there's no download button here. The agent at the centre of it is out today: <strong>Aura Code is open source</strong> and runs on the machine you already have.</p>
+      <div class="install">
+        <code id="install-cmd">npm install -g aura-code</code>
+        <button class="btn-pixel copy" type="button" data-copy="npm install -g aura-code" data-select="install-cmd">COPY</button>
+      </div>
+      <br><a class="more" href="/">Meet Aura Code &#x2192;</a>
+    </div>
+    <div class="term">
+      <div class="term-bar"><span>SHELL</span></div>
+<pre><span class="p">$ </span>npm install -g aura-code
+<span class="p">$ </span>aura
+<span class="c"># ask her anything; on adOS she also runs the machine</span></pre>
+    </div>
+  </section>
+</main>
+
+<footer class="foot col">
+  <div class="sign">
+    <p>Aura adOS: architecture and design by Du&#x161;an Milosavljevi&#x107;, Da Nang, Vietnam.<br>Aura adOS is proprietary software. It is built on Arch Linux and sway, and their open-source components keep their own licences. &#xa9; 2026</p>
+    <svg class="corner" viewBox="0 0 146 100" aria-hidden="true"><use href="#stripes"/></svg>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = id => document.getElementById(id);
+
+  /* ------------------------------------------------ copy buttons */
+  document.querySelectorAll('[data-copy]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const was = b.dataset.was || (b.dataset.was = b.textContent);
+      let msg = 'COPIED';
+      try { await navigator.clipboard.writeText(b.dataset.copy); }
+      catch (e) {
+        const t = b.dataset.select && $(b.dataset.select);
+        if (t) { const r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+        msg = 'SELECTED';
+      }
+      b.textContent = msg;
+      clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = was; }, 1400);
+    });
+  });
+
+  /* ------------------------------------------------ sidebar meters (made-up numbers) */
+  const sparks = { cpu: [14, 30], ram: [52, 6], gpu: [3, 8], pwr: [30, 20] };
+  const hist = {};
+  for (const [k, [base, jit]] of Object.entries(sparks)) {
+    const el = $('spark-' + k);
+    hist[k] = Array.from({ length: 16 }, () => Math.max(4, Math.min(100, base + (Math.random() - .5) * jit)));
+    el.append(...hist[k].map(() => document.createElement('i')));
+  }
+  function drawSparks(step) {
+    for (const [k, [base, jit]] of Object.entries(sparks)) {
+      if (step) { hist[k].shift(); hist[k].push(Math.max(4, Math.min(100, base + (Math.random() - .5) * jit))); }
+      [...$('spark-' + k).children].forEach((b, i) => b.style.setProperty('--h', hist[k][i].toFixed(0) + '%'));
+    }
+    $('cpu-v').textContent = Math.round(hist.cpu[hist.cpu.length - 1]) + '%';
+  }
+  drawSparks(false);
+  if (!reduce) setInterval(() => { if (!document.hidden) drawSparks(true); }, 1000);
+
+  /* ------------------------------------------------ the demo: a failed build, then Ask Aura */
+  const steps = [...document.querySelectorAll('#demo [data-step]')];
+  steps.forEach(s => { if (s.dataset.type != null) s.dataset.full = s.textContent; });
+  const statusEl = $('desk-status'), btn = $('replay');
+  const say = t => { statusEl.textContent = t; };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let run = 0;
+
+  function showAll() {
+    run++;
+    steps.forEach(s => { s.hidden = !!s.dataset.flash; if (s.dataset.full) s.textContent = s.dataset.full; });
+    say('Nothing runs until you press Enter.');
+  }
+  async function play() {
+    const me = ++run;
+    steps.forEach(s => { s.hidden = true; });
+    say('Build running');
+    for (const s of steps) {
+      await sleep(+s.dataset.wait || 300); if (me !== run) return;
+      if (s.classList.contains('err')) say('exit 1');
+      if (s.dataset.flash != null) say('Ctrl+Shift+A: asking Aura');
+      if (s.classList.contains('sug')) say('Suggested, not run');
+      s.hidden = false;
+      if (s.dataset.full) {
+        const full = s.dataset.full, dt = +s.dataset.type || 30;
+        for (let i = 1; i <= full.length; i += dt < 20 ? 3 : 1) { s.textContent = full.slice(0, i); await sleep(dt); if (me !== run) return; }
+        s.textContent = full;
+      }
+      if (s.dataset.flash != null) { await sleep(900); if (me !== run) return; s.hidden = true; }
+    }
+    say('Nothing runs until you press Enter.');
+  }
+  btn.addEventListener('click', () => { reduce ? showAll() : play(); });
+  if (reduce) { showAll(); return; }
+  showAll();
+  const io = 'IntersectionObserver' in window && new IntersectionObserver(es => {
+    if (es.some(e => e.isIntersecting)) { io.disconnect(); play(); }
+  }, { threshold: .4 });
+  io ? io.observe($('demo')) : play();
+})();
+</script>
+<script src="/aura-kb.js" defer></script>
+<script src="/aura-chat.js" data-product="Aura adOS, the agent driven operating system" defer></script>
