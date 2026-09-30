@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Aura adOS is a developer's desktop that an AI agent operates. Aura installs, themes, fixes and backs it up, and takes a snapshot before every change. Arch Linux and sway, under 350 MB idle.">
 <meta name="author" content="Du&#x161;an Milosavljevi&#x107;">
-<meta name="theme-color" content="#0B0A10">
+<meta name="theme-color" content="#070907">
 <link rel="canonical" href="https://www.leanproiq.com/ados">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -20,40 +20,39 @@
 <meta name="twitter:title" content="Aura adOS &#xb7; You ask. She does it.">
 <meta name="twitter:description" content="The agent driven operating system. Snapshot first.">
 <meta name="twitter:image" content="https://www.leanproiq.com/ados/og-image.jpg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Press+Start+2P&display=swap">
 <style>
-/* Aura adOS: the same world as the Aura Code page, the Spectrum at night. */
+/* Aura adOS: the same world as the Aura Code page, Nature. */
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/geist.woff2) format("woff2")}
+@font-face{font-family:"Geist Mono";font-style:normal;font-weight:400 500;font-display:swap;src:url(/fonts/geist-mono.woff2) format("woff2")}
 :root{
   color-scheme:dark;
-  --ink:#0B0A10; --ink-2:#121019; --ink-3:#1A1823; --line:#2B2836; --dim:#57536A;
-  --paper:#F2F1F5; --mute:#A29EB2;
+  --ink:#070907; --ink-2:#0c100c; --ink-3:#141a14; --line:#252920; --dim:#8b8e7a;
+  --paper:#f2ebc9; --mute:#b9baa2; --gold:#e7cf85;
   --red:#E4312B; --yellow:#F8B91E; --green:#2FAE4E; --cyan:#1AA6E0;
-  --red-text:#F0584F; --green-text:#3CC45E; --violet-text:#9C8CF0;
-  --display:"Saira","Arial Narrow",system-ui,sans-serif;
-  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --pixel:"Press Start 2P",ui-monospace,monospace;
+  --red-text:#F0584F; --green-text:#3CC45E; --violet-text:#e7cf85;
+  --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --display:var(--sans);
+  --pixel:var(--mono);
   --gutter:clamp(16px,3.2vw,44px);
 }
 body{margin:0;background:var(--ink);color:var(--paper);font:400 17px/1.6 var(--sans);padding-inline:var(--gutter);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 .col{max-width:1180px;margin-inline:auto}
 a{color:inherit}
-:focus-visible{outline:2px solid var(--yellow);outline-offset:3px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 code,pre{font-family:var(--mono)}
 p code,li code,dd code{font-size:.92em;color:var(--paper);background:var(--ink-3);padding:.08em .35em;border-radius:3px;overflow-wrap:anywhere}
-::selection{background:var(--yellow);color:var(--ink)}
+::selection{background:var(--gold);color:var(--ink)}
 [hidden]{display:none!important}
 
-.kicker{font:10px/1.6 var(--pixel);color:var(--mute);text-transform:uppercase;margin:0 0 20px}
-h1,h2,h3{font-family:var(--display);font-style:italic;text-wrap:balance}
-h2{font-weight:800;font-stretch:87.5%;font-size:clamp(34px,4.8vw,62px);line-height:.98;letter-spacing:-.01em;margin:0;max-width:17ch}
+.kicker{font:500 12px/1.6 var(--pixel);letter-spacing:.06em;color:var(--mute);text-transform:uppercase;margin:0 0 20px}
+h1,h2,h3{font-family:var(--display);font-weight:500;text-wrap:balance}
+h2{font-weight:500;font-size:clamp(34px,4.6vw,60px);line-height:1.04;letter-spacing:-.045em;margin:0;max-width:17ch}
 .intro{color:var(--mute);max-width:60ch;margin:24px 0 0;font-size:clamp(17px,1.35vw,19px)}
 .intro strong{color:var(--paper);font-weight:500}
 section{padding-block:clamp(56px,8vw,112px)}
-.btn-pixel{font:10px/1 var(--pixel);color:var(--paper);background:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:12px 14px;cursor:pointer}
-.btn-pixel:hover{border-color:var(--yellow)}
+.btn-pixel{font:500 12px/1 var(--pixel);letter-spacing:.06em;color:var(--paper);background:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:12px 14px;cursor:pointer}
+.btn-pixel:hover{border-color:var(--gold)}
 
 /* ---------------- header */
 .top{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-block:22px}
@@ -66,21 +65,21 @@ section{padding-block:clamp(56px,8vw,112px)}
 
 /* ---------------- hero */
 .hero{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:clamp(32px,5vw,64px);align-items:center;padding-block:clamp(28px,5vw,64px) clamp(56px,7vw,104px)}
-.eyebrow{font:10px/1.6 var(--pixel);color:var(--cyan);margin:0 0 24px}
-h1{font-weight:800;font-stretch:87.5%;font-size:clamp(52px,6.6vw,96px);line-height:.9;letter-spacing:-.012em;margin:0 0 28px}
-h1 .s{color:var(--yellow)}
+.eyebrow{font:500 12px/1.6 var(--pixel);letter-spacing:.06em;color:var(--cyan);margin:0 0 24px}
+h1{font-weight:500;font-size:clamp(48px,6.4vw,92px);line-height:1;letter-spacing:-.055em;margin:0 0 28px}
+h1 .s{color:var(--gold)}
 .lede{font-size:clamp(17px,1.45vw,20px);color:var(--mute);max-width:34em;margin:0 0 30px}
 .lede strong{color:var(--paper);font-weight:500}
 .status{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin:0}
-.chip{font:8px/1 var(--pixel);padding:7px 7px 6px;border:1px solid currentColor;border-radius:3px;white-space:nowrap}
+.chip{font:500 10px/1 var(--pixel);letter-spacing:.06em;padding:7px 7px 6px;border:1px solid currentColor;border-radius:3px;white-space:nowrap}
 .chip.test{color:var(--yellow)}
 .status a{font:500 15px/1.4 var(--sans);color:var(--paper)}
 @media (max-width:980px){.hero{grid-template-columns:minmax(0,1fr)}}
 
 /* ---------------- the desk mock (fictional data, drawn in CSS) */
 .desk-wrap{margin:0;container-type:inline-size}
-.desk{font:400 clamp(8.5px,1.7cqi,13px)/1.5 var(--mono);color:var(--mute);background:#07060b;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px rgba(242,241,245,.04),0 40px 90px -40px rgba(26,166,224,.35)}
-.bar{display:flex;align-items:center;justify-content:space-between;gap:1.4em;padding:.55em 1em;background:#0d0c14;border-bottom:1px solid var(--line);white-space:nowrap}
+.desk{font:400 clamp(8.5px,1.7cqi,13px)/1.5 var(--mono);color:var(--mute);background:#090c09;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px rgba(242,235,201,.04),0 40px 90px -40px rgba(231,207,133,.22)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:1.4em;padding:.55em 1em;background:#0e130e;border-bottom:1px solid var(--line);white-space:nowrap}
 .bar .tabs,.bar .tray{display:flex;gap:1.1em}
 .bar .tabs span{color:var(--t)}
 .bar .tabs .on{box-shadow:0 2px 0 var(--t)}
@@ -89,7 +88,7 @@ h1 .s{color:var(--yellow)}
 .bar .bat{color:var(--green-text)}
 .bar .clock{color:var(--violet-text)}
 .desk-body{display:grid;grid-template-columns:15.5em minmax(0,1fr);height:28em}
-.side{padding:.9em 1.1em;border-right:1px solid var(--line);background:#0a0911;overflow:hidden}
+.side{padding:.9em 1.1em;border-right:1px solid var(--line);background:#0a0d0a;overflow:hidden}
 .side h4{margin:0 0 .15em;font:inherit;color:var(--dim)}
 .side ul{list-style:none;margin:0 0 1em;padding:0 0 0 .8em}
 .side li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -98,11 +97,11 @@ h1 .s{color:var(--yellow)}
 .meter{display:grid;grid-template-columns:2.6em minmax(0,1fr) 3.4em;gap:.5em;align-items:end;margin:0 0 .15em;padding-left:.8em}
 .meter span:last-child{text-align:right;color:var(--paper)}
 .spark{display:flex;align-items:flex-end;gap:1px;height:1.05em;margin-bottom:.22em}
-.spark i{flex:1;background:#6f6a8c;height:var(--h,10%);transition:height .5s}
+.spark i{flex:1;background:#6d7352;height:var(--h,10%);transition:height .5s}
 .side .agent{padding-left:.8em;margin:0 0 .55em;white-space:normal}
 .side .agent b{font-weight:500;color:var(--a)}
 .panes{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:1px;background:var(--line);min-height:0}
-.pane{background:#050408;display:flex;flex-direction:column;min-width:0;min-height:0}
+.pane{background:#060806;display:flex;flex-direction:column;min-width:0;min-height:0}
 .pane-h{display:flex;justify-content:space-between;align-items:center;gap:1em;padding:.35em .9em;border-bottom:1px solid var(--line);color:var(--dim);white-space:nowrap;overflow:hidden}
 .pane-h svg{height:.9em;width:auto;flex:none}
 .pane-b{padding:.8em .9em;overflow:hidden;flex:1;position:relative}
@@ -111,14 +110,14 @@ h1 .s{color:var(--yellow)}
 .cmd{color:var(--paper)}
 .err{color:var(--red-text)}
 .exit{display:inline-block;margin-top:.5em;padding:.05em .5em;border:1px solid var(--red-text);color:var(--red-text);border-radius:2px}
-.keycap{position:absolute;right:.9em;bottom:.9em;padding:.35em .6em;border-radius:4px;background:linear-gradient(#434752,#33363F);color:var(--paper);box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 2px 0 #1a1b20}
+.keycap{position:absolute;right:.9em;bottom:.9em;padding:.35em .6em;border-radius:4px;background:linear-gradient(#3d4233,#2d3125);color:var(--paper);box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 2px 0 #171a12}
 .ask .pane-h{color:var(--paper)}
 .ask p{color:var(--mute)}
-.ask .sug{margin-top:.8em;padding:.5em .7em;border:1px solid var(--line);border-left:2px solid var(--yellow);color:var(--paper);background:#0e0d14}
+.ask .sug{margin-top:.8em;padding:.5em .7em;border:1px solid var(--line);border-left:2px solid var(--gold);color:var(--paper);background:#0e130e}
 .ask .hint{margin-top:.6em;color:var(--dim)}
 .caret::after{content:"";display:inline-block;width:.55em;height:1.05em;margin-left:1px;vertical-align:-.2em;background:var(--paper);animation:blink 1.1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
-.desk-cap{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin-top:14px;font:10px/1.5 var(--pixel);color:var(--mute)}
+.desk-cap{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin-top:14px;font:500 12px/1.5 var(--pixel);letter-spacing:.06em;color:var(--mute)}
 .desk-cap #desk-status{flex:1;min-width:16ch;color:var(--paper)}
 @container (max-width:620px){
   .desk{font-size:clamp(8px,2.6cqi,12px)}
@@ -133,7 +132,7 @@ h1 .s{color:var(--yellow)}
 /* ---------------- why */
 .why-grid{list-style:none;padding:0;margin:56px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 64px}
 .why-grid li{display:grid;grid-template-columns:3.2rem 1fr;column-gap:18px}
-.why-grid .n{font:italic 800 64px/.8 var(--display);color:var(--c);grid-row:span 2}
+.why-grid .n{font:500 64px/.8 var(--display);color:var(--c);grid-row:span 2}
 .why-grid h3{font-weight:700;font-size:25px;line-height:1.15;margin:4px 0 10px}
 .why-grid p{margin:0;color:var(--mute);max-width:46ch}
 @media (max-width:760px){.why-grid{grid-template-columns:1fr;gap:40px}}
@@ -162,9 +161,9 @@ kbd{font:500 .9em var(--mono);color:var(--paper);background:var(--ink-3);border:
 .chip.later{color:var(--yellow)}
 @media (max-width:480px){.rules li{grid-template-columns:1fr;gap:8px}}
 
-.term{background:#000;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.term-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);font:10px/1 var(--pixel);color:var(--mute)}
-.term-bar .btn-pixel{padding:9px 11px;font-size:9px}
+.term{background:#050705;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.term-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);font:500 12px/1 var(--pixel);letter-spacing:.06em;color:var(--mute)}
+.term-bar .btn-pixel{padding:9px 11px;font-size:11px}
 .term pre{margin:0;padding:20px;font:400 14px/1.8 var(--mono);overflow-x:auto;color:var(--paper)}
 .term .p{color:var(--dim);user-select:none}
 .term .c{color:var(--dim)}
@@ -172,8 +171,8 @@ kbd{font:500 .9em var(--mono);color:var(--paper);background:var(--ink-3);border:
 
 /* ---------------- boot */
 .panel{margin:0}
-.bezel{padding:clamp(8px,1.2vw,14px);background:linear-gradient(#1b1a22,#111016);border:1px solid var(--line);border-radius:14px}
-.screen16{aspect-ratio:16/10;background:#000;display:grid;place-items:center;border-radius:4px;overflow:hidden}
+.bezel{padding:clamp(8px,1.2vw,14px);background:linear-gradient(#1a201a,#0f130f);border:1px solid var(--line);border-radius:14px}
+.screen16{aspect-ratio:16/10;background:#050705;display:grid;place-items:center;border-radius:4px;overflow:hidden}
 .screen16 img{display:block;width:66.667%;height:auto}
 .panel figcaption{color:var(--mute);font-size:14px;margin-top:14px;max-width:70ch}
 .spec{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:28px 0 0;font:400 13px/1.5 var(--mono)}
@@ -183,7 +182,7 @@ kbd{font:500 .9em var(--mono);color:var(--paper);background:var(--ink-3);border:
 /* ---------------- specs */
 .sheet{margin:56px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:64px}
 .sheet div{display:grid;grid-template-columns:9.5rem 1fr;gap:4px 18px;padding-block:14px;border-top:1px solid var(--line);align-items:baseline}
-.sheet dt{font:8px/1.6 var(--pixel);color:var(--mute);text-transform:uppercase}
+.sheet dt{font:500 10px/1.6 var(--pixel);letter-spacing:.06em;color:var(--mute);text-transform:uppercase}
 .sheet dd{margin:0;font-size:16px}
 .sheet dd small{display:block;color:var(--mute);font-size:14px}
 @media (max-width:760px){.sheet{grid-template-columns:minmax(0,1fr)}}
@@ -235,9 +234,9 @@ kbd{font:500 .9em var(--mono);color:var(--paper);background:var(--ink-3);border:
     <figure class="desk-wrap" id="demo">
       <div class="desk" role="img" aria-label="A mock-up of the Aura adOS desktop. A top bar with four coloured desktop tabs, the toggles silent, hotspot, record, cast and tiles, battery and clock. A left sidebar lists the spaces, live cpu, ram, gpu and power, and each agent's latest step. In the terminal, npm run build fails because the sharp module is missing. Ctrl+Shift+A opens Ask Aura in a split beside it, which explains the error and suggests npm install sharp and npm run build, to run only when Enter is pressed.">
         <div class="bar" aria-hidden="true">
-          <div class="tabs"><span class="on" style="--t:#9C8CF0">1 code</span><span style="--t:#6FB7F0">2 web</span><span style="--t:#E8C47A">3 docs</span><span style="--t:#5FD0B0">4 media</span></div>
+          <div class="tabs"><span class="on" style="--t:#e7cf85">1 code</span><span style="--t:#1AA6E0">2 web</span><span style="--t:#dde2c8">3 docs</span><span style="--t:#3CC45E">4 media</span></div>
           <div class="mid">silent &#xb7; hotspot &#xb7; record &#xb7; cast &#xb7; <b>tiles</b></div>
-          <div class="tray"><span class="bat">&#x26a1; 82%</span><span class="clock">14:32</span></div>
+          <div class="tray"><span class="bat">bat 82%</span><span class="clock">14:32</span></div>
         </div>
         <div class="desk-body" aria-hidden="true">
           <aside class="side">
