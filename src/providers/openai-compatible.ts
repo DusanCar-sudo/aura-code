@@ -73,7 +73,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // Kept for the 401 hint only — never logged, never sent anywhere but here.
     this.configuredKey = config.apiKey ?? resolveApiKey(config);
     this.client = new OpenAI({
-      apiKey: this.configuredKey,
+      // openai v5+ throws on a missing key at construction; v4 sent an empty
+      // Bearer. Keyless servers (Ollama, LM Studio) ignore the placeholder,
+      // and a server that needs a key still answers 401, which is where the
+      // hint below comes in.
+      apiKey: this.configuredKey || 'no-key',
       baseURL: config.baseUrl ?? resolveBaseUrl(config),
       defaultHeaders: {
         'HTTP-Referer': 'https://github.com/DusanCar-sudo/aura-code',
@@ -420,9 +424,12 @@ export function fromOpenAIResponse(response: OpenAI.ChatCompletion): LLMResponse
     stripped,
     readReasoningField(choice.message) + stripper.reasoningText,
   );
-  const toolCalls: ToolCall[] = (choice.message.tool_calls ?? []).map(tc => {
+  // openai v5+ also types "custom" (free-text) tool calls; aura only
+  // declares function tools, so those are the only ones to read.
+  const toolCalls: ToolCall[] = (choice.message.tool_calls ?? []).flatMap(tc => {
+    if (tc.type !== 'function') return [];
     const input: Record<string, unknown> = safeParseToolArgs(tc.function.arguments);
-    return { id: tc.id, name: tc.function.name, input };
+    return [{ id: tc.id, name: tc.function.name, input }];
   });
 
   const stopReason =

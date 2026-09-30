@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { run } from '../util/exec.js';
 import { openExternal } from '../util/open.js';
 import type { ExecutionPlan } from '../orchestration/types.js';
 import { sessionStore, type ChatSession } from '../agent/session-store.js';
@@ -1636,7 +1637,9 @@ function applyPanels(projectRoot: string, opts: { enrich?: boolean } = {}): void
     const scriptPath = fs.existsSync(local) ? local : path.join(PANELS_DIR, script);
     if (!fs.existsSync(scriptPath)) continue;
     try {
-      execSync(`node "${scriptPath}" "${projectRoot}"`, { stdio: 'ignore', timeout: 90_000 });
+      // argv: a project path with a quote or $(…) in it used to be shell text.
+      // process.execPath, not "node" from PATH: the same runtime Aura runs on.
+      run(process.execPath, [scriptPath, projectRoot], { env: process.env, timeoutMs: 90_000 });
     } catch { /* keep whatever dashboard we have */ }
   }
 }

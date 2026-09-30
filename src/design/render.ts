@@ -26,6 +26,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { findChrome, CHROME_MISSING_MESSAGE } from '../util/chrome.js';
+import { loadPuppeteer } from '../util/optional-deps.js';
 
 export type PageFormat = 'A4' | 'Letter' | 'Legal' | 'A3' | 'A5';
 
@@ -127,7 +128,7 @@ async function withPage(
   const outDir = path.dirname(path.resolve(opts.output));
   fs.mkdirSync(outDir, { recursive: true });
 
-  const puppeteer = await import('puppeteer-core');
+  const puppeteer = await loadPuppeteer('Design rendering');
   const browser = await puppeteer.launch({
     executablePath: chrome,
     headless: true,

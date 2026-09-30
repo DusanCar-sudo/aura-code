@@ -212,7 +212,7 @@ export function toAnthropicMessages(history: HistoryMessage[]): Anthropic.Messag
     if (msg.role === 'user') {
       out.push({ role: 'user', content: msg.content });
     } else if (msg.role === 'assistant') {
-      const content: Anthropic.ContentBlock[] = [];
+      const content: Anthropic.ContentBlockParam[] = [];
       if (msg.content) {
         content.push({ type: 'text', text: msg.content });
       }

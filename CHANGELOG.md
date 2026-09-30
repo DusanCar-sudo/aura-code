@@ -2,6 +2,27 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.19.1] — 2026-09-19
+
+### Security hardening
+
+From Socket.dev's review of 0.18.0 (`docs/security/socket-alerts-0.18.0.md`), plus what fixing it turned up. `npm audit --omit=dev`: 0 vulnerabilities (was 6, 4 high).
+
+- **Dependencies**: removed `pptxgenjs` (never imported) and with it `image-size` (CVE-2025-71329/-71330, unfixed upstream), `jszip` and the `https` stub; removed unused `glob`, `xterm`, `xterm-addon-fit`; `@xterm/*` and `@tauri-apps/*` are devDependencies (the web UI bundles them); `node-pty` and `puppeteer-core` are optional, with a clear message when missing. `openai` 4 → 7, `@anthropic-ai/sdk` 0.32 → 0.127, `@google/generative-ai` 0.24. Production tree: 197 → 148 packages.
+- **`util/exec`**: one way to run a program — argv, no shell, an environment without Aura's API keys.
+- **No more shell strings built from data**: `image_read` (file names), `ftp_upload`, `cron` (a job containing `$(…)` ran while being saved), `email` (`to` was unquoted; `$(…)` in a body ran), Telegram `/search`, `/find`, `/cam`, `viz`.
+- **Credentials**: FTP passwords and the Telegram bot token no longer appear in `ps`; plugin hooks and helper programs no longer inherit API keys; `image_read base64` only encodes real images (it encoded any file); a Telegram caption starting with `<` can no longer upload a local file.
+- **Telegram**: fails closed — with no `allowed_user_ids` it answers no one and tells the sender their ID for pairing (it used to answer anyone). `/run` and `/cam` need `allow_run` / `allow_cam` in `telegram.json`. `/read`, `/ls`, `/sendfile`, `/search` refuse credential stores (`~/.ssh`, `~/.aura`, `.env*`, keys). `allowed_user_ids: "a,b"` now works (it matched nobody).
+- **Permissions**: `cron run/add` get `run_shell`'s dangerous-command screen (they had none), and adding a cron job always confirms in normal mode; browser `evaluate` confirms; the browser opens http(s) only.
+- **Verification** re-runs only pure test-runner commands (it re-ran any command containing "npm test").
+- **`:catchthis`** masks credential-shaped typed text; recordings and screenshots are private (0700).
+
+## [0.19.0] — 2026-09-19
+
+### Added — Learning journey
+
+- **`:journey` / `aura journey`**: a full-screen chart of runs per day (success vs failure) with everything Aura did and learned below; Enter opens one item. `GET /api/learning/graph` and the `learning.frames` protocol method serve the same data to other clients.
+
 ## [0.18.0] — 2026-09-09
 
 ### Changed — Prompt-Cache Stability & Context Budget

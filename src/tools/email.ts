@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '../providers/types.js';
 import { auraPath } from '../util/aura-home.js';
+import { run, hasCommand } from '../util/exec.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Email — send and read emails (system mail or configured SMTP)
@@ -47,29 +48,36 @@ function getConfig(): { smtp_host?: string; smtp_port?: number; smtp_user?: stri
   }
 }
 
-function sendViaCommand(to: string, subject: string, body: string): string {
-  // Try msmtp
-  try {
-    execSync('which msmtp', { stdio: 'pipe' });
-    const emailContent = `To: ${to}\nSubject: ${subject}\nContent-Type: text/plain; charset=UTF-8\n\n${body}`;
-    execSync(`echo ${JSON.stringify(emailContent)} | msmtp ${to}`, { stdio: 'pipe' });
-    return `Email sent to ${to} via msmtp: "${subject}"`;
-  } catch { /* not found */ }
+/** Comma-separated addresses → a list, or null if any isn't a plain address. */
+export function parseRecipients(to: string): string[] | null {
+  const list = to.split(',').map(a => a.trim()).filter(Boolean);
+  const ok = list.length > 0 && list.every(a => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(a));
+  return ok ? list : null;
+}
 
-  // Try sendmail
-  try {
-    execSync('which sendmail', { stdio: 'pipe' });
-    const emailContent = `To: ${to}\nSubject: ${subject}\nContent-Type: text/plain; charset=UTF-8\n\n${body}`;
-    execSync(`echo ${JSON.stringify(emailContent)} | sendmail -t`, { stdio: 'pipe' });
-    return `Email sent to ${to} via sendmail: "${subject}"`;
-  } catch { /* not found */ }
+/**
+ * Hand the message to a local mail program. It used to be
+ * `echo "<message>" | msmtp <to>`: $(…) in the body ran, and `to` went into
+ * the command unquoted. Now the message is stdin and the addresses are
+ * argv, each checked to be an address.
+ */
+export function sendViaCommand(to: string, subject: string, body: string): string {
+  const rcpts = parseRecipients(to);
+  if (!rcpts) return `Error: not a valid recipient list: ${to}`;
+  // a line break in a header would start a new header (hidden Bcc, etc.)
+  if (/[\r\n]/.test(subject)) return 'Error: subject cannot contain line breaks';
+  const message = `To: ${rcpts.join(', ')}\nSubject: ${subject}\nContent-Type: text/plain; charset=UTF-8\n\n${body}`;
 
-  // Try mail (mailutils)
-  try {
-    execSync('which mail', { stdio: 'pipe' });
-    execSync(`echo ${JSON.stringify(body)} | mail -s ${JSON.stringify(subject)} ${to}`, { stdio: 'pipe' });
-    return `Email sent to ${to} via mail: "${subject}"`;
-  } catch { /* not found */ }
+  const attempts: Array<[string, string[], string]> = [
+    ['msmtp', ['--', ...rcpts], message],
+    ['sendmail', ['-t'], message],
+    ['mail', ['-s', subject, '--', ...rcpts], body],
+  ];
+  for (const [bin, args, input] of attempts) {
+    if (!hasCommand(bin)) continue;
+    const r = run(bin, args, { input, timeoutMs: 60_000 });
+    if (!r.error && r.status === 0) return `Email sent to ${rcpts.join(', ')} via ${bin}: "${subject}"`;
+  }
 
   return 'Error: No mail command found. Install msmtp, sendmail, or mailutils. Or configure ~/.aura/email.json';
 }

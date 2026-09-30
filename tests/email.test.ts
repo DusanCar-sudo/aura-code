@@ -7,6 +7,11 @@ vi.mock('child_process', () => ({
     return '';
   }),
 }));
+// no mail program installed
+vi.mock('../src/util/exec.js', () => ({
+  hasCommand: () => false,
+  run: () => ({ status: 127, stdout: '', stderr: '', error: new Error('not found') }),
+}));
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');

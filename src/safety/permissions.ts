@@ -28,6 +28,17 @@ export interface PermissionResult {
   approvalKey?: string;
 }
 
+/**
+ * The shell command a tool call will execute, or null when it runs none.
+ * One place, so a new shell-running tool is screened by adding a line here
+ * rather than by remembering every branch of {@link PermissionSystem.check}.
+ */
+export function shellCommandOf(toolName: string, input: Record<string, unknown>): string | null {
+  if (toolName === 'run_shell') return String(input.command ?? '');
+  if (toolName === 'cron' && (input.action === 'run' || input.action === 'add')) return String(input.command ?? '');
+  return null;
+}
+
 export class PermissionSystem {
   private level: PermissionLevel;
   private sessionApprovals = new Set<string>();
@@ -69,13 +80,15 @@ export class PermissionSystem {
       return { allowed: true };
     }
 
+    // Every tool that ends in a shell command is screened like run_shell.
+    // cron used to skip this entirely: `run` executed its command and `add`
+    // installed one into the crontab without a single check.
+    const shellCmd = shellCommandOf(toolName, input);
+
     // Auto mode: allow everything except explicitly dangerous
     if (this.level === 'auto') {
-      if (toolName === 'run_shell') {
-        const cmd = String(input.command ?? '');
-        if (this.isDangerous(cmd)) {
-          return { allowed: false, reason: `Dangerous command blocked: ${cmd}` };
-        }
+      if (shellCmd !== null && this.isDangerous(shellCmd)) {
+        return { allowed: false, reason: `Dangerous command blocked: ${shellCmd}` };
       }
       if (toolName === 'mcp' && String(input.action ?? '') === 'connect') {
         const cmd = this.mcpConnectCommand(input);
@@ -102,14 +115,19 @@ export class PermissionSystem {
     if (toolName === 'web_fetch' && this.tainted && this.fetchCarriesData(input)) {
       return { allowed: true, needsConfirm: true };
     }
-    if (toolName === 'run_shell') {
-      const cmd = String(input.command ?? '');
-      if (this.isDangerous(cmd)) {
-        return { allowed: false, reason: `Dangerous command blocked: ${cmd}` };
+    if (shellCmd !== null) {
+      if (this.isDangerous(shellCmd)) {
+        return { allowed: false, reason: `Dangerous command blocked: ${shellCmd}` };
       }
-      if (!this.isSafe(cmd)) {
+      // A cron job keeps running long after this session: always ask.
+      if (toolName === 'cron' || !this.isSafe(shellCmd)) {
         return { allowed: true, needsConfirm: true };
       }
+    }
+
+    // Page scripts run with the page's cookies and session; ask first.
+    if (toolName === 'browser' && input.action === 'evaluate') {
+      return { allowed: true, needsConfirm: true };
     }
 
     // Writing a file is destructive — it overwrites whatever was there — and

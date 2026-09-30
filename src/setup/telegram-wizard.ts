@@ -156,9 +156,11 @@ async function configureBotToken(rl: readline.Interface): Promise<string | null>
 /** Calls Telegram's getMe, returns the bot's username on success or null. */
 export async function testBotToken(token: string): Promise<string | null> {
   try {
-    const url = `https://api.telegram.org/bot${token}/getMe`;
-    const { stdout } = await execAsync(`curl -s "${url}"`, { timeout: 15_000 });
-    const parsed = JSON.parse(stdout);
+    // fetch, not `curl "<url>"` in a shell: the token was shell text (a
+    // pasted value with $(…) ran) and sat in argv for `ps` to show.
+    if (!/^\d+:[A-Za-z0-9_-]+$/.test(token.trim())) return null;
+    const res = await fetch(`https://api.telegram.org/bot${token.trim()}/getMe`, { signal: AbortSignal.timeout(15_000) });
+    const parsed = await res.json() as { ok?: boolean; result?: { username?: string } };
     if (!parsed.ok || !parsed.result?.username) return null;
     return parsed.result.username;
   } catch {

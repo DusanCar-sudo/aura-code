@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ToolDefinition } from '../providers/types.js';
-import { execSync } from 'child_process';
+import { run } from '../util/exec.js';
 import * as fs from 'fs';
 
 export interface FtpUploadInput {
@@ -34,6 +34,11 @@ export const FTP_UPLOAD_DEFINITION: ToolDefinition = {
   },
 };
 
+/** curl config-file string: backslash and double quote escaped. */
+function curlQuote(v: string): string {
+  return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
 export function ftpUpload(input: FtpUploadInput): string {
   const port = input.port ?? 21;
   const localFile = input.localFile;
@@ -41,20 +46,29 @@ export function ftpUpload(input: FtpUploadInput): string {
   if (!fs.existsSync(localFile)) {
     return `Error: Local file not found: ${localFile}`;
   }
-
-  // Build curl FTP upload command
-  // --ftp-create-dirs creates remote directories if they don't exist
-  const curlCmd = [
-    'curl',
-    '--ftp-create-dirs',
-    '-T', JSON.stringify(localFile),
-    `ftp://${encodeURIComponent(input.username)}:${encodeURIComponent(input.password)}@${input.host}:${port}${input.remoteDir}`,
-  ].join(' ');
-
-  try {
-    execSync(curlCmd, { stdio: 'inherit' });
-    return `✓ Uploaded ${localFile} to ftp://${input.host}:${port}${input.remoteDir}`;
-  } catch (err) {
-    return `✗ FTP upload failed: ${err instanceof Error ? err.message : String(err)}`;
+  // Everything that lands in the URL is checked, so a value can't smuggle in
+  // another host, a query or a second URL.
+  if (!/^[A-Za-z0-9.-]{1,253}$/.test(input.host) && !/^\[[0-9A-Fa-f:.]+\]$/.test(input.host)) {
+    return `Error: invalid FTP host: ${input.host}`;
   }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return `Error: invalid FTP port: ${input.port}`;
+  }
+  if (!/^\/[^\s?#@\\]*$/.test(input.remoteDir)) {
+    return `Error: remoteDir must be an absolute path without spaces, ?, #, @ or backslashes: ${input.remoteDir}`;
+  }
+  if (/[\r\n]/.test(input.username + input.password)) {
+    return 'Error: username and password cannot contain line breaks';
+  }
+
+  const url = `ftp://${input.host}:${port}${input.remoteDir}`;
+  // Credentials go to curl on stdin as a config line (-K -): never in argv,
+  // where every user on the machine can read them in `ps`, and never in a URL.
+  const r = run('curl', ['--silent', '--show-error', '--ftp-create-dirs', '-K', '-', '-T', localFile, url], {
+    input: `user = ${curlQuote(`${input.username}:${input.password}`)}\n`,
+    timeoutMs: 10 * 60_000,
+  });
+  if (r.error) return `✗ FTP upload failed: ${r.error.message}`;
+  if (r.status !== 0) return `✗ FTP upload failed (curl exit ${r.status}): ${r.stderr.trim()}`;
+  return `✓ Uploaded ${localFile} to ${url}`;
 }

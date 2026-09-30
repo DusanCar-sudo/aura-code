@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { ScreenSidecar } from '../tools/screen/sidecar.js';
+import { ensurePrivateDir } from './store.js';
 
 export interface ShotTaker {
   /** Capture now; resolves to the file path, or null if it could not. */
@@ -50,7 +51,7 @@ export function sidecarShots(dir: string): ShotTaker {
           await sidecar.start();
           await sidecar.send({ cmd: 'init' });
         }
-        fs.mkdirSync(dir, { recursive: true });
+        ensurePrivateDir(dir);   // screenshots of the whole screen: this user only
         const file = path.join(dir, `shot-${String(index).padStart(2, '0')}.png`);
         const reply = await sidecar.send({ cmd: 'capture', path: file }, 15_000);
         if (!reply.ok) return null;

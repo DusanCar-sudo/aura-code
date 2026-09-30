@@ -1,22 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cronTool, CRON_DEFINITION } from '../src/tools/cron.js';
 
-// Mock child_process
+// Mock util/exec: crontab -l reads the table, crontab - saves stdin
 let mockCrontab = '';
-vi.mock('child_process', () => ({
-  execSync: vi.fn().mockImplementation((cmd: string, opts?: any) => {
-    if (cmd === 'crontab -l 2>/dev/null') {
-      if (!mockCrontab) throw new Error('no crontab');
-      return mockCrontab;
+vi.mock('../src/util/exec.js', () => ({
+  run: vi.fn().mockImplementation((cmd: string, args: string[], opts?: { input?: string }) => {
+    if (cmd === 'crontab' && args[0] === '-l') {
+      return mockCrontab ? { status: 0, stdout: mockCrontab, stderr: '' } : { status: 1, stdout: '', stderr: 'no crontab' };
     }
-    if (cmd.startsWith('echo') && cmd.includes('crontab')) {
-      // Extract content piped to crontab
-      const match = cmd.match(/^echo\s+"(.+?)"\s*\|\s*crontab\s*-$/s);
-      if (match) mockCrontab = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-      return '';
+    if (cmd === 'crontab' && args[0] === '-') {
+      mockCrontab = String(opts?.input ?? '');
+      return { status: 0, stdout: '', stderr: '' };
     }
-    if (opts?.encoding) return 'command output';
-    return Buffer.from('');
+    return { status: 0, stdout: 'command output', stderr: '' };
   }),
 }));
 
