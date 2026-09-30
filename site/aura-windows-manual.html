@@ -4,120 +4,38 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aura Code — Windows 11 Terminal Manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0B0A10">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Saira:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Press+Start+2P&display=swap');
 
+    /* Aura brand: the Spectrum at night. One dark theme. */
     :root {
-      /* Default Theme: Aura Classic (Red/Gold/Dark) */
-      --bg-color: #08080a;
-      --panel-bg: #0d0d10;
-      --panel-header: #141419;
-      --border-color: #272730;
-      --text-main: #d8d8de;
-      --text-dim: #6c6c76;
-      --accent-primary: #ff3b30;
-      --accent-primary-glow: rgba(255, 59, 48, 0.45);
-      --accent-secondary: #c8a45c;
-      --accent-secondary-glow: rgba(200, 164, 92, 0.35);
-      --accent-success: #30d158;
-      --accent-info: #0a84ff;
-      --accent-warning: #ffd60a;
-      --glow-color: rgba(255, 59, 48, 0.15);
-      --selection-bg: rgba(200, 164, 92, 0.2);
-      
-      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-      --font-display: 'Share Tech Mono', monospace;
+      color-scheme: dark;
+      --bg-color: #0B0A10;
+      --panel-bg: #121019;
+      --panel-header: #1A1823;
+      --border-color: #2B2836;
+      --text-main: #F2F1F5;
+      --text-dim: #A29EB2;
+      --accent-primary: #E4312B;
+      --accent-primary-glow: rgba(228, 49, 43, 0.45);
+      --accent-secondary: #F8B91E;
+      --accent-secondary-glow: rgba(248, 185, 30, 0.35);
+      --accent-success: #3CC45E;
+      --accent-info: #1AA6E0;
+      --accent-warning: #F8B91E;
+      --glow-color: rgba(26, 166, 224, 0.06);
+      --selection-bg: #F8B91E;
+      --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --font-display: 'Saira', 'Arial Narrow', system-ui, sans-serif;
+      --font-pixel: 'Press Start 2P', ui-monospace, monospace;
       --shadow-color: rgba(0, 0, 0, 0.7);
-    }
-
-    [data-theme="matrix"] {
-      --bg-color: #020603;
-      --panel-bg: #040e05;
-      --panel-header: #081609;
-      --border-color: #0c3311;
-      --text-main: #33ff33;
-      --text-dim: #127a12;
-      --accent-primary: #33ff33;
-      --accent-primary-glow: rgba(51, 255, 51, 0.5);
-      --accent-secondary: #00ff00;
-      --accent-secondary-glow: rgba(0, 255, 0, 0.4);
-      --accent-success: #33ff33;
-      --accent-info: #00ffff;
-      --accent-warning: #99ff33;
-      --glow-color: rgba(51, 255, 51, 0.2);
-      --selection-bg: rgba(51, 255, 51, 0.25);
-    }
-
-    [data-theme="amber"] {
-      --bg-color: #080501;
-      --panel-bg: #100a03;
-      --panel-header: #191005;
-      --border-color: #332009;
-      --text-main: #ffb000;
-      --text-dim: #996a00;
-      --accent-primary: #ffb000;
-      --accent-primary-glow: rgba(255, 176, 0, 0.5);
-      --accent-secondary: #ffd000;
-      --accent-secondary-glow: rgba(255, 208, 0, 0.4);
-      --accent-success: #ffc800;
-      --accent-info: #ffdd00;
-      --accent-warning: #ff9a00;
-      --glow-color: rgba(255, 176, 0, 0.2);
-      --selection-bg: rgba(255, 176, 0, 0.25);
-    }
-
-    [data-theme="dracula"] {
-      --bg-color: #1a1b26;
-      --panel-bg: #222430;
-      --panel-header: #2e303e;
-      --border-color: #414558;
-      --text-main: #f8f8f2;
-      --text-dim: #6272a4;
-      --accent-primary: #ff79c6;
-      --accent-primary-glow: rgba(255, 121, 198, 0.5);
-      --accent-secondary: #8be9fd;
-      --accent-secondary-glow: rgba(139, 233, 253, 0.4);
-      --accent-success: #50fa7b;
-      --accent-info: #bd93f9;
-      --accent-warning: #ffb86c;
-      --glow-color: rgba(255, 121, 198, 0.2);
-      --selection-bg: rgba(255, 121, 198, 0.25);
-    }
-
-    [data-theme="cyberpunk"] {
-      --bg-color: #0c0818;
-      --panel-bg: #140d28;
-      --panel-header: #20143f;
-      --border-color: #f70d1a;
-      --text-main: #00ffff;
-      --text-dim: #644a86;
-      --accent-primary: #f70d1a;
-      --accent-primary-glow: rgba(247, 13, 26, 0.5);
-      --accent-secondary: #ffee00;
-      --accent-secondary-glow: rgba(255, 238, 0, 0.4);
-      --accent-success: #39ff14;
-      --accent-info: #00ffff;
-      --accent-warning: #ff007f;
-      --glow-color: rgba(247, 13, 26, 0.2);
-      --selection-bg: rgba(0, 255, 255, 0.25);
-    }
-
-    [data-theme="monochrome"] {
-      --bg-color: #0a0a0a;
-      --panel-bg: #121212;
-      --panel-header: #1e1e1e;
-      --border-color: #333333;
-      --text-main: #ffffff;
-      --text-dim: #666666;
-      --accent-primary: #ffffff;
-      --accent-primary-glow: rgba(255, 255, 255, 0.3);
-      --accent-secondary: #cccccc;
-      --accent-secondary-glow: rgba(204, 204, 204, 0.2);
-      --accent-success: #ffffff;
-      --accent-info: #aaaaaa;
-      --accent-warning: #dddddd;
-      --glow-color: rgba(255, 255, 255, 0.05);
-      --selection-bg: rgba(255, 255, 255, 0.2);
     }
 
     * {
@@ -134,6 +52,7 @@
     body {
       background-color: var(--bg-color);
       color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
       font-family: var(--font-mono);
       line-height: 1.6;
       padding: 1.5rem;
@@ -144,7 +63,7 @@
     /* Selection Color */
     ::selection {
       background: var(--selection-bg);
-      color: var(--accent-secondary);
+      color: var(--bg-color);
     }
 
     /* Scrollbars */
@@ -163,28 +82,23 @@
       background: var(--accent-secondary);
     }
 
-    /* CRT Overlay Effect */
-    body.crt-mode::after {
-      content: " ";
-      display: block;
-      position: fixed;
-      inset: 0;
-      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.18) 50%), 
-                  linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
-      z-index: 9999;
-      background-size: 100% 4px, 6px 100%;
-      pointer-events: none;
-    }
 
-    @keyframes crt-flicker {
-      0% { opacity: 0.985; }
-      50% { opacity: 0.995; }
-      100% { opacity: 0.985; }
-    }
+    /* Brand header + footer (shared with the main site) */
+    .brand-top { max-width: 1300px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 8px; }
+    .brand-top .brand { display: block; color: var(--text-main); }
+    .brand-top .brand svg { display: block; width: 128px; height: auto; }
+    .brand-top nav { display: flex; flex-wrap: wrap; gap: 6px 22px; font: 500 14px/1 var(--font-sans); }
+    .brand-top nav a { color: var(--text-dim); text-decoration: none; padding-block: 6px; }
+    .brand-top nav a:hover { color: var(--text-main); }
+    :focus-visible { outline: 2px solid var(--accent-secondary); outline-offset: 3px; }
+    .brand-foot { max-width: 1300px; margin: 3rem auto 0; padding-top: 2rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: flex-end; gap: 28px; }
+    .brand-foot p { margin: 0 0 1.5rem; color: var(--text-dim); font: 400 14px/1.6 var(--font-sans); }
+    .brand-foot p a { color: var(--text-main); }
+    .brand-foot .corner { height: clamp(64px, 9vw, 120px); width: auto; flex: none; display: block; }
 
-    body.crt-mode {
-      animation: crt-flicker 0.15s infinite;
-    }
+    .terminal-menu { display: flex; flex-wrap: wrap; gap: 4px 20px; padding: 0.6rem 1rem; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); font: 500 13px/1 var(--font-sans); }
+    .terminal-menu .menu-item { color: var(--text-dim); cursor: pointer; padding-block: 4px; }
+    .terminal-menu .menu-item:hover { color: var(--accent-secondary); }
 
     /* Terminal Container */
     .terminal-container {
@@ -221,12 +135,14 @@
       height: 12px;
       border-radius: 50%;
     }
-    .dot-close { background-color: #ff5f56; }
-    .dot-min { background-color: #ffbd2e; }
-    .dot-max { background-color: #27c93f; }
+    .dot-close { background-color: #E4312B; }
+    .dot-min { background-color: #F8B91E; }
+    .dot-max { background-color: #2FAE4E; }
 
     .window-title {
       font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 700;
       font-size: 1.1rem;
       color: var(--accent-secondary);
       letter-spacing: 0.05em;
@@ -275,7 +191,7 @@
     .control-btn.active {
       background-color: var(--accent-secondary);
       color: var(--bg-color);
-      font-weight: bold;
+      font-weight: 600;
     }
 
     .mobile-menu-toggle {
@@ -369,7 +285,7 @@
 
     .tree-file a:hover, .tree-file.active a {
       color: var(--accent-success);
-      background-color: rgba(48, 209, 88, 0.08);
+      background-color: rgba(47, 174, 78, 0.08);
       padding-left: 8px;
     }
 
@@ -461,7 +377,7 @@
     .cmd-badge:hover {
       color: var(--accent-secondary);
       border-color: var(--accent-secondary);
-      background-color: rgba(200, 164, 92, 0.05);
+      background-color: rgba(248, 185, 30, 0.05);
     }
 
     /* Content Area (Scrollable body) */
@@ -481,16 +397,18 @@
     }
 
     .sec-label {
-      font-family: var(--font-display);
-      font-size: 0.75rem;
+      font-family: var(--font-pixel);
+      font-size: 0.6rem;
       text-transform: uppercase;
-      letter-spacing: 0.2em;
+      letter-spacing: 0.08em;
       color: var(--accent-primary);
       margin-bottom: 0.5rem;
     }
 
     .sec-title {
       font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 800;
       font-size: 2.2rem;
       color: var(--text-main);
       margin-bottom: 1rem;
@@ -522,7 +440,7 @@
 
     .terminal-card:hover {
       border-color: var(--accent-secondary);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 15px rgba(200, 164, 92, 0.05);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 15px rgba(248, 185, 30, 0.05);
       transform: translateY(-1px);
     }
 
@@ -703,8 +621,8 @@
     }
 
     .todo-card.done {
-      border-color: rgba(48, 209, 88, 0.25);
-      background-color: rgba(48, 209, 88, 0.01);
+      border-color: rgba(47, 174, 78, 0.25);
+      background-color: rgba(47, 174, 78, 0.01);
     }
 
     .todo-card.done .todo-title-text {
@@ -787,7 +705,7 @@
 
     .flow-node:hover {
       border-color: var(--accent-secondary);
-      box-shadow: 0 0 10px rgba(200, 164, 92, 0.15);
+      box-shadow: 0 0 10px rgba(248, 185, 30, 0.15);
     }
 
     .flow-node .node-title {
@@ -818,7 +736,7 @@
     /* Tip Boxes */
     .term-tip-box {
       border-left: 3px solid var(--accent-secondary);
-      background-color: rgba(200, 164, 92, 0.03);
+      background-color: rgba(248, 185, 30, 0.03);
       padding: 1rem 1.25rem;
       margin: 1.5rem 0;
       border-radius: 0 4px 4px 0;
@@ -827,17 +745,17 @@
 
     .term-tip-box.warning {
       border-left-color: var(--accent-warning);
-      background-color: rgba(255, 214, 10, 0.02);
+      background-color: rgba(248, 185, 30, 0.02);
     }
 
     .term-tip-box.danger {
       border-left-color: var(--accent-primary);
-      background-color: rgba(255, 59, 48, 0.02);
+      background-color: rgba(228, 49, 43, 0.02);
     }
 
     .term-tip-box.success {
       border-left-color: var(--accent-success);
-      background-color: rgba(48, 209, 88, 0.02);
+      background-color: rgba(47, 174, 78, 0.02);
     }
 
     .term-tip-header {
@@ -1117,7 +1035,24 @@
     }
   </style>
 </head>
-<body class="crt-mode">
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="aura-letters" viewBox="56 56 450 108"><path fill="currentColor" d="M160 110A50 50 0 1 0 60 110A50 50 0 1 0 160 110ZM130 110A20 20 0 1 1 90 110A20 20 0 1 1 130 110ZM130 160H160V60H130ZM178 110H208V60H178ZM178 110A50 50 0 0 0 278 110L248 110A20 20 0 0 1 208 110ZM248 160H278V60H248ZM296 160H326V60H296ZM388.402 83.504A50 50 0 0 0 296 110L326 110A20 20 0 0 1 362.961 99.402ZM501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402Z"/></symbol>
+  <symbol id="stripes" viewBox="0 0 146 100"><path fill="#E4312B" d="M0 100L24 100L74 0L50 0Z"/><path fill="#F8B91E" d="M24 100L48 100L98 0L74 0Z"/><path fill="#2FAE4E" d="M48 100L72 100L122 0L98 0Z"/><path fill="#1AA6E0" d="M72 100L96 100L146 0L122 0Z"/></symbol>
+  <symbol id="lockup" viewBox="54 54 626 170">
+    <path fill="currentColor" d="M160 110A50 50 0 1 0 60 110A50 50 0 1 0 160 110ZM130 110A20 20 0 1 1 90 110A20 20 0 1 1 130 110ZM130 160H160V60H130ZM178 110H208V60H178ZM178 110A50 50 0 0 0 278 110L248 110A20 20 0 0 1 208 110ZM248 160H278V60H248ZM296 160H326V60H296ZM388.402 83.504A50 50 0 0 0 296 110L326 110A20 20 0 0 1 362.961 99.402ZM501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402ZM545.562 188.979A17 17 0 1 0 545.562 213.021L540.273 207.732A9.52 9.52 0 1 1 540.273 194.268ZM590.442 201A17 17 0 1 0 556.442 201A17 17 0 1 0 590.442 201ZM582.962 201A9.52 9.52 0 1 1 563.922 201A9.52 9.52 0 1 1 582.962 201ZM601.322 218H608.802V184H601.322ZM601.322 218H618.322V210.52H601.322ZM601.322 191.48H618.322V184H601.322ZM618.322 218A17 17 0 0 0 618.322 184L618.322 191.48A9.52 9.52 0 0 1 618.322 210.52ZM646.202 218H653.682V184H646.202ZM646.202 191.48H673.402V184H646.202ZM646.202 204.74H670.002V197.26H646.202ZM646.202 218H673.402V210.52H646.202Z"/>
+    <path fill="#E4312B" d="M527.402 160L551.402 160L601.402 60L577.402 60Z"/><path fill="#F8B91E" d="M551.402 160L575.402 160L625.402 60L601.402 60Z"/><path fill="#2FAE4E" d="M575.402 160L599.402 160L649.402 60L625.402 60Z"/><path fill="#1AA6E0" d="M599.402 160L623.402 160L673.402 60L649.402 60Z"/>
+  </symbol>
+</svg>
+
+  <header class="brand-top">
+    <a class="brand" href="./" aria-label="Aura Code, home"><svg viewBox="0 0 626 170" role="img" aria-label="aura code"><use href="#lockup"/></svg></a>
+    <nav aria-label="Sections">
+      <a href="./">Home</a>
+      <a href="ados/">adOS</a>
+      <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub &#x2197;</a>
+    </nav>
+  </header>
 
   <div class="terminal-container">
     
@@ -1130,21 +1065,9 @@
         <button class="mobile-menu-toggle" id="menuToggle">☰ Menu</button>
       </div>
       <div class="window-title">
-        ◆ <span>AURA_OS</span>: ~/manual_windows_11.sh
+        ◆ <span>aura</span> · windows 11 manual
       </div>
       <div class="window-controls">
-        <div class="control-item">
-          <label for="themeSelect">Theme:</label>
-          <select id="themeSelect">
-            <option value="aura">Aura Classic</option>
-            <option value="matrix">Matrix Green</option>
-            <option value="amber">Amber Fallout</option>
-            <option value="dracula">Dracula Dark</option>
-            <option value="cyberpunk">Cyber Neon</option>
-            <option value="monochrome">Monochrome</option>
-          </select>
-        </div>
-        <button class="control-btn active" id="crtToggle">CRT Scanlines</button>
         <button class="control-btn" id="soundToggle">Audio Click [OFF]</button>
       </div>
     </header>
@@ -1215,7 +1138,7 @@
             <div class="sec-label">System Initialization</div>
             <h2 class="sec-title"><span>◆</span> Aura Code</h2>
             <div style="text-align: center; margin: 1.5rem 0 2.5rem 0;">
-              <img src="aura-logo-tui.png" alt="AURA ◆ CODE" style="max-width: 100%; height: auto; display: block; margin: 0 auto; filter: drop-shadow(0 0 15px var(--accent-primary-glow));" />
+              <svg viewBox="0 0 626 170" role="img" aria-label="aura code" style="display:block;width:min(100%,520px);height:auto;margin:0 auto;color:var(--text-main)"><use href="#lockup"/></svg>
             </div>
             
             <div class="system-info-grid">
@@ -1792,33 +1715,10 @@
           writeConsoleLine('  aura checklist      - show setup checklist status', 'output');
           writeConsoleLine('  aura safety         - print safety permission specs', 'output');
           writeConsoleLine('  aura brains         - list online AI models info', 'output');
-          writeConsoleLine('  theme [name]        - switch styling (matrix, amber, dracula, cyberpunk, aura)', 'output');
-          writeConsoleLine('  crt [on/off]        - toggle screen scanlines overlay', 'output');
           writeConsoleLine('  clear               - wipe console scroll screen history', 'output');
         } else if (cleanCmd === 'clear') {
           consoleHistory.innerHTML = '';
           writeConsoleLine('Console screen wiped.', 'output');
-        } else if (cleanCmd.startsWith('theme ')) {
-          const themeName = cleanCmd.replace('theme ', '').trim();
-          const themeSelect = document.getElementById('themeSelect');
-          if (['aura', 'matrix', 'amber', 'dracula', 'cyberpunk', 'monochrome'].includes(themeName)) {
-            document.documentElement.setAttribute('data-theme', themeName);
-            themeSelect.value = themeName;
-            writeConsoleLine(`System theme switched to '${themeName}'.`, 'success');
-            playSuccessChime();
-          } else {
-            writeConsoleLine(`Error: Theme '${themeName}' not recognized. Available: aura, matrix, amber, dracula, cyberpunk, monochrome.`, 'error');
-          }
-        } else if (cleanCmd === 'crt' || cleanCmd === 'crt toggle') {
-          toggleCRT();
-        } else if (cleanCmd === 'crt on') {
-          document.body.classList.add('crt-mode');
-          document.getElementById('crtToggle').classList.add('active');
-          writeConsoleLine('CRT Scanlines overlay enabled.', 'success');
-        } else if (cleanCmd === 'crt off') {
-          document.body.classList.remove('crt-mode');
-          document.getElementById('crtToggle').classList.remove('active');
-          writeConsoleLine('CRT Scanlines overlay disabled.', 'output');
         } else if (cleanCmd === 'aura checklist') {
           const done = document.getElementById('doneCount').innerText;
           const total = document.getElementById('totalCount').innerText;
@@ -1851,29 +1751,6 @@
         playClickSound(300 + Math.random() * 200, 0.02, 'sine', 0.01);
       }
     });
-
-    // Theme Selector
-    document.getElementById('themeSelect').addEventListener('change', (e) => {
-      document.documentElement.setAttribute('data-theme', e.target.value);
-      playClickSound(700, 0.05, 'triangle');
-    });
-
-    // CRT Toggle
-    function toggleCRT() {
-      const body = document.body;
-      const btn = document.getElementById('crtToggle');
-      if (body.classList.contains('crt-mode')) {
-        body.classList.remove('crt-mode');
-        btn.classList.remove('active');
-        writeConsoleLine('CRT Filter: Off', 'output');
-      } else {
-        body.classList.add('crt-mode');
-        btn.classList.add('active');
-        writeConsoleLine('CRT Filter: On', 'success');
-      }
-      playClickSound(800, 0.05);
-    }
-    document.getElementById('crtToggle').addEventListener('click', toggleCRT);
 
     // Sound Toggle
     document.getElementById('soundToggle').addEventListener('click', () => {
@@ -2112,5 +1989,10 @@
       });
     });
   </script>
+
+  <footer class="brand-foot">
+    <p>Aura Code: architecture and design by Du&#x161;an Milosavljevi&#x107;, Da Nang, Vietnam.<br>Open source, MIT licence. <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">github.com/DusanCar-sudo/aura-code</a></p>
+    <svg class="corner" viewBox="0 0 146 100" aria-hidden="true"><use href="#stripes"/></svg>
+  </footer>
 </body>
 </html>
