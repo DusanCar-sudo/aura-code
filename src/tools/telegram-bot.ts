@@ -24,6 +24,7 @@ import {
   type ParsedAction,
 } from './telegram-actions.js';
 import { getApiKey } from '../util/env.js';
+import pkg from '../../package.json';
 import { loadKeysIntoEnv } from '../setup/key-store.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
@@ -1469,7 +1470,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Builder: Dušan Milosavljević`,
       `Alati: 22`,
       `Testovi: 838+ passing`,
-      `Verzija: v0.7.2 (Aura)`,
+      `Verzija: v${pkg.version} (Aura)`,
     ].join('\n');
   }
 

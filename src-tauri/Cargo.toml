@@ -1,6 +1,6 @@
 [package]
 name = "aura-code-app"
-version = "0.17.0"
+version = "0.20.0"
 description = "Aura Code — Autonomous AI Coding Agent Desktop Application"
 authors = ["Dusan Car <dusan@aura-code.dev>"]
 edition = "2021"

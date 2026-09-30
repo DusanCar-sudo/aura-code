@@ -1495,7 +1495,7 @@ export function Board({
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
-          background: 'rgba(11, 14, 23, 0.4)',
+          background: 'rgba(17, 19, 15, 0.4)',
           width: '100%',
           boxSizing: 'border-box'
         }}>
@@ -1736,7 +1736,7 @@ export function Board({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          background: 'rgba(11, 14, 23, 0.4)',
+          background: 'rgba(17, 19, 15, 0.4)',
           width: '100%',
           boxSizing: 'border-box'
         }}>
@@ -1918,7 +1918,7 @@ export function Board({
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
-          background: 'rgba(11, 14, 23, 0.4)',
+          background: 'rgba(17, 19, 15, 0.4)',
           width: '100%',
           boxSizing: 'border-box'
         }}>
@@ -1974,7 +1974,7 @@ export function Board({
                   <div
                     key={task.id}
                     style={{
-                      background: 'var(--surface-overlay, rgba(20, 26, 40, 0.75))',
+                      background: 'var(--surface-overlay, rgba(31, 34, 26, 0.75))',
                       border: '1px solid var(--line)',
                       borderRadius: '8px',
                       padding: '16px 20px',
@@ -2089,7 +2089,7 @@ export function Board({
           display: 'flex',
           flexDirection: 'column',
           width: '100%',
-          background: 'rgba(9, 11, 18, 0.6)',
+          background: 'rgba(14, 15, 12, 0.6)',
           position: 'relative',
           overflow: 'hidden',
           boxSizing: 'border-box'
@@ -2269,7 +2269,7 @@ export function Board({
                           fontFamily: 'var(--font-mono)',
                           fontWeight: 700,
                           background: badgeColor,
-                          color: '#0f1724',
+                          color: '#1a1d16',
                           padding: '2px 6px',
                           borderRadius: '4px',
                           textTransform: 'uppercase'

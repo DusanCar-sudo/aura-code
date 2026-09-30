@@ -8,7 +8,7 @@ Context/instructions for this codebase: what Aura Code is, how it's structured, 
 
 **Aura Code** = model-agnostic, autonomous coding agent CLI. Natural-language task → read codebase → plan → execute (edit files, run commands) → verify → report.
 
-- **Package:** `aura-code` (v0.9.0), CLI binary `aura`
+- **Package:** `aura-code` (v0.20.0), CLI binary `aura`
 - **Language:** TypeScript (strict), CommonJS, Node ≥ 18
 - **Framework name:** *Praktess* ("she who acts and executes")
 - **License:** MIT

@@ -9,14 +9,14 @@
 
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
-[![Website](https://img.shields.io/badge/website-aura--website-6ed0ea?style=flat-square)](https://dusancar-sudo.github.io/aura-website/)
-[![Version](https://img.shields.io/badge/version-v0.18.0-terracotta?style=flat-square)](https://github.com/DusanCar-sudo/aura-code/releases)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18-green?style=flat-square)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
-[![Providers](https://img.shields.io/badge/routing%20targets-31-purple?style=flat-square)](#providers)
+[![Website](https://img.shields.io/badge/website-leanproiq.com-e7cf85?style=flat-square&labelColor=070907)](https://www.leanproiq.com)
+[![Version](https://img.shields.io/badge/version-v0.20.0-e7cf85?style=flat-square&labelColor=070907)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![License](https://img.shields.io/badge/license-MIT-535c37?style=flat-square&labelColor=070907)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-535c37?style=flat-square&labelColor=070907)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-535c37?style=flat-square&labelColor=070907)](https://www.typescriptlang.org)
+[![Providers](https://img.shields.io/badge/routing%20targets-31-535c37?style=flat-square&labelColor=070907)](#providers)
 
-**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows guide](docs/WINDOWS.md) · [styled version](https://www.leanproiq.com/aura-windows-manual)
+**→ [leanproiq.com](https://www.leanproiq.com)** · [Windows guide](docs/WINDOWS.md) · [styled version](https://www.leanproiq.com/aura-windows-manual)
 
 *Architecture and design by [Dušan Milosavljević](https://github.com/DusanCar-sudo) — Da Nang, Vietnam*
 
@@ -118,31 +118,29 @@ run the bare command exactly as before. `AURA_RTK=0` opts out.
 
 ## Visual Showcase & Aura Web Studio
 
-Aura features a web client interface (`web/`) with visual drag-and-drop Kanban execution, n8n/Zapier automation integration hubs, visual workflow builders, and interactive canvas previews.
+`aura serve` opens the web studio (`web/`): chat, a drag-and-drop Kanban board
+with a workflow graph, a canvas for live previews, and a code editor with a
+real terminal. It wears the same Nature identity as the terminal UI.
 
-| Visual Kanban Board | Execution List Manager |
+| Chat | Kanban board |
 |---|---|
-| ![Visual Kanban Board](assets/screenshots/01-kanban-board.png "Visual Kanban Board") | ![Execution List Manager](assets/screenshots/02-execution-list.png "Execution List Manager") |
+| ![Chat](assets/screenshots/web-chat.png "Chat") | ![Kanban board](assets/screenshots/web-board.png "Kanban board") |
 
-| Third-Party Automation Hub (n8n, Zapier, Make) | Linear Zapier Workflow Builder |
+| Workflow graph | Execution list |
 |---|---|
-| ![Third-Party Automation Hub](assets/screenshots/03-third-party-providers.png "Third-Party Automation Hub") | ![Linear Zapier Workflow Builder](assets/screenshots/04-workflow-zapier-visual.png "Linear Zapier Workflow Builder") |
+| ![Workflow graph](assets/screenshots/web-workflow-dag.png "Workflow graph") | ![Execution list](assets/screenshots/web-execution-list.png "Execution list") |
 
-| Interactive Web & Canvas Preview | Archimedes Competence Engine |
+| Canvas | Code editor and terminal |
 |---|---|
-| ![Interactive Web and Canvas Preview](assets/screenshots/05-canvas-web-preview.png "Interactive Web and Canvas Preview") | ![Archimedes Competence Engine](assets/screenshots/06-archimedes-competence.png "Archimedes Competence Engine") |
+| ![Canvas](assets/screenshots/web-canvas.png "Canvas") | ![Code editor and terminal](assets/screenshots/web-code.png "Code editor and terminal") |
 
-| Resilient Provider Mesh Settings | Swarm Multi-Agent Orchestrator |
+| Agents | Providers and models |
 |---|---|
-| ![Resilient Provider Mesh Settings](assets/screenshots/07-model-mesh-settings.png "Resilient Provider Mesh Settings") | ![Swarm Multi-Agent Orchestrator](assets/screenshots/08-swarm-orchestrator.png "Swarm Multi-Agent Orchestrator") |
+| ![Agents](assets/screenshots/web-agents.png "Agents") | ![Providers and models](assets/screenshots/web-models.png "Providers and models") |
 
-| DAG Workflow Architecture | Retro Task Detail Inspector |
+| Approval and sandbox | Terminal UI |
 |---|---|
-| ![DAG Workflow Architecture](assets/screenshots/09-system-architecture.png "DAG Workflow Architecture") | ![Retro Task Detail Inspector](assets/screenshots/10-task-detail-modal.png "Retro Task Detail Inspector") |
-
-| Code Editor & Canvas | Multi-Agent TUI Terminal |
-|---|---|
-| ![Code Editor and Canvas](assets/screenshots/11-code-editor-canvas.png "Code Editor and Canvas") | ![Multi-Agent TUI Terminal](assets/screenshots/12-multi-agent-tui.png "Multi-Agent TUI Terminal") |
+| ![Approval and sandbox](assets/screenshots/web-autonomy.png "Approval and sandbox") | ![Terminal UI](assets/screenshots/tui-slash-menu.png "Terminal UI") |
 
 ---
 
@@ -710,4 +708,4 @@ rest is being built in the open.
 
 MIT © [Dušan Milosavljević](https://github.com/DusanCar-sudo)
 
-Website: **[dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)**
+Website: **[leanproiq.com](https://www.leanproiq.com)**

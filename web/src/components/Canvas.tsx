@@ -89,7 +89,7 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #090a10;
+      background: #0d0e0b;
       color: #fff;
       font-family: 'JetBrains Mono', monospace;
       display: flex;
@@ -108,8 +108,8 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
       color: #d8cb95;
     }
     #viewport {
-      background: #05060a;
-      border: 2px solid #232536;
+      background: #080906;
+      border: 2px solid #2d3227;
       border-radius: 8px;
       box-shadow: 0 16px 40px rgba(0,0,0,0.8), 0 0 20px rgba(231, 207, 133,0.1);
     }
@@ -215,17 +215,17 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
     }
 
     function render() {
-      ctx.fillStyle = '#07080f';
+      ctx.fillStyle = '#0b0d09';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Floor
-      ctx.fillStyle = '#1c1e2d';
+      ctx.fillStyle = '#252920';
       ctx.fillRect(0, 386, canvas.width, 34);
       ctx.fillStyle = '#2ed573';
       ctx.fillRect(0, 386, canvas.width, 3);
 
       // Platforms
-      ctx.fillStyle = '#242738';
+      ctx.fillStyle = '#2f3429';
       ctx.fillRect(220, 260, 240, 12);
       ctx.fillStyle = '#d8cb95';
       ctx.fillRect(220, 260, 240, 2);
@@ -249,7 +249,7 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
       // Player
       ctx.fillStyle = player.color;
       ctx.fillRect(player.x, player.y, player.width, player.height);
-      ctx.fillStyle = '#090a0e';
+      ctx.fillStyle = '#0c0d0a';
       ctx.fillRect(player.x + 16, player.y + 6, 6, 6); // visor eye
     }
 
@@ -273,7 +273,7 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #090a0e;
+      background: #0c0d0a;
       color: #ced6e0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
@@ -281,7 +281,7 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
     }
     .sidebar {
       width: 220px;
-      background: #111218;
+      background: #151613;
       border-right: 1px solid rgba(255,255,255,0.08);
       padding: 20px 16px;
       display: flex;
@@ -290,11 +290,11 @@ const TEMPLATES: Record<string, { name: string; code: string }> = {
     }
     .brand { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
     .nav-link { padding: 8px 12px; border-radius: 6px; color: #a4b0be; text-decoration: none; font-size: 13px; }
-    .nav-link.active { background: #1c1f2e; color: #d8cb95; font-weight: 600; }
+    .nav-link.active { background: #262a20; color: #d8cb95; font-weight: 600; }
     .main-content { flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; }
     .header-row { display: flex; align-items: center; justify-content: space-between; }
     .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-    .stat-card { background: #141520; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 18px; }
+    .stat-card { background: #1a1d17; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 18px; }
     .stat-label { font-size: 11px; text-transform: uppercase; color: #747d8c; letter-spacing: 0.08em; }
     .stat-val { font-size: 26px; font-weight: 700; color: #fff; margin-top: 6px; }
     .btn-action { padding: 8px 16px; background: #e7cf85; border: 0; border-radius: 6px; color: #10150f; font-weight: 600; cursor: pointer; }
@@ -489,12 +489,12 @@ export function Canvas({
   <meta charset="utf-8"/>
   <title>${previewPayload.path}</title>
   <style>
-    body { margin: 0; padding: 30px; background: #0d0f17; color: #ede0cc; font-family: system-ui, -apple-system, sans-serif; }
-    .preview-card { background: #141724; border: 1px solid #d8cb95; border-radius: 12px; padding: 24px; box-shadow: 0 12px 36px rgba(0,0,0,0.6); max-width: 860px; margin: 0 auto; }
+    body { margin: 0; padding: 30px; background: #12150f; color: #ede0cc; font-family: system-ui, -apple-system, sans-serif; }
+    .preview-card { background: #1d2018; border: 1px solid #d8cb95; border-radius: 12px; padding: 24px; box-shadow: 0 12px 36px rgba(0,0,0,0.6); max-width: 860px; margin: 0 auto; }
     .badge { display: inline-block; padding: 3px 9px; border-radius: 5px; background: rgba(46, 213, 115, 0.15); border: 1px solid rgba(46, 213, 115, 0.35); color: #2ed573; font-family: monospace; font-size: 11px; font-weight: 700; margin-bottom: 12px; }
     h1 { margin: 0 0 10px; font-size: 24px; color: #d8cb95; }
     p { line-height: 1.6; color: #c8b5a0; font-size: 14px; }
-    .web-sandbox-box { margin-top: 18px; padding: 16px; background: #0b0c13; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); font-family: monospace; font-size: 12px; color: #8be0f5; }
+    .web-sandbox-box { margin-top: 18px; padding: 16px; background: #0f110d; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); font-family: monospace; font-size: 12px; color: #8be0f5; }
   </style>
 </head>
 <body>
@@ -718,11 +718,11 @@ export function Canvas({
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Fresh Game & App Instance</title>
   <style>
-    body { margin: 0; background: #0d0f17; color: #ede0cc; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+    body { margin: 0; background: #12150f; color: #ede0cc; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
     .hud { text-align: center; margin-bottom: 12px; }
     h2 { margin: 0 0 6px; color: #d8cb95; font-size: 20px; }
     p { margin: 0; color: #8a7768; font-size: 13px; }
-    canvas { background: #141724; border: 2px solid #d8cb95; border-radius: 10px; box-shadow: 0 0 28px rgba(231, 207, 133, 0.25); }
+    canvas { background: #1d2018; border: 2px solid #d8cb95; border-radius: 10px; box-shadow: 0 0 28px rgba(231, 207, 133, 0.25); }
   </style>
 </head>
 <body>
@@ -736,7 +736,7 @@ export function Canvas({
     const ctx = canvas.getContext('2d');
     let x = 60, y = 170, dx = 4, dy = 3, radius = 22, angle = 0;
     function draw() {
-      ctx.fillStyle = 'rgba(20, 23, 36, 0.25)';
+      ctx.fillStyle = 'rgba(29, 32, 24, 0.25)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.translate(x, y);
@@ -793,7 +793,7 @@ export function Canvas({
   <meta charset="utf-8"/>
   <title>${file.name} - Game Runner</title>
   <style>
-    body { margin:0; background:#0b0c12; color:#fff; font-family:sans-serif; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; }
+    body { margin:0; background:#0f100d; color:#fff; font-family:sans-serif; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; }
     canvas { background:#000; border:1px solid #333; display:block; border-radius:8px; }
     #overlay-console { position:fixed; bottom:0; left:0; right:0; background:rgba(0,0,0,0.85); color:#00ff88; font-family:monospace; font-size:11px; padding:8px 14px; max-height:80px; overflow:auto; border-top:1px solid #222; }
   </style>
@@ -1870,7 +1870,7 @@ export function Canvas({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                background: 'rgba(11, 14, 23, 0.4)',
+                background: 'rgba(17, 19, 15, 0.4)',
                 width: '100%',
                 height: 'calc(100% - 60px)'
               }}>
@@ -1914,7 +1914,7 @@ export function Canvas({
                               top: '-10px',
                               left: '20px',
                               background: node.type === 'gate' ? '#f0dc9c' : '#d8cb95',
-                              color: '#0f1724',
+                              color: '#1a1d16',
                               fontSize: '9px',
                               fontFamily: 'var(--font-mono)',
                               fontWeight: 650,
@@ -2048,7 +2048,7 @@ export function Canvas({
                                 top: '50%',
                                 left: '50%',
                                 transform: 'translate(-50%, -50%)',
-                                background: '#1c2739',
+                                background: '#2b3025',
                                 color: 'var(--dim)',
                                 border: '1px solid var(--line)',
                                 borderRadius: '50%',
@@ -2081,7 +2081,7 @@ export function Canvas({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                background: 'rgba(11, 14, 23, 0.4)',
+                background: 'rgba(17, 19, 15, 0.4)',
                 width: '100%',
                 height: 'calc(100% - 60px)'
               }}>
