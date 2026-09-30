@@ -49,7 +49,7 @@ import { EFFORT_LEVELS, parseEffort, clampEffort, wasClamped, type EffortLevel }
 
 void refreshLiveModels().catch(() => {}); // fire-and-forget at module load — see comment history for why this isn't awaited
 process.on('unhandledRejection', (reason) => {
-  console.error(chalk.hex('#b15439')('  \u2717 Unhandled rejection: ' + String(reason)));
+  console.error(ERR('  \u2717 Unhandled rejection: ' + String(reason)));
 });
 import { createResilientProvider } from '../providers/resilient-factory.js';
 import { envMaxTokens } from '../providers/openai-compatible.js';
@@ -58,6 +58,7 @@ import { generateDashboard, generateGlobalDashboard, openDashboard } from '../vi
 import { extractGraph } from '../perception/graphify.js';
 import { runAgentLoop, costFor } from '../agent/loop.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
+import { tokenHex } from './diamond.js';
 import { createGazelleChat, type GazelleChat } from '../agent/gazelle-chat.js';
 import { runCoderConversation } from '../agent/coder-conversation.js';
 import { SessionBudget, describeBudgetStop } from '../agent/session-budget.js';
@@ -70,7 +71,7 @@ import { applyModelOverride } from '../archimedes/endpoint.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler, confirm } from '../safety/permissions.js';
 import { inSandbox, sandboxPreflight, sandboxBanner, reexecSandboxed } from '../safety/sandbox.js';
 import { createTerminalDisplay } from './display.js';
-import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerLines, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController, isAltScreen, repaintScreen } from './tui.js';
+import { initTui, startInput, stopInput, setCallbacks, setChatId, writeOutput, createTuiDisplay, destroyTui, setPanelContent, setStatusLine, askConfirm, enterAltScreen, setBannerBuilder, inputActive, enterFullscreenPrompt, exitFullscreenPrompt, createAbortController, clearAbortController, isAltScreen, repaintScreen } from './tui.js';
 import { startServer } from '../server/index.js';
 import { runSidecar } from '../protocol/stdio.js';
 import { runDevices } from './devices-command.js';
@@ -123,7 +124,8 @@ import { createWorkflow, runWorkflow, resumeWorkflow, listWorkflows, saveWorkflo
 import type { WorkflowStep, StepResult } from '../workflows/types.js';
 import { createBlueprint, loadBlueprint, listBlueprints as listArchitectBlueprints, markBuilt, addDeviation, updateBlueprintStatus } from '../architect/engine.js';
 import type { Blueprint } from '../architect/types.js';
-import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX } from './diamond.js';
+import { runSplash } from './splash.js';
+import { renderBanner, buildBannerLines, preferredBannerTier, TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX, CHROME, ERR, OK, WARN } from './diamond.js';
 import { checkBuildFreshness } from './build-freshness.js';
 import { isProviderChange, apiKeyEnvForModelSwitch, buildModelRows, modelIdForNumber, modelCount, layoutColumns, showProviderSelector, showModelSelectorForProvider, promptAuthKeyUpdate, type ModelRow } from './model-select.js';
 import { isAuthError } from '../util/errors.js';
@@ -173,6 +175,23 @@ const catchSession: {
   id?: string; shots?: import('../record/shots.js').ShotTaker;
 } = { handle: null, startedAt: 0 };
 
+// Every flag the CLI understands: the declared minimist keys plus the ones
+// consumed via bracket access in the mode branches. A flag outside this set
+// is refused loudly below instead of being silently dropped — a typo'd flag
+// (aura "task" --verrify) would otherwise change the run's meaning unnoticed.
+const KNOWN_FLAGS = new Set([
+  // declared to minimist below (kept in sync automatically by listing here)
+  'model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm',
+  'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile',
+  'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image',
+  'help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup',
+  'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows',
+  'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed',
+  'allow-plugin-install', 'allow-api-keys', 'no-api-keys',
+  // consumed in serve/device/web branches
+  'lan', 'tailscale', 'port', 'open', 'remote', 'includes', 'interactive', 'speak',
+]);
+
 const argv = minimist(process.argv.slice(2), {
   string:  ['model', 'm', 'api-key', 'base-url', 'effort', 'mode', 'cwd', 'rate-limit-rpm', 'rate-limit-tpm', 'max-retries', 'max-verify-retries', 'max-turns', 'fallback', 'resume', 'chat-id', 'profile', 'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image'],
   boolean: ['help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup', 'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows', 'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed', 'allow-plugin-install', 'allow-api-keys', 'no-api-keys'],
@@ -181,7 +200,18 @@ const argv = minimist(process.argv.slice(2), {
     model: process.env.AURA_MODEL,
     mode:  'auto',
   },
+  unknown: (arg: string) => {
+    if (!arg.startsWith('-')) return true;
+    const name = arg.replace(/^-{1,2}/, '').split('=')[0];
+    if (KNOWN_FLAGS.has(name)) return true;
+    console.error(`Unknown flag "${arg}". Run \`aura --help\` for the list.`);
+    process.exit(1);
+  },
 });
+
+// A quoted empty task (`aura ""`) must not start an agent run with an empty
+// prompt — it used to spin up a full session that just asked "work on what?".
+argv._ = argv._.filter((a) => String(a).trim() !== '');
 
 function num(s: unknown): number | undefined {
   if (s === undefined || s === null || s === '') return undefined;
@@ -266,7 +296,7 @@ if (argv.sandboxed && !inSandbox()) {
   const root = argv.cwd ? path.resolve(argv.cwd) : process.cwd();
   const pre = sandboxPreflight({ projectRoot: root, computerUse: argv.computer === true });
   if (!pre.ok) {
-    console.error(chalk.hex('#cc785c')('\n  --sandboxed cannot run here:\n'));
+    console.error(CHROME('\n  --sandboxed cannot run here:\n'));
     for (const err of pre.errors) console.error(`    ${err}\n`);
     process.exit(2);
   }
@@ -275,7 +305,7 @@ if (argv.sandboxed && !inSandbox()) {
 }
 
 if (argv.models) {
-  console.log('\n' + chalk.hex('#cc785c').bold('  Supported models:\n'));
+  console.log('\n' + CHROME.bold('  Supported models:\n'));
   const allModels = getAllModels();
   const byProvider = allModels.reduce<Record<string, typeof allModels>>((acc, m) => {
     (acc[m.provider] ??= []).push(m);
@@ -284,7 +314,7 @@ if (argv.models) {
   for (const [provider, models] of Object.entries(byProvider)) {
     console.log(chalk.hex(TEXT_DIM_HEX)(`  ${provider}`));
     for (const m of models) {
-      console.log(`    ${chalk.hex('#cc785c')(m.id.padEnd(45))} ${chalk.hex(FAINT_HEX)(m.speed)}`);
+      console.log(`    ${CHROME(m.id.padEnd(45))} ${chalk.hex(FAINT_HEX)(m.speed)}`);
     }
   }
   console.log(chalk.hex(FAINT_HEX)('\n  Use --model <id> or set AURA_MODEL env var'));
@@ -299,14 +329,14 @@ if (argv['list-sessions']) {
   if (sessions.length === 0) {
     console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved sessions for this project.\n'));
   } else {
-    console.log(chalk.hex('#cc785c').bold('\n  Saved sessions:\n'));
+    console.log(CHROME.bold('\n  Saved sessions:\n'));
     for (let i = 0; i < sessions.length; i++) {
       const s = sessions[i];
       const num = chalk.hex(TEXT_DIM_HEX)(`[#${i + 1}]`.padEnd(5));
       const updated = new Date(s.updatedAt).toLocaleString();
       const turns = Math.floor(s.history.length / 2);
       console.log(
-        `  ${num} ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
+        `  ${num} ${CHROME(s.id.padEnd(20))} ` +
         `${chalk.hex(TEXT_HEX)(s.title.slice(0, 45).padEnd(46))} ` +
         `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}`,
       );
@@ -319,21 +349,21 @@ if (argv['list-sessions']) {
 if (argv.analyze) {
   const report = mineWeaknesses();
   const outPath = saveReport(report);
-  console.log(chalk.hex('#cc785c').bold('\n  Weakness Analysis Report\n'));
+  console.log(CHROME.bold('\n  Weakness Analysis Report\n'));
   console.log(chalk.hex(TEXT_DIM_HEX)(`  Sessions analyzed: ${report.sessionsAnalyzed}`));
   console.log(chalk.hex(TEXT_DIM_HEX)(`  Report saved to: ${outPath}\n`));
 
   if (report.patterns.length === 0) {
-    console.log(chalk.hex('#5a9e6e')('  ✓ No recurring weakness patterns detected. Agent behavior looks healthy.\n'));
+    console.log(OK('  ✓ No recurring weakness patterns detected. Agent behavior looks healthy.\n'));
   } else {
     for (const p of report.patterns) {
-      console.log(chalk.hex('#b15439').bold(`  ✗ ${p.pattern} (${p.frequency} occurrences)`));
+      console.log(ERR.bold(`  ✗ ${p.pattern} (${p.frequency} occurrences)`));
       console.log(chalk.hex(TEXT_DIM_HEX)(`    ${p.description}`));
       if (p.occurrences[0]) {
         console.log(chalk.hex(FAINT_HEX)(`    Example task: "${p.occurrences[0].exampleTask.slice(0, 80)}"`));
         console.log(chalk.hex(FAINT_HEX)(`    Example failure: ${p.occurrences[0].exampleFailure.slice(0, 100)}`));
       }
-      console.log(chalk.hex('#cc785c')(`    Suggestion: ${p.promptPatch.slice(0, 120)}...`));
+      console.log(CHROME(`    Suggestion: ${p.promptPatch.slice(0, 120)}...`));
       console.log();
     }
     console.log(chalk.hex(TEXT_DIM_HEX)(`  ${report.summary}\n`));
@@ -361,17 +391,17 @@ if (argv['propose-harness']) {
 
   const proposals = generateProposals();
   if (proposals.length === 0) {
-    console.log(chalk.hex('#5a9e6e')('\n  ✓ No proposals generated — no actionable weakness patterns found.\n'));
+    console.log(OK('\n  ✓ No proposals generated — no actionable weakness patterns found.\n'));
   } else {
-    console.log(chalk.hex('#cc785c').bold('\n  Harness Proposals\n'));
+    console.log(CHROME.bold('\n  Harness Proposals\n'));
     for (const p of proposals) {
-      console.log(chalk.hex('#cc785c')(`  ${p.id}`));
+      console.log(CHROME(`  ${p.id}`));
       console.log(chalk.hex(TEXT_DIM_HEX)(`    Pattern:  ${p.pattern} (${p.description.slice(0, 60)})`));
       console.log(chalk.hex(TEXT_DIM_HEX)(`    Section:  ${p.targetSection}`));
       console.log(chalk.hex(FAINT_HEX)(`    Patch:    ${p.patchText.slice(0, 80)}...`));
       console.log();
     }
-    console.log(chalk.hex('#5a9e6e')(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
+    console.log(OK(`  ${proposals.length} proposal(s) saved to ~/.aura/harness/proposals/`));
     console.log(chalk.hex(TEXT_DIM_HEX)('  Apply with: aura --apply-harness <id>\n'));
   }
   process.exit(0);
@@ -379,13 +409,13 @@ if (argv['propose-harness']) {
 
 if (typeof argv['apply-harness'] === 'string' && argv['apply-harness']) {
   const proposalId = argv['apply-harness'];
-  console.log(chalk.hex('#cc785c').bold(`\n  Applying harness proposal: ${proposalId}\n`));
+  console.log(CHROME.bold(`\n  Applying harness proposal: ${proposalId}\n`));
 
   const result = applyHarnessProposal(proposalId);
   if (result.success) {
-    console.log(chalk.hex('#5a9e6e')(`  ✓ ${result.message}\n`));
+    console.log(OK(`  ✓ ${result.message}\n`));
   } else {
-    console.log(chalk.hex('#b15439')(`  ✗ ${result.message}\n`));
+    console.log(ERR(`  ✗ ${result.message}\n`));
   }
   process.exit(result.success ? 0 : 1);
 }
@@ -397,14 +427,14 @@ if (argv.workflows) {
     if (workflows.length === 0) {
       console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
     } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
+      console.log(CHROME.bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
         const created = new Date(ws.definition.createdAt).toLocaleString();
         const doneSteps = ws.stepStates.filter(s => s.status === 'done').length;
         const totalSteps = ws.definition.steps.length;
-        const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
+        const statusColor = ws.status === 'done' ? tokenHex('ok') : ws.status === 'failed' ? tokenHex('err') : tokenHex('chrome');
         console.log(
-          `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
+          `  ${CHROME(ws.definition.id.padEnd(24))} ` +
           `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
           `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
@@ -423,15 +453,15 @@ if (argv.blueprints) {
     if (bps.length === 0) {
       console.log(chalk.hex(TEXT_DIM_HEX)('\n  No saved blueprints.\n'));
     } else {
-      console.log(chalk.hex('#cc785c').bold('\n  Saved blueprints:\n'));
+      console.log(CHROME.bold('\n  Saved blueprints:\n'));
       for (const bp of bps) {
         const created = new Date(bp.createdAt).toLocaleString();
         const builtCount = bp.files.filter(f => f.status === 'built').length;
         const totalFiles = bp.files.length;
-        const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
+        const statusColor = bp.status === 'complete' ? tokenHex('ok') : bp.status === 'building' ? tokenHex('warn') : tokenHex('chrome');
         console.log(
           `  ${chalk.hex(statusColor)(bp.status.padEnd(10))} ` +
-          `${chalk.hex('#cc785c')(bp.id.slice(0, 16).padEnd(18))} ` +
+          `${CHROME(bp.id.slice(0, 16).padEnd(18))} ` +
           `${chalk.hex(TEXT_HEX)(bp.task.slice(0, 40).padEnd(41))} ` +
           `${chalk.hex(FAINT_HEX)(`${builtCount}/${totalFiles} files · ${created}`)}`,
         );
@@ -447,13 +477,13 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
   (async () => {
     const bp = await loadBlueprint(argv.blueprint);
     if (!bp) {
-      console.error(chalk.hex('#b15439')(`\n  ✗ Blueprint not found: ${argv.blueprint}\n`));
+      console.error(ERR(`\n  ✗ Blueprint not found: ${argv.blueprint}\n`));
       process.exit(1);
     }
 
-    const statusColor = bp.status === 'complete' ? '#5a9e6e' : bp.status === 'building' ? '#cc9e5c' : '#cc785c';
-    console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
-    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('ID:')}      ${chalk.hex('#cc785c')(bp.id)}`);
+    const statusColor = bp.status === 'complete' ? tokenHex('ok') : bp.status === 'building' ? tokenHex('warn') : tokenHex('chrome');
+    console.log(CHROME.bold('\n  Blueprint\n'));
+    console.log(`  ${chalk.hex(TEXT_DIM_HEX)('ID:')}      ${CHROME(bp.id)}`);
     console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Task:')}    ${chalk.hex(TEXT_HEX)(bp.task)}`);
     console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Status:')}  ${chalk.hex(statusColor)(bp.status)}`);
     console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Steps:')}   ${bp.estimatedSteps}`);
@@ -461,11 +491,11 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     if (bp.builtAt) console.log(`  ${chalk.hex(TEXT_DIM_HEX)('Built:')}   ${new Date(bp.builtAt).toLocaleString()}`);
 
     if (bp.files.length > 0) {
-      console.log(chalk.hex('#cc785c').bold('\n  Files:\n'));
+      console.log(CHROME.bold('\n  Files:\n'));
       for (const f of bp.files) {
-        const fileStatusColor = f.status === 'built' ? '#5a9e6e' : f.status === 'skipped' ? '#a68a2a' : '#cc785c';
+        const fileStatusColor = f.status === 'built' ? tokenHex('ok') : f.status === 'skipped' ? tokenHex('warn') : tokenHex('chrome');
         console.log(
-          `    ${chalk.hex(fileStatusColor)(f.status.padEnd(8))} ${chalk.hex('#cc785c')(f.path)}`,
+          `    ${chalk.hex(fileStatusColor)(f.status.padEnd(8))} ${CHROME(f.path)}`,
         );
         console.log(`            ${chalk.hex(TEXT_DIM_HEX)(f.purpose)}`);
         if (f.exports.length > 0) {
@@ -478,9 +508,9 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     }
 
     if (bp.dataModels.length > 0) {
-      console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
+      console.log(CHROME.bold('\n  Data Models:\n'));
       for (const dm of bp.dataModels) {
-        console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
+        console.log(`    ${CHROME(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
         for (const field of dm.fields) {
           console.log(`      ${chalk.hex(FAINT_HEX)(field)}`);
         }
@@ -488,24 +518,24 @@ if (typeof argv.blueprint === 'string' && argv.blueprint) {
     }
 
     if (bp.dependencies.length > 0) {
-      console.log(chalk.hex('#cc785c').bold('\n  Dependencies:\n'));
+      console.log(CHROME.bold('\n  Dependencies:\n'));
       for (const dep of bp.dependencies) {
         console.log(`    ${chalk.hex(FAINT_HEX)(dep)}`);
       }
     }
 
     if (bp.risks.length > 0) {
-      console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
+      console.log(ERR.bold('\n  Risks:\n'));
       for (const risk of bp.risks) {
-        console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
+        console.log(`    ${ERR('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
       }
     }
 
     if (bp.deviations.length > 0) {
-      console.log(chalk.hex('#cc9e5c').bold('\n  Deviations:\n'));
+      console.log(WARN.bold('\n  Deviations:\n'));
       for (const dev of bp.deviations) {
         const time = new Date(dev.recordedAt).toLocaleString();
-        console.log(`    ${chalk.hex('#cc9e5c')('→')} ${chalk.hex(TEXT_DIM_HEX)(dev.description)} ${chalk.hex(FAINT_HEX)(`(${time})`)}`);
+        console.log(`    ${WARN('→')} ${chalk.hex(TEXT_DIM_HEX)(dev.description)} ${chalk.hex(FAINT_HEX)(`(${time})`)}`);
       }
     }
 
@@ -829,7 +859,7 @@ async function main() {
   // can still proceed.
   const platWarn = platformWarning();
   if (platWarn) {
-    console.warn(chalk.hex('#b15439')('\n  ⚠ ' + platWarn.split('\n').join('\n  ') + '\n'));
+    console.warn(ERR('\n  ⚠ ' + platWarn.split('\n').join('\n  ') + '\n'));
   }
 
   // Before any mode branches: the flag has to be recorded even for a run that
@@ -901,7 +931,7 @@ async function main() {
     // If stdin is not a TTY and there's nothing piped in, the wizard will
     // hang. Skip with a helpful message instead.
     if (process.stdin.isTTY !== true && !process.stdin.readable) {
-      console.error(chalk.hex('#b15439')('\n  ✗ No interactive input available.'));
+      console.error(ERR('\n  ✗ No interactive input available.'));
       console.error(chalk.hex(TEXT_DIM_HEX)('  Set an API key env var (e.g. export OPENAI_API_KEY=...)'));
       console.error(chalk.hex(TEXT_DIM_HEX)('  or pass --api-key <key> --model <id> on the command line,\n'));
       process.exit(1);
@@ -911,7 +941,7 @@ async function main() {
     // saving. The choice is persisted and restored on every later run.
     const cfg = await runProviderWizard();
     if (!cfg) {
-      console.error(chalk.hex('#b15439')('\n  ✗ Setup cancelled. Set an API key env var (e.g. export OPENAI_API_KEY=...) or run with --api-key.\n'));
+      console.error(ERR('\n  ✗ Setup cancelled. Set an API key env var (e.g. export OPENAI_API_KEY=...) or run with --api-key.\n'));
       process.exit(1);
     }
     // Apply the wizard's choice to this session (it already saved to disk).
@@ -932,7 +962,7 @@ async function main() {
 
   // ── Guard: we need a model before we can build a provider ─────────────────
   if (!resolved.model) {
-    console.error(chalk.hex('#b15439')('\n  ✗ No model configured.'));
+    console.error(ERR('\n  ✗ No model configured.'));
     console.error(chalk.hex(TEXT_DIM_HEX)('  Run `aura` with no args in a TTY to launch the setup wizard,'));
     console.error(chalk.hex(TEXT_DIM_HEX)('  or pass --model <id> --api-key <key> on the command line,'));
     console.error(chalk.hex(TEXT_DIM_HEX)('  or set the model in .aura.json (`"model": "..."`).'));
@@ -980,13 +1010,13 @@ async function main() {
       // --resume <id>
       const loaded = await sessionStore.loadSession(projectRoot, argv['resume']);
       if (!loaded) {
-        console.error(chalk.hex('#b15439')(`\n  ✗ Session not found: ${argv['resume']}\n`));
+        console.error(ERR(`\n  ✗ Session not found: ${argv['resume']}\n`));
         process.exit(1);
       }
       activeChatId = loaded.id;
       activeChatHistory = loaded.history;
       activeChatTitle = loaded.title;
-      console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming session ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
+      console.log(OK(`\n  ↩ Resuming session ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
     } else if (argv['resume'] === true || argv['resume'] === '') {
       // --resume with no value → resume latest
       const latest = sessionStore.findLatestSession(projectRoot);
@@ -994,7 +1024,7 @@ async function main() {
         activeChatId = latest.id;
         activeChatHistory = latest.history;
         activeChatTitle = latest.title;
-        console.log(chalk.hex('#5a9e6e')(`\n  ↩ Resuming latest session ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
+        console.log(OK(`\n  ↩ Resuming latest session ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
       } else {
         activeChatId = sessionStore.generateId();
       }
@@ -1035,6 +1065,7 @@ async function main() {
     : path.join(sessionStore.projectDir(projectRoot), `${activeChatId}.run.json`);
 
   // ── Startup banner ──────────────────────────────────────────────────────────
+  if (argv._.length === 0) await runSplash();
   renderBanner({
     version: pkg.version,
     title: ctx.name,
@@ -1054,14 +1085,14 @@ async function main() {
   // thing this program does, so it must never be the reason a prompt is slow
   // to appear. The refresh below runs detached and is only ever seen next time.
   const updateNotice = pendingUpdateNotice(pkg.version);
-  if (updateNotice) console.log(chalk.hex('#d4903a')(`  ↑ ${updateNotice}`));
+  if (updateNotice) console.log(WARN(`  ↑ ${updateNotice}`));
   refreshUpdateCacheInBackground();
 
   // You are running dist/, but you edit and test src/ — say so when they've
   // diverged, or an edit looks landed while the binary runs the old code.
   const stale = checkBuildFreshness(path.join(__dirname, '../..'));
   if (stale) {
-    console.log(chalk.hex('#d4903a')(
+    console.log(WARN(
       `  ⚠ dist/ is ${stale.behindBy} behind src/ (newest: ${stale.newestSource}) — run \`npm run build\`.`,
     ));
   }
@@ -1075,7 +1106,7 @@ async function main() {
   if (typeof argv.build === 'string' && argv.build) {
     const bp = await loadBlueprint(argv.build);
     if (!bp) {
-      console.error(chalk.hex('#b15439')(`\n  ✗ Blueprint not found: ${argv.build}\n`));
+      console.error(ERR(`\n  ✗ Blueprint not found: ${argv.build}\n`));
       process.exit(1);
     }
 
@@ -1089,7 +1120,7 @@ async function main() {
     const plannedFiles = bp.files.filter(f => f.status === 'planned');
 
     for (const file of plannedFiles) {
-      console.log(chalk.hex('#cc785c')(`  ▸ Building: ${file.path} — ${file.purpose}`));
+      console.log(CHROME(`  ▸ Building: ${file.path} — ${file.purpose}`));
 
       const buildTask = [
         `Create the file ${file.path}.`,
@@ -1114,13 +1145,13 @@ async function main() {
 
         if (result.success) {
           await markBuilt(bp.id, file.path);
-          console.log(chalk.hex('#5a9e6e')(`  ✓ ${file.path} built\n`));
+          console.log(OK(`  ✓ ${file.path} built\n`));
         } else {
-          console.log(chalk.hex('#b15439')(`  ✗ ${file.path} failed: ${result.summary}\n`));
+          console.log(ERR(`  ✗ ${file.path} failed: ${result.summary}\n`));
           await addDeviation(bp.id, `Failed to build ${file.path}: ${result.summary}`);
         }
       } catch (e) {
-        console.log(chalk.hex('#b15439')(`  ✗ ${file.path} error: ${String(e)}\n`));
+        console.log(ERR(`  ✗ ${file.path} error: ${String(e)}\n`));
         await addDeviation(bp.id, `Error building ${file.path}: ${String(e)}`);
       }
     }
@@ -1131,9 +1162,9 @@ async function main() {
       const allBuilt = finalBp.files.every(f => f.status !== 'planned');
       if (allBuilt) {
         await updateBlueprintStatus(bp.id, 'complete');
-        console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ Blueprint complete: ${finalBp.files.filter(f => f.status === 'built').length} files built\n`));
+        console.log(OK.bold(`\n  ✓ Blueprint complete: ${finalBp.files.filter(f => f.status === 'built').length} files built\n`));
       } else {
-        console.log(chalk.hex('#cc9e5c').bold(`\n  ⚠ Blueprint partially complete: ${finalBp.files.filter(f => f.status === 'built').length}/${finalBp.files.length} files built\n`));
+        console.log(WARN.bold(`\n  ⚠ Blueprint partially complete: ${finalBp.files.filter(f => f.status === 'built').length}/${finalBp.files.length} files built\n`));
       }
     }
 
@@ -1145,7 +1176,7 @@ async function main() {
     const workflowName = argv.workflow;
     const stepTasks = argv._.map(String);
     if (stepTasks.length === 0) {
-      console.error(chalk.hex('#b15439')('\n  ✗ No step tasks provided.'));
+      console.error(ERR('\n  ✗ No step tasks provided.'));
       console.error(chalk.hex(TEXT_DIM_HEX)('  Usage: aura --workflow <name> "step 1" "step 2" ...\n'));
       process.exit(1);
     }
@@ -1158,11 +1189,11 @@ async function main() {
     display.header('Workflow', `Creating workflow "${workflowName}" with ${steps.length} steps`);
 
     const state = await createWorkflow({ name: workflowName, steps });
-    console.log(chalk.hex('#5a9e6e')(`\n  ✓ Workflow created: ${state.definition.id}\n`));
+    console.log(OK(`\n  ✓ Workflow created: ${state.definition.id}\n`));
 
     const makeRunStep = () => {
       return async (task: string, stepIndex: number): Promise<StepResult> => {
-        console.log(chalk.hex('#cc785c')(`\n  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
+        console.log(CHROME(`\n  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
 
         const currentProvider = buildProvider(display);
         const result = await runAgentLoop({
@@ -1188,9 +1219,9 @@ async function main() {
     const finalState = await runWorkflow(state, makeRunStep());
 
     if (finalState.status === 'done') {
-      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+      console.log(OK.bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
-      console.error(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}\n`));
+      console.error(ERR.bold(`\n  ✗ ${finalState.outcome}\n`));
     }
 
     const totalTokens = finalState.totalTokens ?? 0;
@@ -1212,7 +1243,7 @@ async function main() {
 
     const makeRunStep = () => {
       return async (task: string, stepIndex: number): Promise<StepResult> => {
-        console.log(chalk.hex('#cc785c')(`\n  ▸ Step ${stepIndex + 1}: ${task}\n`));
+        console.log(CHROME(`\n  ▸ Step ${stepIndex + 1}: ${task}\n`));
 
         const currentProvider = buildProvider(display);
         const result = await runAgentLoop({
@@ -1237,14 +1268,14 @@ async function main() {
 
     const finalState = await resumeWorkflow(workflowId, makeRunStep());
     if (!finalState) {
-      console.error(chalk.hex('#b15439')(`\n  ✗ Workflow not found: ${workflowId}\n`));
+      console.error(ERR(`\n  ✗ Workflow not found: ${workflowId}\n`));
       process.exit(1);
     }
 
     if (finalState.status === 'done') {
-      console.log(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+      console.log(OK.bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
-      console.error(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}\n`));
+      console.error(ERR.bold(`\n  ✗ ${finalState.outcome}\n`));
     }
 
     const totalTokens = finalState.totalTokens ?? 0;
@@ -1267,10 +1298,10 @@ async function main() {
     // text-only with a warning — never abort the session over a bad image.
     const { images: taskImages, warnings: imageWarnings } = loadImages(cliImagePaths);
     for (const w of imageWarnings) {
-      console.warn(chalk.hex('#b15439')(`  ⚠ ${w}`));
+      console.warn(ERR(`  ⚠ ${w}`));
     }
     if (taskImages.length > 0 && !looksVisionCapable(provider.model)) {
-      console.warn(chalk.hex('#b15439')(
+      console.warn(ERR(
         `  ⚠ Model "${provider.model}" may not support image input. Sending anyway — ` +
         `if it fails, the provider will likely return a text-only response or an error.`,
       ));
@@ -1453,15 +1484,19 @@ async function main() {
       ...(activeChatId ? [`chat ${activeChatId}`] : []),
     ],
   };
-  // The pinned header is deliberately the one-line `compact` tier: every
-  // banner row is subtracted from the scroll region for the whole session,
-  // so the full lockup goes into the scroll region below instead (see
-  // startInput()), where it scrolls away like any other output.
-  renderBanner(tuiBannerInfo, 'compact');
+  // The pinned header starts at the full lockup: the mark sits at the top of
+  // the screen and stays put while the session is idle. Every banner row is
+  // subtracted from the scroll region for the whole session, and the first
+  // submitted task calls demoteBanner(), which collapses the header to the
+  // one-line `compact` ribbon — only the ribbon stays for the rest of the
+  // session, exactly like a work titlebar.
+  const startTier = preferredBannerTier() === 'hero' ? 'hero' : 'standard';
+  renderBanner(tuiBannerInfo, startTier);
   // The TUI keeps its own copy of the banner rows: when scroll mode hands
   // the screen back, the live view is rebuilt from scratch, and on the alt
-  // screen there's no scrollback to recover the banner from.
-  setBannerLines(buildBannerLines(tuiBannerInfo, 'compact'));
+  // screen there's no scrollback to recover the banner from. The builder
+  // takes an optional tier so demoteBanner() can ask for `compact`.
+  setBannerBuilder((tier) => buildBannerLines(tuiBannerInfo, tier ?? startTier));
 
   // Use the TUI display for output
   
@@ -1500,18 +1535,10 @@ async function main() {
   // row" invariant initTui() establishes; calling it any earlier corrupts
   // that baseline.
   //
-  // The mark greets you once, in the scroll region, and then gets out of the
-  // way — only when the terminal is big enough that it isn't the whole view.
-  if (preferredBannerTier() === 'hero') {
-    // Minus the closing rule: it spans the full terminal width, one column
-    // wider than the scroll region, so writeOutput() would reflow it onto a
-    // second line. The pinned header's own rule already separates the two.
-    buildBannerLines(tuiBannerInfo, 'hero').slice(0, -1).forEach(line => writeOutput(line));
-  }
   // Same stale-build warning as one-shot mode, routed through the TUI.
   const staleBuild = checkBuildFreshness(path.join(__dirname, '../..'));
   if (staleBuild) {
-    writeOutput(chalk.hex('#d4903a')(
+    writeOutput(WARN(
       `  ⚠ dist/ is ${staleBuild.behindBy} behind src/ (newest: ${staleBuild.newestSource}) — run \`npm run build\`.`,
     ));
   }
@@ -1532,7 +1559,7 @@ let abortController: AbortController | null = null;
       if (abortController && !abortController.signal.aborted) {
         const cmd = line.trim();
         if (cmd === ':stop' || cmd === ':cancel') {
-          writeOutput(chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+          writeOutput(WARN('  ⏹ Aborting current task...'));
           abortController.abort();
           return;
         }
@@ -1545,7 +1572,7 @@ let abortController: AbortController | null = null;
         // rival one. Commands are excluded: a `:` line is REPL machinery, and
         // most of it (:model, :new, :compact) mutates state the running loop
         // is holding, so it waits for the run to end the way it always has.
-        if (steeringInbox && !cmd.startsWith(':')) {
+        if (steeringInbox && !cmd.startsWith(':') && toColonForm(cmd) === cmd) {
           steeringInbox.post(cmd);
           writeOutput(chalk.hex(TERRACOTTA_HEX)('  ↳ queued — Aura picks this up on the next turn.'));
           return;
@@ -1710,16 +1737,16 @@ let abortController: AbortController | null = null;
     };
 
     // Check for REPL commands
-    const cmdResult = await handleReplCommand(input, replCtx);
+    const cmdResult = await handleReplCommand(toColonForm(input), replCtx);
     if (!cmdResult.handled && looksLikeCommand(input)) {
       // A `:` line is REPL machinery by definition (see the steering note in
       // setCallbacks), so one no command claims is a typo or a guess — and
       // sending it to the model as a task is the worst possible answer: it
       // burns a provider round-trip researching the word "stats". Name the
       // miss and point at the list instead.
-      writeOutput(chalk.hex('#b15439')(
+      writeOutput(ERR(
         `  ✗ Unknown command: ${input.trim().split(/\s+/)[0]}` +
-        ` — :help lists everything. (:stats and /stats are the same.)`,
+        ` — /help lists everything.`,
       ));
       return;
     }
@@ -1766,7 +1793,7 @@ let abortController: AbortController | null = null;
         await runGazelleTurn(input);
       } catch (err) {
         const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-        writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+        writeOutput(ERR('  ✗ Unhandled error: ' + msg));
       }
       return;
     }
@@ -1909,14 +1936,14 @@ let abortController: AbortController | null = null;
           const newKey = await promptAuthKeyUpdate(resolved.model ?? runtimeConfig.model ?? '');
           if (newKey) {
             runtimeConfig.apiKey = newKey;
-            writeOutput(chalk.hex('#5a9e6e')('  ✓ Key updated — re-run the task.'));
+            writeOutput(OK('  ✓ Key updated — re-run the task.'));
           }
         } finally {
           if (wasActive) { exitFullscreenPrompt(); startInput(); }
         }
       } else {
         const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-        writeOutput(chalk.hex('#b15439')('  ✗ Unhandled error: ' + msg));
+        writeOutput(ERR('  ✗ Unhandled error: ' + msg));
       }
       clearAbortController();
       abortController = null;
@@ -1939,7 +1966,7 @@ let abortController: AbortController | null = null;
 
     // Check if task was cancelled by user
     if (abortController?.signal.aborted && !result.success) {
-      writeOutput(chalk.hex('#d4903a')('  ⏹ Task cancelled.'));
+      writeOutput(WARN('  ⏹ Task cancelled.'));
       // Don't record episode for cancelled tasks
       clearAbortController();
       abortController = null;
@@ -2001,11 +2028,11 @@ let abortController: AbortController | null = null;
     }
     } catch (err) {
       const msg = err instanceof Error ? (err.stack || err.message) : String(err);
-      writeOutput(chalk.hex('#b15439')('  \u2717 Unhandled error after task completed: ' + msg));
+      writeOutput(ERR('  \u2717 Unhandled error after task completed: ' + msg));
     }
   }
 
-  writeOutput(chalk.hex(TEXT_DIM_HEX)('  Type a task, or :help for commands.'));
+  writeOutput(chalk.hex(TEXT_DIM_HEX)('  Type a task, or / for commands.'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2081,7 +2108,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
       c.providerConfig.apiKey = undefined;
       c.providerConfig.baseUrl = undefined;
     }
-    console.log(chalk.hex('#5a9e6e')(`  ✓ Switched to ${test.name} · ${newModel}`));
+    console.log(OK(`  ✓ Switched to ${test.name} · ${newModel}`));
     // Update the TUI status line so the model change is immediately visible.
     // The mode marker has to be re-appended — setStatusLine replaces the line.
     setStatusLine([test.name, newModel, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
@@ -2136,9 +2163,9 @@ async function ensureApiKeyForModel(c: ReplCtx): Promise<void> {
   const wasActive = inputActive;
   if (wasActive) { stopInput(); enterFullscreenPrompt(); }
   try {
-    console.log(chalk.hex('#d4903a')(`\n  ⚠ No API key configured for this provider (${envName} is not set).`));
+    console.log(WARN(`\n  ⚠ No API key configured for this provider (${envName} is not set).`));
     const answer = await new Promise<string>(resolve => {
-      const promptText = chalk.hex('#cc785c')(`  Enter ${envName} (press Enter to skip): `);
+      const promptText = CHROME(`  Enter ${envName} (press Enter to skip): `);
       if (c.rl) { c.rl.question(promptText, resolve); return; }
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
       rl.question(promptText, ans => { rl.close(); resolve(ans); });
@@ -2152,9 +2179,9 @@ async function ensureApiKeyForModel(c: ReplCtx): Promise<void> {
     c.providerConfig.apiKey = key;
     try {
       const p = saveKey(envName, key);
-      console.log(chalk.hex('#5a9e6e')(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).\n`));
+      console.log(OK(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).\n`));
     } catch (e) {
-      console.log(chalk.hex('#5a9e6e')(`  ✓ API key set for this session (could not persist: ${String(e)}).\n`));
+      console.log(OK(`  ✓ API key set for this session (could not persist: ${String(e)}).\n`));
     }
   } finally {
     if (wasActive) { exitFullscreenPrompt(); startInput(); }
@@ -2176,11 +2203,11 @@ async function ensureZhipuPlanChoice(c: ReplCtx): Promise<void> {
   const wasActive = inputActive;
   if (wasActive) { stopInput(); enterFullscreenPrompt(); }
   try {
-    console.log(chalk.hex('#cc785c')('\n  GLM billing plan:'));
-    console.log(`    ${chalk.hex('#cc785c')('1')}. Pay-as-you-go ${chalk.hex(FAINT_HEX)('(general API)')}`);
-    console.log(`    ${chalk.hex('#cc785c')('2')}. Coding Plan   ${chalk.hex(FAINT_HEX)('(api.z.ai coding endpoint)')}`);
+    console.log(CHROME('\n  GLM billing plan:'));
+    console.log(`    ${CHROME('1')}. Pay-as-you-go ${chalk.hex(FAINT_HEX)('(general API)')}`);
+    console.log(`    ${CHROME('2')}. Coding Plan   ${chalk.hex(FAINT_HEX)('(api.z.ai coding endpoint)')}`);
     const answer = await new Promise<string>(resolve => {
-      const promptText = chalk.hex('#cc785c')('  Which plan? [1/2, Enter = 1]: ');
+      const promptText = CHROME('  Which plan? [1/2, Enter = 1]: ');
       if (c.rl) { c.rl.question(promptText, resolve); return; }
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
       rl.question(promptText, ans => { rl.close(); resolve(ans); });
@@ -2188,7 +2215,7 @@ async function ensureZhipuPlanChoice(c: ReplCtx): Promise<void> {
     if (answer.trim() === '2') {
       const glmModel = model.replace(/^zhipu\//, '');
       const r = trySetModel(c, `zhipu-coding/${glmModel}`);
-      if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+      if (!r.ok) console.log(ERR(`  ✗ ${r.err}`));
     } else {
       console.log(chalk.hex(TEXT_DIM_HEX)('  Using pay-as-you-go (general endpoint).\n'));
     }
@@ -2260,7 +2287,7 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
     // number, so numbering is gap-free and a header can never be selected.
     const rows = buildModelRows(getAllModels());
 
-    console.log(chalk.hex('#cc785c').bold('\n  Model Selector\n'));
+    console.log(CHROME.bold('\n  Model Selector\n'));
     // Multi-column per provider group — 100+ models in a single column push
     // the top of the list off-screen (the selector runs outside the scroll
     // region, so there is no way to scroll back up).
@@ -2272,7 +2299,7 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
       for (const line of layoutColumns(group, cellWidth, termWidth, 4)) {
         console.log('    ' + line.map(m => {
           const plain = `${String(m.num).padStart(3)}. ${m.name}`;
-          return chalk.hex('#cc785c')(String(m.num).padStart(3)) + '. '
+          return CHROME(String(m.num).padStart(3)) + '. '
             + chalk.hex(TEXT_HEX)(m.name)
             + ' '.repeat(cellWidth - plain.length);
         }).join(''));
@@ -2297,10 +2324,10 @@ async function showModelSelector(c: ReplCtx): Promise<void> {
         // TUI mode: TUI input is stopped above, so a temporary readline can
         // own stdin without the two-readers-one-stream conflict.
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        rl.question(chalk.hex('#cc785c')('  ▸ '), ans => { rl.close(); resolve(ans); });
+        rl.question(CHROME('  ▸ '), ans => { rl.close(); resolve(ans); });
         return;
       }
-      promptRl.question(chalk.hex('#cc785c')('  ▸ '), resolve);
+      promptRl.question(CHROME('  ▸ '), resolve);
     });
     const choice = answer.trim();
 
@@ -2354,6 +2381,17 @@ function looksLikeCommand(input: string): boolean {
   return t.startsWith('/') && !t.includes(' ') && !t.slice(1).includes('/');
 }
 
+/**
+ * `/word …` is how commands are typed; the handlers below were written
+ * against `:word …`, so the slash form is folded onto it once, here. Only a
+ * first token with no further `/` counts — `/home/me/x.ts` stays a path.
+ */
+function toColonForm(input: string): string {
+  const t = input.trim();
+  const first = t.split(/\s/)[0]!;
+  return t.startsWith('/') && first.length > 1 && !first.slice(1).includes('/') ? ':' + t.slice(1) : input;
+}
+
 async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommandResult> {
   if (input === ':quit' || input === ':q' || input === '/exit') {
     process.exit(0);
@@ -2361,7 +2399,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
   if (input === ':speak') {
     speakEnabled = !speakEnabled;
-    console.log(chalk.hex(speakEnabled ? '#5a9e6e' : '#a68a2a')(
+    console.log(chalk.hex(speakEnabled ? tokenHex('ok') : tokenHex('warn'))(
       `  🔊 Voice replies ${speakEnabled ? 'ON — Aura will read its answers aloud' : 'OFF'}.\n`,
     ));
     return { handled: true };
@@ -2380,11 +2418,11 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     else next = cur === 'auto' ? 'normal' : 'auto';
     c.permissions.setLevel(next);
     if (next === 'auto') {
-      console.log(chalk.hex('#d4903a')(
+      console.log(WARN(
         '  ✅ Auto-approve ON — commands run without asking (dangerous ones still blocked). `:approve off` to re-enable prompts.\n',
       ));
     } else {
-      console.log(chalk.hex('#5a9e6e')('  🔒 Auto-approve OFF — destructive commands will ask for confirmation again.\n'));
+      console.log(OK('  🔒 Auto-approve OFF — destructive commands will ask for confirmation again.\n'));
     }
     // The status line carries the permission level and nothing else redraws
     // it, so toggling auto-approve changed the behaviour while the bar kept
@@ -2417,7 +2455,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       if (modelId) {
         const r = trySetModel(c, modelId);
         if (!r.ok) {
-          console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+          console.log(ERR(`  ✗ ${r.err}`));
         } else {
           await postModelSwitch(c);
           setStatusLine([resolved.model ?? modelId, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
@@ -2450,7 +2488,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       if (modelId === 'back') modelId = await showProviderSelector();
       if (modelId) {
         const r = trySetModel(c, modelId);
-        if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+        if (!r.ok) console.log(ERR(`  ✗ ${r.err}`));
         else await postModelSwitch(c);
       }
     } finally {
@@ -2463,7 +2501,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     const sep = input.startsWith(':model ') ? ':model ' : '/model ';
     const newModel = input.slice(sep.length).trim();
     const r = trySetModel(c, newModel);
-    if (!r.ok) console.log(chalk.hex('#b15439')(`  ✗ ${r.err}`));
+    if (!r.ok) console.log(ERR(`  ✗ ${r.err}`));
     else await postModelSwitch(c);
     return { handled: true };
   }
@@ -2479,7 +2517,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       const sent = cur ? clampEffort(cur, target) : undefined;
       console.log(chalk.hex(TEXT_DIM_HEX)(
         `  effort: ${cur ?? 'provider default'}`
-        + (cur && sent !== cur ? chalk.hex('#d4903a')(`  (sent as "${sent}" — ${model} tops out there)`) : '')
+        + (cur && sent !== cur ? WARN(`  (sent as "${sent}" — ${model} tops out there)`) : '')
         + `\n  ladder: ${EFFORT_LEVELS.join(' · ')}`
         + `\n  usage:  :effort <level>`));
       return { handled: true };
@@ -2487,7 +2525,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
 
     const level = parseEffort(arg);
     if (!level) {
-      console.log(chalk.hex('#b15439')(
+      console.log(ERR(
         `  ✗ Unknown effort "${arg}". Expected one of: ${EFFORT_LEVELS.join(', ')}`));
       return { handled: true };
     }
@@ -2501,12 +2539,12 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     try {
       buildProvider(c.display);
     } catch (e) {
-      console.log(chalk.hex('#b15439')(`  ✗ Could not apply effort: ${String(e)}`));
+      console.log(ERR(`  ✗ Could not apply effort: ${String(e)}`));
       return { handled: true };
     }
-    console.log(chalk.hex('#5a9e6e')(`  ✓ Effort: ${level}`)
+    console.log(OK(`  ✓ Effort: ${level}`)
       + (wasClamped(level, target)
-        ? chalk.hex('#d4903a')(` — sent as "${clampEffort(level, target)}", the ceiling for ${model}`)
+        ? WARN(` — sent as "${clampEffort(level, target)}", the ceiling for ${model}`)
         : ''));
     if (level === 'none') {
       console.log(chalk.hex(TEXT_DIM_HEX)('  Thinking disabled — the model answers without a chain of thought.'));
@@ -2538,12 +2576,12 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
     if (envName) {
       try {
         const p = saveKey(envName, newKey);
-        console.log(chalk.hex('#5a9e6e')(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).`));
+        console.log(OK(`  ✓ API key saved as ${envName} → ${p} (persists across sessions).`));
       } catch (e) {
-        console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session (could not persist: ' + String(e) + ').'));
+        console.log(OK('  ✓ API key set for current session (could not persist: ' + String(e) + ').'));
       }
     } else {
-      console.log(chalk.hex('#5a9e6e')('  ✓ API key set for current session.'));
+      console.log(OK('  ✓ API key set for current session.'));
     }
     return { handled: true };
   }
@@ -2561,7 +2599,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
       );
       if (saved) {
         const pretty = saved.map(r => (r * 100).toFixed(0) + '%').join(' → ');
-        console.log(chalk.hex('#5a9e6e')(`\n  ✓ Compaction ladder: ${pretty}`));
+        console.log(OK(`\n  ✓ Compaction ladder: ${pretty}`));
         console.log(chalk.hex(TEXT_DIM_HEX)(
           '    Applies to this session. To persist it, add to .aura.json:\n' +
           `      "context": { "ladder": [${saved.join(', ')}] }\n`,
@@ -2736,14 +2774,14 @@ async function runArchitectPlan(
   });
 
   // Display result
-  console.log(chalk.hex('#cc785c').bold('\n  Blueprint\n'));
+  console.log(CHROME.bold('\n  Blueprint\n'));
   console.log(chalk.hex(TEXT_HEX)(`  Task: ${blueprint.task}`));
   console.log(chalk.hex(FAINT_HEX)(`  ID: ${blueprint.id}\n`));
 
   if (blueprint.files.length > 0) {
-    console.log(chalk.hex('#cc785c').bold('  Files:\n'));
+    console.log(CHROME.bold('  Files:\n'));
     for (const f of blueprint.files) {
-      console.log(`    ${chalk.hex('#cc785c')(f.path)}`);
+      console.log(`    ${CHROME(f.path)}`);
       console.log(`      ${chalk.hex(TEXT_DIM_HEX)(f.purpose)}`);
       if (f.exports.length > 0) console.log(`      ${chalk.hex(FAINT_HEX)(`exports: ${f.exports.join(', ')}`)}`);
       if (f.interfaces.length > 0) console.log(`      ${chalk.hex(FAINT_HEX)(`interfaces: ${f.interfaces.join(', ')}`)}`);
@@ -2751,22 +2789,22 @@ async function runArchitectPlan(
   }
 
   if (blueprint.dataModels.length > 0) {
-    console.log(chalk.hex('#cc785c').bold('\n  Data Models:\n'));
+    console.log(CHROME.bold('\n  Data Models:\n'));
     for (const dm of blueprint.dataModels) {
-      console.log(`    ${chalk.hex('#cc785c')(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
+      console.log(`    ${CHROME(dm.name)} — ${chalk.hex(TEXT_DIM_HEX)(dm.description)}`);
     }
   }
 
   if (blueprint.risks.length > 0) {
-    console.log(chalk.hex('#b15439').bold('\n  Risks:\n'));
+    console.log(ERR.bold('\n  Risks:\n'));
     for (const risk of blueprint.risks) {
-      console.log(`    ${chalk.hex('#b15439')('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
+      console.log(`    ${ERR('⚠')} ${chalk.hex(TEXT_DIM_HEX)(risk)}`);
     }
   }
 
-  console.log(chalk.hex('#5a9e6e')('\n  Blueprint saved. No files were modified.'));
-  console.log(chalk.hex('#5a9e6e')(`  Review with: aura --blueprint ${blueprint.id}`));
-  console.log(chalk.hex('#5a9e6e')(`  Build with: aura --build ${blueprint.id}\n`));
+  console.log(OK('\n  Blueprint saved. No files were modified.'));
+  console.log(OK(`  Review with: aura --blueprint ${blueprint.id}`));
+  console.log(OK(`  Build with: aura --build ${blueprint.id}\n`));
 }
 
 async function runOrchestratedTask(
@@ -2797,7 +2835,7 @@ async function runOrchestratedTask(
     const sharedRl = getSharedReadline();
     const rl = sharedRl ?? readline.createInterface({ input: process.stdin, output: process.stdout });
     const approved = await new Promise<boolean>(resolve => {
-      rl.question(chalk.hex('#cc785c')('\n  Run this plan? [y/N] '), answer => {
+      rl.question(CHROME('\n  Run this plan? [y/N] '), answer => {
         if (!sharedRl) rl.close();
         resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
       });
@@ -2872,7 +2910,7 @@ async function speakSummary(text: string): Promise<void> {
 
 function printHelp() {
   console.log(`
-${chalk.hex('#cc785c').bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code: model-agnostic AI coding agent")}
+${CHROME.bold('  aura')} ${chalk.hex(TEXT_DIM_HEX)("— Aura Code: model-agnostic AI coding agent")}
 
   ${chalk.hex(FAINT_HEX)('Usage:')}
     aura ${chalk.hex(TEXT_DIM_HEX)('"<task>"')}                           Run a single task
@@ -3115,7 +3153,7 @@ if (require.main !== module) {
   if (!runtimeConfig.model) {
     // Fail here rather than at the first task: the server would otherwise
     // start, look healthy, and only break once a client sends something.
-    console.error(chalk.hex('#b15439')(
+    console.error(ERR(
       '\nNo model configured. Run `aura` once to complete setup, '
       + 'or pass `aura serve -m <model>`.\n',
     ));
@@ -3139,5 +3177,5 @@ if (require.main !== module) {
       : undefined,
   }).catch(e => { console.error('Fatal:', String(e)); process.exit(1); });
 } else {
-  main().catch(e => { console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`)); process.exit(1); });
+  main().catch(e => { console.error(ERR(`\nFatal: ${String(e)}`)); process.exit(1); });
 }

@@ -13,13 +13,13 @@
 
 import chalk from 'chalk';
 import { launchWebServer } from './web-launcher.js';
-import { FAINT_HEX } from './diamond.js';
+import { FAINT_HEX, CHROME } from './diamond.js';
 
 const args = process.argv.slice(2);
 
 if (args[0] === '--help' || args[0] === '-h') {
   console.log(`
-  ${chalk.hex('#cc785c').bold('webaura')} — Aura's web client
+  ${CHROME.bold('webaura')} — Aura's web client
 
   ${chalk.hex(FAINT_HEX)('webaura')}                 start the server and open it in your browser
   ${chalk.hex(FAINT_HEX)('webaura --port 8080')}     serve on a different port

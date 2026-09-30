@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import type { RemGraph } from './graph.js';
+import { CHROME, CHROME_DIM, ERR, FAINT, OK, TEXT } from '../cli/diamond.js';
 
 /**
  * Renders a `RemGraph` as terminal text using Aura's existing warm palette
@@ -20,12 +21,12 @@ import type { RemGraph } from './graph.js';
  */
 
 const C = {
-  heading: chalk.hex('#cc785c').bold,
-  text: chalk.hex('#ede0cc'),
-  muted: chalk.hex('#8a7768'),
-  dim: chalk.hex('#4e3d30'),
-  good: chalk.hex('#5a9e6e'),
-  warn: chalk.hex('#b15439'),
+  heading: CHROME.bold,
+  text: TEXT,
+  muted: CHROME_DIM,
+  dim: FAINT,
+  good: OK,
+  warn: ERR,
 };
 
 const BAR_CHAR = '█';

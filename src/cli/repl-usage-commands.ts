@@ -21,7 +21,7 @@
  */
 
 import chalk from 'chalk';
-import { TEXT_DIM_HEX } from './diamond.js';
+import { TEXT_DIM_HEX, OK } from './diamond.js';
 import type { ContextHealthTracker } from './context-health.js';
 import type { Display } from './display.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
@@ -75,7 +75,7 @@ export async function handleUsageCommand(
     c.cumulative.inputTokens = 0;
     c.cumulative.outputTokens = 0;
     c.cumulative.costUsd = 0;
-    emit(chalk.hex('#5a9e6e')('  ✓ Session stats reset'));
+    emit(OK('  ✓ Session stats reset'));
     // This zeroes the *displayed* counters only — the underlying history
     // (what actually gets resent and billed on the next task) is untouched.
     // Say so explicitly: "reset"/"clear" reads as "start fresh" otherwise,

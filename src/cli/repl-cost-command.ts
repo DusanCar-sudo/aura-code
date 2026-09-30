@@ -20,12 +20,8 @@ import chalk from 'chalk';
 import { aggregateCosts, defaultCostLogDir, loadCostLogs, type CostOutcome } from '../archimedes/cost-log.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
 import { emit } from '../commands/surface.js';
+import { FG_BRIGHT, WARN, CHROME, ERR, FAINT, OK, TEXT_DIM } from './diamond.js';
 
-const DIM = '#8a94a6';
-const FAINT = '#4a5568';
-const ACCENT = '#cc785c';
-const GOOD = '#5a9e6e';
-const BAD = '#b15439';
 
 /** Shorthand names for the outcome buckets in the report. */
 const OUTCOME_LABELS: Record<CostOutcome, string> = {
@@ -50,7 +46,7 @@ function fmtSigned(n: number): string {
 }
 
 function colorBySign(n: number): (text: string) => string {
-  return n >= 0 ? chalk.hex(GOOD) : chalk.hex(BAD);
+  return n >= 0 ? OK : ERR;
 }
 
 /**
@@ -63,21 +59,21 @@ export function renderCostReport(entries: Awaited<ReturnType<typeof loadCostLogs
   const lines: string[] = [];
 
   if (r.entries === 0) {
-    lines.push(chalk.hex(DIM)('  No cost rows yet. Every Archimedes-path attempt appends one; run :cost after the alternator has worked.'));
-    lines.push(chalk.hex(FAINT)(`  Ledger: ${defaultCostLogDir()}`));
+    lines.push(TEXT_DIM('  No cost rows yet. Every Archimedes-path attempt appends one; run :cost after the alternator has worked.'));
+    lines.push(FAINT(`  Ledger: ${defaultCostLogDir()}`));
     return lines;
   }
 
   lines.push(
-    chalk.hex(ACCENT)(`  Cost ledger — ${r.entries} attempt(s) over ${r.days} day(s)`),
-    chalk.hex(FAINT)(`  ${defaultCostLogDir()}`),
+    CHROME(`  Cost ledger — ${r.entries} attempt(s) over ${r.days} day(s)`),
+    FAINT(`  ${defaultCostLogDir()}`),
     '',
   );
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  lines.push(chalk.hex(DIM)('  ── Total ─────────────────────────────────────────────────'));
+  lines.push(TEXT_DIM('  ── Total ─────────────────────────────────────────────────'));
   lines.push(
-    `  Actually spent:    ${chalk.hex('#d8dee9')(fmtTokens(r.actualTokens))} tokens`,
+    `  Actually spent:    ${FG_BRIGHT(fmtTokens(r.actualTokens))} tokens`,
     `  Direct-large view: ${fmtTokens(r.directLargeTokens)} tokens (${r.directLargeMeasured} measured, ${r.directLargeEstimated} estimated)`,
   );
   lines.push(
@@ -90,7 +86,7 @@ export function renderCostReport(entries: Awaited<ReturnType<typeof loadCostLogs
   // not be read as a result.
   if (r.unbilledLargeCalls > 0) {
     const share = r.entries > 0 ? (r.unbilledLargeCalls / r.entries) * 100 : 0;
-    const warn = share >= 50 ? chalk.hex('#ebcb8b') : chalk.hex(FAINT);
+    const warn = share >= 50 ? WARN : FAINT;
     lines.push(warn(
       `  ⚠ ${r.unbilledLargeCalls} of ${r.entries} row(s) recorded a large-model call that billed `
       + `0 tokens (${share.toFixed(0)}%).`,
@@ -103,18 +99,18 @@ export function renderCostReport(entries: Awaited<ReturnType<typeof loadCostLogs
   }
   lines.push('');
   lines.push(
-    chalk.hex(DIM)('  Gate contribution (tokens never spent because of gating): ') +
+    TEXT_DIM('  Gate contribution (tokens never spent because of gating): ') +
     colorBySign(r.gateContribution)(`${fmtTokens(r.gateContribution)}`) +
-    chalk.hex(FAINT)(`  across ${r.gateContributionRows} gated row(s), based on ${r.gateContributionBasis} measured attempt(s)`),
+    FAINT(`  across ${r.gateContributionRows} gated row(s), based on ${r.gateContributionBasis} measured attempt(s)`),
   );
   lines.push('');
 
   // ── By outcome ────────────────────────────────────────────────────────────
-  lines.push(chalk.hex(DIM)('  ── By outcome ───────────────────────────────────────────'));
+  lines.push(TEXT_DIM('  ── By outcome ───────────────────────────────────────────'));
   for (const out of ['gated', 'small-success', 'escalated', 'direct-large'] as CostOutcome[]) {
     const b = r.byOutcome[out];
     if (b.attempts === 0) {
-      lines.push(chalk.hex(FAINT)(`  ${OUTCOME_LABELS[out].padEnd(42)} —`));
+      lines.push(FAINT(`  ${OUTCOME_LABELS[out].padEnd(42)} —`));
       continue;
     }
     lines.push(
@@ -128,13 +124,13 @@ export function renderCostReport(entries: Awaited<ReturnType<typeof loadCostLogs
   lines.push('');
 
   // ── Caveat ────────────────────────────────────────────────────────────────
-  lines.push(chalk.hex(FAINT)(
+  lines.push(FAINT(
     '  Small-success counterfactuals are estimated from the per-category average of measured',
   ));
-  lines.push(chalk.hex(FAINT)(
+  lines.push(FAINT(
     '  large-model runs when the large model never ran for that task. Gate contribution is',
   ));
-  lines.push(chalk.hex(FAINT)(
+  lines.push(FAINT(
     '  similarly estimated from measured attempts (the epsilon probe keeps it measurable).',
   ));
 

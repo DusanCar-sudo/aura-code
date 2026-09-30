@@ -33,13 +33,14 @@ export const COMPUTER_DEFINITION: ToolDefinition = {
   description:
     'See the screen and control the mouse and keyboard. Actions: screenshot, click, double_click, '
     + 'right_click, move, drag, type, key, scroll, remember. '
+    + 'Actions also include accessibility_tree, which reads native Linux accessibility semantics. '
     + 'ALWAYS take a screenshot first and read coordinates off that image — x/y are in the '
     + 'coordinates of the screenshot you were shown, not the raw screen. Take another screenshot '
     + 'after anything you expect to change the screen, and check it did.',
   parameters: {
     type: 'object',
     properties: {
-      action: { type: 'string', description: 'screenshot | click | double_click | right_click | move | drag | type | key | scroll | remember' },
+      action: { type: 'string', description: 'screenshot | accessibility_tree | click | double_click | right_click | move | drag | type | key | scroll | remember' },
       x:      { type: 'number', description: 'X in screenshot coordinates' },
       y:      { type: 'number', description: 'Y in screenshot coordinates' },
       to_x:   { type: 'number', description: 'drag: destination X in screenshot coordinates' },
@@ -50,6 +51,9 @@ export const COMPUTER_DEFINITION: ToolDefinition = {
       dx:     { type: 'number', description: 'scroll: horizontal wheel clicks' },
       note:   { type: 'string', description: 'remember: one line worth keeping for next time' },
       key_id: { type: 'string', description: 'remember: stable id, so the same fact is stored once (e.g. "chrome:address-bar")' },
+      max_depth: { type: 'number', description: 'accessibility_tree: maximum tree depth (default 8)' },
+      max_nodes: { type: 'number', description: 'accessibility_tree: maximum nodes returned (default 300)' },
+      include_hidden: { type: 'boolean', description: 'accessibility_tree: include invisible/offscreen nodes (default false)' },
     },
     required: ['action'],
   },
@@ -60,6 +64,7 @@ export interface ComputerInput {
   x?: number; y?: number; to_x?: number; to_y?: number;
   text?: string; combo?: string; dy?: number; dx?: number;
   note?: string; key_id?: string;
+  max_depth?: number; max_nodes?: number; include_hidden?: boolean;
 }
 
 let sidecar: ScreenSidecar | null = null;
@@ -142,6 +147,22 @@ export async function computerTool(input: ComputerInput): Promise<ToolOutput> {
     switch (action) {
       case 'screenshot': return await screenshot(sidecar);
 
+      case 'accessibility_tree': {
+        const r = await sidecar.send({
+          cmd: 'accessibility_tree',
+          max_depth: input.max_depth ?? 8,
+          max_nodes: input.max_nodes ?? 300,
+          include_hidden: input.include_hidden ?? false,
+        });
+        if (!r.ok) return `Error: ${r.error ?? 'accessibility tree failed'}`;
+        return {
+          text: `Native accessibility tree (${r.nodes ?? 0} nodes, Linux AT-SPI). `
+            + 'Node bounds are in physical screen coordinates. Use names, roles, states and actions '
+            + 'to choose targets; use screenshot coordinates when calling click.\n'
+            + JSON.stringify(r.tree ?? [], null, 2),
+        };
+      }
+
       case 'move': {
         const p = await point(input);
         await sidecar.send({ cmd: 'move', ...p });
@@ -202,7 +223,7 @@ export async function computerTool(input: ComputerInput): Promise<ToolOutput> {
 
       default:
         return `Error: unknown computer action "${input.action}". `
-          + 'Use screenshot, click, double_click, right_click, move, drag, type, key, scroll or remember.';
+          + 'Use screenshot, accessibility_tree, click, double_click, right_click, move, drag, type, key, scroll or remember.';
     }
   } catch (e) {
     // A dead sidecar must not poison every later call with a stale handle.
@@ -243,7 +264,7 @@ async function screenshot(sc: ScreenSidecar): Promise<ToolOutput> {
  */
 function validate(action: string, input: ComputerInput): string | null {
   const POSITIONAL = ['click', 'double_click', 'right_click', 'move'];
-  const KNOWN = [...POSITIONAL, 'screenshot', 'drag', 'type', 'key', 'scroll', 'remember'];
+  const KNOWN = [...POSITIONAL, 'screenshot', 'accessibility_tree', 'drag', 'type', 'key', 'scroll', 'remember'];
 
   if (!KNOWN.includes(action)) {
     return `unknown computer action "${input.action}". `

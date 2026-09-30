@@ -123,4 +123,8 @@ describe('the tool definition', () => {
     expect(COMPUTER_DEFINITION.description).toMatch(/screenshot first/i);
     expect(COMPUTER_DEFINITION.description).toMatch(/not the raw screen/i);
   });
+
+  it('exposes native semantic inspection', () => {
+    expect(COMPUTER_DEFINITION.description).toMatch(/accessibility_tree/i);
+  });
 });

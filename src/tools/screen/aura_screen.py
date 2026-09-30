@@ -32,7 +32,8 @@ import time
 
 import gi
 gi.require_version("Gst", "1.0")
-from gi.repository import Gio, GLib, Gst          # noqa: E402
+gi.require_version("Atspi", "2.0")
+from gi.repository import Gio, GLib, Gst, Atspi  # noqa: E402
 from evdev import UInput, AbsInfo, ecodes as e    # noqa: E402
 
 PORTAL = "org.freedesktop.portal.Desktop"
@@ -374,6 +375,91 @@ def die_with_parent():
         print(f"pdeathsig unavailable: {exc}", file=sys.stderr, flush=True)
 
 
+def accessibility_tree(max_depth=8, max_nodes=300, include_hidden=False):
+    """Return a bounded native UI tree through Linux AT-SPI.
+
+    This is deliberately a perception-only operation. It does not invoke
+    actions, move focus, or change the desktop. The model gets stable semantic
+    information (role/name/state/bounds/actions) to complement the screenshot
+    and can still choose whether to use coordinate input.
+    """
+    try:
+        if not Atspi.is_initialized():
+            Atspi.init()
+        roots = [Atspi.get_desktop(i) for i in range(Atspi.get_desktop_count())]
+        limit_depth = max(0, min(int(max_depth), 32))
+        limit_nodes = max(1, min(int(max_nodes), 2000))
+        count = 0
+
+        def safe(fn, default=None):
+            try:
+                return fn()
+            except Exception:
+                return default
+
+        def rect_value(rect):
+            if rect is None:
+                return None
+            return {"x": int(rect.x), "y": int(rect.y),
+                    "width": int(rect.width), "height": int(rect.height)}
+
+        def node(obj, depth):
+            nonlocal count
+            if count >= limit_nodes:
+                return None
+            count += 1
+            states = safe(lambda: obj.get_state_set().get_states(), []) or []
+            state_names = [getattr(s, "value_nick", str(s)) for s in states]
+            visible = ("visible" in state_names or "showing" in state_names
+                       or "VISIBLE" in state_names or "SHOWING" in state_names)
+            if not include_hidden and depth > 0 and state_names and not visible:
+                return None
+            actions = []
+            n_actions = safe(obj.get_n_actions, 0) or 0
+            for i in range(min(int(n_actions), 32)):
+                name = safe(lambda i=i: obj.get_action_name(i), "") or ""
+                if name:
+                    actions.append({"name": str(name),
+                                    "description": str(safe(lambda i=i: obj.get_action_description(i), "") or "")})
+            bounds = safe(lambda: obj.get_extents(Atspi.CoordType.SCREEN))
+            result = {
+                "id": count,
+                "role": str(safe(obj.get_role_name, "unknown") or "unknown"),
+                "name": str(safe(obj.get_name, "") or ""),
+                "description": str(safe(obj.get_description, "") or ""),
+                "states": state_names,
+                "bounds": rect_value(bounds),
+                "actions": actions,
+                "text": str(safe(lambda: obj.get_text(0, -1), "") or "")[:500],
+                "attributes": dict(safe(obj.get_attributes, {}) or {}),
+            }
+            children = []
+            if depth < limit_depth:
+                n_children = safe(obj.get_child_count, 0) or 0
+                for i in range(int(n_children)):
+                    child = safe(lambda i=i: obj.get_child_at_index(i))
+                    if child is None:
+                        continue
+                    item = node(child, depth + 1)
+                    if item is not None:
+                        children.append(item)
+                    if count >= limit_nodes:
+                        break
+            if children:
+                result["children"] = children
+            return result
+
+        tree = []
+        for root in roots:
+            item = node(root, 0)
+            if item is not None:
+                tree.append(item)
+        return {"ok": True, "nodes": count, "tree": tree,
+                "backend": "linux-atspi", "truncated": count >= limit_nodes}
+    except Exception as exc:
+        return {"ok": False, "error": f"AT-SPI unavailable: {type(exc).__name__}: {exc}"}
+
+
 def main():
     die_with_parent()
     portal = None
@@ -402,6 +488,11 @@ def main():
                     tw, th, scale = encode_png(data, w, h, out, req.get("max_pixels", 1_100_000))
                     reply({"ok": True, "path": out, "width": tw, "height": th,
                            "source_width": w, "source_height": h, "scale": scale})
+
+                elif cmd == "accessibility_tree":
+                    reply(accessibility_tree(req.get("max_depth", 8),
+                                             req.get("max_nodes", 300),
+                                             req.get("include_hidden", False)))
 
                 elif cmd == "move":
                     inp.move(req["x"], req["y"]);  reply({"ok": True})

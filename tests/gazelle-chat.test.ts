@@ -232,8 +232,8 @@ describe('REPL mode commands', () => {
     const advertised: string[] = [];
     for (const line of HELP_TEXT.slice(start + 1)) {
       if (line.includes('── ')) break;                 // next section
-      const m = /^\s*(:[a-z-]+)\s{2,}/.exec(line);
-      if (m) advertised.push(m[1]);
+      const m = /^\s*[:/]([a-z-]+)\s{2,}/.exec(line);
+      if (m) advertised.push(':' + m[1]);
     }
     expect(advertised.sort()).toEqual([':coder', ':gazelle']);
 

@@ -243,7 +243,8 @@ function finalizeInstall(stagingDir: string, mode: 'copy' | 'move', fallbackName
   const plugin = loadPlugin(dest)!;
   const warnings: string[] = [];
   if (plugin.mcpServerCount > 0) {
-    warnings.push(`declares ${plugin.mcpServerCount} MCP server(s) — aura has no MCP client yet, those are ignored.`);
+    warnings.push(`declares ${plugin.mcpServerCount} MCP server(s) — plugin .mcp.json is not loaded; ` +
+      `copy the entries into ~/.aura/mcp.json to use them.`);
   }
   return { plugin, warnings };
 }

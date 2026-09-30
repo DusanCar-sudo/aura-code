@@ -4,7 +4,7 @@
  * modifies history or triggers compaction.
  */
 import chalk from 'chalk';
-import { TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { TEXT_DIM_HEX, FAINT_HEX, CHROME, ERR, INFO, OK, SOFT, WARN } from './diamond.js';
 import type { HistoryMessage } from '../providers/types.js';
 import { estimateContextTokens, countMessage, countText, getRecapGeneration } from '../agent/compactor.js';
 import { getLadder, compactionThreshold } from '../agent/context-policy.js';
@@ -141,7 +141,7 @@ export function formatContextBar(h: ContextHealth): string {
     else if (ladderPos.includes(i)) bar += '\u250a';
     else bar += '\u2591';
   }
-  const barColor = h.usagePercent < 50 ? chalk.hex('#5a9e6e') : h.usagePercent < 70 ? chalk.hex('#d4903a') : chalk.hex('#b15439');
+  const barColor = h.usagePercent < 50 ? OK : h.usagePercent < 70 ? WARN : ERR;
   const pct = h.usagePercent.toFixed(0) + '%';
   const tok = (h.estimatedTokens / 1000).toFixed(1) + 'k/' + (h.contextWindow / 1000).toFixed(0) + 'k';
   const gen = h.recapGeneration > 0 ? ' \u00b7 gen ' + h.recapGeneration : '';
@@ -162,49 +162,49 @@ export function formatContextDashboard(h: ContextHealth): string {
     else if (ladderPos.includes(i)) bar += '\u250a';
     else bar += '\u2591';
   }
-  const barColor = h.usagePercent < 50 ? chalk.hex('#5a9e6e') : h.usagePercent < 70 ? chalk.hex('#d4903a') : chalk.hex('#b15439');
+  const barColor = h.usagePercent < 50 ? OK : h.usagePercent < 70 ? WARN : ERR;
   const freeTokens = Math.max(0, h.contextWindow - h.estimatedTokens);
   const freePct = (100 - Math.min(100, h.usagePercent)).toFixed(0);
 
   const lines: string[] = [
     '',
     chalk.hex(FAINT_HEX)(line),
-    chalk.hex('#cc785c').bold('  Context Health Dashboard'),
+    CHROME.bold('  Context Health Dashboard'),
     chalk.hex(FAINT_HEX)(line),
     '',
-    '  Window:    ' + chalk.hex('#c8b5a0')(h.contextWindow.toLocaleString()) + ' tokens',
-    '  Used:      ' + chalk.hex('#c8b5a0')(h.estimatedTokens.toLocaleString()) + ' tokens (' + chalk.bold(h.usagePercent.toFixed(1) + '%') + ') ' + barColor(bar),
-    '  Free:      ' + chalk.hex('#c8b5a0')(freeTokens.toLocaleString()) + ' tokens (' + freePct + '%)',
+    '  Window:    ' + SOFT(h.contextWindow.toLocaleString()) + ' tokens',
+    '  Used:      ' + SOFT(h.estimatedTokens.toLocaleString()) + ' tokens (' + chalk.bold(h.usagePercent.toFixed(1) + '%') + ') ' + barColor(bar),
+    '  Free:      ' + SOFT(freeTokens.toLocaleString()) + ' tokens (' + freePct + '%)',
     '',
-    '  Compaction: ' + chalk.hex('#c8b5a0')('Generation ' + h.recapGeneration + ' of ' + ROLLOVER_AT_GENERATION),
-    '  Next fire:  ' + chalk.hex('#c8b5a0')(h.nextCompactionThreshold.toLocaleString() + ' tokens (' + h.nextCompactionPercent + '%)') + ' \u2014 ' + chalk.hex('#d4903a')(h.tokensUntilCompaction.toLocaleString() + ' tokens away'),
+    '  Compaction: ' + SOFT('Generation ' + h.recapGeneration + ' of ' + ROLLOVER_AT_GENERATION),
+    '  Next fire:  ' + SOFT(h.nextCompactionThreshold.toLocaleString() + ' tokens (' + h.nextCompactionPercent + '%)') + ' \u2014 ' + WARN(h.tokensUntilCompaction.toLocaleString() + ' tokens away'),
     '  Ladder:     ' + formatLadder(h.recapGeneration),
-    '  Remaining:  ' + chalk.hex('#c8b5a0')(h.rolloversRemaining + ' compaction(s) before dream flush'),
+    '  Remaining:  ' + SOFT(h.rolloversRemaining + ' compaction(s) before dream flush'),
     '',
-    chalk.hex('#cc785c').bold('  Session totals'),
-    '    Input:    ' + chalk.hex('#c8b5a0')(h.totalInputTokens.toLocaleString()) + ' tokens',
-    '    Output:   ' + chalk.hex('#c8b5a0')(h.totalOutputTokens.toLocaleString()) + ' tokens',
-    '    Cost:     ' + chalk.hex('#c8b5a0')('$' + h.totalCostUsd.toFixed(4)),
-    '    Turns:    ' + chalk.hex('#c8b5a0')(String(h.turnCount)),
-    '    Tools:    ' + chalk.hex('#c8b5a0')(h.toolCallCount + ' calls'),
+    CHROME.bold('  Session totals'),
+    '    Input:    ' + SOFT(h.totalInputTokens.toLocaleString()) + ' tokens',
+    '    Output:   ' + SOFT(h.totalOutputTokens.toLocaleString()) + ' tokens',
+    '    Cost:     ' + SOFT('$' + h.totalCostUsd.toFixed(4)),
+    '    Turns:    ' + SOFT(String(h.turnCount)),
+    '    Tools:    ' + SOFT(h.toolCallCount + ' calls'),
     '',
     '  System RAM: ' + memColor(h.systemMemory.severity)(h.systemMemory.usagePercent.toFixed(1) + '% used')
       + chalk.hex(TEXT_DIM_HEX)(' · ' + (h.systemMemory.availableMemory / 1024 ** 3).toFixed(1) + 'GB available · ' + h.systemMemory.recommendation),
   ];
 
   if (h.compactionHistory.length > 0) {
-    lines.push('', chalk.hex('#cc785c').bold('  Compaction history'));
+    lines.push('', CHROME.bold('  Compaction history'));
     for (const e of h.compactionHistory) {
       const saved = ((1 - e.afterTokens / e.beforeTokens) * 100).toFixed(0);
-      lines.push('    Turn ' + e.turn + ': ' + e.beforeTokens.toLocaleString() + ' \u2192 ' + e.afterTokens.toLocaleString() + ' tokens ' + chalk.hex('#5a9e6e')('(-' + saved + '%)') + ' gen ' + (e.generation - 1) + '\u2192' + e.generation);
+      lines.push('    Turn ' + e.turn + ': ' + e.beforeTokens.toLocaleString() + ' \u2192 ' + e.afterTokens.toLocaleString() + ' tokens ' + OK('(-' + saved + '%)') + ' gen ' + (e.generation - 1) + '\u2192' + e.generation);
     }
   }
 
   if (h.largestMessages.length > 0) {
-    lines.push('', chalk.hex('#cc785c').bold('  Largest messages'));
+    lines.push('', CHROME.bold('  Largest messages'));
     for (const m of h.largestMessages) {
       const idx = m.index === -1 ? 'sys' : '#' + m.index;
-      lines.push('    ' + chalk.hex(FAINT_HEX)(idx.padEnd(4)) + ' ' + chalk.hex(TEXT_DIM_HEX)(m.role.padEnd(12)) + ' ' + m.preview + ' ' + chalk.hex('#d4903a')(m.tokens.toLocaleString() + ' tok'));
+      lines.push('    ' + chalk.hex(FAINT_HEX)(idx.padEnd(4)) + ' ' + chalk.hex(TEXT_DIM_HEX)(m.role.padEnd(12)) + ' ' + m.preview + ' ' + WARN(m.tokens.toLocaleString() + ' tok'));
     }
   }
 
@@ -213,21 +213,21 @@ export function formatContextDashboard(h: ContextHealth): string {
 }
 
 function memColor(severity: ContextHealth['systemMemory']['severity']) {
-  return severity === 'ok' ? chalk.hex('#5a9e6e') : severity === 'warn' ? chalk.hex('#d4903a') : chalk.hex('#b15439');
+  return severity === 'ok' ? OK : severity === 'warn' ? WARN : ERR;
 }
 
 function formatLadder(generation: number): string {
   const rungs = getLadder().map((r, i) => {
     const pct = (r * 100).toFixed(0) + '%';
-    if (i < generation) return chalk.hex('#5a9e6e')(pct + ' \u2713');
-    if (i === generation) return chalk.hex('#d4903a')(pct + ' pending');
+    if (i < generation) return OK(pct + ' \u2713');
+    if (i === generation) return WARN(pct + ' pending');
     return chalk.hex(FAINT_HEX)(pct);
   });
-  const flush = chalk.hex('#6d8fb3')('flush');
+  const flush = INFO('flush');
   return rungs.join(' \u2192 ') + ' \u2192 ' + flush;
 }
 
 export function formatCompactionEvent(beforeTokens: number, afterTokens: number, generation: number, threshold: number): string {
   const saved = ((1 - afterTokens / beforeTokens) * 100).toFixed(0);
-  return 'Context compacted: ' + beforeTokens.toLocaleString() + ' \u2192 ' + afterTokens.toLocaleString() + ' tokens ' + chalk.hex('#5a9e6e')('(-' + saved + '%)') + ' \u00b7 gen ' + generation + ' \u00b7 threshold ' + threshold.toLocaleString();
+  return 'Context compacted: ' + beforeTokens.toLocaleString() + ' \u2192 ' + afterTokens.toLocaleString() + ' tokens ' + OK('(-' + saved + '%)') + ' \u00b7 gen ' + generation + ' \u00b7 threshold ' + threshold.toLocaleString();
 }

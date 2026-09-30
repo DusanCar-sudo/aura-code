@@ -8,7 +8,7 @@ import { Board, type ModelItem } from './components/Board';
 import { Canvas } from './components/Canvas';
 import { Code } from './components/Code';
 import { SettingsPanel, type SettingsTab } from './components/Settings';
-import auraSign from './assets/aura-sign.webp';
+import { PeakMark } from './components/PeakMark';
 import { runCommand } from './lib/commands';
 
 export type MainView = 'chat' | 'kanban' | 'canvas' | 'code';
@@ -261,12 +261,9 @@ export function App() {
   return (
     <div className="aura-app-root">
       {/* Background Watermark Sigil (8% opacity) */}
-      <img
-        src={auraSign}
-        alt=""
-        className="aura-bg-watermark"
-        aria-hidden="true"
-      />
+      <div className="aura-bg-watermark" aria-hidden="true">
+        <PeakMark size={620} />
+      </div>
 
       {/* Update notice — the web client's equivalent of the TUI's startup line */}
       {updateInfo?.available && (
@@ -276,7 +273,7 @@ export function App() {
           style={{
             position: 'relative', zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
             gap: '8px', padding: '6px 16px', fontSize: '12.5px', fontWeight: 600,
-            background: 'linear-gradient(90deg, rgba(90,158,110,0.18), rgba(110,208,234,0.18))',
+            background: 'linear-gradient(90deg, rgba(90,158,110,0.18), rgba(231, 207, 133,0.18))',
             borderBottom: '1px solid rgba(90,158,110,0.35)',
             color: 'var(--txt, #e8eaf2)',
           }}
@@ -297,8 +294,8 @@ export function App() {
       {/* Top Header */}
       <header className="aura-header">
         <div className="aura-header-brand">
-          <img src={auraSign} alt="Aura Sign" className="aura-brand-mark" />
-          <span className="aura-brand-title">Aura</span>
+          <PeakMark size={32} className="aura-brand-mark" />
+          <span className="aura-brand-title">AURA CODE</span>
         </div>
 
         <nav className="aura-header-tabs" role="tablist">

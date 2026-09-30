@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
 import { exec, execSync, execFileSync } from 'child_process';
-import { createProvider, registerCustomProviders, getAllModels, isModelConfigured } from '../providers/factory.js';
+import { createProvider, registerCustomProviders, getAllModels, isModelConfigured, LOCAL_ONLY_PROVIDERS } from '../providers/factory.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { rtkWrap } from '../util/rtk.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
@@ -24,6 +24,7 @@ import {
   type ParsedAction,
 } from './telegram-actions.js';
 import { getApiKey } from '../util/env.js';
+import { loadKeysIntoEnv } from '../setup/key-store.js';
 import { loadUnifiedMemory } from '../agent/unified-memory.js';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
 import type { ChatSession } from '../agent/session-store.js';
@@ -61,6 +62,10 @@ function loadConfig(): TelegramConfig {
 // ─────────────────────────────────────────────────────────────────────────────
 // HTTPS helper (no fetch dependency)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Must run before loadConfig()/any provider is built: this is what puts the
+// stored keys into process.env for this process.
+loadKeysIntoEnv();
 
 const config = loadConfig();
 const TOKEN = config.bot_token;
@@ -545,7 +550,9 @@ function SESSION_DIR(): string { return auraPath('sessions', 'telegram'); }
  * Not a restriction: `/provider <model_id>` still switches to anything Aura has
  * configured, listed or not.
  */
-const TELEGRAM_PROVIDERS = ['Google', 'NVIDIA', 'OpenCode Zen', 'OpenCode Go', 'OpenRouter'];
+const TELEGRAM_PROVIDERS = [
+  'Google', 'NVIDIA', 'OpenCode Zen', 'OpenCode Go', 'OpenRouter', 'Kilo Code',
+];
 
 // Per-chat provider instances — one Telegram user's /provider switch MUST NOT
 // affect another user's messages. Map<chatId, provider>.
@@ -731,6 +738,9 @@ const APPROVAL_TIMEOUT_MS = 5 * 60_000;
 // resets the session — mirrors the TUI's accept-all mode, not a one-time flush.
 const autoApproveChats = new Set<string>();
 
+/** Chats that predate autoApproveChats and still expect a tap per command. */
+const manualApproveChats = new Set<string>();
+
 // ── Running-task registry (for /stop and /status) ────────────────────────────
 // Message handlers are detached tasks, so several agentic runs can be in
 // flight at once — even in the same chat. /stop aborts everything registered
@@ -795,12 +805,15 @@ function flushApprovals(chatId: string, approved: boolean): number {
 // anyone who finds it, and there the prompt is the only thing between a
 // stranger and a shell on this PC. isCatastrophic() is unaffected either way —
 // `rm -rf /` and friends are refused outright, approval or not.
-const PER_COMMAND_APPROVAL = ALLOWED_USER_IDS.length === 0;
+const PER_COMMAND_APPROVAL = process.env.TELEGRAM_REQUIRE_APPROVAL === '1';
 
 /** Ask Dušan to approve a command; resolves true/false (false on timeout). */
 async function requestApproval(chatId: string | number, label: string, command: string): Promise<boolean> {
-  if (!PER_COMMAND_APPROVAL) return true;
-  if (autoApproveChats.has(String(chatId))) return true;
+  const id_ = String(chatId);
+  // Opt-out by default: Dušan asked for approve-all to be the resting state.
+  // /approve-all re-enables it, /manual-approve puts the taps back.
+  if (PER_COMMAND_APPROVAL && !manualApproveChats.has(id_)) return true;
+  if (autoApproveChats.has(id_)) return true;
   const id = `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   const keyboard = {
     inline_keyboard: [[
@@ -1229,7 +1242,10 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `Commands:`,
       `/status — What's running in this chat (task, duration, pending approvals) + system status`,
       `/tools — List available tools`,
-      `/provider [model] — List AI models, or switch model (this session)`,
+      `/models — List every model you have a stored key for`,
+      `/models all — The same, grouped by provider, untruncated`,
+      `/model <model_id> — Switch this chat to that model`,
+      `/provider [model] — Alias of /model`,
       `/memory — View memory`,
       `/history — View conversation history`,
       `/clear — Delete conversation history`,
@@ -1248,11 +1264,9 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       ``,
       `🎛 Task control:`,
       `/stop — Stop the task currently running in this chat`,
-      ...(PER_COMMAND_APPROVAL
-        ? [`/approve-all — ⚠️ Auto mode: approve all pending confirmations AND all future commands without asking (including destructive ones). Lasts until you send /new.`]
-        // Listing a command that now returns immediately would be a lie: with an
-        // allowlist configured there is nothing left to approve.
-        : [`(Commands run without per-command approval — you are on the allowlist. Catastrophic commands are still refused.)`]),
+      `/approve-all — Approve all pending confirmations AND all future commands without asking (ON by default).`,
+      `/manual-approve — Turn the tap-per-command prompts back on.`,
+      `(Catastrophic commands — rm -rf /, disk wipes — are always refused.)`,
       `/new — New session: clears history and turns off auto-approve mode`,
       ``,
       `💡 I remember conversations permanently — whatever you ask me, I'll recall it next time!`,
@@ -1271,7 +1285,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   // always showed follows below the live-task section.
   if (lower === '/status') {
     const lines: string[] = [];
-    if (autoApproveChats.has(String(chatId))) {
+    if (autoApproveChats.has(String(chatId)) || !PER_COMMAND_APPROVAL && !manualApproveChats.has(String(chatId))) {
       lines.push('⚡ Auto-approve ON — commands execute without asking (until /new).');
     }
     const set = runningTasks.get(String(chatId));
@@ -1342,22 +1356,44 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   // accept-all mode.
   if (lower === '/approve-all') {
     autoApproveChats.add(String(chatId));
+    manualApproveChats.delete(String(chatId));
     const n = flushApprovals(String(chatId), true);
     return [
       `⚡ Auto-approve ON — all commands execute without asking, including destructive ones.`,
       ...(n > 0 ? [`Approved ${n} pending confirmation(s) that were waiting.`] : []),
-      `Stays on until /new resets the session.`,
+      `This is the default. /manual-approve puts the tap-per-command prompts back.`,
+      `Catastrophic commands (rm -rf /, disk wipes) stay refused either way.`,
+    ].join('\n');
+  }
+
+  // ── /manual-approve — the inverse of /approve-all, now that auto is default ─
+  if (lower === '/manual-approve') {
+    manualApproveChats.add(String(chatId));
+    autoApproveChats.delete(String(chatId));
+    return [
+      `🔒 Manual approval ON — I'll ask before each command that changes anything.`,
+      `/approve-all turns it back off.`,
     ].join('\n');
   }
 
   if (lower === '/time') return `🕐 ${new Date().toLocaleString('sr-RS', { timeZone: 'Europe/Belgrade' })}`;
 
   // ── /provider — switch AI model for this chat ─────────────────────────────
-  if (lower === '/provider' || lower.startsWith('/provider ')) {
-    const arg = text.slice(9).trim();
+  if (lower === '/provider' || lower.startsWith('/provider ') ||
+      lower === '/model' || lower.startsWith('/model ') ||
+      lower === '/models' || lower.startsWith('/models ')) {
+    // '/model' is the natural spelling; '/models' takes an optional scope.
+    // Slicing by the matched prefix keeps '/model x' and '/provider x' honest
+    // about where the model id starts (the old hard-coded slice(9) only ever
+    // lined up for '/provider').
+    const prefix = lower.split(' ')[0];
+    const arg = text.slice(prefix.length).trim();
+    // 'all' asks for EVERY configured model, not just the curated families.
+    const showAll = /^all$/i.test(arg);
+    const modelArg = showAll ? '' : arg;
 
     // No argument: list current + available configured models
-    if (!arg) {
+    if (!modelArg) {
       const currentProvider = chatProviders.get(String(chatId));
       const currentModel = currentProvider ? currentProvider.name : DEFAULT_CHAT_MODEL;
       const configured = getAllModels().filter(m => isModelConfigured(m.id));
@@ -1366,36 +1402,50 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       // providers; listing every configured one put ~57 undifferentiated lines
       // in a chat message, most of them for providers nobody here uses. These
       // are the families that get used, in the order they get reached for.
-      const featured = configured.filter(m => TELEGRAM_PROVIDERS.includes(m.provider));
+      // Ollama/Local entries report themselves as configured without any key
+      // (isModelConfigured returns true for local prefixes), but listing models
+      // whose server is not actually running just leads to failed switches.
+      const live = configured.filter(m => !LOCAL_ONLY_PROVIDERS.includes(m.provider));
       // Fall back to the full list rather than an empty one: a bot with keys
       // for something unlisted should still be switchable.
-      const shown = featured.length > 0 ? featured : configured;
+      const featured = live.filter(m => TELEGRAM_PROVIDERS.includes(m.provider));
+      // '/models all' drops the curation and shows every family we hold a key
+      // for — the full inventory, grouped, one message per chunk.
+      const shown = showAll ? live : (featured.length > 0 ? featured : live);
 
       const lines: string[] = [`🤖 Current: ${currentModel}`, ``];
 
+      // Curated order first, then whatever families curation left out — so
+      // 'all' still leads with the everyday ones instead of an alphabet soup.
       const order = featured.length > 0
-        ? TELEGRAM_PROVIDERS
+        ? [...TELEGRAM_PROVIDERS, ...[...new Set(shown.map(m => m.provider))].filter(p => !TELEGRAM_PROVIDERS.includes(p))]
         : [...new Set(shown.map(m => m.provider))];
 
       for (const providerName of order) {
         const models = shown.filter(m => m.provider === providerName);
         if (models.length === 0) continue;
+        // Free tiers lead each family — the ones worth reaching for first.
+        // Speed strings carry the marker ('free', 'fast · free', …).
+        const sorted = [
+          ...models.filter(m => /free/i.test(m.speed)),
+          ...models.filter(m => !/free/i.test(m.speed)),
+        ];
         lines.push(`${providerName}`);
-        for (const m of models) lines.push(`  • ${m.id} (${m.speed})`);
+        for (const m of sorted) lines.push(`  • ${m.id} (${m.speed})`);
         lines.push(``);
       }
 
-      if (featured.length > 0 && configured.length > featured.length) {
-        lines.push(`${configured.length - featured.length} more configured elsewhere — /provider <model_id> switches to any of them.`);
+      if (!showAll && featured.length > 0 && live.length > featured.length) {
+        lines.push(`${live.length - featured.length} more configured elsewhere — /models all lists them all.`);
       }
-      lines.push(`💡 /provider <model_id> to switch (this chat only)`);
+      lines.push(`💡 /model <model_id> to switch (this chat only) · ${live.length} model${live.length === 1 ? '' : 's'} with keys`);
       return lines.join('\n');
     }
 
     // With argument: switch to that model
-    const newModel = arg;
+    const newModel = modelArg;
     if (!isModelConfigured(newModel)) {
-      return `❌ Model not configured or missing API key: ${newModel}\n\n💡 Use /provider to see available models.`;
+      return `❌ Model not configured or missing API key: ${newModel}\n\n💡 Use /models to see available models.`;
     }
 
     // Detect cost tier for hint
@@ -1514,6 +1564,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       fs.unlinkSync(filePath);
     }
     const wasAuto = autoApproveChats.delete(String(chatId));
+    manualApproveChats.delete(String(chatId));
     return [
       '🗑️ Istorija razgovora obrisana. Možemo početi iz početka!',
       ...(wasAuto ? ['🔒 Auto-approve isključen — komande opet traže potvrdu.'] : []),
@@ -1648,9 +1699,14 @@ async function poll(): Promise<void> {
   // Whether a stranger can reach a shell on this PC is the single most
   // important fact about a given start, so it goes in the banner rather than
   // being inferred from the config file.
+  // Dušan's resting state is approve-all, so the banner has to name the real
+  // gate: WHO can reach the bot, and whether commands prompt.
+  const gate = PER_COMMAND_APPROVAL
+    ? 'per-command approval ON (TELEGRAM_REQUIRE_APPROVAL=1)'
+    : 'approve-all by default — commands run without asking';
   console.log(`   Auth: ${ALLOWED_USER_IDS.length > 0
-    ? `${ALLOWED_USER_IDS.length} allowed user id(s) · per-command approval OFF (Hermes parity)`
-    : '⚠️ NO ALLOWLIST — open to anyone · per-command approval ON'}`);
+    ? `${ALLOWED_USER_IDS.length} allowed user id(s) · ${gate}`
+    : `⚠️ NO ALLOWLIST — open to anyone · ${gate}`}`);
   console.log(`   Offset: ${offset}`);
   console.log(`   Long-polling Telegram (30s)…`);
   console.log('');

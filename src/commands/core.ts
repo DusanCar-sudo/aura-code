@@ -54,10 +54,12 @@ import { handleCostCommand } from '../cli/repl-cost-command.js';
 import { handleArchimedesCommand } from '../cli/repl-archimedes-commands.js';
 import { handleUsageCommand } from '../cli/repl-usage-commands.js';
 import { handleSkillsCommand } from '../cli/repl-skills-command.js';
+import { handleThemeCommand } from '../cli/repl-theme-commands.js';
 import { HELP_TEXT } from '../cli/help-data.js';
-import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX } from '../cli/diamond.js';
+import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, CHROME, ERR, INFO, OK, WARN } from '../cli/diamond.js';
 import { ContextHealthTracker } from '../cli/context-health.js';
 import type { LLMProvider, HistoryMessage } from '../providers/types.js';
+import { tokenHex } from '../cli/diamond.js';
 import type { Display } from '../cli/display.js';
 import { envMaxTokens } from '../providers/openai-compatible.js';
 import { checkComputerUseGate } from '../tools/screen/disclosure.js';
@@ -174,7 +176,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         return { handled: true };
       }
       const item = addToQueue(prompt);
-      emit(chalk.hex('#5a9e6e')(`\n  ✓ Queued #${loadQueue().length}: "${prompt.slice(0, 60)}"\n`));
+      emit(OK(`\n  ✓ Queued #${loadQueue().length}: "${prompt.slice(0, 60)}"\n`));
       return { handled: true };
     }
 
@@ -220,7 +222,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         c.display.warning(`No item at position ${n}.`);
         return { handled: true };
       }
-      emit(chalk.hex('#5a9e6e')(`\n  ✓ Dropped #${n}: "${removed.prompt.slice(0, 60)}"\n`));
+      emit(OK(`\n  ✓ Dropped #${n}: "${removed.prompt.slice(0, 60)}"\n`));
       return { handled: true };
     }
 
@@ -231,7 +233,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         return { handled: true };
       }
       clearQueue();
-      emit(chalk.hex('#5a9e6e')(`\n  ✓ Queue cleared (${count} item(s) removed).\n`));
+      emit(OK(`\n  ✓ Queue cleared (${count} item(s) removed).\n`));
       return { handled: true };
     }
 
@@ -271,10 +273,10 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         permissions: c.permissions,
         display: c.display,
       });
-      emit(chalk.hex('#5a9e6e')(`  ✓ Research written: ${res.path}`));
+      emit(OK(`  ✓ Research written: ${res.path}`));
       emit(chalk.hex(TEXT_DIM_HEX)(`  ${res.turns} turn(s) · ${res.toolCalls} tool call(s).\n`));
     } catch (e) {
-      emit(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+      emit(ERR(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -288,7 +290,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
 
     if (dxArgs.listStyles) {
       const { DESIGN_STYLES } = await import('../design/styles.js');
-      emit(chalk.hex('#cc785c').bold(`\n  Design lexicon — ${DESIGN_STYLES.length} directions\n`));
+      emit(CHROME.bold(`\n  Design lexicon — ${DESIGN_STYLES.length} directions\n`));
       for (const s of DESIGN_STYLES) {
         emit(`  ${chalk.hex(TEXT_HEX).bold(s.name)} ${chalk.hex(FAINT_HEX)(`(${s.id})`)}`);
         emit(chalk.hex(TEXT_DIM_HEX)(`    risk ${s.risk}/5 · ${s.fits.join(', ')} · ${s.lineage}`));
@@ -308,7 +310,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       brief: dxArgs.brief, target: dxArgs.target, daring: dxArgs.daring,
       pinned: dxArgs.pinned, seed: dxArgs.seed, count: dxArgs.count,
     });
-    emit(chalk.hex('#cc785c').bold(`\n  ✦ designx — ${dxArgs.target}${dxArgs.targetInferred ? chalk.hex(FAINT_HEX)(' (inferred)') : ''} · ${dxArgs.daring}`));
+    emit(CHROME.bold(`\n  ✦ designx — ${dxArgs.target}${dxArgs.targetInferred ? chalk.hex(FAINT_HEX)(' (inferred)') : ''} · ${dxArgs.daring}`));
     for (const s of previewStyles) {
       emit(chalk.hex(TEXT_HEX)(`    ▸ ${s.name}`) + chalk.hex(FAINT_HEX)(`  risk ${s.risk}/5`));
     }
@@ -337,17 +339,17 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         // Reported as an error rather than a success with a caveat, because the
         // directory listing alone looks exactly like a completed run.
         c.display.error(`designx wrote ${dx.files.length} file(s) but they are not finished:`);
-        for (const p of dx.problems) emit(chalk.hex('#b15439')(`    ${p.file}: ${p.problem}`));
+        for (const p of dx.problems) emit(ERR(`    ${p.file}: ${p.problem}`));
         emit(chalk.hex(TEXT_DIM_HEX)(`  ${dx.dir}`));
         emit(chalk.hex(FAINT_HEX)('  Re-run to have it rebuild them in a single write.\n'));
       } else {
-        emit(chalk.hex('#5a9e6e')(`\n  ✓ ${dx.dir}`));
+        emit(OK(`\n  ✓ ${dx.dir}`));
         for (const f of dx.files) emit(chalk.hex(TEXT_DIM_HEX)(`    ${f}`));
         emit(chalk.hex(FAINT_HEX)(`  ${dx.turns} turn(s) · ${dx.toolCalls} tool call(s) · led with ${dx.styles[0]?.name ?? 'no direction'}`));
         emit(chalk.hex(FAINT_HEX)(`  Re-roll: :designx ${dxArgs.brief} --seed ${(dxArgs.seed ?? 0) + 1}\n`));
       }
     } catch (e) {
-      emit(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+      emit(ERR(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -357,7 +359,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     if (confs.length === 0) {
       emit(chalk.hex(TEXT_DIM_HEX)('\n  No confessions yet. Run :confess after a high-token episode.\n'));
     } else {
-      emit(chalk.hex('#cc785c').bold(`\n  ${confs.length} confession(s):\n`));
+      emit(CHROME.bold(`\n  ${confs.length} confession(s):\n`));
       for (const c of confs) {
         emit(chalk.hex(TEXT_DIM_HEX)(`  ${c.file}`));
         emit(chalk.hex(FAINT_HEX)(`    ${c.tokens.toLocaleString()} tokens burned → ${c.lesson.slice(0, 100)}`));
@@ -370,7 +372,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     const { runConfession, findEpisodeToConfess } = await import('../agent/confess.js');
     const targetEp = findEpisodeToConfess(c.ctx.root);
     if (!targetEp) {
-      emit(chalk.hex('#cc9e5c')('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
+      emit(WARN('\n  No anomalous episode found. Confession is fully automatic — the system alone decides what to confess.\n'));
       return { handled: true };
     }
     emit(chalk.hex(TEXT_DIM_HEX)(`\n  🙏 Confessing episode ${targetEp.id.slice(0,8)}… — ${targetEp.task.slice(0,60)} (${(targetEp.tokens/1e6).toFixed(1)}M tok)\n`));
@@ -384,12 +386,12 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         episodeId: targetEp.id,
         provider,
       });
-      emit(chalk.hex('#5a9e6e')(`  ✓ Confession written: ${result.path}`));
+      emit(OK(`  ✓ Confession written: ${result.path}`));
       emit(chalk.hex(TEXT_DIM_HEX)(`  Tokens burned: ${result.tokensBurned.toLocaleString()} | Confession cost: ${result.tokensSpent.toLocaleString()} (${confessorModel})`));
       emit(chalk.hex('#cc9e6c')('  Permanent lesson:'));
       emit(chalk.hex(TEXT_HEX)(`  "${result.lesson}"\n`));
     } catch (e) {
-      emit(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+      emit(ERR(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -426,7 +428,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       if (s.total === 0) {
         c.display.warning('No training-data rows yet — run :mine --refine or :mine --corrections to produce them.');
       } else {
-        emit(chalk.hex('#cc785c').bold(`\n  Training-data corpus (${s.total} row(s)):\n`));
+        emit(CHROME.bold(`\n  Training-data corpus (${s.total} row(s)):\n`));
         for (const [prov, n] of Object.entries(s.byProvenance)) {
           emit(chalk.hex(TEXT_DIM_HEX)(`    ${prov.padEnd(12)} ${n}`));
         }
@@ -437,7 +439,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       emit(chalk.hex(TEXT_DIM_HEX)('\n  Collecting direct correction pairs from escalation episodes…'));
       const res = await collectCorrections(c.ctx.root);
       if (res.written.length > 0) {
-        emit(chalk.hex('#5a9e6e')(`  ✓ ${res.written.length} correction pair(s) appended: ${res.outputPath}`));
+        emit(OK(`  ✓ ${res.written.length} correction pair(s) appended: ${res.outputPath}`));
         emit(chalk.hex(FAINT_HEX)(`    ${res.skipped} episode(s) skipped (not escalations).\n`));
       } else {
         c.display.warning(`No correction pairs — ${res.skipped} episode(s) skipped (not escalations).`);
@@ -450,7 +452,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         c.display.warning('No episodes to mine yet — run some tasks first.');
         return { handled: true };
       }
-      emit(chalk.hex('#cc785c').bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
+      emit(CHROME.bold(`\n  Mined ${mined.concepts.length} concept(s) from ${mined.episodeCount} episode(s) (${mined.unclustered} unclustered):\n`));
       for (const con of mined.concepts.slice(0, 15)) {
         emit(chalk.hex(TEXT_DIM_HEX)(`  ${con.concept}`) + chalk.hex(FAINT_HEX)(`  (${con.category} · ×${con.frequency} · conf ${con.confidence} · depth ${con.depth})`));
         if (con.keywords.length > 0) emit(chalk.hex(FAINT_HEX)(`    keywords: ${con.keywords.join(', ')}`));
@@ -462,7 +464,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       const { refineConcepts } = await import('../mining/refine.js');
       const res = await refineConcepts({ projectRoot: c.ctx.root, concepts: mined.concepts });
       if (res.accepted.length > 0) {
-        emit(chalk.hex('#5a9e6e')(`  ✓ ${res.accepted.length} training example(s) appended: ${res.outputPath}`));
+        emit(OK(`  ✓ ${res.accepted.length} training example(s) appended: ${res.outputPath}`));
         emit(chalk.hex(FAINT_HEX)(`    ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.\n`));
       } else {
         c.display.warning(`No concepts survived refinement — ${res.rejected} rejected, ${res.skipped} below the confidence/frequency gate.`);
@@ -562,14 +564,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         panelSize, panelModel,
         configuredModel: c.providerConfig.model,
       });
-      emit(chalk.hex('#5a9e6e')(`  ✓ Ecclesia verdict written: ${res.path}`));
-      emit(chalk.hex('#5a9e6e')(`    HTML: ${res.htmlPath}`));
+      emit(OK(`  ✓ Ecclesia verdict written: ${res.path}`));
+      emit(OK(`    HTML: ${res.htmlPath}`));
       emit(chalk.hex(TEXT_DIM_HEX)(`  ${res.panelSize} seats on ${res.panelModel}.`));
       if (res.agentFailures > 0) {
         c.display.warning(`${res.agentFailures} of ${res.panelSize} panel agent(s) failed — verdict is based on the rest.`);
       }
     } catch (e) {
-      emit(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+      emit(ERR(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -588,13 +590,13 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     if (arg === 'status') {
       const st = NerdsPolicy.getState();
       emit(st.enabled
-        ? chalk.hex('#6ed0ea')(`\n  Nerds on — writer: ${st.holder ?? 'none'}${st.waiting.length ? `, waiting: ${st.waiting.join(', ')}` : ''}\n`)
+        ? INFO(`\n  Nerds on — writer: ${st.holder ?? 'none'}${st.waiting.length ? `, waiting: ${st.waiting.join(', ')}` : ''}\n`)
         : chalk.hex(TEXT_DIM_HEX)('\n  Nerds off.\n'));
       return { handled: true };
     }
 
     NerdsPolicy.enable();
-    emit(chalk.hex('#6ed0ea').bold('\n  🤓 Nerds on'));
+    emit(INFO.bold('\n  🤓 Nerds on'));
     emit(chalk.hex(TEXT_DIM_HEX)('  Read-only work runs in parallel; only one writer at a time, the rest queue.'));
     emit(chalk.hex(TEXT_DIM_HEX)("  The lease is live — board runs do not consult it yet. ':nerds off' ends it.\n"));
 
@@ -623,14 +625,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     if (arg === 'status') {
       const st = MarathonManager.getState();
       emit(st.enabled
-        ? chalk.hex('#6ed0ea')(`\n  Marathon mode on — ${formatRemaining(st.remainingMs)} left.\n`)
+        ? INFO(`\n  Marathon mode on — ${formatRemaining(st.remainingMs)} left.\n`)
         : chalk.hex(TEXT_DIM_HEX)('\n  Marathon mode off.\n'));
       return { handled: true };
     }
 
     MarathonManager.activate();
     const { remainingMs } = MarathonManager.getState();
-    emit(chalk.hex('#6ed0ea').bold('\n  🏃 Marathon mode on'));
+    emit(INFO.bold('\n  🏃 Marathon mode on'));
     emit(chalk.hex(TEXT_DIM_HEX)(`  Lapses on its own in ${formatRemaining(remainingMs)}. ':marathon off' ends it sooner.`));
     emit(chalk.hex(TEXT_DIM_HEX)('  It is a flag: nothing in the run loop reads it yet, so turns behave as usual.\n'));
 
@@ -673,6 +675,11 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
   // indistinguishable from a loaded one.
   const skillsCmd = handleSkillsCommand(input, { projectRoot: c.ctx.root });
   if (skillsCmd) return skillsCmd;
+
+  // ── Theme ────────────────────────────────────────────────────────────────
+  // :theme wears one of the Aura adOS palettes (see repl-theme-commands.ts).
+  const themeCmd = handleThemeCommand(input);
+  if (themeCmd) return themeCmd;
 
   if (input === ':help' || input === '/help') {
     emit(chalk.hex(TEXT_DIM_HEX)(HELP_TEXT.join('\n')));
@@ -801,20 +808,20 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       const sent = cur ? clampEffort(cur, target) : undefined;
       emit(chalk.hex(TEXT_DIM_HEX)(
         `  effort: ${cur ?? 'provider default'}`
-        + (cur && sent !== cur ? chalk.hex('#d4903a')(`  (sent as "${sent}" — ${c.providerConfig.model} tops out there)`) : '')
+        + (cur && sent !== cur ? WARN(`  (sent as "${sent}" — ${c.providerConfig.model} tops out there)`) : '')
         + `\n  ladder: ${EFFORT_LEVELS.join(' · ')}`
         + `\n  usage:  :effort <level>`));
       return { handled: true };
     }
     const level = parseEffort(arg);
     if (!level) {
-      emit(chalk.hex('#b15439')(
+      emit(ERR(
         `  ✗ Unknown effort "${arg}". Expected one of: ${EFFORT_LEVELS.join(', ')}`));
       return { handled: true };
     }
-    emit(chalk.hex('#5a9e6e')(`  ✓ Effort: ${level} — live from the next task.`)
+    emit(OK(`  ✓ Effort: ${level} — live from the next task.`)
       + (wasClamped(level, target)
-        ? chalk.hex('#d4903a')(` Sent as "${clampEffort(level, target)}", the ceiling for ${c.providerConfig.model}.`)
+        ? WARN(` Sent as "${clampEffort(level, target)}", the ceiling for ${c.providerConfig.model}.`)
         : ''));
     if (level === 'none') {
       emit(chalk.hex(TEXT_DIM_HEX)('  Thinking disabled — the model answers without a chain of thought.'));
@@ -825,7 +832,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
   if (input === ':id') {
     const cs = c.chatState;
     if (cs.activeChatId) {
-      emit(chalk.hex(TEXT_DIM_HEX)(`\n  Chat ID: ${chalk.hex('#cc785c')(cs.activeChatId)}`));
+      emit(chalk.hex(TEXT_DIM_HEX)(`\n  Chat ID: ${CHROME(cs.activeChatId)}`));
       if (cs.activeChatTitle) emit(chalk.hex(TEXT_DIM_HEX)(`  Title:   ${cs.activeChatTitle}`));
       emit(chalk.hex(FAINT_HEX)(`  Turns:   ${Math.floor(cs.activeChatHistory.length / 2)}\n`));
     } else {
@@ -848,7 +855,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       ));
     } else {
       const otherProjects = new Set(sessions.map(s => s.project)).size;
-      emit(chalk.hex('#cc785c').bold(
+      emit(CHROME.bold(
         hereOnly ? '\n  Saved sessions (this project):\n'
                  : `\n  Saved sessions (${sessions.length} across ${otherProjects} project${otherProjects === 1 ? '' : 's'}):\n`,
       ));
@@ -865,12 +872,12 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
         const num = chalk.hex(TEXT_DIM_HEX)(`[#${i + 1}]`.padEnd(5));
         const updated = new Date(s.updatedAt).toLocaleString();
         const turns = Math.floor(s.history.length / 2);
-        const marker = s.id === c.chatState.activeChatId ? chalk.hex('#5a9e6e')(' ← current') : '';
+        const marker = s.id === c.chatState.activeChatId ? OK(' ← current') : '';
         const here = path.resolve(s.projectRoot) === thisRoot;
         const label = (path.basename(s.projectRoot) || s.projectRoot).replace(/^_+/, '').slice(0, 24);
         const proj = hereOnly || here ? '' : chalk.hex(FAINT_HEX)(` · ${label}`);
         emit(
-          `  ${num} ${chalk.hex('#cc785c')(s.id.padEnd(20))} ` +
+          `  ${num} ${CHROME(s.id.padEnd(20))} ` +
           `${chalk.hex(TEXT_HEX)(s.title.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(FAINT_HEX)(`${turns}t · ${updated}`)}${proj}${marker}`,
         );
@@ -905,7 +912,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     const { getContextWindow } = await import('../providers/factory.js');
     const history = c.chatState.activeChatHistory;
     if (history.length <= 1) {
-      emit(chalk.hex('#d4903a')('\n  Nothing to compact — history is empty or has only the task.\n'));
+      emit(WARN('\n  Nothing to compact — history is empty or has only the task.\n'));
       return { handled: true };
     }
     const model = c.providerConfig.model;
@@ -915,15 +922,15 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     // Force compaction by passing totalTokens = Infinity so the threshold check is bypassed.
     const compacted = compactHistory(history, Infinity, model);
     if (!compacted) {
-      emit(chalk.hex('#d4903a')('\n  Compaction had no effect — history is already minimal.\n'));
+      emit(WARN('\n  Compaction had no effect — history is already minimal.\n'));
       return { handled: true };
     }
     const afterTokens = estimateContextTokens('', history);
     const saved = beforeTokens > 0 ? ((1 - afterTokens / beforeTokens) * 100).toFixed(0) : '0';
     const newGen = getRecapGeneration(history);
-    emit(chalk.hex('#5a9e6e')(
+    emit(OK(
       `\n  ✓ Context compacted: ${beforeTokens.toLocaleString()} → ${afterTokens.toLocaleString()} tokens ` +
-      chalk.hex('#5a9e6e')(`(-${saved}%)`) +
+      OK(`(-${saved}%)`) +
       ` · gen ${generation}→${newGen} · window ${(window / 1000).toFixed(0)}k\n`,
     ));
     c.healthTracker.recordCompaction(beforeTokens, afterTokens, newGen);
@@ -941,7 +948,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     if (!summary) {
       emit(chalk.hex(TEXT_DIM_HEX)('\n  No graph.json found. Run :graph extract to build it.\n'));
     } else {
-      emit(chalk.hex('#cc785c').bold('\n  Codebase Knowledge Graph\n'));
+      emit(CHROME.bold('\n  Codebase Knowledge Graph\n'));
       emit(chalk.hex(TEXT_DIM_HEX)(summary));
       emit('');
     }
@@ -956,11 +963,11 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     ));
     try {
       const outPath = all ? generateGlobalDashboard() : generateDashboard(c.ctx.root);
-      emit(chalk.hex('#5a9e6e')(`  ✓ Dashboard written to ${outPath}`));
+      emit(OK(`  ✓ Dashboard written to ${outPath}`));
       emit(chalk.hex(TEXT_DIM_HEX)('  Opening in browser…\n'));
       openDashboard(outPath);
     } catch (e) {
-      emit(chalk.hex('#b15439')(`  ✗ ${String(e)}\n`));
+      emit(ERR(`  ✗ ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -971,14 +978,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     if (!plans.length) {
       emit(chalk.hex(TEXT_DIM_HEX)('\n  No execution plans found.\n'));
     } else {
-      emit(chalk.hex('#cc785c').bold('\n  Execution plans:\n'));
+      emit(CHROME.bold('\n  Execution plans:\n'));
       for (const p of plans.slice(0, 15)) {
         const created = new Date(p.created).toLocaleString();
         const dur = p.completed ? `${Math.round((p.completed - p.created) / 1000)}s` : '—';
-        const statusColor = p.status === 'done' ? '#5a9e6e' : p.status === 'failed' ? '#b15439' : '#cc9e5c';
+        const statusColor = p.status === 'done' ? tokenHex('ok') : p.status === 'failed' ? tokenHex('err') : tokenHex('warn');
         emit(
           `  ${chalk.hex(statusColor)(p.status.padEnd(8))} ` +
-          `${chalk.hex('#cc785c')(p.id.slice(0, 12).padEnd(14))} ` +
+          `${CHROME(p.id.slice(0, 12).padEnd(14))} ` +
           `${chalk.hex(TEXT_HEX)(p.goal.slice(0, 50).padEnd(51))} ` +
           `${chalk.hex(FAINT_HEX)(`${p.steps.length}s · ${dur} · ${created}`)}`,
         );
@@ -993,18 +1000,18 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     emit(chalk.hex(TEXT_DIM_HEX)(`\n  ${action} codebase graph…\n`));
     try {
       const outPath = await extractGraph(c.ctx.root);
-      emit(chalk.hex('#5a9e6e')(`  ✓ Graph written to ${outPath}`));
+      emit(OK(`  ✓ Graph written to ${outPath}`));
       // Reload context graph so :graph and the agent loop see it immediately
       c.ctx.graphSummary = loadGraphSummary(c.ctx.root);
       if (c.ctx.graphSummary) {
         const n = c.ctx.graphSummary.match(/Top (\d+) of (\d+) nodes/);
         const counts = n ? `${n[1]}/${n[2]} nodes` : '';
-        emit(chalk.hex('#5a9e6e')(`  ✓ Injected into context (${counts}).\n`));
+        emit(OK(`  ✓ Injected into context (${counts}).\n`));
       } else {
         emit(chalk.hex(TEXT_DIM_HEX)('  Graph saved but could not be loaded into context.\n'));
       }
     } catch (e) {
-      emit(chalk.hex('#b15439')(`  ✗ Extraction failed: ${String(e)}\n`));
+      emit(ERR(`  ✗ Extraction failed: ${String(e)}\n`));
     }
     return { handled: true };
   }
@@ -1030,14 +1037,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     if (workflows.length === 0) {
       emit(chalk.hex(TEXT_DIM_HEX)('\n  No saved workflows.\n'));
     } else {
-      emit(chalk.hex('#cc785c').bold('\n  Saved workflows:\n'));
+      emit(CHROME.bold('\n  Saved workflows:\n'));
       for (const ws of workflows) {
         const created = new Date(ws.definition.createdAt).toLocaleString();
         const doneSteps = ws.stepStates.filter(s => s.status === 'done').length;
         const totalSteps = ws.definition.steps.length;
-        const statusColor = ws.status === 'done' ? '#5a9e6e' : ws.status === 'failed' ? '#b15439' : '#cc785c';
+        const statusColor = ws.status === 'done' ? tokenHex('ok') : ws.status === 'failed' ? tokenHex('err') : tokenHex('chrome');
         emit(
-          `  ${chalk.hex('#cc785c')(ws.definition.id.padEnd(24))} ` +
+          `  ${CHROME(ws.definition.id.padEnd(24))} ` +
           `${chalk.hex(TEXT_HEX)(ws.definition.name.slice(0, 36).padEnd(37))} ` +
           `${chalk.hex(statusColor)(ws.status.padEnd(8))} ` +
           `${chalk.hex(FAINT_HEX)(`${doneSteps}/${totalSteps} steps · ${created}`)}`,
@@ -1053,7 +1060,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     // Parse: <name> "step1" "step2" ...  or  <name> step1 step2 ...
     const match = parts.match(/^(\S+)\s+(.+)$/);
     if (!match) {
-      emit(chalk.hex('#b15439')('  ✗ Usage: :workflow <name> "step 1" "step 2" ...'));
+      emit(ERR('  ✗ Usage: :workflow <name> "step 1" "step 2" ...'));
       return { handled: true };
     }
     const workflowName = match[1];
@@ -1067,7 +1074,7 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     }
 
     if (stepTasks.length === 0) {
-      emit(chalk.hex('#b15439')('  ✗ At least one step task is required.'));
+      emit(ERR('  ✗ At least one step task is required.'));
       return { handled: true };
     }
 
@@ -1076,14 +1083,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
       task,
     }));
 
-    emit(chalk.hex('#cc785c').bold(`\n  Creating workflow "${workflowName}" with ${steps.length} steps...\n`));
+    emit(CHROME.bold(`\n  Creating workflow "${workflowName}" with ${steps.length} steps...\n`));
 
     const state = await createWorkflow({ name: workflowName, steps });
-    emit(chalk.hex('#5a9e6e')(`  ✓ Workflow created: ${state.definition.id}\n`));
+    emit(OK(`  ✓ Workflow created: ${state.definition.id}\n`));
 
     // Build the runStep callback using the REPL context's provider
     const runStep = async (task: string, stepIndex: number): Promise<StepResult> => {
-      emit(chalk.hex('#cc785c')(`  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
+      emit(CHROME(`  ▸ Step ${stepIndex + 1}/${steps.length}: ${task}\n`));
 
       const { createResilientProvider } = await import('../providers/resilient-factory.js');
       const currentProvider = createResilientProvider(
@@ -1108,9 +1115,9 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
 
     const finalState = await runWorkflow(state, runStep);
     if (finalState.status === 'done') {
-      emit(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+      emit(OK.bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
-      emit(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
+      emit(ERR.bold(`\n  ✗ ${finalState.outcome}`));
       emit(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 
@@ -1120,14 +1127,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
   if (input.startsWith(':resume-workflow ')) {
     const workflowId = input.slice(':resume-workflow '.length).trim();
     if (!workflowId) {
-      emit(chalk.hex('#b15439')('  ✗ Usage: :resume-workflow <id>'));
+      emit(ERR('  ✗ Usage: :resume-workflow <id>'));
       return { handled: true };
     }
 
-    emit(chalk.hex('#cc785c').bold(`\n  Resuming workflow ${workflowId}...\n`));
+    emit(CHROME.bold(`\n  Resuming workflow ${workflowId}...\n`));
 
     const runStep = async (task: string, stepIndex: number): Promise<StepResult> => {
-      emit(chalk.hex('#cc785c')(`  ▸ Step ${stepIndex + 1}: ${task}\n`));
+      emit(CHROME(`  ▸ Step ${stepIndex + 1}: ${task}\n`));
 
       const { createResilientProvider } = await import('../providers/resilient-factory.js');
       const currentProvider = createResilientProvider(
@@ -1152,14 +1159,14 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
 
     const finalState = await resumeWorkflow(workflowId, runStep);
     if (!finalState) {
-      emit(chalk.hex('#b15439')(`  ✗ Workflow not found: ${workflowId}\n`));
+      emit(ERR(`  ✗ Workflow not found: ${workflowId}\n`));
       return { handled: true };
     }
 
     if (finalState.status === 'done') {
-      emit(chalk.hex('#5a9e6e').bold(`\n  ✓ ${finalState.outcome}\n`));
+      emit(OK.bold(`\n  ✓ ${finalState.outcome}\n`));
     } else {
-      emit(chalk.hex('#b15439').bold(`\n  ✗ ${finalState.outcome}`));
+      emit(ERR.bold(`\n  ✗ ${finalState.outcome}`));
       emit(chalk.hex(TEXT_DIM_HEX)(`  Resume with: :resume-workflow ${finalState.definition.id}\n`));
     }
 

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { refreshKeysFromStore } from '../setup/key-store.js';
 
 /**
  * Provider-agnostic env-var reader.
@@ -15,6 +16,8 @@ import * as path from 'path';
  * the `??` operator and have it fall through to the next fallback.
  */
 export function getApiKey(canonical: string, ...aliases: string[]): string | undefined {
+  // Pick up a key another session saved since startup (no-op outside the CLI).
+  refreshKeysFromStore();
   const names = [canonical, canonical.toLowerCase(), ...aliases];
   for (const name of names) {
     const v = process.env[name];

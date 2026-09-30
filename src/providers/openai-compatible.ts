@@ -16,6 +16,7 @@ export function envMaxTokens(): number | undefined {
 import { clampEffort, parseEffort } from './effort.js';
 import { paramPolicyFor, authErrorHint } from './param-policy.js';
 import { withIdleTimeout, streamIdleMs, isStreamStalled } from './stream-timeout.js';
+import { currentKey } from '../setup/key-store.js';
 import type {
   LLMProvider, ProviderConfig, ToolDefinition,
   HistoryMessage, LLMResponse, StreamChunk, ToolCall,
@@ -102,6 +103,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     tools: ToolDefinition[],
   ): Promise<LLMResponse> {
     const messages = toOpenAIMessages(system, history);
+    this.syncKey();
     const response = await this.withAuthHint(this.client.chat.completions.create({
       model: this.model,
       max_tokens: this.maxTokens,
@@ -115,6 +117,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
     } as OpenAI.ChatCompletionCreateParamsNonStreaming));
     return fromOpenAIResponse(response);
+  }
+
+  /**
+   * Swap in a replacement key when keys.json has replaced the one this
+   * provider was built with — e.g. another session saved a new key with
+   * :apikey. Without this a running session kept sending the dead key until
+   * it was restarted.
+   */
+  private syncKey(): void {
+    if (!this.configuredKey) return;
+    const k = currentKey(this.configuredKey);
+    if (k === this.configuredKey) return;
+    this.configuredKey = k;
+    this.client.apiKey = k;
   }
 
   /**
@@ -171,6 +187,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const messages = toOpenAIMessages(system, history);
     // Lets the idle guard tear down the socket instead of leaking it.
     const controller = new AbortController();
+    this.syncKey();
     const rawStream = await this.withAuthHint(this.client.chat.completions.create({
       model: this.model,
       max_tokens: this.maxTokens,

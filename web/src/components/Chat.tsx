@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Markdown, CopyButton } from './Markdown';
 import { Composer, type Attachment } from './Composer';
-import auraSign from '../assets/aura-sign.webp';
+import { PeakMark, Stripes } from './PeakMark';
 import type { Message, ToolEvent, PendingApproval } from '../hooks/useAura';
 
 type T = (key: string) => string;
@@ -163,7 +163,7 @@ export function Chat({
       >
         {displayList.length === 0 ? (
           <div className="chat-empty-state">
-            <img src={auraSign} alt="Aura Logo" className="empty-state-logo" />
+            <div className="empty-state-mark"><PeakMark size={72} className="empty-state-logo" /><Stripes width={64} /></div>
             <h2 className="empty-state-quote">I don't try. I verify.</h2>
             <p className="empty-state-sub">Give me something to reproduce, and I'll run it before I touch it.</p>
           </div>

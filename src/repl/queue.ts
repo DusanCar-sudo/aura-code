@@ -22,6 +22,8 @@ import type { ProjectContext } from '../agent/context.js';
 import { createTerminalDisplay } from '../cli/display.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { auraPath } from '../util/aura-home.js';
+import { CHROME, CHROME_DIM } from '../cli/diamond.js';
+import { tokenHex } from '../cli/diamond.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -140,19 +142,19 @@ export async function runQueueItem(
 // ── Formatting (for REPL display) ───────────────────────────────────────────
 
 export function formatQueue(items: QueueItem[]): string {
-  if (items.length === 0) return chalk.hex('#8a7768')('\n  Queue is empty. Use :q add <prompt> to enqueue a task.\n');
+  if (items.length === 0) return CHROME_DIM('\n  Queue is empty. Use :q add <prompt> to enqueue a task.\n');
 
   const lines = items.map((item, i) => {
     const statusColor: Record<string, string> = {
-      pending: '#8a7768',
-      running: '#d4903a',
-      done:    '#5a9e6e',
-      failed:  '#b15439',
+      pending: tokenHex('chromeDim'),
+      running: tokenHex('warn'),
+      done:    tokenHex('ok'),
+      failed:  tokenHex('err'),
     };
-    const color = statusColor[item.status] || '#8a7768';
+    const color = statusColor[item.status] || tokenHex('chromeDim');
     const statusIcon = item.status === 'done' ? '✓' : item.status === 'running' ? '⟳' : item.status === 'failed' ? '✗' : '·';
     const created = new Date(item.createdAt).toLocaleTimeString();
-    return `  ${chalk.hex('#cc785c')(String(i + 1).padEnd(3))} ${chalk.hex(color)(statusIcon)} ${chalk.hex('#ede0cc')(item.prompt.slice(0, 80))} ${chalk.hex('#4e3d30')(created)}`;
+    return `  ${CHROME(String(i + 1).padEnd(3))} ${chalk.hex(color)(statusIcon)} ${chalk.hex(tokenHex('fg'))(item.prompt.slice(0, 80))} ${chalk.hex(tokenHex('faint'))(created)}`;
   });
   return `\n${lines.join('\n')}\n`;
 }

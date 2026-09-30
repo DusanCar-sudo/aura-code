@@ -14,8 +14,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
-import { TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { TEXT_DIM_HEX, FAINT_HEX, CHROME, ERR, OK, SOFT, WARN } from './diamond.js';
 import type { TokenLogEntry } from '../agent/loop.js';
+import { tokenHex } from './diamond.js';
 
 export interface CostSummary {
   calls: number;
@@ -80,7 +81,7 @@ export function summarize(entries: TokenLogEntry[]): CostSummary {
 
 function bar(ratio: number, width = 20): string {
   const filled = Math.max(0, Math.min(width, Math.round(ratio * width)));
-  const colour = ratio >= 0.7 ? '#5a9e6e' : ratio >= 0.3 ? '#d4903a' : '#b15439';
+  const colour = ratio >= 0.7 ? tokenHex('ok') : ratio >= 0.3 ? tokenHex('warn') : tokenHex('err');
   return chalk.hex(colour)('█'.repeat(filled)) + chalk.hex(FAINT_HEX)('░'.repeat(width - filled));
 }
 
@@ -97,49 +98,49 @@ export function formatCostReport(entries: TokenLogEntry[], recent = 20): string 
   const s = summarize(entries);
   const w = process.stdout.columns ?? 80;
   const line = '─'.repeat(Math.min(w - 4, 68));
-  const out: string[] = ['', chalk.hex(FAINT_HEX)(line), chalk.hex('#cc785c').bold('  Cost & cache report'), chalk.hex(FAINT_HEX)(line), ''];
+  const out: string[] = ['', chalk.hex(FAINT_HEX)(line), CHROME.bold('  Cost & cache report'), chalk.hex(FAINT_HEX)(line), ''];
 
   out.push(
-    '  Calls:      ' + chalk.hex('#c8b5a0')(String(s.calls)),
-    '  Input:      ' + chalk.hex('#c8b5a0')(s.input.toLocaleString()) + ' tokens',
-    '  Output:     ' + chalk.hex('#c8b5a0')(s.output.toLocaleString()) + ' tokens',
-    '  Cost:       ' + chalk.hex('#c8b5a0')('$' + s.costUsd.toFixed(4)),
+    '  Calls:      ' + SOFT(String(s.calls)),
+    '  Input:      ' + SOFT(s.input.toLocaleString()) + ' tokens',
+    '  Output:     ' + SOFT(s.output.toLocaleString()) + ' tokens',
+    '  Cost:       ' + SOFT('$' + s.costUsd.toFixed(4)),
     '',
     '  Cache hit:  ' + bar(s.hitRatio) + ' ' + chalk.bold((s.hitRatio * 100).toFixed(1) + '%')
       + chalk.hex(TEXT_DIM_HEX)(`  (${s.cacheHit.toLocaleString()} of ${s.input.toLocaleString()} input tokens)`),
   );
 
   if (s.hitRatio < 0.3 && s.input > 50_000) {
-    out.push('', chalk.hex('#d4903a')('  ⚠  Low cache hit rate on a large session.'));
+    out.push('', WARN('  ⚠  Low cache hit rate on a large session.'));
     out.push(chalk.hex(TEXT_DIM_HEX)('     Input is being re-sent uncached each turn. Common causes: a system'));
     out.push(chalk.hex(TEXT_DIM_HEX)('     prompt that changes between calls, or a provider that does not cache.'));
   } else if (s.hitRatio >= 0.7) {
-    out.push('', chalk.hex('#5a9e6e')(`  ✓ Caching is working — roughly $${s.savedUsd.toFixed(2)} avoided at this hit rate.`));
+    out.push('', OK(`  ✓ Caching is working — roughly $${s.savedUsd.toFixed(2)} avoided at this hit rate.`));
   }
 
   if (s.byModel.size > 1) {
-    out.push('', chalk.hex('#cc785c').bold('  By model'));
+    out.push('', CHROME.bold('  By model'));
     for (const [model, m] of [...s.byModel].sort((a, b) => b[1].costUsd - a[1].costUsd)) {
       const r = m.input > 0 ? m.cacheHit / m.input : 0;
       out.push(
-        '    ' + chalk.hex('#c8b5a0')(model.padEnd(28).slice(0, 28))
+        '    ' + SOFT(model.padEnd(28).slice(0, 28))
         + chalk.hex(TEXT_DIM_HEX)(String(m.calls).padStart(4) + ' calls  ')
         + chalk.hex(TEXT_DIM_HEX)(k(m.input).padStart(7) + ' in  ')
         + chalk.hex(TEXT_DIM_HEX)((r * 100).toFixed(0).padStart(3) + '% cached  ')
-        + chalk.hex('#d4903a')('$' + m.costUsd.toFixed(4)),
+        + WARN('$' + m.costUsd.toFixed(4)),
       );
     }
   }
 
   const tail = entries.slice(-recent);
-  out.push('', chalk.hex('#cc785c').bold(`  Last ${tail.length} call(s)`));
+  out.push('', CHROME.bold(`  Last ${tail.length} call(s)`));
   out.push(chalk.hex(FAINT_HEX)('    turn      input   cached    cost'));
   for (const e of tail) {
     const r = e.input > 0 ? (e.cacheHit ?? 0) / e.input : 0;
-    const colour = r >= 0.7 ? '#5a9e6e' : r >= 0.3 ? '#d4903a' : '#b15439';
+    const colour = r >= 0.7 ? tokenHex('ok') : r >= 0.3 ? tokenHex('warn') : tokenHex('err');
     out.push(
       '    ' + chalk.hex(FAINT_HEX)(String(e.turn).padStart(4))
-      + chalk.hex('#c8b5a0')(k(e.input).padStart(11))
+      + SOFT(k(e.input).padStart(11))
       + chalk.hex(colour)(((r * 100).toFixed(0) + '%').padStart(9))
       + chalk.hex(TEXT_DIM_HEX)(('$' + e.costUsd.toFixed(4)).padStart(10)),
     );
@@ -149,11 +150,11 @@ export function formatCostReport(entries: TokenLogEntry[], recent = 20): string 
   const cold = [...entries].filter(e => (e.input > 0 ? (e.cacheHit ?? 0) / e.input : 0) < 0.3)
     .sort((a, b) => b.costUsd - a.costUsd).slice(0, 3);
   if (cold.length > 0 && s.hitRatio < 0.9) {
-    out.push('', chalk.hex('#cc785c').bold('  Most expensive uncached calls'));
+    out.push('', CHROME.bold('  Most expensive uncached calls'));
     for (const e of cold) {
       out.push('    ' + chalk.hex(FAINT_HEX)(`turn ${e.turn}`.padEnd(10))
-        + chalk.hex('#c8b5a0')(k(e.input).padStart(8) + ' in')
-        + chalk.hex('#b15439')(('$' + e.costUsd.toFixed(4)).padStart(10))
+        + SOFT(k(e.input).padStart(8) + ' in')
+        + ERR(('$' + e.costUsd.toFixed(4)).padStart(10))
         + chalk.hex(TEXT_DIM_HEX)('  ' + e.model));
     }
   }

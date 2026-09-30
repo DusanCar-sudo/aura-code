@@ -13,6 +13,8 @@ import chalk from 'chalk';
 import type { DoctorReport, DoctorOptions, Finding, Severity } from './types.js';
 import { ALL_CHECKS, checkLatestVersion } from './checks.js';
 import { attemptRepair, type RepairResult } from './repair.js';
+import { CHROME, CHROME_DIM, ERR, OK, SOFT, WARN } from '../cli/diamond.js';
+import { tokenHex } from '../cli/diamond.js';
 
 export async function runDoctor(opts: DoctorOptions): Promise<DoctorReport> {
   const { projectRoot, fix = false, offline = false } = opts;
@@ -110,10 +112,10 @@ const SEVERITY_ICON: Record<Severity, string> = {
   ok: '✓', warn: '⚠', error: '✗', fixable: '⟳',
 };
 const SEVERITY_COLOR: Record<Severity, (s: string) => string> = {
-  ok: chalk.hex('#5a9e6e'),
-  warn: chalk.hex('#d4903a'),
-  error: chalk.hex('#b15439'),
-  fixable: chalk.hex('#d4903a'),
+  ok: OK,
+  warn: WARN,
+  error: ERR,
+  fixable: WARN,
 };
 const CATEGORY_LABEL: Record<string, string> = {
   build: 'Build', config: 'Config', source: 'Source', assets: 'Assets',
@@ -124,13 +126,13 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 export function formatDoctorReport(report: DoctorReport): string {
   const w = process.stdout.columns ?? 80;
-  const line = chalk.hex('#4e3d30')('─'.repeat(Math.min(w - 4, 60)));
+  const line = chalk.hex(tokenHex('faint'))('─'.repeat(Math.min(w - 4, 60)));
 
   const parts: string[] = [
     '',
     line,
-    chalk.hex('#cc785c').bold('  ◆ Aura Doctor — System Diagnostic'),
-    chalk.hex('#8a7768')(`  v${report.version} · ${new Date(report.timestamp).toLocaleString()}`),
+    CHROME.bold('  ◆ Aura Doctor — System Diagnostic'),
+    CHROME_DIM(`  v${report.version} · ${new Date(report.timestamp).toLocaleString()}`),
     line,
     '',
   ];
@@ -139,23 +141,23 @@ export function formatDoctorReport(report: DoctorReport): string {
   const categories = [...new Set(report.findings.map(f => f.category))];
   for (const cat of categories) {
     const catFindings = report.findings.filter(f => f.category === cat);
-    parts.push(chalk.hex('#cc785c').bold(`  ${CATEGORY_LABEL[cat] ?? cat}`));
+    parts.push(CHROME.bold(`  ${CATEGORY_LABEL[cat] ?? cat}`));
     for (const f of catFindings) {
       const icon = SEVERITY_COLOR[f.severity](SEVERITY_ICON[f.severity]);
-      const msg = chalk.hex('#c8b5a0')(f.message);
+      const msg = SOFT(f.message);
       const fixTag = f.fixable && !report.fixed.includes(f.name)
-        ? ' ' + chalk.hex('#d4903a')('[fixable]')
+        ? ' ' + WARN('[fixable]')
         : report.fixed.includes(f.name)
-          ? ' ' + chalk.hex('#5a9e6e')('[fixed]')
+          ? ' ' + OK('[fixed]')
           : '';
       parts.push(`    ${icon} ${msg}${fixTag}`);
       if (f.detail) {
         for (const dl of f.detail.split('\n')) {
-          parts.push(chalk.hex('#4e3d30')(`       ${dl}`));
+          parts.push(chalk.hex(tokenHex('faint'))(`       ${dl}`));
         }
       }
       if (f.fixDescription && f.fixable && !report.fixed.includes(f.name)) {
-        parts.push(chalk.hex('#8a7768')(`       → ${f.fixDescription}`));
+        parts.push(CHROME_DIM(`       → ${f.fixDescription}`));
       }
     }
     parts.push('');
@@ -166,26 +168,26 @@ export function formatDoctorReport(report: DoctorReport): string {
   const allOk = s.error === 0 && s.warn === 0 && s.fixable === 0;
   parts.push(line);
   if (allOk) {
-    parts.push(chalk.hex('#5a9e6e').bold('  ✓ All checks passed — Aura is healthy.'));
+    parts.push(OK.bold('  ✓ All checks passed — Aura is healthy.'));
   } else {
     const bits: string[] = [];
-    if (s.error > 0) bits.push(chalk.hex('#b15439')(`${s.error} error(s)`));
-    if (s.warn > 0) bits.push(chalk.hex('#d4903a')(`${s.warn} warning(s)`));
-    if (s.fixable > 0) bits.push(chalk.hex('#d4903a')(`${s.fixable} fixable`));
-    if (s.ok > 0) bits.push(chalk.hex('#5a9e6e')(`${s.ok} ok`));
+    if (s.error > 0) bits.push(ERR(`${s.error} error(s)`));
+    if (s.warn > 0) bits.push(WARN(`${s.warn} warning(s)`));
+    if (s.fixable > 0) bits.push(WARN(`${s.fixable} fixable`));
+    if (s.ok > 0) bits.push(OK(`${s.ok} ok`));
     parts.push(`  ${bits.join(' · ')}`);
   }
 
   if (report.fixed.length > 0) {
-    parts.push(chalk.hex('#5a9e6e')(`  ✓ Repaired: ${report.fixed.join(', ')}`));
+    parts.push(OK(`  ✓ Repaired: ${report.fixed.join(', ')}`));
   }
   if (report.fixFailed.length > 0) {
-    parts.push(chalk.hex('#b15439')(`  ✗ Could not repair: ${report.fixFailed.join(', ')}`));
+    parts.push(ERR(`  ✗ Could not repair: ${report.fixFailed.join(', ')}`));
   }
 
   const fixableCount = report.findings.filter(f => f.fixable && !report.fixed.includes(f.name)).length;
   if (fixableCount > 0 && !report.fixed.length) {
-    parts.push(chalk.hex('#8a7768')(`  Run aura --doctor --fix to attempt ${fixableCount} repair(s).`));
+    parts.push(CHROME_DIM(`  Run aura --doctor --fix to attempt ${fixableCount} repair(s).`));
   }
 
   parts.push(line + '\n');

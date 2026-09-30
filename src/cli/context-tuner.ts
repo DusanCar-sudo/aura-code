@@ -10,7 +10,7 @@
  * runTuner() is the only part that touches stdin.
  */
 import chalk from 'chalk';
-import { TEXT_DIM_HEX, FAINT_HEX } from './diamond.js';
+import { TEXT_DIM_HEX, FAINT_HEX, CHROME, OK } from './diamond.js';
 import {
   getLadder, setLadder, getMaxContextTokens, MIN_RUNG, MAX_RUNG, MIN_GAP,
 } from '../agent/context-policy.js';
@@ -80,10 +80,10 @@ export function renderTuner(
     if (rungIdx !== -1) {
       // The selected rung is drawn brighter so it reads as "grabbed".
       bar += rungIdx === state.selected
-        ? chalk.hex('#cc785c').bold('┊')
+        ? CHROME.bold('┊')
         : chalk.hex(TEXT_DIM_HEX)('┊');
     } else if (i < filled) {
-      bar += chalk.hex('#5a9e6e')('█');
+      bar += OK('█');
     } else {
       bar += chalk.hex(FAINT_HEX)('░');
     }
@@ -95,7 +95,7 @@ export function renderTuner(
 
   // Caret sits under the selected rung, offset by the bar's own left padding.
   const BAR_OFFSET = '  ◆ Context: '.length;
-  const caretLine = ' '.repeat(BAR_OFFSET + selectedPos) + chalk.hex('#cc785c')('▲');
+  const caretLine = ' '.repeat(BAR_OFFSET + selectedPos) + CHROME('▲');
 
   // The rung is a *share of the window*, but compaction actually fires at
   // min(window * rung, maxContextTokens) — see compactionThreshold(). Reporting
@@ -108,7 +108,7 @@ export function renderTuner(
 
   const rungPct = (state.ladder[state.selected] * 100).toFixed(0) + '%';
   const rungTok = (Math.min(rawRungTok, cap) / 1000).toFixed(1) + 'k';
-  const label = chalk.hex('#cc785c').bold(
+  const label = CHROME.bold(
     `rung ${state.selected + 1}/${state.ladder.length}: ${rungPct} (${rungTok}${isCapped ? ' — capped' : ''})`,
   );
   const hint = chalk.hex(FAINT_HEX)('[←/→ adjust · ⇧ coarse · Tab next · ⏎ save · Esc cancel]');

@@ -29,14 +29,14 @@ import chalk from 'chalk';
 import type { Display } from './display.js';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
 import { formatContextBar, formatContextDashboard } from './context-health.js';
-import { gradient, gradientStopFor, TEXT_HEX, TEXT_DIM_HEX, BG_HEX, CHROME_DIM, RUBY_ACCENT } from './diamond.js';
-import { PALETTE_COMMANDS, filterCommands, renderPalette, type PaletteCommand } from './command-palette.js';
+import { gradient, gradientStopFor, TEXT, TEXT_DIM, BG_HEX, CHROME_DIM, RUBY_ACCENT, CHROME, ERR, OK, WARN } from './diamond.js';
+import { onThemeChange } from './theme.js';
+import { PALETTE_COMMANDS, filterCommands, renderPalette, slashSuggestions, type PaletteCommand } from './command-palette.js';
 import { renderMarkdown } from './markdown.js';
 import { readClipboardSync } from '../tools/clipboard.js';
+import { tokenHex } from './diamond.js';
 
-const TEXT = chalk.hex(TEXT_HEX);
-const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
-const ACCENT = chalk.hex('#cc785c');
+const ACCENT = CHROME;
 const RUBY = RUBY_ACCENT;
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -115,10 +115,72 @@ function closeOverlay(): void {
   drawPromptBottom();
 }
 
+// ── Slash menu: `/` at the start of the input lists the commands ──────────
+
+const SLASH_MAX_ROWS = 8;
+let slashSelected = 0;
+let slashBufferSeen = '';
+let slashDismissedFor: string | null = null;
+let slashDrawnRows = 0;
+
+function slashMatches(): PaletteCommand[] {
+  if (overlay !== 'none' || scrollMode || fullscreenPrompt || pendingConfirm) return [];
+  if (slashDismissedFor !== null && slashDismissedFor === inputBuffer) return [];
+  return slashSuggestions(inputBuffer);
+}
+
+/** Paint the menu just above the input block; redrawLiveView() restores the rows it covered. */
+function drawSlashMenu(): void {
+  const matches = slashMatches();
+  if (inputBuffer !== slashBufferSeen) { slashBufferSeen = inputBuffer; slashSelected = 0; }
+  if (matches.length === 0) { slashDrawnRows = 0; return; }
+  slashSelected = Math.max(0, Math.min(slashSelected, matches.length - 1));
+  const sr = screenRows();
+  const room = Math.max(0, sr - FIXED_BOTTOM - visibleBannerRowCount(sr) - 1);
+  const n = Math.min(matches.length, SLASH_MAX_ROWS, room);
+  if (n <= 0) { slashDrawnRows = 0; return; }
+  const first = Math.max(0, Math.min(slashSelected - Math.floor(n / 2), matches.length - n));
+  const width = Math.max(20, cols() - LEAD - MARGIN);
+  const nameW = Math.min(18, Math.max(...matches.slice(first, first + n).map(c => c.id.length)) + 2);
+  const top = sr - FIXED_BOTTOM - n + 1;
+  for (let i = 0; i < n; i++) {
+    const cmd = matches[first + i]!;
+    const on = first + i === slashSelected;
+    const name = cmd.id.padEnd(nameW);
+    const line = on
+      ? ACCENT.bold('❯ ' + name) + TEXT(cmd.description)
+      : TEXT_DIM('  ' + name + cmd.description);
+    rawWrite(`\x1b[${top + i};1H`);
+    clearEol();
+    rawWrite(' '.repeat(LEAD) + fitVisible(line, width));
+  }
+  slashDrawnRows = n;
+  moveCursorToOutputBase(sr);
+}
+
+/** Enter runs the highlighted command; Tab drops it into the box so arguments can follow. */
+function applySlashSelection(run: boolean): boolean {
+  const cmd = slashMatches()[slashSelected];
+  if (!cmd) return false;
+  slashDrawnRows = 0;
+  if (run) {
+    inputBuffer = ''; cursorPos = 0;
+    redrawLiveView();
+    if (onEnter) onEnter(cmd.id);
+  } else {
+    inputBuffer = cmd.id + ' '; cursorPos = inputBuffer.length;
+    redrawLiveView();
+  }
+  return true;
+}
+
 // ── Scroll mode ────────────────────────────────────────────────────────────
 
+let themeListenerAttached = false;
 let scrollMode = false;
 let scrollOffset = 0;
+/** Lines that arrived while the view was scrolled up; shown as a jump-to-latest hint. */
+let unseenLines = 0;
 /**
  * When scroll mode was last left. A free-spinning wheel or a trackpad with
  * inertia keeps emitting scroll detents for a moment after the hand has moved
@@ -164,6 +226,8 @@ let scrollBuffer: string[] = [];
 const MAX_SCROLLBACK = 5000;
 let streamAccum = '';
 let bannerLines: string[] = [];
+/** How to rebuild the banner — kept so a theme switch can repaint it. */
+let bannerBuilder: ((tier?: 'hero' | 'standard' | 'compact') => string[]) | null = null;
 let lastPromptStartRow: number | null = null;
 let lastPromptScreenRows: number | null = null;
 
@@ -290,9 +354,29 @@ export function enterAltScreen(): void {
   altScreenActive = true;
   rawWrite('\x1b[?1049h');
   enableMouse();
-  // OSC 11: set the terminal's default background to the palette's bluish
-  // dark. Restored via OSC 111 on leave — no per-line bg painting needed.
+  applyTerminalTheme();
+}
+
+/**
+ * OSC 11: paint the terminal's own default background with the active
+ * theme's `bg`. Restored via OSC 111 on leave, so no line is ever
+ * background-painted. Re-applied on a theme switch: a light theme on the
+ * previous dark background is unreadable.
+ */
+export function applyTerminalTheme(): void {
+  if (!altScreenActive) return;
   rawWrite(`\x1b]11;${BG_HEX}\x07`);
+}
+
+/**
+ * A theme switch: re-set the terminal background, rebuild the banner (its
+ * rows are pre-painted strings, so a stored copy keeps the old palette) and
+ * repaint the frame.
+ */
+function handleThemeChange(): void {
+  applyTerminalTheme();
+  if (bannerBuilder) bannerLines = bannerBuilder();
+  repaintScreen();
 }
 export function leaveAltScreen(): void {
   if (!altScreenActive) return;
@@ -450,7 +534,7 @@ function buildBottomRows(): string[] {
       const showPlaceholder = inputBuffer.length === 0 && contentRow === 0;
       let inner: string;
       if (showPlaceholder) {
-        inner = fitVisible(TEXT_DIM('type a task, :btw, :q, :help...') + cursorChar, innerWidth);
+        inner = fitVisible(TEXT_DIM('type a task, or / for commands') + cursorChar, innerWidth);
       } else if (isCursorRow && focused) {
         const before = TEXT(text.slice(0, wrapped.cursorCol));
         const after = TEXT(text.slice(wrapped.cursorCol));
@@ -545,6 +629,12 @@ function drawPromptBottom(): void {
   lastPromptStartRow = startRow;
   lastPromptScreenRows = sr;
   moveCursorToOutputBase(sr);
+  if (slashDrawnRows > 0 && slashMatches().length < slashDrawnRows) {
+    // The menu shrank or closed: repaint the output rows it was covering.
+    slashDrawnRows = 0;
+    redrawLiveView();
+  }
+  drawSlashMenu();
 }
 
 // ── Fullscreen mode for interactive prompts (wizard etc.) ──────────────────
@@ -614,6 +704,7 @@ export function writeOutput(text: string): void {
   const { output, lineCount } = wrapForTerminal(text);
   pushScrollback(output.split('\n'));
   if (scrollMode) {
+    if (scrollOffset > 0) unseenLines += lineCount;
     scrollOffset = Math.min(scrollOffset + lineCount, maxScrollOffset());
     renderScrollView();
     return;
@@ -661,6 +752,29 @@ export function setBannerLines(lines: string[]): void {
   bannerLines = lines;
 }
 
+/**
+ * Register how the banner is built, and paint it once. The TUI keeps the
+ * builder rather than only the rows so `:theme` can re-render the lockup in
+ * the new palette without index.ts having to listen for theme changes.
+ */
+export function setBannerBuilder(build: (tier?: 'hero' | 'standard' | 'compact') => string[]): void {
+  bannerBuilder = build;
+  bannerLines = build();
+}
+
+let bannerDemoted = false;
+/**
+ * Collapse the pinned lockup (hero/standard) to the one-line ribbon: work has
+ * started and the big mark must make room for output. The registered builder
+ * is re-run with the compact tier; a compact banner is left alone.
+ */
+export function demoteBanner(): void {
+  if (bannerDemoted || !bannerBuilder || bannerLines.length <= 1) return;
+  bannerDemoted = true;
+  bannerLines = bannerBuilder('compact');
+  repaintScreen();
+}
+
 // ── Scroll-mode rendering ──────────────────────────────────────────────────
 
 function viewHeight(): number {
@@ -703,6 +817,7 @@ function renderScrollView(): void {
   }
 
   const bottom = start + visible.length;
+  if (scrollOffset === 0) unseenLines = 0;
   const pos = scrollOffset === 0 ? 'BOT' : start === 0 ? 'TOP' : `${Math.round((bottom / Math.max(1, liveLines.length)) * 100)}%`;
   const hasSelection = selectionSpan() !== null;
   const indicator = selToast
@@ -711,6 +826,7 @@ function renderScrollView(): void {
       ? ACCENT.bold(' -- SELECT -- ')
         + TEXT_DIM('release to copy · drag past the edge to scroll')
       : ACCENT.bold(' -- SCROLL -- ')
+        + (unseenLines > 0 ? ACCENT.bold(`↓ ${unseenLines} new · G `) : '')
         + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · drag to select · wheel · j/k · gg/G · Shift+drag = terminal select`);
   rawWrite(`\x1b[${sr};1H`);
   rawWrite(truncVisible(indicator, width));
@@ -966,6 +1082,7 @@ function exitScrollMode(): void {
   leftScrollAt = Date.now();
   pendingG = false;
   scrollOffset = 0;
+  unseenLines = 0;
   clearSelection();
   selToast = null;
   redrawLiveView();
@@ -1006,6 +1123,7 @@ function redrawLiveView(): void {
   // Rebuilds must hand the cursor back to the output region, not leave it
   // parked in the bottom pane where later writes can smear copies upward.
   moveCursorToOutputBase(sr);
+  drawSlashMenu();
 }
 
 function handleResize(): void {
@@ -1105,7 +1223,7 @@ function commitPaste(raw: string): void {
 
 export function askConfirm(message: string): Promise<boolean> {
   return new Promise(resolve => {
-    writeOutput(chalk.hex('#d4903a')(`  ⚠  ${message} [y/N]`));
+    writeOutput(WARN(`  ⚠  ${message} [y/N]`));
     pendingConfirm = (answer: string) => {
       const a = answer.trim().toLowerCase();
       resolve(a === 'y' || a === 'yes');
@@ -1117,7 +1235,7 @@ export function askInput(prompt: string): Promise<string> {
   return new Promise(resolve => {
     if (fullscreenPrompt) {
       // In fullscreen mode, write prompt directly and use raw readline-style input
-      rawWrite(chalk.hex('#cc785c')(prompt));
+      rawWrite(CHROME(prompt));
       pendingInput = (text: string) => {
         rawWrite(text + '\n');
         resolve(text);
@@ -1127,7 +1245,7 @@ export function askInput(prompt: string): Promise<string> {
       cursorPos = 0;
       return;
     }
-    writeOutput(chalk.hex('#cc785c')(prompt));
+    writeOutput(CHROME(prompt));
     pendingInput = (text: string) => { resolve(text); };
     inputAccumulator = [];
   });
@@ -1160,7 +1278,7 @@ function handleChar(ch: string): void {
     }
     if (currentAbort && !currentAbort.signal.aborted) {
       currentAbort.abort();
-      writeOutput(chalk.hex('#d4903a')('  ⏹ Aborting current task...'));
+      writeOutput(WARN('  ⏹ Aborting current task...'));
       if (onStop) onStop();
       return;
     }
@@ -1198,6 +1316,7 @@ function handleChar(ch: string): void {
       return;
     }
     if (overlay === 'session') { closeOverlay(); if (onSessionSwitch) onSessionSwitch(); return; }
+    if (slashMatches().length > 0 && applySlashSelection(true)) return;
 
     const line = inputBuffer.trim();
 
@@ -1234,6 +1353,7 @@ function handleChar(ch: string): void {
     }
 
     if (line) {
+      demoteBanner();
       echoUserLine(line);
     }
     const expanded = expandPastes(line);
@@ -1285,6 +1405,7 @@ function handleChar(ch: string): void {
     return;
   }
 
+  if (ch === '\t' && slashMatches().length > 0) { applySlashSelection(false); return; }
   if (ch === '\t') { // Tab — agent mode switcher
     agentMode = agentMode === 'build' ? 'plan' : 'build';
     if (onModeChange) onModeChange(agentMode);
@@ -1359,9 +1480,20 @@ function handleKey(key: string): void {
   // Ctrl+L — session switcher (0x0c)
   if (key === '\x0c') { openOverlay('session'); return; }
 
+  if (key === '\x1b' && slashMatches().length > 0) {
+    slashDismissedFor = inputBuffer;
+    drawPromptBottom();
+    return;
+  }
   if (key === '\x1b') {
     if (overlay !== 'none') { closeOverlay(); return; }
     enterScrollMode(0);
+    return;
+  }
+  if ((key === '\x1b[A' || key === '\x1b[B') && slashMatches().length > 0) {
+    const n = slashMatches().length;
+    slashSelected = key === '\x1b[A' ? (slashSelected + n - 1) % n : (slashSelected + 1) % n;
+    drawPromptBottom();
     return;
   }
   if (overlay === 'none' && key === '\x1b[A') {
@@ -1513,6 +1645,13 @@ function rawHandler(data: string): void {
     }
     if (enteredPaste) continue;
     stdinBuffer = stdinBuffer.slice(i);
+    if (stdinBuffer === '\x1b') {
+      // A lone ESC is either the Escape key or the start of a sequence split
+      // across reads; if nothing follows, it was the key.
+      setTimeout(() => {
+        if (stdinBuffer === '\x1b') { stdinBuffer = ''; handleKey('\x1b'); }
+      }, 50);
+    }
     return;
   }
 }
@@ -1590,6 +1729,10 @@ export function initTui(): void {
   hideCursor();
   patchStdout();
   attachResizeHandler();
+  if (!themeListenerAttached) {
+    themeListenerAttached = true;
+    onThemeChange(handleThemeChange);
+  }
 
   // Clear screen, draw banner
   rawWrite('\x1b[2J\x1b[H');
@@ -1743,7 +1886,7 @@ export function createTuiDisplay(): Display {
     toolCall(name: string, input: Record<string, unknown>) {
       stopToolSpinner();
       const icon = toolIcon(name);
-      const label = chalk.hex('#cc785c').bold(`${icon} ${name}`);
+      const label = CHROME.bold(`${icon} ${name}`);
       const detail = fmtIn(name, input);
       writeOutput(`  ${label}  ${TEXT_DIM(detail)}`);
     },
@@ -1759,28 +1902,28 @@ export function createTuiDisplay(): Display {
       const elapsed = TEXT_DIM(`${elapsedMs}ms`);
       const isError = result.startsWith('Error:') || result.startsWith('Tool error');
       if (isError) {
-        writeOutput('  ' + chalk.hex('#b15439')('✗ ') + TEXT_DIM(preview.replace(/\n/g, '\n    ')));
+        writeOutput('  ' + ERR('✗ ') + TEXT_DIM(preview.replace(/\n/g, '\n    ')));
       } else {
         const fl = lines[0] ?? '';
         if (lines.length <= 3) {
-          writeOutput('  ' + chalk.hex('#5a9e6e')('✓ ') + TEXT_DIM(result));
+          writeOutput('  ' + OK('✓ ') + TEXT_DIM(result));
         } else {
-          writeOutput('  ' + chalk.hex('#5a9e6e')('✓ ') + TEXT_DIM(`${fl}`) + TEXT_DIM(` (+${lines.length - 1} lines) ${elapsed}`));
+          writeOutput('  ' + OK('✓ ') + TEXT_DIM(`${fl}`) + TEXT_DIM(` (+${lines.length - 1} lines) ${elapsed}`));
         }
       }
     },
 
     toolBlocked(name: string, reason: string) {
       stopToolSpinner();
-      writeOutput('  ' + chalk.hex('#d4903a')(`⊘ ${name} blocked: ${reason}`));
+      writeOutput('  ' + WARN(`⊘ ${name} blocked: ${reason}`));
     },
 
     warning(msg: string) {
-      writeOutput('\n' + chalk.hex('#d4903a')(`  ⚠  ${msg}`));
+      writeOutput('\n' + WARN(`  ⚠  ${msg}`));
     },
 
     success(msg: string) {
-      writeOutput('\n' + chalk.hex('#5a9e6e')(`  ✓  ${msg}`));
+      writeOutput('\n' + OK(`  ✓  ${msg}`));
     },
 
     subagentSpawned(info) {
@@ -1790,13 +1933,13 @@ export function createTuiDisplay(): Display {
     },
 
     error(msg: string) {
-      writeOutput('\n' + chalk.hex('#b15439')(`  ✗  ${msg}`));
+      writeOutput('\n' + ERR(`  ✗  ${msg}`));
     },
 
     header(title: string, subtitle?: string) {
       const l = sep();
       writeOutput('\n' + l);
-      writeOutput(chalk.hex('#cc785c').bold(`  ${title}`));
+      writeOutput(CHROME.bold(`  ${title}`));
       if (subtitle) writeOutput(TEXT_DIM(`  ${subtitle}`));
       writeOutput(l);
     },
@@ -1804,7 +1947,7 @@ export function createTuiDisplay(): Display {
     summary(text: string, turns: number, toolCount: number) {
       const l = sep();
       writeOutput('\n' + l);
-      writeOutput(chalk.hex('#5a9e6e').bold('  ✓ Done'));
+      writeOutput(OK.bold('  ✓ Done'));
       writeOutput(TEXT_DIM(`  ${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`));
       if (text) {
         const mdLines = renderMarkdown(text);
@@ -1818,12 +1961,12 @@ export function createTuiDisplay(): Display {
       const l = sep();
       const idxMap = new Map<string, number>(plan.steps.map((s, i) => [s.id, i + 1]));
       writeOutput('\n' + l);
-      writeOutput(chalk.hex('#cc785c').bold('  Execution Plan'));
+      writeOutput(CHROME.bold('  Execution Plan'));
       writeOutput(TEXT_DIM(`  Goal: ${plan.goal}`));
       writeOutput(l);
       plan.steps.forEach((s, i) => {
         const num  = TEXT_DIM(`${i + 1}.`);
-        const spec = chalk.hex('#cc785c').bold(`[${s.specialist}]`);
+        const spec = CHROME.bold(`[${s.specialist}]`);
         const task = TEXT(s.task.length > 55 ? s.task.slice(0, 52) + '…' : s.task);
         const deps = s.dependsOn.length > 0
           ? TEXT_DIM(` ← ${s.dependsOn.map(d => idxMap.get(d) ?? '?').join(', ')}`)
@@ -1834,28 +1977,28 @@ export function createTuiDisplay(): Display {
     },
 
     stepStarted(step: PlanStep) {
-      const spec = chalk.hex('#d4903a').bold(`[${step.specialist}]`);
+      const spec = WARN.bold(`[${step.specialist}]`);
       const task = TEXT_DIM(step.task.length > 70 ? step.task.slice(0, 67) + '…' : step.task);
-      writeOutput('\n' + chalk.hex('#d4903a')('  →') + ` ${spec} ${task}`);
+      writeOutput('\n' + WARN('  →') + ` ${spec} ${task}`);
     },
 
     stepCompleted(step: PlanStep, _result: string) {
-      const spec = chalk.hex('#5a9e6e').bold(`[${step.specialist}]`);
+      const spec = OK.bold(`[${step.specialist}]`);
       const ms   = step.durationMs != null ? `${step.durationMs}ms` : '?ms';
-      writeOutput(chalk.hex('#5a9e6e')('  ✓') + ` ${spec} ${TEXT_DIM(`done (${ms})`)}`);
+      writeOutput(OK('  ✓') + ` ${spec} ${TEXT_DIM(`done (${ms})`)}`);
     },
 
     retry(info) {
       const secs = (info.delayMs / 1000).toFixed(1);
-      writeOutput(chalk.hex('#d4903a')(`  ⟳ ${info.provider} retrying in ${secs}s (attempt ${info.attempt}) — ${info.reason}`));
+      writeOutput(WARN(`  ⟳ ${info.provider} retrying in ${secs}s (attempt ${info.attempt}) — ${info.reason}`));
     },
 
     failover(info) {
-      writeOutput(chalk.hex('#d4903a')(`  ⤳ Failing over ${info.from} → ${info.to} (${info.reason})`));
+      writeOutput(WARN(`  ⤳ Failing over ${info.from} → ${info.to} (${info.reason})`));
     },
 
     circuit(info) {
-      const colour = info.state === 'open' ? '#b15439' : info.state === 'half-open' ? '#d4903a' : '#5a9e6e';
+      const colour = info.state === 'open' ? tokenHex('err') : info.state === 'half-open' ? tokenHex('warn') : tokenHex('ok');
       writeOutput(chalk.hex(colour)(`  ◯ Circuit ${info.provider}: ${info.state}`));
     },
 
@@ -1869,7 +2012,7 @@ export function createTuiDisplay(): Display {
 
     compactionEvent(info) {
       const saved = ((1 - info.afterTokens / info.beforeTokens) * 100).toFixed(0);
-      writeOutput(chalk.hex('#d4903a')(`  ⚠  Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens (-${saved}%) · gen ${info.generation}`));
+      writeOutput(WARN(`  ⚠  Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens (-${saved}%) · gen ${info.generation}`));
     },
   };
 }

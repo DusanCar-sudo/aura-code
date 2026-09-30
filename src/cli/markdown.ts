@@ -6,16 +6,14 @@
  * Uses Aura's palette from diamond.ts.
  */
 import chalk from 'chalk';
-import { TEXT_HEX, TEXT_DIM_HEX, PANEL_BG_HEX, RUBY_ACCENT } from './diamond.js';
+import { TEXT, TEXT_DIM, CODE_BG, RUBY_ACCENT, CHROME } from './diamond.js';
+import { tokenHex } from './diamond.js';
 
-const TEXT = chalk.hex(TEXT_HEX);
-const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 const RUBY = RUBY_ACCENT;
 // chalk.hex() sets FOREGROUND — keep the elevated panel as an actual
 // background (bgHex) and give the text itself a bright, readable
 // foreground, matching normal scrollback brightness (Bug 5 fix).
-const CODE_BG = chalk.bgHex(PANEL_BG_HEX).hex('#dfe3ea');
-const HEADING = chalk.hex('#cc785c');
+const HEADING = CHROME;
 
 /**
  * Render a markdown string into terminal-colored lines.

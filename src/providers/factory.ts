@@ -542,10 +542,12 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'groq/deepseek-r1-distill-llama-70b',  name: 'DeepSeek R1 70B (Groq)',     provider: 'Groq', speed: 'Ultra-fast reasoning' },
   { id: 'groq/mixtral-8x7b-32768',             name: 'Mixtral 8x7B (Groq)',        provider: 'Groq', speed: 'Fast · MoE' },
 
-  // ── NVIDIA NIM ───────────────────────────────────────────────────────────
-  { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Nemotron 70B (NIM)',     provider: 'NVIDIA', speed: 'Powerful · 131k' },
-  { id: 'nvidia/meta/llama-3.3-70b-instruct',      name: 'Llama 3.3 70B (NIM)',     provider: 'NVIDIA', speed: 'Powerful · 128k' },
-  { id: 'nvidia/deepseek-ai/deepseek-r1',          name: 'DeepSeek R1 (NIM)',       provider: 'NVIDIA', speed: 'Reasoning · flagship' },
+  // ── NVIDIA NIM (catalog verified live 2026-09-29; the previous Nemotron
+//    70B / Llama 3.3 / R1 entries 404 "Not found for account" — retired) ──
+  { id: 'nvidia/z-ai/glm-5.3-flash',               name: 'GLM 5.3 Flash (NIM)',     provider: 'NVIDIA', speed: 'Fast · free' },
+  { id: 'nvidia/z-ai/glm-5.3',                     name: 'GLM 5.3 (NIM)',           provider: 'NVIDIA', speed: 'Powerful · free' },
+  { id: 'nvidia/deepseek-ai/deepseek-v4.1-flash',  name: 'DeepSeek V4.1 Flash (NIM)', provider: 'NVIDIA', speed: 'Fast · free' },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b',       name: 'Nemotron 3 Ultra 550B (NIM)', provider: 'NVIDIA', speed: 'Powerful · free' },
 
   // ── Xiaomi MiMo ─────────────────────────────────────────────────────────
   { id: 'mimo-v2.5-pro',   name: 'MiMo V2.5 Pro',   provider: 'Xiaomi MiMo', speed: 'Powerful · 1T params' },
@@ -763,6 +765,34 @@ function hasApiKey(...names: string[]): boolean {
 }
 
 /**
+ * Synchronous reachability probe for a local model server (Ollama / LM Studio).
+ *
+ * isModelConfigured() is called synchronously from the Telegram /models listing
+ * and the model picker, so the async checkOllamaHealth() cannot be used there.
+ * A short curl against the base URL is enough to tell "no server on this
+ * machine" apart from "server up, model switchable", and it never throws: any
+ * failure (no curl, no server, timeout) simply means not configured.
+ */
+/**
+ * Providers that only exist on a model server running on THIS machine. They are
+ * never a matter of stored API keys, so they stay out of the "models you have
+ * keys for" listings and their group headers.
+ */
+export const LOCAL_ONLY_PROVIDERS = ['Ollama', 'Local'];
+
+function isLocalServerUp(baseUrl: string): boolean {
+  try {
+    execFileSync('curl', ['-sf', '--max-time', '2', '-o', '/dev/null', baseUrl], {
+      stdio: 'ignore',
+      timeout: 3000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * True when this model can be called with credentials available in env / saved wizard config.
  * Used to keep competence-based model selection from routing to providers without keys.
  * (Reinstated: the original was lost in the backup-restore commit 6e5481a5.)
@@ -783,9 +813,17 @@ export function isModelConfigured(modelId: string): boolean {
   // Saved config exact match
   if (savedCfg?.apiKey && (savedCfg.model === modelId || savedCfg.model.toLowerCase() === model)) return true;
 
-  // Local models need no key
-  if (model.startsWith('ollama/') || model.startsWith('ollama:')) return true;
-  if (model.startsWith('local/') || model.startsWith('lmstudio/') || model.startsWith('local-profile/')) return true;
+  // Local models need no API key — but they DO need a running server. Reporting
+  // them as configured whenever the id merely has the right prefix made
+  // /models advertise ~19 ollama/* + lmstudio/* entries that always fail, and
+  // /model <one of those> would accept the switch and then error on first use.
+  // Probe the endpoint instead; a down server is not a configured model.
+  if (model.startsWith('ollama/') || model.startsWith('ollama:')) {
+    return isLocalServerUp(localBaseUrl('OLLAMA_BASE_URL', 'http://localhost:11434/v1').replace(/\/v1$/, ''));
+  }
+  if (model.startsWith('local/') || model.startsWith('lmstudio/') || model.startsWith('local-profile/')) {
+    return isLocalServerUp(localBaseUrl('LMSTUDIO_BASE_URL', 'http://localhost:1234/v1').replace(/\/v1$/, ''));
+  }
 
   // Check model-specific API key env var
   const envVar = apiKeyEnvVarForModel(modelId);

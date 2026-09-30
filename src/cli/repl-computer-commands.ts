@@ -33,6 +33,7 @@ import {
 } from '../tools/screen/disclosure.js';
 import type { Display } from './display.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
+import { FAINT, OK, TEXT_DIM } from './diamond.js';
 
 export interface ComputerCommandCtx {
   display: Pick<Display, 'success' | 'warning'>;
@@ -62,14 +63,14 @@ function statusLines(): string[] {
   return [
     '',
     on
-      ? chalk.hex('#5a9e6e')('  Computer use: ON') + chalk.hex('#8a94a6')(
+      ? OK('  Computer use: ON') + TEXT_DIM(
           live ? '  (sidecar running — holding the input device)' : '  (no sidecar yet — starts on first action)')
-      : chalk.hex('#8a94a6')('  Computer use: OFF'),
-    chalk.hex('#4a5568')(`    flag           ${isComputerUseEnabled() ? 'set' : 'not set'}`),
-    chalk.hex('#4a5568')(`    ${COMPUTER_USE_ENV.padEnd(15)}${envEnabled() ? 'set' : 'not set'}`),
-    chalk.hex('#4a5568')(`    disclosure     ${isAcknowledged() ? 'accepted on this machine' : 'not yet accepted'}`),
+      : TEXT_DIM('  Computer use: OFF'),
+    FAINT(`    flag           ${isComputerUseEnabled() ? 'set' : 'not set'}`),
+    FAINT(`    ${COMPUTER_USE_ENV.padEnd(15)}${envEnabled() ? 'set' : 'not set'}`),
+    FAINT(`    disclosure     ${isAcknowledged() ? 'accepted on this machine' : 'not yet accepted'}`),
     '',
-    chalk.hex('#4a5568')('    :compon to enable · :compoff to disable and release the device'),
+    FAINT('    :compon to enable · :compoff to disable and release the device'),
     '',
   ];
 }

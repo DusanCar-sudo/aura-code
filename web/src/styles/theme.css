@@ -8,50 +8,50 @@
 
 :root {
   /* ── Palette, from src/cli/diamond.ts & AuraWebapp ── */
-  --ruby: #9b1b30;
-  --bg: #0c1322;
-  --panel-bg: #101a2c;
-  --panel: #101a2c;
-  --recess: #0a1020;
-  --terracotta: #c2674c;
-  --text: #e8e6e3;
-  --text-primary: #f3ece4;
-  --text-dim: #8a94a6;
-  --ink: #f7f4ef;
-  --txt: #dbe3ec;
-  --mut: #9aaabb;
-  --dim: #6b7c90;
-  --faint: #6b7c90;
+  --ruby: #d24b30;
+  --bg: #070907;
+  --panel-bg: #0c100c;
+  --panel: #0c100c;
+  --recess: #050705;
+  --terracotta: #e7cf85;
+  --text: #f2ebc9;
+  --text-primary: #f2ebc9;
+  --text-dim: #b9baa2;
+  --ink: #f2ebc9;
+  --txt: #e2dbb7;
+  --mut: #b9baa2;
+  --dim: #8b8e7a;
+  --faint: #535c37;
 
   /* ── Status, from src/cli/display.ts ── */
-  --ok: #5a9e6e;
-  --status-success: #5a9e6e;
-  --err: #b15439;
-  --status-error: #b15439;
-  --warn: #d4903a;
-  --status-warning: #d4903a;
+  --ok: #3cc45e;
+  --status-success: #3cc45e;
+  --err: #f0584f;
+  --status-error: #f0584f;
+  --warn: #f8b91e;
+  --status-warning: #f8b91e;
 
   /* ── Derived surfaces ── */
-  --surface-sunken: #0a1020;
-  --panel-raised: #1c2739;
-  --surface-float: #22304a;
-  --line: rgba(110, 208, 234, 0.16);
-  --line2: rgba(110, 208, 234, 0.34);
-  --line-soft: rgba(110, 208, 234, 0.10);
-  --line-strong: rgba(110, 208, 234, 0.34);
-  --overlay: rgba(12, 19, 34, 0.82);
-  --selection: rgba(194, 103, 76, 0.26);
+  --surface-sunken: #050705;
+  --panel-raised: #141a14;
+  --surface-float: #1a211a;
+  --line: rgba(242, 235, 201, 0.12);
+  --line2: rgba(242, 235, 201, 0.26);
+  --line-soft: rgba(242, 235, 201, 0.07);
+  --line-strong: rgba(242, 235, 201, 0.26);
+  --overlay: rgba(7, 9, 7, 0.82);
+  --selection: rgba(231, 207, 133, 0.26);
 
   /* Accents */
-  --acc: #c2674c;
-  --accent: #c2674c;
-  --acc2: #6ed0ea;
-  --accent2: #6ed0ea;
-  --onacc: #411e13;
-  --accent-bright: #d9785c;
-  --accent-dim: #a8543c;
-  --accent-wash: rgba(194, 103, 76, 0.10);
-  --accent-edge: rgba(194, 103, 76, 0.34);
+  --acc: #e7cf85;
+  --accent: #e7cf85;
+  --acc2: #d8cb95;
+  --accent2: #d8cb95;
+  --onacc: #10150f;
+  --accent-bright: #f0dc9c;
+  --accent-dim: #b79f52;
+  --accent-wash: rgba(231, 207, 133, 0.10);
+  --accent-edge: rgba(231, 207, 133, 0.34);
 
   /* ── Elevation ── */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.30);
@@ -107,12 +107,12 @@
      These are gradients, not flat fills, so they cannot be expressed with the
      surface ramp alone; they get their own tokens so the tactile look survives
      a theme switch instead of being baked to one. */
-  --ctl-top: #1b1c25;
-  --ctl-bottom: #14151b;
-  --ctl2-top: #242633;
-  --ctl2-bottom: #1a1b24;
-  --ctl2-hover-top: #2d3040;
-  --ctl2-hover-bottom: #20222e;
+  --ctl-top: #1a211a;
+  --ctl-bottom: #101410;
+  --ctl2-top: #212a21;
+  --ctl2-bottom: #161c16;
+  --ctl2-hover-top: #2a352a;
+  --ctl2-hover-bottom: #1c231c;
   --ctl-edge: rgba(255, 255, 255, 0.12);
   --ctl-edge-top: rgba(255, 255, 255, 0.2);
   --ctl-hi: rgba(255, 255, 255, 0.08);
@@ -133,46 +133,62 @@
 :root[data-theme='light'],
 html[data-theme='light'],
 body.theme-light {
-  --bg: #f5f4f0;
-  --panel-bg: #ffffff;
-  --panel: #ffffff;
-  --recess: #ece8e1;
-  --surface-sunken: #ece8e1;
-  --panel-raised: #fbf9f6;
-  --surface-float: #ffffff;
+  --bg: #f2ebc9;
+  --panel-bg: #f8f3da;
+  --panel: #f8f3da;
+  --recess: #e9e1bd;
+  --surface-sunken: #e9e1bd;
+  --panel-raised: #fbf7e4;
+  --surface-float: #fbf7e4;
   --line: rgba(0, 0, 0, 0.12);
   --line2: rgba(0, 0, 0, 0.22);
   --line-soft: rgba(0, 0, 0, 0.07);
   --line-strong: rgba(0, 0, 0, 0.28);
   
-  --text: #121826;
-  --ink: #0f172a;
-  --txt: #2c384e;
-  --text-dim: #5c6c82;
-  --mut: #5c6c82;
-  --dim: #8494a8;
-  --faint: #b4c0d0;
+  --text: #10150f;
+  --ink: #10150f;
+  --txt: #3b4232;
+  --text-dim: #535c37;
+  --mut: #535c37;
+  --dim: #7a7f62;
+  --faint: #c9c193;
 
-  --accent-wash: rgba(194, 103, 76, 0.14);
-  --accent-edge: rgba(194, 103, 76, 0.45);
+  --accent-wash: rgba(83, 92, 55, 0.12);
+  --accent-edge: rgba(83, 92, 55, 0.45);
 
+  --accent: #535c37;
+  --acc: #535c37;
+  --accent2: #3b4232;
+  --acc2: #3b4232;
+  --onacc: #f2ebc9;
+  --accent-bright: #6b7547;
+  --accent-dim: #3b4232;
+  --terracotta: #535c37;
+  --ruby: #b53a22;
+  --ok: #1f7a39;
+  --err: #b53a22;
+  --warn: #9a6a00;
+  --peak-body: #10150f;
+  --peak-core: #535c37;
+  --line: rgba(16, 21, 15, 0.16);
+  --line-strong: rgba(16, 21, 15, 0.30);
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-2: 0 3px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-3: 0 6px 18px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
   --shadow-4: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
 
-  --overlay: rgba(245, 244, 240, 0.90);
-  --selection: rgba(194, 103, 76, 0.22);
+  --overlay: rgba(242, 235, 201, 0.90);
+  --selection: rgba(83, 92, 55, 0.22);
 
   /* Light: the face is lighter than the page rather than darker, and the top
      highlight becomes near-opaque white — a lit edge reads as raised under a
      light background too, where a white glaze at 8% would vanish. */
-  --ctl-top: #ffffff;
-  --ctl-bottom: #f4f1ec;
-  --ctl2-top: #ffffff;
-  --ctl2-bottom: #ece8e1;
-  --ctl2-hover-top: #ffffff;
-  --ctl2-hover-bottom: #e2ddd4;
+  --ctl-top: #fbf7e4;
+  --ctl-bottom: #efe8c8;
+  --ctl2-top: #fbf7e4;
+  --ctl2-bottom: #e9e1bd;
+  --ctl2-hover-top: #fffdf0;
+  --ctl2-hover-bottom: #e0d7ae;
   --ctl-edge: rgba(0, 0, 0, 0.14);
   --ctl-edge-top: rgba(0, 0, 0, 0.10);
   --ctl-hi: rgba(255, 255, 255, 0.9);

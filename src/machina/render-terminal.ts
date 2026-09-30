@@ -1,15 +1,16 @@
 import chalk from 'chalk';
 import { AAM_PREAMBLE, AAM_LIMITS_NOTE } from './spec.js';
 import type { VerificationReport, ClaimResult } from './verify.js';
+import { CHROME, CHROME_DIM, ERR, FAINT, OK, TEXT } from '../cli/diamond.js';
 
 const C = {
-  heading: chalk.hex('#cc785c').bold,
-  text: chalk.hex('#ede0cc'),
-  muted: chalk.hex('#8a7768'),
-  dim: chalk.hex('#4e3d30'),
-  good: chalk.hex('#5a9e6e'),
-  warn: chalk.hex('#b15439'),
-  math: chalk.hex('#9e6ecc'),
+  heading: CHROME.bold,
+  text: TEXT,
+  muted: CHROME_DIM,
+  dim: FAINT,
+  good: OK,
+  warn: ERR,
+  math: CHROME,
 };
 
 const COMPONENT_LABEL: Record<ClaimResult['component'], string> = {

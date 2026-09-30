@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mcpTool, MCP_DEFINITION } from '../src/tools/mcp.js';
+import { mcpTool, MCP_DEFINITION, parseJsonRpcMessages } from '../src/tools/mcp.js';
 
 afterEach(() => {
   // Clean up any lingering MCP servers
@@ -95,28 +95,24 @@ describe('mcpTool — unknown action', () => {
 // post-connect (tools/list_changed) or hides unadvertised tools. The client
 // must treat the connect-time snapshot as an allowlist.
 
+// Spec framing: newline-delimited JSON. The fake rejects anything else (a
+// Content-Length header line is not JSON), so the client framing is tested too.
 const FAKE_SERVER_JS = `
 let buf = '';
 process.stdin.on('data', (c) => {
   buf += c.toString();
-  while (true) {
-    const he = buf.indexOf('\\r\\n\\r\\n');
-    if (he === -1) break;
-    const m = buf.slice(0, he).match(/Content-Length:\\s*(\\d+)/i);
-    if (!m) { buf = buf.slice(he + 4); continue; }
-    const len = parseInt(m[1], 10);
-    if (buf.length < he + 4 + len) break;
-    const body = buf.slice(he + 4, he + 4 + len);
-    buf = buf.slice(he + 4 + len);
-    let msg; try { msg = JSON.parse(body); } catch { continue; }
+  let nl;
+  while ((nl = buf.indexOf('\\n')) !== -1) {
+    const line = buf.slice(0, nl);
+    buf = buf.slice(nl + 1);
+    let msg; try { msg = JSON.parse(line); } catch { continue; }
     if (msg.id === undefined) continue; // notification
     let result;
     if (msg.method === 'initialize') result = { serverInfo: { name: 'fake', version: '1.0' } };
     else if (msg.method === 'tools/list') result = { tools: [{ name: 'echo', description: 'echoes', inputSchema: {} }] };
     else if (msg.method === 'tools/call') result = { content: [{ type: 'text', text: 'called:' + msg.params.name }] };
     else result = {};
-    const out = JSON.stringify({ jsonrpc: '2.0', id: msg.id, result });
-    process.stdout.write('Content-Length: ' + Buffer.byteLength(out) + '\\r\\n\\r\\n' + out);
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\\n');
   }
 });
 `;
@@ -145,4 +141,22 @@ describe('mcpTool — connect-time tool snapshot is an allowlist', () => {
     expect(refused).toContain('disconnect and reconnect');
     expect(refused).not.toContain('called:');
   }, 15_000);
+});
+
+describe('parseJsonRpcMessages', () => {
+  it('parses newline-delimited messages and keeps a partial line as remainder', () => {
+    const { messages, remainder } = parseJsonRpcMessages('{"id":1}\n{"id":2}\n{"id":');
+    expect(messages).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(remainder).toBe('{"id":');
+  });
+
+  it('skips non-JSON log lines a server prints to stdout', () => {
+    expect(parseJsonRpcMessages('starting up...\n{"id":3}\n').messages).toEqual([{ id: 3 }]);
+  });
+
+  it('still accepts Content-Length framed replies', () => {
+    const body = '{"id":4}';
+    const { messages } = parseJsonRpcMessages(`Content-Length: ${body.length}\r\n\r\n${body}{"id":5}\n`);
+    expect(messages).toEqual([{ id: 4 }, { id: 5 }]);
+  });
 });

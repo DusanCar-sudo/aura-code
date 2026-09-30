@@ -18,15 +18,13 @@ import {
 } from '../agent/topics.js';
 import type { Display } from './display.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
+import { OK, CHROME, FAINT, TEXT_DIM } from './diamond.js';
 
 export interface StudyCommandCtx {
   display: Pick<Display, 'success' | 'warning'>;
   write: (text: string) => void;
 }
 
-const DIM = '#8a94a6';
-const FAINT = '#4a5568';
-const ACCENT = '#cc785c';
 
 /** `:learn <topic> <key> = <value> [@ <source>]` */
 const LEARN_RE = /^:learn\s+(\S+)\s+([^=]+?)\s*=\s*(.+)$/s;
@@ -39,16 +37,16 @@ export function handleStudyCommand(input: string, c: StudyCommandCtx): ReplComma
     const topics = listTopics();
     const pinned = new Set(pinnedTopics());
     if (topics.length === 0) {
-      c.write(chalk.hex(DIM)('\n  No topics yet. Add a fact with:\n'));
-      c.write(chalk.hex(FAINT)('    :learn chemistry mole = 6.022e23 particles @ IUPAC 2019\n'));
+      c.write(TEXT_DIM('\n  No topics yet. Add a fact with:\n'));
+      c.write(FAINT('    :learn chemistry mole = 6.022e23 particles @ IUPAC 2019\n'));
       return { handled: true };
     }
-    c.write(chalk.hex(ACCENT).bold('\n  Topics\n'));
+    c.write(CHROME.bold('\n  Topics\n'));
     for (const t of topics) {
-      const mark = pinned.has(t.topic) ? chalk.hex('#5a9e6e')(' ● pinned') : '';
-      c.write(`  ${chalk.hex(DIM)(t.topic.padEnd(24))}${chalk.hex(FAINT)(`${t.facts} fact${t.facts === 1 ? '' : 's'}`)}${mark}`);
+      const mark = pinned.has(t.topic) ? OK(' ● pinned') : '';
+      c.write(`  ${TEXT_DIM(t.topic.padEnd(24))}${FAINT(`${t.facts} fact${t.facts === 1 ? '' : 's'}`)}${mark}`);
     }
-    c.write(chalk.hex(FAINT)('\n  :study <topic> to pin it into the prompt · :study off to unpin all\n'));
+    c.write(FAINT('\n  :study <topic> to pin it into the prompt · :study off to unpin all\n'));
     return { handled: true };
   }
 

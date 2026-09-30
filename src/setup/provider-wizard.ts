@@ -25,6 +25,8 @@ import { saveGlobalConfig, globalConfigPath } from './global-config.js';
 import { saveKey } from './key-store.js';
 import { defaultXiaomiBaseUrl, normalizeXiaomiWizardConfig, xiaomiKeyKind } from './xiaomi.js';
 import { ZHIPU_CODING_BASE_URL, ZHIPU_GENERAL_BASE_URL } from '../providers/factory.js';
+import { CHROME, CHROME_DIM, ERR, OK, SOFT } from '../cli/diamond.js';
+import { tokenHex } from '../cli/diamond.js';
 
 export interface ProviderConfig {
   provider: string;
@@ -48,8 +50,8 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
   });
 
   try {
-    console.log(chalk.hex('#cc785c')('\n  ✦  Provider Setup Wizard'));
-    console.log(chalk.hex('#8a7768')('  Configure your AI provider in 3 easy steps.\n'));
+    console.log(CHROME('\n  ✦  Provider Setup Wizard'));
+    console.log(CHROME_DIM('  Configure your AI provider in 3 easy steps.\n'));
 
     // ── Step 1: Select Provider ─────────────────────────────────────────────
     const provider = await selectProvider(rl, askInputFn);
@@ -66,9 +68,9 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     let effectiveModel = model;
 
     if (provider.name === 'GLM (Zhipu)') {
-      console.log(chalk.hex('#cc785c')('\n  Which GLM plan are you using?\n'));
-      console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Coding Plan')} ${chalk.hex('#5a4a3a')('(subscription quota)')}`);
-      console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('Pay-as-you-go')} ${chalk.hex('#5a4a3a')('(general API key)')}`);
+      console.log(CHROME('\n  Which GLM plan are you using?\n'));
+      console.log(`  ${CHROME_DIM('1.')} ${SOFT('Coding Plan')} ${chalk.hex('#5a4a3a')('(subscription quota)')}`);
+      console.log(`  ${CHROME_DIM('2.')} ${SOFT('Pay-as-you-go')} ${chalk.hex('#5a4a3a')('(general API key)')}`);
       const planChoice = await askInput(rl, '  ▸ Choose (1 or 2): ', askInputFn);
       if (planChoice.trim() === '1') {
         effectiveModel = `zhipu-coding/${model}`;
@@ -79,10 +81,10 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     // the same host, so only ask when the region actually matters.
     let xiaomiRegion: 'sgp' | 'cn' | 'ams' = 'sgp';
     if (provider.name === 'Xiaomi MiMo' && xiaomiKeyKind(apiKey ?? undefined) !== 'paygo') {
-      console.log(chalk.hex('#cc785c')('\n  Which Token Plan region?\n'));
-      console.log(`  ${chalk.hex('#8a7768')('1.')} ${chalk.hex('#e8d5b7')('Singapore')} ${chalk.hex('#5a4a3a')('(default)')}`);
-      console.log(`  ${chalk.hex('#8a7768')('2.')} ${chalk.hex('#e8d5b7')('China')}`);
-      console.log(`  ${chalk.hex('#8a7768')('3.')} ${chalk.hex('#e8d5b7')('Amsterdam')}`);
+      console.log(CHROME('\n  Which Token Plan region?\n'));
+      console.log(`  ${CHROME_DIM('1.')} ${SOFT('Singapore')} ${chalk.hex('#5a4a3a')('(default)')}`);
+      console.log(`  ${CHROME_DIM('2.')} ${SOFT('China')}`);
+      console.log(`  ${CHROME_DIM('3.')} ${SOFT('Amsterdam')}`);
       const regionChoice = (await askInput(rl, '  ▸ Choose (1, 2, or 3) [1]: ', askInputFn)).trim();
       if (regionChoice === '2') xiaomiRegion = 'cn';
       else if (regionChoice === '3') xiaomiRegion = 'ams';
@@ -96,7 +98,7 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
         ? (effectiveModel.startsWith('zhipu-coding/') ? ZHIPU_CODING_BASE_URL : ZHIPU_GENERAL_BASE_URL)
         : (provider.baseUrl || '');
     if (defaultBase) {
-      baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex('#ede0cc')(defaultBase)}]: `;
+      baseUrlPrompt = `  ▸ Enter base URL [press Enter to use default ${chalk.hex(tokenHex('fg'))(defaultBase)}]: `;
     }
     const enteredUrl = await askInput(rl, baseUrlPrompt, askInputFn);
     let baseUrl = enteredUrl.trim() || defaultBase || provider.baseUrl || '';
@@ -104,12 +106,12 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
     if (baseUrl) {
       const normalized = normalizeBaseUrl(baseUrl);
       if (normalized !== baseUrl) {
-        console.log(chalk.hex('#8a7768')(`  ↪ Base URL normalized to ${chalk.hex('#ede0cc')(normalized)}`));
+        console.log(CHROME_DIM(`  ↪ Base URL normalized to ${chalk.hex(tokenHex('fg'))(normalized)}`));
       }
       baseUrl = normalized;
     }
     if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
-      console.log(chalk.hex('#b15439')(`  ✗ Base URL must start with http:// or https:// (got "${baseUrl}").`));
+      console.log(ERR(`  ✗ Base URL must start with http:// or https:// (got "${baseUrl}").`));
       return null;
     }
 
@@ -118,12 +120,12 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
       effectiveModel = norm.model;
       baseUrl = norm.baseUrl;
       if (norm.note) {
-        console.log(chalk.hex('#8a7768')(`  ↪ ${norm.note}\n`));
+        console.log(CHROME_DIM(`  ↪ ${norm.note}\n`));
       }
     }
 
     if (!baseUrl && provider.name === 'Custom endpoint') {
-      console.log(chalk.hex('#b15439')('  ✗ Base URL is required for custom endpoints.'));
+      console.log(ERR('  ✗ Base URL is required for custom endpoints.'));
       return null;
     }
 
@@ -149,11 +151,11 @@ export async function runProviderWizard(existingRl?: readline.Interface, askInpu
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function selectProvider(rl: readline.Interface, askInputFn?: (prompt: string) => Promise<string>): Promise<ProviderEntry | null> {
-  console.log(chalk.hex('#cc785c')('  Step 1: Select your AI provider\n'));
+  console.log(CHROME('  Step 1: Select your AI provider\n'));
 
   const items = PROVIDER_REGISTRY.map((p, i) => {
-    const num = chalk.hex('#8a7768')(String(i + 1).padStart(2) + '.');
-    const name = chalk.hex('#e8d5b7')(p.name);
+    const num = CHROME_DIM(String(i + 1).padStart(2) + '.');
+    const name = SOFT(p.name);
     return `  ${num} ${name}`;
   });
   for (const item of items) {
@@ -164,7 +166,7 @@ async function selectProvider(rl: readline.Interface, askInputFn?: (prompt: stri
   const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
   const idx = parseInt(choice, 10) - 1;
   if (idx < 0 || idx >= PROVIDER_REGISTRY.length || !Number.isFinite(idx)) {
-    console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
+    console.log(ERR('  ✗ Invalid choice.'));
     return null;
   }
   return PROVIDER_REGISTRY[idx];
@@ -177,10 +179,10 @@ async function selectProvider(rl: readline.Interface, askInputFn?: (prompt: stri
 async function selectModel(rl: readline.Interface, provider: ProviderEntry, askInputFn?: (prompt: string) => Promise<string>): Promise<string | null> {
   // Custom endpoint — user types model ID
   if (provider.name === 'Custom endpoint') {
-    console.log(chalk.hex('#cc785c')('\n  Step 2: Enter model ID\n'));
+    console.log(CHROME('\n  Step 2: Enter model ID\n'));
     const modelId = await askInput(rl, '  ▸ Model ID: ', askInputFn);
     if (!modelId) {
-      console.log(chalk.hex('#b15439')('  ✗ Model ID is required.'));
+      console.log(ERR('  ✗ Model ID is required.'));
       return null;
     }
     return modelId;
@@ -188,39 +190,39 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry, askI
 
   // Ollama — auto-detect from running instance
   if (provider.name === 'Ollama (local, free)') {
-    console.log(chalk.hex('#cc785c')('\n  Step 2: Select model'));
-    console.log(chalk.hex('#8a7768')('  Detecting models from Ollama...\n'));
+    console.log(CHROME('\n  Step 2: Select model'));
+    console.log(CHROME_DIM('  Detecting models from Ollama...\n'));
     const ollamaModels = await detectOllamaModels();
     if (ollamaModels.length === 0) {
-      console.log(chalk.hex('#b15439')('  Ollama doesn\'t seem to be running, or has no models.'));
-      console.log(chalk.hex('#8a7768')('  Start it first: ollama serve'));
-      console.log(chalk.hex('#8a7768')('  Pull a model:   ollama pull llama3.2\n'));
+      console.log(ERR('  Ollama doesn\'t seem to be running, or has no models.'));
+      console.log(CHROME_DIM('  Start it first: ollama serve'));
+      console.log(CHROME_DIM('  Pull a model:   ollama pull llama3.2\n'));
       const manual = await askInput(rl, '  ▸ Enter model name manually (or press Enter to cancel): ');
       // Bare Ollama tags aren't routable — the factory needs the ollama/
       // prefix to pick the localhost endpoint instead of the OpenAI default.
       return manual ? (manual.startsWith('ollama/') ? manual : `ollama/${manual}`) : null;
     }
     for (let i = 0; i < ollamaModels.length; i++) {
-      const num = chalk.hex('#8a7768')(String(i + 1).padStart(2) + '.');
-      const name = chalk.hex('#e8d5b7')(ollamaModels[i]);
+      const num = CHROME_DIM(String(i + 1).padStart(2) + '.');
+      const name = SOFT(ollamaModels[i]);
       console.log(`  ${num} ${name}`);
     }
     console.log();
     const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
     const idx = parseInt(choice, 10) - 1;
     if (idx < 0 || idx >= ollamaModels.length || !Number.isFinite(idx)) {
-      console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
+      console.log(ERR('  ✗ Invalid choice.'));
       return null;
     }
     return `ollama/${ollamaModels[idx]}`;
   }
 
   // Standard provider — show preset model list
-  console.log(chalk.hex('#cc785c')(`\n  Step 2: Select model for ${provider.name}\n`));
+  console.log(CHROME(`\n  Step 2: Select model for ${provider.name}\n`));
   for (let i = 0; i < provider.models.length; i++) {
     const m = provider.models[i];
-    const num = chalk.hex('#8a7768')(String(i + 1).padStart(2) + '.');
-    const label = chalk.hex('#e8d5b7')(m.label);
+    const num = CHROME_DIM(String(i + 1).padStart(2) + '.');
+    const label = SOFT(m.label);
     const speed = chalk.hex('#5a4a3a')(` (${m.speed})`);
     console.log(`  ${num} ${label}${speed}`);
   }
@@ -228,7 +230,7 @@ async function selectModel(rl: readline.Interface, provider: ProviderEntry, askI
   const choice = await askInput(rl, '  ▸ Choose a number: ', askInputFn);
   const idx = parseInt(choice, 10) - 1;
   if (idx < 0 || idx >= provider.models.length || !Number.isFinite(idx)) {
-    console.log(chalk.hex('#b15439')('  ✗ Invalid choice.'));
+    console.log(ERR('  ✗ Invalid choice.'));
     return null;
   }
   return provider.models[idx].id;
@@ -247,20 +249,20 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry, 
     return '';
   }
 
-  console.log(chalk.hex('#cc785c')('\n  Step 3: API Key\n'));
+  console.log(CHROME('\n  Step 3: API Key\n'));
 
   const existingKey = detectExistingKey(provider);
   if (existingKey) {
     // Key found — offer keep/replace
-    console.log(chalk.hex('#8a7768')(`  API key found: ${chalk.hex('#5a9e6e')(maskApiKey(existingKey))}`));
-    console.log(chalk.hex('#8a7768')(`  Source: environment (${provider.envKey})\n`));
-    console.log(chalk.hex('#8a7768')('   1. Keep this key'));
-    console.log(chalk.hex('#8a7768')('   2. Replace with new key\n'));
+    console.log(CHROME_DIM(`  API key found: ${OK(maskApiKey(existingKey))}`));
+    console.log(CHROME_DIM(`  Source: environment (${provider.envKey})\n`));
+    console.log(CHROME_DIM('   1. Keep this key'));
+    console.log(CHROME_DIM('   2. Replace with new key\n'));
     const choice = await askInput(rl, '  ▸ Choose (1 or 2): ', askInputFn);
     if (choice === '2') {
       const newKey = await askSecretInput(rl, '  ▸ Enter new API key: ');
       if (!newKey) {
-        console.log(chalk.hex('#b15439')('  ✗ No key provided.'));
+        console.log(ERR('  ✗ No key provided.'));
         return null;
       }
       return newKey;
@@ -269,13 +271,13 @@ async function configureApiKey(rl: readline.Interface, provider: ProviderEntry, 
   }
 
   // No key found — prompt for one
-  console.log(chalk.hex('#8a7768')(`  No API key found for ${provider.name}.`));
+  console.log(CHROME_DIM(`  No API key found for ${provider.name}.`));
   if (provider.signupUrl) {
-    console.log(chalk.hex('#8a7768')(`  Get one at: ${chalk.hex('#cc785c')(provider.signupUrl)}\n`));
+    console.log(CHROME_DIM(`  Get one at: ${CHROME(provider.signupUrl)}\n`));
   }
   const newKey = await askSecretInput(rl, '  ▸ Enter API key: ');
   if (!newKey) {
-    console.log(chalk.hex('#b15439')('  ✗ No key provided.'));
+    console.log(ERR('  ✗ No key provided.'));
     return null;
   }
   return newKey;
@@ -302,7 +304,7 @@ async function testAndSave(
   askInputFn?: (prompt: string) => Promise<string>,
   provider?: ProviderEntry,
 ): Promise<ProviderConfig | null> {
-  console.log(chalk.hex('#cc785c')(`\n  Testing connection to ${config.provider}...`));
+  console.log(CHROME(`\n  Testing connection to ${config.provider}...`));
 
   const result = await testProviderConnection({
     provider: config.provider,
@@ -312,15 +314,15 @@ async function testAndSave(
   });
 
   if (result.ok) {
-    console.log(chalk.hex('#5a9e6e')('  ✓ Connected! Model responds.'));
+    console.log(OK('  ✓ Connected! Model responds.'));
     saveProviderConfig(config);
-    console.log(chalk.hex('#8a7768')(`\n  Saved to ${globalConfigPath()}\n`));
+    console.log(CHROME_DIM(`\n  Saved to ${globalConfigPath()}\n`));
     return config;
   }
 
   const kind: TestFailureKind = result.kind ?? 'auth';
-  const dim = chalk.hex('#8a7768');
-  const bad = chalk.hex('#b15439');
+  const dim = CHROME_DIM;
+  const bad = ERR;
 
   // Headline: name what actually went wrong, and say plainly when the key is
   // not the problem — otherwise the user retypes it forever.
@@ -408,7 +410,7 @@ function askInput(rl: readline.Interface, prompt: string, askInputFn?: (prompt: 
   if (canToggle) process.stdout.write('\x1b[?2004l'); // disable bracketed paste
   return new Promise(resolve => {
     setTimeout(() => {
-      rl.question(chalk.hex('#cc785c')(prompt), answer => {
+      rl.question(CHROME(prompt), answer => {
         setTimeout(() => {
           if (canToggle) process.stdout.write('\x1b[?2004h'); // re-enable
           resolve((answer ?? '').trim());
@@ -441,7 +443,7 @@ function askSecretInput(rl: readline.Interface, prompt: string): Promise<string>
   }
 
   return new Promise<string>(resolve => {
-    process.stdout.write(chalk.hex('#cc785c')(prompt));
+    process.stdout.write(CHROME(prompt));
 
     const wasRaw = stdin.isRaw === true;
     rl.pause();

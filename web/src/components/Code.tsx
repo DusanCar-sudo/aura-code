@@ -302,14 +302,14 @@ export function Code({
       theme: {
         background: '#0a0d16',
         foreground: '#e2e8f0',
-        cursor: '#6ed0ea',
+        cursor: '#d8cb95',
         cursorAccent: '#0a0d16',
-        selectionBackground: 'rgba(110, 208, 234, 0.35)',
+        selectionBackground: 'rgba(231, 207, 133, 0.35)',
         black: '#121624',
         red: '#ff6b6b',
         green: '#2ed573',
         yellow: '#ffd166',
-        blue: '#6ed0ea',
+        blue: '#d8cb95',
         magenta: '#d9785c',
         cyan: '#70a1ff',
         white: '#f1f2f6',
@@ -794,7 +794,7 @@ export function Code({
                 if (l.text.startsWith('@@')) {
                   const h = diffHunks[l.hunk];
                   return (
-                    <div key={i} className="code-line-row" style={{ background: 'rgba(110,208,234,0.08)', alignItems: 'center' }}>
+                    <div key={i} className="code-line-row" style={{ background: 'rgba(231, 207, 133,0.08)', alignItems: 'center' }}>
                       <span className="line-code" style={{ color: 'var(--mut)', flex: 1 }}>{l.text}</span>
                       {h && (
                         <button

@@ -34,7 +34,7 @@ vi.mock('puppeteer-core', () => ({
 
 // Mock child_process for findChrome
 vi.mock('child_process', () => ({
-  execSync: vi.fn().mockReturnValue('/usr/bin/google-chrome'),
+  execFileSync: vi.fn().mockReturnValue('/usr/bin/google-chrome'),
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────

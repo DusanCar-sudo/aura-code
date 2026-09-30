@@ -19,6 +19,8 @@ import {
 } from '../agent/learning.js';
 import type { Display } from './display.js';
 import type { ReplCommandResult } from './repl-session-commands.js';
+import { OK, WARN, CHROME, FAINT, TEXT_DIM } from './diamond.js';
+import { tokenHex } from './diamond.js';
 
 export interface LessonCommandCtx {
   display: Pick<Display, 'success' | 'warning'>;
@@ -26,9 +28,6 @@ export interface LessonCommandCtx {
   projectRoot?: string;
 }
 
-const DIM = '#8a94a6';
-const FAINT = '#4a5568';
-const ACCENT = '#cc785c';
 
 /**
  * A timeline of when lessons were learned.
@@ -41,7 +40,7 @@ const ACCENT = '#cc785c';
  * store is read from; no daemon, no browser.
  */
 function timeline(lessons: Lesson[]): string[] {
-  if (lessons.length === 0) return [chalk.hex(FAINT)('  Nothing learned yet — no timeline to draw.')];
+  if (lessons.length === 0) return [FAINT('  Nothing learned yet — no timeline to draw.')];
 
   const byDay = new Map<string, Lesson[]>();
   for (const l of lessons) {
@@ -55,7 +54,7 @@ function timeline(lessons: Lesson[]): string[] {
   const width = 28;
 
   const out: string[] = [
-    chalk.hex(ACCENT)(`  ${lessons.length} lesson(s) across ${days.length} day(s)`),
+    CHROME(`  ${lessons.length} lesson(s) across ${days.length} day(s)`),
     '',
   ];
   for (const day of days) {
@@ -63,32 +62,32 @@ function timeline(lessons: Lesson[]): string[] {
     const bars = Math.max(1, Math.round((items.length / peak) * width));
     const scopes = new Set(items.map(i => i.scope));
     // Colour by what was learned that day: both scopes reads as mixed.
-    const hue = scopes.size > 1 ? ACCENT : scopes.has('global') ? '#5a9e6e' : '#d4903a';
+    const hue = scopes.size > 1 ? tokenHex('chrome') : scopes.has('global') ? tokenHex('ok') : tokenHex('warn');
     out.push(
-      chalk.hex(DIM)(`  ${day}  `) + chalk.hex(hue)('█'.repeat(bars))
-      + chalk.hex(FAINT)(`  ${items.length}`),
+      TEXT_DIM(`  ${day}  `) + chalk.hex(hue)('█'.repeat(bars))
+      + FAINT(`  ${items.length}`),
     );
   }
   out.push(
     '',
-    chalk.hex(FAINT)('  ') + chalk.hex('#5a9e6e')('█') + chalk.hex(FAINT)(' global   ')
-      + chalk.hex('#d4903a')('█') + chalk.hex(FAINT)(' project   ')
-      + chalk.hex(ACCENT)('█') + chalk.hex(FAINT)(' both'),
+    FAINT('  ') + OK('█') + FAINT(' global   ')
+      + WARN('█') + FAINT(' project   ')
+      + CHROME('█') + FAINT(' both'),
   );
   return out;
 }
 
 function render(lessons: Lesson[], scope: LessonScope, where: string): string[] {
   if (lessons.length === 0) {
-    return [chalk.hex(FAINT)(`  ${scope}: nothing learned yet  (${where})`)];
+    return [FAINT(`  ${scope}: nothing learned yet  (${where})`)];
   }
   const out = [
-    chalk.hex(ACCENT)(`  ${scope} — ${lessons.length} lesson(s)`) + chalk.hex(FAINT)(`  ${where}`),
+    CHROME(`  ${scope} — ${lessons.length} lesson(s)`) + FAINT(`  ${where}`),
   ];
   for (const l of lessons) {
     out.push(
-      chalk.hex(DIM)(`    ${l.learnedAt}  `) + l.text,
-      chalk.hex(FAINT)(`              :forget ${l.key}`),
+      TEXT_DIM(`    ${l.learnedAt}  `) + l.text,
+      FAINT(`              :forget ${l.key}`),
     );
   }
   return out;
@@ -138,8 +137,8 @@ export function handleLessonCommand(
       lines.push(...render(items, scope, path.basename(path.dirname(where)) + '/' + path.basename(where)));
       lines.push('');
     }
-    if (term) lines.push(chalk.hex(FAINT)(`  filtered by "${term}"`), '');
-    lines.push(chalk.hex(FAINT)('  :forget <key> removes one. Lessons are injected into every system prompt.'), '');
+    if (term) lines.push(FAINT(`  filtered by "${term}"`), '');
+    lines.push(FAINT('  :forget <key> removes one. Lessons are injected into every system prompt.'), '');
     for (const l of lines) c.write(l);
     return { handled: true };
   }

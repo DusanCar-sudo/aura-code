@@ -1,694 +1,656 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8">
-<meta name="description" content="Aura Code is an open-source, model-agnostic coding agent that keeps lessons, not chat history. They stay on your machine in ~/.aura/memory/.">
-<meta name="author" content="Du&#x161;an Milosavljevi&#x107;">
-<meta name="theme-color" content="#0B0A10">
-<link rel="canonical" href="https://www.leanproiq.com/">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://www.leanproiq.com/">
-<meta property="og:title" content="Aura Code &#x221e;K &#xb7; She remembers.">
-<meta property="og:description" content="An open-source coding agent that keeps lessons, not chat history. npm install -g aura-code">
-<meta property="og:image" content="https://www.leanproiq.com/og-image.jpg">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Aura Code &#x221e;K &#xb7; She remembers.">
-<meta name="twitter:description" content="An open-source coding agent that keeps lessons, not chat history.">
-<meta name="twitter:image" content="https://www.leanproiq.com/og-image.jpg">
-<title>Aura Code &#x221e;K &#xb7; the coding agent that remembers</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Press+Start+2P&display=swap">
-<style>
-/* The \221e  is not in Google's Latin subsets: one-glyph cuts of the same faces */
-@font-face{font-family:"Saira";font-style:italic;font-weight:100 900;font-stretch:75% 125%;unicode-range:U+221E;src:url(data:font/woff2;base64,d09GMgABAAAAAANAAA8AAAAABhQAAALoAAEZ2wAAAAAAAAAAAAAAAAAAAAAAAAAAGyAcKgZgP1NUQVRWADQRCAqBYIFfATYCJAMICwYABCAFhEQHIAwHGwcFCC4HbGMUeg+RuNZY5NEURxznOOt6FumPLsE//P6+X/tgAHxBEaCTneRkxHn3aK3Nvif1OdT9xOeQSIVKwksjaaUSGqTwFOrdkxRr0kx4CZs0kFMCaqllfZ3/9GB/f6rmW8YEXI+yBYIeHUuzwZMuW4OwWi1IL6DBcoEnSQChtjPJtuciyT1OMm04AqLIkcWaNJtaAg8OIAAAYCqKKWO7zju0FykQhxH9zjSyBXCCWWw6Br+cv4WJulNYJQzTwEKLNzMO14XyrZd1jAgNuGU6DQhAoQAFuBEiAguksANl2Cb0pTMmmPDPiIEGjd2XmMcQRpIsBhhlcAQQAhWyBQCEAXkEgAF6IBUcFEBuUlBo8rbtzVsE4ClL4ikiOFiG5oDeQO4D2OIpodWbnmrWjuxnphO95MmD3BP+b3nCzK0ZOx/ffxy1+OnDfEcfP26/5MulN28/fC9q8Y2jGWs3MvPQydglt09kb9iiWYdPRS1+fKHEpmN38wrZw7KBukBzo69ptX2hYWN0ixv7ntWoxhbXvbBbUNZfH2hsvCvS6k320Og2t/Y9qnHbBld12diXes9o/X+UYlv7u6xO10A0cf+1aL6/qXXkQKz8tlDlgdRTRKdhWwAAApT5atG05wV7+Or8j8h+Arx6sbchAG8qjjnI+xDfyI3FRhgGAME/U58K4Xlf2E+eoM80Fra6WApigGEJ4SzCIwAAABwCYliPRS4S2AkRiHxewRDDJbA08AOOMkWBJ6tqShilaqkTxGgyiCjNB08Ml7AMRiuHFSLYVhpTaa4YeKfOENSg7mZoKUHHj120j2fYh+YYVIJjhwjqZyFnVAYTKqP1Eo2pQ61ap3jgWC0HahxSyWrNkil4ByymakuuaI7Vlp6WR2o07BKNd4BKcmQc2SfhHapXo16dep1mTZsxrpPjoHqfwnM8xYrjp5d4KgXqcKjaZtXx9G4k8o5QMDNnIMNb2vzMDsEEKWTaZxTM45YBAA==) format("woff2")}
-@font-face{font-family:"Press Start 2P";font-style:normal;font-weight:400;unicode-range:U+221E;src:url(data:font/woff2;base64,d09GMgABAAAAAAigAA8AAAAAE6AAAAhLAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHCoGYAA0CIFiCZoWEQgKdIEEATYCJAMGCwYABCAFhAoHIAyBMRucElGUbFIN4KsC25gWfBNhNNrPmM/4mV4IbG7kcrEtaJumoWxjWS5cBc/zdu//2mfO4ELBTZ4nkCcCn1l+uP5NkXyqUgtXTPWqLzRAgEdfENgcQy/psRHjuYj4pq+TKK04RSen6LEMWPFnrc1Owu2wjGwb8P9o+2ZFCZ7mhodYBrGVwfINfAVJ0MxaUVPU6aqTwfO/ttB/mivtf38mB62qkITqhClJFrrG7GU2280kB9kcMCtCVSChEDSyBiBZT+gqZW11DLX3OIH4wHbb30MAP9lyqY6ugQnCZ1avnCOVBvgfzsW1cdgzmKAeUzNAv7+xLFHeB9qlMOnQPjvWyXvpYWxgHAK+E3YNEAD1kJ/lMhg++KcmMZBJGheaxEtfntSxh777Xjjhv8ZZVOB57h5XrrNoHLp66LlZy63/Vzl94teyejj/J6uH8/sOFQom0yxLL/8RvnmJdfcpUXlK7ks5Up18Runw36ElmuzbnvMeZqHdpiNCXmJAgFuOAgo6EO9do+OnMZdXfLY/w8rJY2je+Zy8eVdn2oxcJ4/34kQtVVP7ktW6wuGAXLbFCWC4VJei6b0GOlJ9rJLktwtXu3Ltp7iaqt+BknN2iOVsMJIOcw4Y0ExoHQ6E6VsJUyKWROd9RkpAw7x5HTRzHHWYuXZdLkzfK0GX2T7G0AvLVd2/fbZWOq/ouJ3Klht2crLss/DuEmLO4x0nC5jA9msjSltk3XNbogky4oAaHyETpGAOAzakmQj4/j9NY8FIwisZ5pdpds/kYLRXyWfxqtc/+Xraw/XHdGkxg3a0Fs1qRtWBziIc02s97imepjIwFOVOkxlPIAqPzJCgz4GCZqHu0RhYmc3JO/P5qg+E0NRMZqNOA2EgRSLoL/p4okpiJsTBGELNAxGIqFruoP5pmtSMStiL6kqbsEQLRPHyXWp6Os3nCX3bj0CMW7KdXu6unvOrSJw1AY2Ivw9HfOdHaiRiGdpRGltwQOjsyIEJQ7dSE/KC7rLrY+2k2wy9IZV2HYZU/Kc6GmaCviDUbqWgzNUfI16wwa5NEYfmUZj3dyARSw2V3yUiEjUjIBG/oEtUQerv2PYybVCKdeU/YcF41E7P5UASGonXAslo4qc4K0phg1JZ0xE26ShbdIxtOs4OnWBfXh5M98fFKi/fJVOHfDwkmwfyAdFx+bNgQXS2/D2iT2KJkJURp3ASLgLSEJCOgAwEZCIgCwHZCMhBQC5CcSHUV1UqalyIFU2M5UzMWSSFwvr63RSDIqNoGCiBtJAli2xYs7di/1HaaYBKreXEckDJsJm8P0s3cyGdMu30D1JcDt3L80FUYAnJCWUjloE+ZUXEf+F0GT2ytVbO+wU8JJVQr0WmM6B9/oACVehO9YFqeCHi+0Geaw2aooML6rSAjIjS5/WxK1nYoLTnfEYkjtXM+8evBmoBcaIS0YpW6FfB59cOa7FIfa29oA7mq5urhJaIvm6xcp2Ed5N+qvZq2/1UcfUkx2jCcdWMEAdo84L2Z7KmCLHvjmMqLweG4cPBVmJ4gxt0eZn1Gu6aBpPQ0ebDmjMcn6PUq1JaZ9GgrbVNqoshdmzqgBlzFjqWytGMxGgJvi67pVeWA/W6mE8SZsywfk0c3eDjYMLz1kzYtGBio1wVyNLymZhInXrzDiXYTJhm8CzljHj+DR80YJ9V27KWlvqd2HQrC1jHDgtuOdpCJq5qhqnT5B+eE/W05XZyUp+7Vsx71wItiFV33NbYXvh+h9rlVlBriXZtA3VW3XZfx9az1sIbob2juKd2n3j9RAxV4gJTrzlhLeaPaAeaM6cR4uc/sai7ZknM19S2va05X0tSfc4ndeZRe00XdhcnsKd6G9diawVHt5v8kEdGnufwMVlM5XBJeip60RCGR9VQ2AdqvNR/OuIzU6d5zajaigygGnv0k40GMcJowhALDU8QwgizHsUh8xgyjyPzBHLBJH4y4tKeooTQ9EQhzAjWszczzzHzPDMvMOvFdOG8BOdlOK/A9SoODa+h4XU0vIHG2cwbkthCEttIYgdJ7CKJPSRxGkmcQao/i0a9EZ1zHI/mRZ5Hi9ZDrnjVwZeGwgNwVBiI0oCqdNEQM2rZgEY2uC0JT10CIOoNaDCgMV00xolJNmKWjVhkI1arpc2AdgP7aKObcMomXLIJt2zCY7X0GtBn0OYvfDHW6gfraWLBfrS5b2SO/PgufhwBQf5HBAAFgAZs4DhIBx+JKbZ2Kk/7JbC6Tj+DX0KTzwTwrze+duGvu39duzPyhYRf2rQLf4qeSyLAix5NjSfFoqGgz7G0wi4tQAADPvn1s3+XI42/Oso4BD7Naf/mr7r2/XP/fP7vTskS7DyThP4RBxCKXks4tvBxSHNFrSCZMZzYY5THgddCcQRxKZs5DET7gK9BTxeO+3q6Isxv0w2a09M1hbVNNznaubtjkdsjtHOeC9zkErtss8MVXOVKlSnnmuBiM3OES377spvpGsfZq7wgOmEEkXmevdZZl2S2crWzdw7nUqjMXOt04w1u4nFrinuOTSrUKj7RFfIUcl1nN2S2ayy9yk0uca2r3sDV1ZnxVw+xytl8jT997j9CpVK9zVXOSKorFCt1Kxu0M9tv3klDHGsmNY1S1PY/rdHcOXuKTb04u2Ua5qY+OCn6Bs5q/59yJ+9/jQ/HZg5Enprdlx8Wx79wgN328pmJxkxNPn1Kz7/o7/QX+VN82mHG2bVGrTor3TxXoO3tlAfZg/SBBRrfSJFU3nNVe3RFx0GmPDI6s+89MsOhDc5u8IbzANG7tz4xZ9Ix61yl5191ep0y55itg/mv8X/7+skDJW/6orlh0dEB) format("woff2")}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070907">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Aura Code is an open-source autonomous coding agent that keeps lessons, not chat history. Small local model first, cloud when it counts. npm install -g aura-code.">
+  <title>Aura Code — The coding agent that remembers.</title>
+  <link rel="canonical" href="https://www.leanproiq.com/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Aura Code">
+  <meta property="og:url" content="https://www.leanproiq.com/">
+  <meta property="og:title" content="Aura Code — The coding agent that remembers.">
+  <meta property="og:description" content="Lessons, not chat history. A small local model first, the cloud when it counts. Open source, MIT.">
+  <meta property="og:image" content="https://www.leanproiq.com/og-nature.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Aura Code — The coding agent that remembers.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Aura Code — The coding agent that remembers.">
+  <meta name="twitter:description" content="Lessons, not chat history. A small local model first, the cloud when it counts.">
+  <meta name="twitter:image" content="https://www.leanproiq.com/og-nature.jpg">
+  <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" as="image" href="/nature/hero-tall.webp" media="(max-width: 700px)">
+  <link rel="preload" as="image" href="/nature/hero-1600.webp" imagesrcset="/nature/hero-1600.webp 1600w, /nature/hero-2400.webp 2400w" imagesizes="100vw" media="(min-width: 701px)">
+  <script>document.documentElement.classList.add('js')</script>
+  <style>
+    @font-face { font-family: 'Geist'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(/fonts/geist.woff2) format('woff2'); }
+    @font-face { font-family: 'Geist Mono'; font-style: normal; font-weight: 400 500; font-display: swap; src: url(/fonts/geist-mono.woff2) format('woff2'); }
 
-/* One deliberate world: the Spectrum at night. Single dark theme. */
-:root{
-  color-scheme:dark;
-  --ink:#0B0A10; --ink-2:#121019; --ink-3:#1A1823; --line:#2B2836; --dim:#57536A;
-  --paper:#F2F1F5; --mute:#A29EB2;
-  --red:#E4312B; --yellow:#F8B91E; --green:#2FAE4E; --cyan:#1AA6E0;
-  --red-text:#F0584F; --green-text:#3CC45E;
-  --key-hi:#434752; --key-lo:#33363F; --key-sym:#FF8A80;
-  --display:"Saira","Arial Narrow",system-ui,sans-serif;
-  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --pixel:"Press Start 2P",ui-monospace,monospace;
-  --gutter:clamp(16px,3.2vw,44px);
-}
-body{background:var(--ink);color:var(--paper);font:400 17px/1.6 var(--sans);padding-inline:var(--gutter);-webkit-font-smoothing:antialiased}
-.col{max-width:1180px;margin-inline:auto}
-.wide{max-width:1640px;margin-inline:auto}
-a{color:inherit}
-:focus-visible{outline:2px solid var(--yellow);outline-offset:3px}
-code,pre{font-family:var(--mono)}
-p code{font-size:.92em;color:var(--paper);background:var(--ink-3);padding:.08em .35em;border-radius:3px}
-::selection{background:var(--yellow);color:var(--ink)}
+    /* ── Tokens: forest, moss, cream and the gold of late light ─────────── */
+    :root {
+      --bg: #070907;
+      --bg-2: #0c100c;
+      --card: #141a14;
+      --card-2: #1a211a;
+      --line: rgba(236, 229, 196, .11);
+      --line-2: rgba(236, 229, 196, .22);
+      --cream: #f2ebc9;
+      --cream-2: #e2dbb7;
+      --soft: #d8cb95;
+      --dim: #b9baa2;
+      --mute: #8b8e7a;
+      --gold: #e7cf85;
+      --ink: #10150f;
+      --ink-2: #3b4232;
+      --olive: #535c37;
+      --sage: #dde2c8;
+      --glass: rgba(9, 12, 9, .52);
+      --sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      --wrap: 1240px;
+      --gutter: clamp(18px, 4.5vw, 56px);
+      --r: 26px;
+      --inset: clamp(8px, 1vw, 14px);
+    }
 
-.kicker{font:10px/1.6 var(--pixel);color:var(--mute);text-transform:uppercase;margin:0 0 20px}
-h1,h2,h3{font-family:var(--display);font-style:italic;text-wrap:balance}
-h2{font-weight:800;font-stretch:87.5%;font-size:clamp(34px,4.8vw,62px);line-height:.98;letter-spacing:-.01em;margin:0;max-width:17ch}
-.intro{color:var(--mute);max-width:60ch;margin:24px 0 0;font-size:clamp(17px,1.35vw,19px)}
-.intro strong{color:var(--paper);font-weight:500}
-section{padding-block:clamp(72px,10vw,140px)}
-.btn-pixel{font:10px/1 var(--pixel);color:var(--paper);background:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:12px 14px;cursor:pointer}
-.btn-pixel:hover{border-color:var(--yellow)}
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--cream); font: 400 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    img, svg, video { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    h1, h2, h3, p, ul, ol, figure, dl, dd { margin: 0; }
+    ul, ol { padding: 0; list-style: none; }
+    em { font-style: normal; }
+    code { font-family: var(--mono); font-size: .88em; color: var(--gold); }
+    ::selection { background: var(--gold); color: var(--ink); }
+    :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 8px; }
+    section[id] { scroll-margin-top: 80px; }
+    .wrap { width: min(var(--wrap), 100% - var(--gutter) * 2); margin-inline: auto; }
+    .skip { position: absolute; left: 12px; top: -60px; z-index: 100; padding: 10px 16px; background: var(--cream); color: var(--ink); border-radius: 999px; font-weight: 600; }
+    .skip:focus { top: 12px; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* ---------------- header */
-.top{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-block:22px}
-.brand{display:block;color:var(--paper)}
-.brand svg{display:block;width:128px;height:auto}
-.top nav{display:flex;flex-wrap:wrap;gap:6px 22px;font:500 14px/1 var(--sans)}
-.top nav a{color:var(--mute);text-decoration:none;padding-block:6px}
-.top nav a:hover{color:var(--paper)}
-@media (max-width:620px){.top nav .sec{display:none}}
+    /* ── Type ──────────────────────────────────────────────────────────── */
+    .h2 { font: 500 clamp(36px, 4.6vw, 64px)/1.04 var(--sans); letter-spacing: -.045em; }
+    .h2 em, h1 em { color: var(--soft); }
+    .lede { font-size: clamp(16.5px, 1.3vw, 18.5px); color: var(--dim); max-width: 36em; }
+    .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font: 500 13px/1.2 var(--sans); color: var(--cream); letter-spacing: -.005em; }
+    .chip-light { background: rgba(16, 21, 15, .08); border-color: rgba(16, 21, 15, .14); color: var(--ink); -webkit-backdrop-filter: none; backdrop-filter: none; }
 
-/* ---------------- hero */
-.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:clamp(32px,5vw,72px);align-items:center;padding-block:clamp(28px,5vw,72px) clamp(56px,7vw,104px)}
-.eyebrow{font:10px/1.6 var(--pixel);color:var(--cyan);margin:0 0 24px}
-h1{font-weight:800;font-stretch:87.5%;font-size:clamp(54px,7.4vw,104px);line-height:.88;letter-spacing:-.012em;margin:0 0 28px}
-.lede{font-size:clamp(17px,1.45vw,20px);color:var(--mute);max-width:36em;margin:0 0 32px}
-.lede strong{color:var(--paper);font-weight:500}
-.install{display:inline-flex;max-width:100%;border:1px solid var(--line);background:var(--ink-2);border-radius:6px;overflow:hidden}
-.install code{font:500 15px/1 var(--mono);padding:15px 16px;white-space:nowrap;overflow-x:auto;min-width:0}
-.install code::before{content:"$ ";color:var(--dim)}
-.install .copy{border:0;border-left:1px solid var(--line);border-radius:0;flex:none}
-.screen{margin:0}
-.screen canvas{display:block;width:100%;height:auto;aspect-ratio:352/288;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;box-shadow:0 0 0 1px rgba(242,241,245,.07),0 40px 90px -40px rgba(26,166,224,.35)}
-.screen-bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin-top:14px;font:10px/1.5 var(--pixel);color:var(--mute)}
-.screen-bar #status{flex:1;min-width:14ch;color:var(--paper)}
-.screen-bar #bytes{white-space:nowrap}
-@media (max-width:880px){.hero{grid-template-columns:minmax(0,1fr)}}
+    /* ── Buttons: pills with a round arrow ────────────────────────────── */
+    .pill { display: inline-flex; align-items: center; gap: 14px; min-height: 54px; padding: 6px 6px 6px 22px; border-radius: 999px; font: 600 15px/1 var(--sans); letter-spacing: -.01em; transition: transform .25s ease, background .25s ease, border-color .25s ease; }
+    .pill:hover { transform: translateY(-2px); }
+    .pill .knob { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; transition: transform .3s ease; }
+    .pill:hover .knob { transform: translateX(3px); }
+    .pill .knob svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .pill-glass { border: 1px solid var(--line-2); background: rgba(40, 46, 30, .55); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); color: var(--cream); }
+    .pill-glass .knob { background: var(--cream); color: var(--ink); }
+    .pill-glass:hover { background: rgba(60, 66, 40, .7); }
+    .pill-cream { background: var(--cream); color: var(--ink); box-shadow: 0 0 0 1px rgba(16, 21, 15, .12), 0 10px 30px -12px rgba(0, 0, 0, .5); }
+    .pill-cream .knob { background: var(--ink); color: var(--cream); }
+    .pill-cream:hover { background: #fff8dc; }
+    .ghost { display: inline-flex; align-items: center; min-height: 54px; padding: 0 22px; border-radius: 999px; border: 1px solid var(--line-2); font: 600 15px/1 var(--sans); color: var(--cream); transition: border-color .2s, background .2s; }
+    .ghost:hover { border-color: var(--cream); background: rgba(242, 235, 201, .06); }
 
-/* ---------------- full-width renders */
-.shot{margin:0;position:relative}
-.shot img,.shot video{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#07060b}
-.shot figcaption{color:var(--mute);font-size:14px;margin-top:14px;max-width:70ch}
-.shot.overlay figcaption{position:absolute;left:clamp(20px,4vw,72px);top:50%;transform:translateY(-50%);margin:0;max-width:min(31ch,34%)}
-.cap-title{font:italic 800 clamp(26px,2.6vw,38px)/1 var(--display);color:var(--paper);margin:0 0 14px;white-space:nowrap}
-.cap-body{margin:0 0 18px;font-size:15px}
-.spec{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font:400 12px/1.5 var(--mono)}
-.spec dt{color:var(--dim)}
-.spec dd{margin:0;color:var(--mute)}
-@media (max-width:980px){.shot.overlay figcaption{position:static;transform:none;max-width:60ch;margin-top:18px}}
+    /* ── Nav ───────────────────────────────────────────────────────────── */
+    .nav { position: fixed; z-index: 50; top: calc(var(--inset) + 12px); left: 0; right: 0; pointer-events: none; }
+    .nav-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(1320px, 100% - var(--gutter) * 2 - var(--inset) * 2 + 12px); margin: 0 auto; }
+    .nav-in > * { pointer-events: auto; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 10px; border-radius: 999px; font: 600 16px/1 var(--sans); letter-spacing: -.02em; transition: background .3s, border-color .3s; border: 1px solid transparent; }
+    .brand svg { width: 28px; height: 28px; }
+    .links { display: flex; align-items: center; gap: 2px; padding: 5px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--glass); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); font: 500 14px/1 var(--sans); }
+    .links a { padding: 10px 16px; border-radius: 999px; color: var(--cream-2); transition: background .2s, color .2s; }
+    .links a:hover { background: rgba(242, 235, 201, .1); color: var(--cream); }
+    .nav .pill { min-height: 46px; padding: 4px 4px 4px 18px; font-size: 14px; }
+    .nav .pill .knob { width: 36px; height: 36px; }
+    .nav.scrolled .brand { background: var(--glass); border-color: var(--line-2); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 
-/* ---------------- why */
-.why-grid{list-style:none;padding:0;margin:56px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 64px}
-.why-grid li{display:grid;grid-template-columns:3.2rem 1fr;column-gap:18px}
-.why-grid .n{font:italic 800 64px/.8 var(--display);color:var(--c);grid-row:span 2}
-.why-grid h3{font-weight:700;font-size:25px;line-height:1.15;margin:4px 0 10px}
-.why-grid p{margin:0;color:var(--mute);max-width:46ch}
-@media (max-width:760px){.why-grid{grid-template-columns:1fr;gap:40px}}
+    /* ── Hero ──────────────────────────────────────────────────────────── */
+    .hero { padding: var(--inset); }
+    .hero-frame { position: relative; display: grid; min-height: calc(100svh - var(--inset) * 2); border-radius: var(--r); overflow: hidden; isolation: isolate; background: #0b0e0a; }
+    .hero-bg, .hero-bg img { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .hero-bg img { object-fit: cover; object-position: 50% 62%; transform-origin: 50% 70%; animation: breathe 38s ease-in-out infinite alternate; }
+    @keyframes breathe { from { transform: scale(1.02); } to { transform: scale(1.09) translateY(-1.2%); } }
+    .hero-frame::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background:
+      radial-gradient(48% 30% at 50% 48%, rgba(7, 9, 7, .42), transparent 72%),
+      linear-gradient(180deg, rgba(7, 9, 7, .28), rgba(7, 9, 7, 0) 22%, rgba(7, 9, 7, 0) 62%, rgba(7, 9, 7, .78)); }
+    .hero-in { position: relative; z-index: 2; align-self: center; display: grid; justify-items: center; gap: 24px; padding: clamp(120px, 16vh, 170px) var(--gutter) clamp(110px, 14vh, 150px); text-align: center; }
+    .hero h1 { font: 500 clamp(46px, 7.4vw, 112px)/.98 var(--sans); letter-spacing: -.055em; text-shadow: 0 2px 40px rgba(7, 9, 7, .55); }
+    .hero-in > p { max-width: 34em; font-size: clamp(16.5px, 1.35vw, 19px); color: rgba(242, 235, 201, .88); text-shadow: 0 1px 18px rgba(7, 9, 7, .8); }
+    .hero .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 6px; }
+    .facts { position: absolute; z-index: 2; left: 0; right: 0; bottom: clamp(18px, 3vh, 30px); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; font: 400 12.5px/1.3 var(--mono); color: rgba(242, 235, 201, .78); letter-spacing: .02em; }
+    .facts li + li::before { content: ''; display: inline-block; width: 4px; height: 4px; margin: 0 22px 2px -12px; border-radius: 50%; background: var(--gold); vertical-align: middle; }
 
-/* ---------------- keys */
-.keys .shot{margin-top:56px}
-.anatomy{display:grid;grid-template-columns:auto minmax(0,1fr);gap:clamp(32px,6vw,80px);align-items:center;margin:72px 0 40px}
-.big{display:flex;flex-direction:column;align-items:center;gap:12px;width:220px}
-.big .ag,.big .ar{font:600 15px/1 var(--sans);letter-spacing:.05em;min-height:15px}
-.big .ag{color:var(--green-text)}
-.big .ar{color:var(--red-text)}
-.bigkey{position:relative;width:200px;height:156px;border-radius:16px;background:linear-gradient(var(--key-hi),var(--key-lo));box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.25),0 6px 0 #1a1b20,0 16px 34px rgba(0,0,0,.55)}
-.bigkey .m{position:absolute;left:20px;top:14px;font:700 64px/1 var(--display)}
-.bigkey .m.mod{left:0;right:0;top:44px;text-align:center;font:600 22px/1.15 var(--sans);letter-spacing:.05em;white-space:pre-line}
-.bigkey .s{position:absolute;right:18px;top:18px;font:600 18px/1 var(--sans);color:var(--key-sym)}
-.bigkey .w{position:absolute;left:0;right:0;bottom:18px;text-align:center;font:600 17px/1 var(--sans);letter-spacing:.04em}
-.legend{margin:0;display:grid;gap:0;max-width:560px}
-.legend div{display:grid;grid-template-columns:minmax(0,13rem) 1fr;gap:4px 20px;padding-block:12px;border-top:1px solid var(--line);align-items:baseline}
-.legend div:last-child{border-bottom:1px solid var(--line)}
-.legend dt{font:600 12px/1.4 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--mute)}
-.legend dd{margin:0;font:500 17px/1.3 var(--mono)}
-.legend .g{color:var(--green-text)}
-.legend .r{color:var(--red-text)}
-@media (max-width:720px){.anatomy{grid-template-columns:1fr;justify-items:center}.legend{width:100%}.legend div{grid-template-columns:1fr}}
+    /* ── Intro: modes + numbers ───────────────────────────────────────── */
+    .intro { padding: clamp(90px, 11vw, 150px) 0; }
+    .intro-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: clamp(36px, 6vw, 96px); align-items: stretch; }
+    .intro-copy { display: flex; flex-direction: column; gap: 26px; }
+    .inline-img { display: inline-block; width: 1.55em; height: .98em; margin: 0 .08em; border-radius: .28em; object-fit: cover; vertical-align: -.12em; }
+    .stats { display: flex; flex-wrap: wrap; gap: 26px clamp(28px, 4vw, 56px); margin-top: auto; padding-top: 34px; }
+    .stats li { display: grid; gap: 6px; }
+    .stats b { font: 500 clamp(48px, 5.2vw, 72px)/1 var(--sans); letter-spacing: -.05em; color: var(--cream); }
+    .stats span { font-size: 14.5px; color: var(--dim); }
+    .modes { display: grid; gap: 14px; align-content: center; }
+    .mode { display: grid; gap: 12px; padding: 28px 30px 26px; border-radius: 22px; background: var(--card-2); border: 1px solid var(--line); }
+    .mode:nth-child(2) { background: var(--cream); color: var(--ink); border-color: transparent; transform: translateX(-26px); }
+    .mode:nth-child(3) { transform: translateX(12px); }
+    .mode h3 { font: 500 clamp(24px, 2.2vw, 30px)/1.1 var(--sans); letter-spacing: -.035em; }
+    .mode p { color: var(--dim); font-size: 15.5px; line-height: 1.55; max-width: 34em; }
+    .mode:nth-child(2) p { color: var(--ink-2); }
+    .mode small { margin-top: 10px; font: 500 12.5px/1 var(--mono); letter-spacing: .04em; color: var(--gold); }
+    .mode:nth-child(2) small { color: var(--olive); }
 
-.kb-scroll{overflow-x:auto;padding-bottom:10px}
-.deck{--k:64px;--g:12px;--p:calc(var(--k) + var(--g));width:max-content;margin-inline:auto;padding:22px 28px 26px;background:linear-gradient(#15131b,#0e0d12);border:1px solid var(--line);border-radius:14px}
-.band{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:0 0 20px}
-.band .wm{height:22px;width:auto;color:var(--paper)}
-.band .model{display:flex;align-items:center;gap:14px;font:italic 800 21px/1 var(--display)}
-.band .model svg{height:26px;width:auto}
-.rows{display:grid;gap:4px}
-.row{display:flex;gap:var(--g);padding-left:calc(var(--s) * var(--p))}
-.kc{width:var(--k);display:flex;flex-direction:column;align-items:center;gap:6px}
-.lg{font:600 9px/1 var(--sans);letter-spacing:.03em;white-space:nowrap;min-height:9px;transform:scaleX(var(--fx,1))}
-.lg.g{color:var(--green-text)}
-.lg.r{color:var(--red-text)}
-.key{position:relative;display:block;width:var(--k);height:50px;padding:0;border:0;border-radius:7px;background:linear-gradient(var(--key-hi),var(--key-lo));color:var(--paper);cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 3px 0 #1a1b20,0 6px 10px rgba(0,0,0,.45);transition:transform .08s,box-shadow .08s}
-.key .m{position:absolute;left:7px;top:6px;font:700 20px/1 var(--display)}
-.key .s{position:absolute;right:6px;top:7px;font:600 8.5px/1 var(--sans);color:var(--key-sym);white-space:nowrap}
-.key .w{position:absolute;left:50%;bottom:7px;font:600 8px/1 var(--sans);letter-spacing:.03em;white-space:nowrap;transform:translateX(-50%) scaleX(var(--fx,1))}
-.key.mod .m{left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font:600 8.5px/1.2 var(--sans);letter-spacing:.05em;white-space:pre-line}
-.key.sym .m{color:var(--key-sym)}
-.key:hover{transform:translateY(1px)}
-.key[aria-pressed="true"]{box-shadow:0 0 0 2px var(--yellow),inset 0 1px 0 rgba(255,255,255,.13),0 3px 0 #1a1b20}
-.kb-note{color:var(--mute);font-size:15px;max-width:72ch;margin:26px auto 0;text-align:left}
-@media (prefers-reduced-motion:reduce){.key{transition:none}.key:hover{transform:none}}
+    /* ── Tour: the phone rests on a landscape ─────────────────────────── */
+    .tour-sec { padding: clamp(60px, 8vw, 110px) 0 0; }
+    .sec-head { display: grid; gap: 20px; max-width: 760px; margin-bottom: clamp(40px, 6vw, 72px); }
+    .tour { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: clamp(32px, 6vw, 96px); }
+    .stage { position: sticky; top: 0; height: 100vh; display: grid; place-items: center; padding: 88px 0 28px; }
+    .stage-card { position: relative; display: grid; place-items: center; width: 100%; height: 100%; max-height: 860px; border-radius: var(--r); overflow: hidden; isolation: isolate; background: var(--card); }
+    .stage-card > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 62% 40%; z-index: -1; }
+    .stage-card::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 7, .15), rgba(7, 9, 7, .55)); }
+    .phone { position: relative; width: var(--pw, 300px); padding: 8px; border-radius: 44px; background: linear-gradient(160deg, #262b1f, #0b0d0a 45%, #1b2017); border: 1px solid rgba(242, 235, 201, .22); box-shadow: 0 50px 90px -30px rgba(0, 0, 0, .8), 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .12); }
+    .phone .screen { position: relative; overflow: hidden; border-radius: 36px; aspect-ratio: 576 / 1280; background: #0a1020; }
+    .phone .screen img, .phone .screen video { width: 100%; height: 100%; object-fit: cover; }
+    .stage .phone { --pw: min(290px, calc((100vh - 230px) * .45)); }
+    .stage .screen img { position: absolute; inset: 0; opacity: 0; transition: opacity .55s ease; }
+    .stage .screen img.on { opacity: 1; }
+    .tour-count { position: absolute; left: 22px; right: 22px; bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 14px; font: 500 12px/1 var(--mono); letter-spacing: .1em; color: var(--cream-2); }
+    .tour-count b { color: var(--gold); font-weight: 500; }
+    .tour-bar { display: flex; gap: 6px; }
+    .tour-bar i { width: 20px; height: 3px; border-radius: 2px; background: rgba(242, 235, 201, .28); transition: background .3s, width .3s; }
+    .tour-bar i.on { background: var(--gold); width: 34px; }
+    .chapters { padding: 16vh 0 10vh; }
+    .chapter { min-height: 62vh; display: flex; flex-direction: column; justify-content: center; gap: 18px; padding: 28px 0; transition: opacity .4s ease; }
+    .js .chapter { opacity: .72; }
+    .js .chapter.on { opacity: 1; }
+    .chapter h3 { font: 500 clamp(30px, 3.3vw, 44px)/1.06 var(--sans); letter-spacing: -.045em; max-width: 15ch; }
+    .chapter h3 em { color: var(--soft); }
+    .chapter p { color: var(--dim); max-width: 42ch; }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tags li { padding: 6px 12px; border: 1px solid var(--line-2); border-radius: 999px; font: 400 12.5px/1.3 var(--mono); color: var(--cream-2); background: rgba(242, 235, 201, .04); }
+    .ch-phone { display: none; }
 
-/* ---------------- gazelle chart */
-.chart{margin:56px 0 0;padding:clamp(20px,3vw,36px);background:var(--ink-2);border:1px solid var(--line);border-radius:10px}
-.chart-title{font:600 13px/1.4 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--mute);margin:0 0 26px}
-.plot{display:grid;grid-template-columns:5.5rem minmax(0,1fr);column-gap:14px;padding-right:62px}
-.plot .names{display:grid;grid-auto-rows:40px;row-gap:20px;align-items:center;font:600 15px/1 var(--sans)}
-.area{position:relative}
-.bars{display:grid;grid-auto-rows:40px;row-gap:20px;position:relative;z-index:1}
-.track{display:flex;align-items:center}
-.seg{height:100%;flex:none}
-.seg.c{background:var(--cyan)}
-.seg.y{background:var(--yellow)}
-.tot{margin-left:10px;font:500 15px/1 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-.grid{position:absolute;inset:0 0 0 0;pointer-events:none}
-.grid span{position:absolute;top:-10px;bottom:-12px;width:1px;background:var(--line)}
-.ticks{position:relative;height:18px;margin-top:20px;font:400 12px/1 var(--mono);color:var(--mute);font-variant-numeric:tabular-nums}
-.ticks span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
-.ticks span:first-child{transform:none}
-.ticks span:last-child{transform:translateX(-100%)}
-.chart-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px 28px;margin-top:26px;font-size:14px;color:var(--mute)}
-.keyl{display:flex;flex-wrap:wrap;gap:8px 22px;margin:0;padding:0;list-style:none}
-.keyl li{display:flex;align-items:center;gap:8px}
-.keyl i{width:12px;height:12px;display:inline-block}
-.chart-foot p{margin:0;max-width:52ch}
-@media (max-width:560px){.plot{grid-template-columns:4.6rem minmax(0,1fr);padding-right:48px}.ticks span:nth-child(2),.ticks span:nth-child(4){display:none}}
+    /* ── Runtimes ──────────────────────────────────────────────────────── */
+    .run-sec { padding: clamp(70px, 9vw, 130px) 0; }
+    .runtimes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .rt { display: flex; flex-direction: column; gap: 24px; padding: 14px 14px clamp(22px, 2.6vw, 34px); border-radius: var(--r); background: var(--card); border: 1px solid var(--line); }
+    .rt-img { position: relative; aspect-ratio: 2 / 1; border-radius: 18px; overflow: hidden; }
+    .rt-img img { width: 100%; height: 100%; object-fit: cover; }
+    .rt-img .chip { position: absolute; left: 14px; top: 14px; }
+    .rt-body { display: flex; flex-direction: column; gap: 22px; padding: 0 clamp(8px, 1.4vw, 20px); flex: 1; }
+    .rt h3 { font: 500 clamp(24px, 2.3vw, 31px)/1.1 var(--sans); letter-spacing: -.04em; }
+    .rt h3 em { color: var(--soft); }
+    .diagram { display: flex; align-items: center; padding: 18px; border: 1px dashed var(--line-2); border-radius: 18px; background: rgba(7, 9, 7, .45); }
+    .node { flex: none; display: grid; gap: 4px; justify-items: center; min-width: 108px; padding: 13px 12px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--card-2); text-align: center; }
+    .node svg { width: 28px; height: 28px; fill: none; stroke: var(--cream); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .node.warm svg { stroke: var(--gold); }
+    .node b { font: 600 13px/1.2 var(--sans); }
+    .node small { font: 400 11px/1.3 var(--mono); color: var(--mute); }
+    .wire { position: relative; flex: 1; min-width: 60px; height: 28px; }
+    .wire::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: repeating-linear-gradient(90deg, var(--gold) 0 7px, transparent 7px 14px); background-size: 14px 2px; animation: wire 1s linear infinite; }
+    .wire span { position: absolute; left: 50%; top: -14px; transform: translateX(-50%); padding: 0 8px; background: #0b0e0b; font: 400 10.5px/1.2 var(--mono); color: var(--soft); white-space: nowrap; }
+    @keyframes wire { to { background-position: 14px 0; } }
+    .rt ul { display: grid; gap: 13px; color: var(--dim); font-size: 15.5px; }
+    .rt li { position: relative; padding-left: 24px; }
+    .rt li::before { content: ''; position: absolute; left: 3px; top: .62em; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--gold); }
+    .rt li b { color: var(--cream); font-weight: 500; }
+    pre { margin: 0; padding: 16px 18px; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: #050705; font: 400 13px/1.7 var(--mono); color: var(--cream-2); }
+    pre .c { color: var(--mute); }
+    .rt-foot { margin-top: auto; font: 400 13px/1.5 var(--mono); color: var(--mute); }
+    .rt-foot a { color: var(--gold); border-bottom: 1px solid rgba(231, 207, 133, .4); }
+    .rt-foot a:hover { border-color: var(--gold); }
 
-/* ---------------- archimedes */
-.frame{position:relative}
-.vidbtn{position:absolute;right:14px;bottom:14px;background:rgba(11,10,16,.72);backdrop-filter:blur(4px)}
-.arch{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(36px,6vw,88px);margin-top:clamp(48px,6vw,80px);align-items:start}
-.rules{list-style:none;margin:0 0 28px;padding:0}
-.rules li{display:grid;grid-template-columns:5.2rem 1fr;gap:14px;padding-block:14px;border-top:1px solid var(--line);align-items:baseline}
-.rules li:last-child{border-bottom:1px solid var(--line)}
-.rules b{display:block;font-weight:500;color:var(--paper)}
-.rules span{color:var(--mute);font-size:15px}
-.chip{font:8px/1 var(--pixel);padding:7px 7px 6px;border:1px solid currentColor;border-radius:3px;justify-self:start}
-.chip.local{color:var(--green-text)}
-.chip.cloud{color:var(--cyan)}
-.conf{margin:0;background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:18px 20px;font:400 14px/1.65 var(--mono);color:var(--mute);overflow-x:auto}
-.conf .k{color:var(--paper)} .conf .v{color:var(--yellow)}
-@media (max-width:880px){.arch{grid-template-columns:minmax(0,1fr)}}
+    /* ── And the rest: cream carousel over pale mountains ─────────────── */
+    .more { position: relative; margin: 0 var(--inset); padding: clamp(80px, 9vw, 130px) 0; border-radius: var(--r); background: #eee7c8; color: var(--ink); overflow: hidden; isolation: isolate; }
+    .more-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 100%; z-index: -1; }
+    .more-in { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: clamp(28px, 4vw, 64px); padding-left: max(var(--gutter), (100% - var(--wrap)) / 2); }
+    .more-head { display: flex; flex-direction: column; gap: 22px; }
+    .more .h2 { color: var(--ink); }
+    .more .h2 em { color: var(--olive); }
+    .more .lede { color: var(--ink-2); }
+    .count { font: 500 clamp(44px, 4.4vw, 60px)/1 var(--sans); letter-spacing: -.05em; margin-top: 12px; }
+    .count span { font-size: .45em; letter-spacing: -.02em; color: var(--olive); }
+    .arrows { display: flex; gap: 10px; margin-top: auto; padding-top: 16px; }
+    .arrows button { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; border: 0; background: var(--ink); color: var(--cream); transition: transform .2s, opacity .2s, background .2s; }
+    .arrows button:first-child { background: rgba(16, 21, 15, .12); color: var(--ink); }
+    .arrows button:hover:not(:disabled) { transform: scale(1.06); }
+    .arrows button:disabled { opacity: .35; cursor: default; }
+    .arrows svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .rail { --cw: clamp(250px, 24vw, 310px); overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-left: 0; scrollbar-width: none; padding: 6px 0 10px; border-radius: 22px 0 0 22px; }
+    .rail::-webkit-scrollbar { display: none; }
+    .rail:focus-visible { outline-offset: -3px; }
+    .fcards { display: grid; grid-auto-flow: column; grid-auto-columns: var(--cw); gap: 16px; width: max-content; padding-right: max(var(--gutter), calc(100% - var(--cw))); }
+    .fcard { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; aspect-ratio: 3 / 4; padding: 22px; border-radius: 22px; overflow: hidden; isolation: isolate; color: var(--cream); scroll-snap-align: start; background: #1a2016; }
+    .fcard img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; transition: transform .8s ease; }
+    .fcard:hover img { transform: scale(1.05); }
+    .fcard::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 7, .1) 20%, rgba(7, 9, 7, .45) 55%, rgba(7, 9, 7, .9)); }
+    .fcard .chip { position: absolute; left: 18px; top: 18px; }
+    .fcard h3 { font: 500 24px/1.12 var(--sans); letter-spacing: -.035em; }
+    .fcard p { font-size: 14.5px; line-height: 1.5; color: rgba(242, 235, 201, .86); }
 
-/* ---------------- quick start */
-.start{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(36px,6vw,88px);align-items:center}
-.term{background:#000;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.term-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line);font:10px/1 var(--pixel);color:var(--mute)}
-.term-bar .btn-pixel{padding:9px 11px;font-size:9px}
-.term pre{margin:0;padding:22px 20px;font:400 15px/1.8 var(--mono);overflow-x:auto;color:var(--paper)}
-.term .p{color:var(--dim);user-select:none}
-.term .str{color:var(--yellow)}
-.start .small{color:var(--mute);font-size:15px;margin:22px 0 0;max-width:52ch}
-@media (max-width:880px){.start{grid-template-columns:minmax(0,1fr)}}
+    /* ── Control: settings over the Alps ─────────────────────────────── */
+    .control { padding: clamp(90px, 11vw, 150px) 0; }
+    .control-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(36px, 6vw, 96px); align-items: center; }
+    .levels { display: grid; margin-top: 36px; border-top: 1px solid var(--line); counter-reset: lv; }
+    .levels li { display: grid; grid-template-columns: 44px 1fr; gap: 4px 12px; padding: 18px 0; border-bottom: 1px solid var(--line); counter-increment: lv; }
+    .levels li::before { content: counter(lv, decimal-leading-zero); grid-row: span 2; padding-top: 3px; font: 500 12px/1 var(--mono); color: var(--gold); }
+    .levels b { font: 600 16px/1.3 var(--sans); }
+    .levels span { color: var(--dim); font-size: 15px; line-height: 1.5; }
+    .ver { display: inline-block; margin-left: 8px; padding: 3px 8px; border: 1px solid rgba(231, 207, 133, .45); border-radius: 999px; font: 500 11px/1.3 var(--mono); color: var(--gold); vertical-align: middle; }
+    .ctl-stage { position: relative; display: grid; place-items: center; min-height: 560px; padding: clamp(18px, 3vw, 40px); border-radius: var(--r); overflow: hidden; isolation: isolate; }
+    .ctl-stage > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 28% 50%; z-index: -1; }
+    .panel { width: 100%; max-width: 470px; padding: clamp(20px, 2.4vw, 30px); border-radius: 22px; border: 1px solid var(--line-2); background: rgba(8, 11, 8, .72); -webkit-backdrop-filter: blur(18px) saturate(1.1); backdrop-filter: blur(18px) saturate(1.1); box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .7); }
+    .panel-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font: 500 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+    .panel-title span { color: var(--dim); }
+    .setting { display: grid; grid-template-columns: 1fr auto; gap: 8px 22px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--line); }
+    .setting:last-of-type { border-bottom: 0; padding-bottom: 4px; }
+    .setting h3 { font: 500 17px/1.3 var(--sans); }
+    .setting p { grid-column: 1; margin-top: 2px; color: var(--dim); font-size: 14px; line-height: 1.5; }
+    .setting .state { grid-column: 1 / -1; margin-top: 4px; padding: 10px 14px; border-left: 2px solid var(--line-2); background: rgba(242, 235, 201, .05); border-radius: 0 10px 10px 0; font: 400 12.5px/1.5 var(--mono); color: var(--cream-2); }
+    .setting.is-on .state { border-color: var(--gold); background: rgba(231, 207, 133, .1); color: #fff3cf; }
+    .switch { position: relative; width: 56px; height: 32px; padding: 0; border: 2px solid var(--mute); border-radius: 999px; background: transparent; transition: background .25s, border-color .25s; }
+    .switch::after { content: ''; position: absolute; left: 5px; top: 5px; width: 18px; height: 18px; border-radius: 50%; background: var(--mute); transition: transform .25s cubic-bezier(.3, 1.4, .5, 1), background .25s, width .25s, height .25s, top .25s, left .25s; }
+    .switch[aria-checked="true"] { background: var(--gold); border-color: var(--gold); }
+    .switch[aria-checked="true"]::after { transform: translateX(24px); background: var(--ink); width: 22px; height: 22px; top: 3px; left: 3px; }
 
-/* ---------------- kit */
-.swatches{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin:56px 0 0}
-.sw{display:grid;gap:10px;padding:0;background:none;border:0;color:var(--paper);text-align:left;cursor:pointer;font:inherit}
-.sw .chipc{display:block;aspect-ratio:4/3;background:var(--sw);border-radius:6px;box-shadow:inset 0 0 0 1px rgba(242,241,245,.1)}
-.sw .nm{font:600 14px/1.2 var(--sans)}
-.sw .hx{font:400 13px/1.2 var(--mono);color:var(--mute)}
-.sw:hover .chipc{box-shadow:inset 0 0 0 1px rgba(242,241,245,.35)}
-@media (max-width:900px){.swatches{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:420px){.swatches{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.specimens{margin:56px 0 0;display:grid;gap:0}
-.spec-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:8px 40px;align-items:center;padding-block:24px;border-top:1px solid var(--line)}
-.spec-row:last-child{border-bottom:1px solid var(--line)}
-.spec-row .sample{margin:0;overflow-wrap:anywhere}
-.spec-row .about{margin:0;color:var(--mute);font-size:15px}
-.spec-row .about b{display:block;color:var(--paper);font-weight:600}
-.s-saira{font:italic 800 clamp(40px,5vw,64px)/1 var(--display)}
-.s-plex{font:500 clamp(24px,2.6vw,32px)/1.2 var(--sans)}
-.s-pixel{font:clamp(14px,1.5vw,18px)/1.5 var(--pixel)}
-@media (max-width:760px){.spec-row{grid-template-columns:minmax(0,1fr)}}
-.tiles{display:grid;grid-template-columns:2fr 2fr 1fr;gap:14px;margin-top:56px}
-.tile{margin:0;border-radius:10px;border:1px solid var(--line);display:grid;place-items:center;padding:clamp(28px,4vw,56px) 20px;min-height:200px;position:relative}
-.tile svg{width:min(100%,320px);height:auto}
-.tile.light{background:var(--paper);color:var(--ink);border-color:var(--paper)}
-.tile.dark{background:var(--ink-2);color:var(--paper)}
-.tile.icon{background:var(--ink-2)}
-.tile.icon svg{width:min(100%,112px)}
-.tile figcaption{position:absolute;left:14px;bottom:12px;font:8px/1 var(--pixel);color:var(--mute)}
-.tile.light figcaption{color:#5f5b6e}
-@media (max-width:760px){.tiles{grid-template-columns:1fr 1fr}.tile.dark{grid-column:1 / -1}}
+    /* ── Demo video ────────────────────────────────────────────────────── */
+    .demo { padding: 0 0 clamp(90px, 11vw, 150px); }
+    .demo-grid { display: grid; grid-template-columns: 1fr auto; gap: clamp(36px, 8vw, 120px); align-items: center; }
+    .demo .phone { --pw: min(290px, 74vw); }
+    .play { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px; width: 100%; border: 0; background: linear-gradient(180deg, rgba(7, 9, 7, .1), rgba(7, 9, 7, .65)); }
+    .play i { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: var(--cream); color: var(--ink); box-shadow: 0 0 0 10px rgba(242, 235, 201, .16), 0 20px 40px -10px rgba(0, 0, 0, .6); transition: transform .25s; }
+    .play:hover i { transform: scale(1.08); }
+    .play i svg { width: 26px; height: 26px; margin-left: 3px; fill: currentColor; }
+    .play span { padding: 5px 12px; border-radius: 999px; background: rgba(7, 9, 7, .8); font: 400 12px/1.3 var(--mono); color: var(--cream); }
 
-/* ---------------- footer */
-.foot{padding-block:clamp(56px,8vw,104px) 0;border-top:1px solid var(--line)}
-.colophon{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:28px 64px}
-.colophon h2{font-size:clamp(26px,3vw,36px)}
-.colophon dl{margin:0;display:grid;gap:18px}
-.colophon dt{font:600 15px/1.3 var(--sans)}
-.colophon dd{margin:4px 0 0;color:var(--mute);font-size:15px;max-width:64ch}
-@media (max-width:760px){.colophon{grid-template-columns:minmax(0,1fr)}}
-.sign{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;margin-top:clamp(56px,8vw,96px)}
-.sign p{margin:0 0 28px;color:var(--mute);font-size:14px}
-.sign p a{color:var(--paper)}
-.sign .corner{height:clamp(64px,9vw,120px);width:auto;flex:none;display:block}
-</style>
+    /* ── Download ──────────────────────────────────────────────────────── */
+    .dl-sec { padding: 0 0 clamp(80px, 10vw, 140px); }
+    .banner { position: relative; border-radius: calc(var(--r) + 6px); overflow: hidden; isolation: isolate; background: #0b0e0a; }
+    .banner > picture img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 70%; z-index: -2; }
+    .banner::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(7, 9, 7, .82), rgba(7, 9, 7, .35) 60%, rgba(7, 9, 7, .2)); }
+    .banner-in { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: clamp(28px, 5vw, 72px); align-items: end; min-height: 540px; padding: clamp(28px, 5vw, 72px); }
+    .banner .h2 { margin: 20px 0 18px; }
+    .banner .lede { color: rgba(242, 235, 201, .86); }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .file { display: grid; gap: 14px; padding: 22px; border-radius: 20px; border: 1px solid var(--line-2); background: rgba(8, 11, 8, .7); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+    .file dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; font: 400 13px/1.5 var(--mono); }
+    .file dt { color: var(--dim); }
+    .file dd { color: var(--cream); word-break: break-all; }
+    .copy { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 15px; border: 1px solid var(--line-2); border-radius: 999px; background: transparent; font: 500 12px/1 var(--mono); color: var(--cream-2); transition: color .2s, border-color .2s, background .2s; }
+    .copy:hover { color: var(--cream); border-color: var(--cream); }
+    .copy svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .copy.done { color: var(--ink); background: var(--gold); border-color: var(--gold); }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; counter-reset: st; }
+    .steps li { padding: 24px 24px 26px; border: 1px solid var(--line); border-radius: 20px; background: var(--card); counter-increment: st; }
+    .steps li::before { content: '0' counter(st); display: block; margin-bottom: 14px; font: 500 12px/1 var(--mono); color: var(--gold); letter-spacing: .1em; }
+    .steps b { display: block; margin-bottom: 6px; font: 600 19px/1.2 var(--sans); letter-spacing: -.025em; }
+    .steps p { color: var(--dim); font-size: 14.5px; line-height: 1.55; }
+    .note { display: grid; gap: 12px; margin-top: 14px; padding: 18px 22px; border: 1px solid var(--line); border-left: 2px solid var(--gold); border-radius: 0 16px 16px 0; background: rgba(231, 207, 133, .05); color: var(--dim); font-size: 14.5px; line-height: 1.55; }
+    .note b, .note em { color: var(--cream); font-weight: 600; }
+    .src { margin-top: 22px; display: grid; gap: 10px; }
+    .src-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font: 500 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-  <symbol id="aura-letters" viewBox="56 56 450 108"><path fill="currentColor" d="M160 110A50 50 0 1 0 60 110A50 50 0 1 0 160 110ZM130 110A20 20 0 1 1 90 110A20 20 0 1 1 130 110ZM130 160H160V60H130ZM178 110H208V60H178ZM178 110A50 50 0 0 0 278 110L248 110A20 20 0 0 1 208 110ZM248 160H278V60H248ZM296 160H326V60H296ZM388.402 83.504A50 50 0 0 0 296 110L326 110A20 20 0 0 1 362.961 99.402ZM501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402Z"/></symbol>
-  <symbol id="stripes" viewBox="0 0 146 100"><path fill="#E4312B" d="M0 100L24 100L74 0L50 0Z"/><path fill="#F8B91E" d="M24 100L48 100L98 0L74 0Z"/><path fill="#2FAE4E" d="M48 100L72 100L122 0L98 0Z"/><path fill="#1AA6E0" d="M72 100L96 100L146 0L122 0Z"/></symbol>
-  <symbol id="lockup" viewBox="54 54 626 170">
-    <path fill="currentColor" d="M160 110A50 50 0 1 0 60 110A50 50 0 1 0 160 110ZM130 110A20 20 0 1 1 90 110A20 20 0 1 1 130 110ZM130 160H160V60H130ZM178 110H208V60H178ZM178 110A50 50 0 0 0 278 110L248 110A20 20 0 0 1 208 110ZM248 160H278V60H248ZM296 160H326V60H296ZM388.402 83.504A50 50 0 0 0 296 110L326 110A20 20 0 0 1 362.961 99.402ZM501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402ZM545.562 188.979A17 17 0 1 0 545.562 213.021L540.273 207.732A9.52 9.52 0 1 1 540.273 194.268ZM590.442 201A17 17 0 1 0 556.442 201A17 17 0 1 0 590.442 201ZM582.962 201A9.52 9.52 0 1 1 563.922 201A9.52 9.52 0 1 1 582.962 201ZM601.322 218H608.802V184H601.322ZM601.322 218H618.322V210.52H601.322ZM601.322 191.48H618.322V184H601.322ZM618.322 218A17 17 0 0 0 618.322 184L618.322 191.48A9.52 9.52 0 0 1 618.322 210.52ZM646.202 218H653.682V184H646.202ZM646.202 191.48H673.402V184H646.202ZM646.202 204.74H670.002V197.26H646.202ZM646.202 218H673.402V210.52H646.202Z"/>
-    <path fill="#E4312B" d="M527.402 160L551.402 160L601.402 60L577.402 60Z"/><path fill="#F8B91E" d="M551.402 160L575.402 160L625.402 60L601.402 60Z"/><path fill="#2FAE4E" d="M575.402 160L599.402 160L649.402 60L625.402 60Z"/><path fill="#1AA6E0" d="M599.402 160L623.402 160L673.402 60L649.402 60Z"/>
-  </symbol>
-</svg>
+    /* ── FAQ ───────────────────────────────────────────────────────────── */
+    .faq-sec { padding: 0 0 clamp(90px, 11vw, 150px); }
+    .faq-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: clamp(32px, 6vw, 96px); }
+    .faq-grid .h2 { margin-top: 20px; }
+    details { border-bottom: 1px solid var(--line); }
+    details:first-child { border-top: 1px solid var(--line); }
+    summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; list-style: none; cursor: pointer; font: 500 clamp(18px, 1.8vw, 21px)/1.3 var(--sans); letter-spacing: -.025em; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: '+'; flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(242, 235, 201, .08); font: 400 20px/1 var(--sans); color: var(--gold); transition: transform .3s, background .3s; }
+    details[open] summary::after { transform: rotate(45deg); background: rgba(231, 207, 133, .16); }
+    details p { padding: 0 52px 26px 0; color: var(--dim); max-width: 60ch; }
+    details p a { color: var(--gold); border-bottom: 1px solid rgba(231, 207, 133, .4); }
+    details p em { color: var(--cream); }
 
-<header class="top col" id="top">
-  <a class="brand" href="#top" aria-label="Aura Code, back to top"><svg viewBox="0 0 626 170" role="img" aria-label="aura code"><use href="#lockup"/></svg></a>
-  <nav aria-label="Sections">
-    <a class="sec" href="#keys">Keys</a>
-    <a class="sec" href="#gazelle">Gazelle</a>
-    <a class="sec" href="#archimedes">Archimedes</a>
-    <a class="sec" href="#kit">Kit</a>
-    <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub &#x2197;</a>
-  </nav>
-</header>
+    /* ── Footer: the valley again, and the name across it ─────────────── */
+    .foot { padding: 0 var(--inset) var(--inset); }
+    .foot-frame { position: relative; display: flex; flex-direction: column; gap: 40px; min-height: 640px; padding: clamp(28px, 4vw, 56px); padding-bottom: 0; border-radius: var(--r); overflow: hidden; isolation: isolate; background: #0b0e0a; }
+    .foot-frame > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 85%; z-index: -2; }
+    .foot-frame::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 7, .9), rgba(7, 9, 7, .55) 45%, rgba(7, 9, 7, .25) 70%, rgba(7, 9, 7, .55)); }
+    .foot-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
+    .foot-top h2 { font: 500 clamp(30px, 3.4vw, 46px)/1.06 var(--sans); letter-spacing: -.045em; }
+    .foot-top h2 em { color: var(--soft); }
+    .foot-top .actions { margin-top: 24px; }
+    .foot-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .foot-cols h3 { margin-bottom: 14px; font: 500 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+    .foot-cols li + li { margin-top: 9px; }
+    .foot-cols a { color: var(--cream-2); font-size: 15px; transition: color .2s; }
+    .foot-cols a:hover { color: var(--gold); }
+    .foot-base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: auto; font: 400 12.5px/1.5 var(--mono); color: rgba(242, 235, 201, .8); }
+    .wordmark { margin: 0 -.03em -.19em; font: 600 clamp(64px, 16.2vw, 250px)/1 var(--sans); letter-spacing: -.07em; white-space: nowrap; text-align: center; background: linear-gradient(180deg, #fff7d6 0%, #d9cf9f 38%, #8d8a62 72%, rgba(90, 92, 60, .5)); -webkit-background-clip: text; background-clip: text; color: transparent; user-select: none; }
 
-<main>
-  <section class="hero col" aria-labelledby="h1">
-    <div>
-      <p class="eyebrow">AURA CODE &#x221e;K &#xb7; RETRO EDITION</p>
-      <h1 id="h1">She remembers.</h1>
-      <p class="lede">Aura Code is an autonomous coding agent that keeps <strong>lessons, not chat history</strong>: what broke last time, what your build actually needs, what you told her once. They live in <code>~/.aura/memory/</code> on your machine. So we built her a machine: a 1982 home computer that never shipped.</p>
-      <div class="install">
-        <code id="install-cmd">npm install -g aura-code</code>
-        <button class="btn-pixel copy" type="button" id="copy-install" data-copy="npm install -g aura-code" data-select="install-cmd">COPY</button>
-      </div>
+    /* ── Reveal ────────────────────────────────────────────────────────── */
+    .js .rv { opacity: 0; transform: translateY(18px); transition: opacity .9s ease, transform .9s cubic-bezier(.2, .7, .2, 1); transition-delay: var(--d, 0s); }
+    .js .rv.in { opacity: 1; transform: none; }
+
+    /* ── Responsive ────────────────────────────────────────────────────── */
+    @media (max-width: 1000px) {
+      .links { display: none; }
+      .intro-grid, .control-grid, .banner-in, .faq-grid, .foot-top { grid-template-columns: minmax(0, 1fr); }
+      .mode:nth-child(2), .mode:nth-child(3) { transform: none; }
+      .runtimes { grid-template-columns: minmax(0, 1fr); }
+      .tour { grid-template-columns: minmax(0, 1fr); }
+      .stage { display: none; }
+      .chapters { padding: 0; }
+      .chapter { min-height: 0; padding: 0 0 72px; opacity: 1 !important; }
+      .chapter h3 { max-width: none; }
+      .ch-phone { display: grid; place-items: center; margin-top: 10px; padding: 36px 16px; border-radius: var(--r); overflow: hidden; position: relative; isolation: isolate; }
+      .ch-phone > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
+      .ch-phone .phone { --pw: min(270px, 78%); }
+      .more-in { grid-template-columns: minmax(0, 1fr); padding-left: var(--gutter); }
+      .arrows { margin-top: 0; }
+      .demo-grid { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+      .banner-in { min-height: 0; }
+      .banner::after { background: linear-gradient(180deg, rgba(7, 9, 7, .8), rgba(7, 9, 7, .55)); }
+    }
+    @media (max-width: 700px) {
+      body { font-size: 16px; }
+      .brand span { display: none; }
+      .brand { padding: 6px; }
+      .hero-in { padding-top: 110px; }
+      .hero .cta { flex-direction: column; align-items: stretch; width: min(100%, 320px); }
+      .hero .cta a { justify-content: space-between; }
+      .hero .cta .ghost { justify-content: center; }
+      .facts { display: none; }
+      .diagram { flex-direction: column; gap: 6px; }
+      .wire { width: 28px; min-width: 0; height: 64px; flex: none; }
+      .wire::before { left: 50%; right: auto; top: 0; bottom: 0; width: 2px; height: auto; margin: 0 0 0 -1px; background: repeating-linear-gradient(180deg, var(--gold) 0 7px, transparent 7px 14px); background-size: 2px 14px; animation-name: wire-v; }
+      .wire span { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+      @keyframes wire-v { to { background-position: 0 14px; } }
+      .rail { --cw: min(78vw, 300px); }
+      .steps { grid-template-columns: 1fr; }
+      .ctl-stage { min-height: 0; }
+      .foot-cols { grid-template-columns: 1fr 1fr; }
+      .foot-frame { min-height: 0; }
+      details p { padding-right: 0; }
+      .stats b { font-size: 46px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; }
+      .js .rv { opacity: 1; transform: none; }
+    }
+    /* ── Aura Code additions ───────────────────────────────────────────── */
+    .stripes { display: block; height: 14px; width: auto; }
+    .brand .stripes { height: 16px; }
+    .install { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 6px 6px 22px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); font: 400 15px/1 var(--mono); }
+    .hero-in { grid-template-columns: minmax(0, 1fr); }
+    .hero-in > * { min-width: 0; max-width: 100%; }
+    .install code { color: var(--cream); font-size: inherit; overflow-x: auto; white-space: nowrap; padding-right: 8px; scrollbar-width: none; }
+    .install code::before { content: '$ '; color: var(--gold); }
+    .install .copy { flex: none; min-height: 42px; }
+    .why .mode:nth-child(4) { transform: translateX(-14px); }
+    .chart { display: grid; gap: 22px; padding: clamp(22px, 3vw, 40px); border-radius: var(--r); background: var(--card); border: 1px solid var(--line); }
+    .chart-title { font: 500 12px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+    .bar-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; align-items: center; }
+    .bar-row b { font: 600 15px/1.2 var(--sans); }
+    .track { position: relative; display: flex; align-items: center; height: 44px; }
+    .seg { display: block; height: 100%; }
+    .seg.a { background: var(--gold); border-radius: 8px 0 0 8px; }
+    .seg.b { background: var(--olive); border-radius: 0 8px 8px 0; }
+    .seg.solo { border-radius: 8px; min-width: 6px; }
+    .tot { margin-left: 12px; font: 500 clamp(22px, 2.6vw, 34px)/1 var(--sans); letter-spacing: -.04em; white-space: nowrap; }
+    .keyl { display: flex; flex-wrap: wrap; gap: 8px 24px; font: 400 13px/1.3 var(--mono); color: var(--dim); }
+    .keyl i { display: inline-block; width: 12px; height: 12px; margin-right: 8px; border-radius: 4px; vertical-align: -1px; }
+    .chart-foot { color: var(--dim); font-size: 14.5px; }
+    .arch-in { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(28px, 5vw, 80px); width: min(var(--wrap), 100% - var(--gutter) * 2); margin-inline: auto; }
+    .arch-in .h2 { color: var(--ink); margin: 18px 0 20px; }
+    .arch-in .h2 em { color: var(--olive); }
+    .arch-in .lede { color: var(--ink-2); }
+    .rules { display: grid; gap: 12px; }
+    .rules li { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start; padding: 18px 20px; border-radius: 18px; background: rgba(255, 252, 235, .72); border: 1px solid rgba(16, 21, 15, .1); }
+    .rules b { display: block; font: 600 16px/1.3 var(--sans); color: var(--ink); }
+    .rules span.d { display: block; margin-top: 2px; font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
+    .tag-l, .tag-c { padding: 5px 11px; border-radius: 999px; font: 500 11.5px/1.2 var(--mono); letter-spacing: .06em; }
+    .tag-l { background: var(--olive); color: var(--cream); }
+    .tag-c { background: var(--ink); color: var(--gold); }
+    .arch-in pre { margin-top: 14px; background: rgba(7, 9, 7, .92); }
+    pre .k { color: var(--gold); } pre .v { color: var(--cream); } pre .p { color: var(--gold); }
+    .term { width: 100%; max-width: 520px; padding: 0; overflow: hidden; }
+    .term-bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line-2); font: 500 12px/1 var(--mono); letter-spacing: .1em; color: var(--gold); }
+    .term pre { border: 0; border-radius: 0; background: transparent; padding: 20px 18px 24px; font-size: 13.5px; }
+    .editions { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .ed { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; min-height: 380px; padding: clamp(24px, 3vw, 38px); border-radius: var(--r); overflow: hidden; isolation: isolate; border: 1px solid var(--line); }
+    .ed > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; transition: transform .8s ease; }
+    .ed:hover > img { transform: scale(1.04); }
+    .ed::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 7, .1) 10%, rgba(7, 9, 7, .55) 55%, rgba(7, 9, 7, .92)); }
+    .ed .chip { align-self: flex-start; }
+    .ed h3 { font: 500 clamp(26px, 2.6vw, 34px)/1.1 var(--sans); letter-spacing: -.04em; }
+    .ed p { max-width: 34em; color: rgba(242, 235, 201, .86); font-size: 15.5px; }
+    .ed .pill { align-self: flex-start; margin-top: 8px; }
+    .faq-sec + .foot, .start-sec { padding: 0 0 clamp(80px, 10vw, 140px); }
+    @media (max-width: 1000px) {
+      .arch-in, .editions { grid-template-columns: minmax(0, 1fr); }
+      .why .mode:nth-child(4) { transform: none; }
+    }
+    @media (max-width: 380px) {
+      .hero h1 { font-size: 36px; }
+      .hero-in { padding-inline: 16px; }
+      .install code { font-size: 12px; }
+      .install .copy span { display: none; }
+      .install .copy { padding: 0 12px; }
+    }
+    @media (max-width: 700px) {
+      .bar-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .install { font-size: 13px; padding-left: 16px; }
+      .stripes { height: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="mark" viewBox="0 0 100 100">
+        <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 78C27 54 38 29 48 14C52 8 58 8 62 14C73 31 84 55 93 78C77 68 59 63 41 66C30 68 23 72 18 78Z" stroke="#f2ebc9" stroke-opacity=".22" stroke-width="19"/>
+          <path d="M18 78C27 54 38 29 48 14C52 8 58 8 62 14C73 31 84 55 93 78C77 68 59 63 41 66C30 68 23 72 18 78Z" stroke="#f2ebc9" stroke-width="10.5"/>
+          <path d="M18 78C27 54 38 29 48 14C52 8 58 8 62 14C73 31 84 55 93 78C77 68 59 63 41 66C30 68 23 72 18 78Z" stroke="#c8ad5c" stroke-opacity=".9" stroke-width="4.5"/>
+        </g>
+      </symbol>
+      <symbol id="stripes" viewBox="0 0 146 100"><path fill="#E4312B" d="M0 100L24 100L74 0L50 0Z"/><path fill="#F8B91E" d="M24 100L48 100L98 0L74 0Z"/><path fill="#2FAE4E" d="M48 100L72 100L122 0L98 0Z"/><path fill="#1AA6E0" d="M72 100L96 100L146 0L122 0Z"/></symbol>
+      <symbol id="arrow-down" viewBox="0 0 24 24"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/></symbol>
+      <symbol id="arrow-right" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-6-6m6 6l-6 6"/></symbol>
+      <symbol id="copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="nav" id="nav">
+    <div class="nav-in">
+      <a class="brand" href="#top" aria-label="Aura Code, back to top"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#mark"/></svg><span>AURA CODE</span></a>
+      <nav class="links" aria-label="Primary">
+        <a href="#why">Why Aura</a>
+        <a href="#gazelle">Gazelle</a>
+        <a href="#archimedes">Archimedes</a>
+        <a href="#start">Quick start</a>
+      </nav>
+      <a class="pill pill-cream" href="#start">Get started <span class="knob"><svg aria-hidden="true"><use href="#arrow-down"/></svg></span></a>
     </div>
-    <figure class="screen">
-      <canvas id="screen" width="352" height="288" role="img" aria-label="A ZX Spectrum loading screen: the aura CODE logo with four rainbow stripes, the line THE AGENT THAT REMEMBERS in cyan, and &#xa9; 2026 Aura Code Ltd. along the bottom. While the tape plays, blue and yellow bars race through the border."></canvas>
-      <figcaption class="screen-bar">
-        <button class="btn-pixel" type="button" id="load" aria-label="Play the tape again">LOAD ""</button>
-        <span id="status">0 OK, 0:1</span>
-        <span id="bytes">6912 / 6912</span>
-      </figcaption>
-    </figure>
-  </section>
+  </header>
 
-  <figure class="shot overlay wide">
-    <img src="img/machine-hero-1920.webp" srcset="img/machine-hero-800.webp 800w, img/machine-hero-1280.webp 1280w, img/machine-hero-1920.webp 1920w" sizes="(min-width: 1720px) 1640px, calc(100vw - 32px)" width="2560" height="1440" alt="A black home computer badged aura CODE &#x221e;K, with grey rubber keys and rainbow corner stripes, in front of a small CRT television showing the loading screen with blue and yellow tape bars. Pink and cyan rim lights on a glossy black floor.">
-    <figcaption>
-      <p class="cap-title">aura CODE &#x221e;K</p>
-      <p class="cap-body">Forty rubber keys, a portable telly on the RF lead, and a loading screen drawn from the ROM's real tape timings.</p>
-      <dl class="spec">
-        <dt>Engine</dt><dd>Blender 5.2 &#xb7; Eevee</dd>
-        <dt>Samples</dt><dd>128</dd>
-        <dt>Frame</dt><dd>2560 &#xd7; 1440</dd>
-      </dl>
-    </figcaption>
-  </figure>
-
-  <section class="col" id="why" aria-labelledby="why-h">
-    <p class="kicker">Why Aura</p>
-    <h2 id="why-h">Most agents are something you use. Aura is something that compounds.</h2>
-    <ol class="why-grid">
-      <li style="--c:var(--red)"><span class="n" aria-hidden="true">1</span><h3>She remembers</h3><p>Lessons, not chat history. What broke last time, what your build actually needs, what you told her once and should not have to repeat. Stored in <code>~/.aura/memory/</code>. It never leaves your machine.</p></li>
-      <li style="--c:var(--yellow)"><span class="n" aria-hidden="true">2</span><h3>She learns what she can handle alone</h3><p>The Archimedes layer scores her competence per project and per task category. A local model takes what she has proven she can do, and a frontier model takes the rest. Cost falls as she improves.</p></li>
-      <li style="--c:var(--green)"><span class="n" aria-hidden="true">3</span><h3>She builds you a dataset you own</h3><p><code>:mine</code> turns your sessions into structured training examples in <code>training-data/</code>, and competence tracking tells you when you have enough to fine-tune.</p></li>
-      <li style="--c:var(--cyan)"><span class="n" aria-hidden="true">4</span><h3>She grows new parts on request</h3><p>Skills, plugins, MCP servers, subagents. &#x201c;I want a travel agent&#x201d; is an ordinary request, because a skill is a file and writing files is what she does.</p></li>
-    </ol>
-  </section>
-
-  <section class="keys" id="keys" aria-labelledby="keys-h">
-    <div class="col">
-      <p class="kicker">The keyboard</p>
-      <h2 id="keys-h">Every key is a command.</h2>
-      <p class="intro">The Spectrum printed up to five functions on a single key. The &#x221e;K prints Aura's: <strong>the REPL command on the key</strong>, a symbol-shift token in the red corner, a concept or tool in green above, and a CLI flag in red below. All forty are real.</p>
-    </div>
-    <figure class="shot wide">
-      <img src="img/machine-macro-1920.webp" srcset="img/machine-macro-800.webp 800w, img/machine-macro-1280.webp 1280w, img/machine-macro-1920.webp 1920w" sizes="(min-width: 1720px) 1640px, calc(100vw - 32px)" width="2560" height="1440" loading="lazy" alt="Low close-up across the rubber keys. The G key is sharp: GAZELLE printed on it, THEN in red at its corner, FINE-TUNE in green above and --NO-SETUP in red below. The rainbow stripes blur into bokeh at the back.">
-      <figcaption>G, in focus at f/4. Hover or tap any key on the deck below to read it.</figcaption>
-    </figure>
-    <div class="col">
-      <div class="anatomy">
-        <div class="big" aria-hidden="true">
-          <span class="ag" id="a-green">FINE-TUNE</span>
-          <div class="bigkey"><span class="m" id="a-main">G</span><span class="s" id="a-sym">THEN</span><span class="w" id="a-word">GAZELLE</span></div>
-          <span class="ar" id="a-red">--NO-SETUP</span>
-        </div>
-        <dl class="legend" aria-label="Selected key">
-          <div><dt>Key</dt><dd id="d-key">G</dd></div>
-          <div><dt>On the key &#xb7; command</dt><dd id="d-word">:gazelle</dd></div>
-          <div><dt>Red corner &#xb7; symbol shift</dt><dd class="r" id="d-sym">THEN</dd></div>
-          <div><dt>Green above &#xb7; concept or tool</dt><dd class="g" id="d-green">FINE-TUNE</dd></div>
-          <div><dt>Red below &#xb7; CLI flag</dt><dd class="r" id="d-red">--no-setup</dd></div>
-        </dl>
-      </div>
-      <div class="kb-scroll">
-        <div class="deck" id="deck">
-          <div class="band">
-            <svg class="wm" viewBox="0 0 450 108" role="img" aria-label="aura"><use href="#aura-letters"/></svg>
-            <span class="model">CODE &#x221e;K <svg viewBox="0 0 146 100" aria-hidden="true"><use href="#stripes"/></svg></span>
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="hero-frame">
+        <picture class="hero-bg">
+          <source media="(max-width: 700px)" srcset="/nature/hero-tall.webp">
+          <img src="/nature/hero-1600.webp" srcset="/nature/hero-1600.webp 1600w, /nature/hero-2400.webp 2400w" sizes="100vw" width="2400" height="1400" alt="" fetchpriority="high">
+        </picture>
+        <div class="hero-in">
+          <span class="chip"><svg class="stripes" viewBox="0 0 146 100" aria-hidden="true"><use href="#stripes"/></svg> Open source coding agent</span>
+          <h1 id="hero-title">The coding agent<br><em>that remembers.</em></h1>
+          <p>Aura Code keeps <strong>lessons, not chat history</strong>: what broke last time, what your build actually needs, what you told her once. They live in <code>~/.aura/memory/</code>, on your machine.</p>
+          <div class="install" role="group" aria-label="Install command">
+            <code id="install-cmd">npm install -g aura-code</code>
+            <button class="copy" type="button" data-copy="#install-cmd"><svg aria-hidden="true"><use href="#copy"/></svg><span>Copy</span></button>
           </div>
-          <div class="rows" id="rows"></div>
-        </div>
-      </div>
-      <p class="kb-note">Read the green legends by row. Row one holds more commands. Row two is the Archimedes loop: LOCAL, CLOUD, ESCALATE, VERIFY, RETRY, LEARN. Row three is what she accumulates, from IDENTITY to SUBAGENT. Row four is her reach past the codebase: TELEGRAM, EMAIL, CALENDAR, CRON, BROWSER, WHATSAPP, SCREEN.</p>
-    </div>
-  </section>
-
-  <section class="col" id="gazelle" aria-labelledby="gz-h">
-    <p class="kicker">Gazelle mode</p>
-    <h2 id="gz-h">26&#xd7; less context per turn.</h2>
-    <p class="intro">Most of what you say to a coding agent isn't a coding task. &#x201c;What did we decide about the auth flow?&#x201d; doesn't need 25 tool schemas and a project tree. Gazelle is the same Aura on a lean path, just the conversation, and <code>:coder</code> is one word away when a request needs hands.</p>
-    <figure class="chart">
-      <figcaption class="chart-title">Fixed context sent with every turn, in tokens</figcaption>
-      <div class="plot">
-        <div class="names"><span>Coder</span><span>Gazelle</span></div>
-        <div class="area">
-          <div class="grid" aria-hidden="true"><span style="left:0"></span><span style="left:25%"></span><span style="left:50%"></span><span style="left:75%"></span><span style="left:100%"></span></div>
-          <div class="bars">
-            <div class="track" role="img" aria-label="Coder: 4,793 tokens of system prompt and project context plus 4,574 tokens of tool schemas, 9,367 in total"><span class="seg c" style="width:47.93%"></span><span class="seg y" style="width:45.74%"></span><span class="tot">9,367</span></div>
-            <div class="track" role="img" aria-label="Gazelle: 356 tokens of system prompt, no tool schemas"><span class="seg c" style="width:3.56%"></span><span class="tot">356</span></div>
+          <div class="cta">
+            <a class="pill pill-glass" href="#start">Quick start <span class="knob"><svg aria-hidden="true"><use href="#arrow-down"/></svg></span></a>
+            <a class="ghost" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub ↗</a>
           </div>
-          <div class="ticks" aria-hidden="true"><span style="left:0">0</span><span style="left:25%">2,500</span><span style="left:50%">5,000</span><span style="left:75%">7,500</span><span style="left:100%">10,000</span></div>
+        </div>
+        <ul class="facts" aria-label="At a glance"><li>npm install</li><li>31 routing targets</li><li>Runs on Ollama, no key</li><li>MIT licence</li></ul>
+      </div>
+    </section>
+
+    <section class="intro why" id="why" aria-labelledby="why-title">
+      <div class="wrap intro-grid">
+        <div class="intro-copy rv">
+          <span class="chip" style="align-self:flex-start">01 · Why Aura</span>
+          <h2 class="h2" id="why-title">Most agents are something you use. <em>Aura compounds.</em></h2>
+          <p class="lede">Every session leaves her a little more useful: she remembers, she measures herself, she keeps your data, and she can grow parts she does not have yet.</p>
+          <ul class="stats">
+            <li><b>26×</b><span>less context per Gazelle turn</span></li>
+            <li><b>31</b><span>routing targets, four transports</span></li>
+            <li><b>0.7</b><span>competence bar for going local</span></li>
+          </ul>
+        </div>
+        <div class="modes">
+          <article class="mode rv"><h3>She remembers</h3><p>Lessons, not chat history. What broke last time, what your build actually needs, what you told her once and should not have to repeat. It never leaves your machine.</p><small>~/.aura/memory/</small></article>
+          <article class="mode rv" style="--d:.08s"><h3>She learns what she can handle alone</h3><p>The Archimedes layer scores her competence per project and per task category. A local model takes what she has proven she can do, and a frontier model takes the rest. Cost falls as she improves.</p><small>ARCHIMEDES</small></article>
+          <article class="mode rv" style="--d:.16s"><h3>She builds you a dataset you own</h3><p>Your sessions become structured training examples in <code>training-data/</code>, and competence tracking tells you when you have enough to fine-tune.</p><small>/mine</small></article>
+          <article class="mode rv" style="--d:.24s"><h3>She grows new parts on request</h3><p>Skills, plugins, MCP servers, subagents. “I want a travel agent” is an ordinary request, because a skill is a file and writing files is what she does.</p><small>SKILLS · PLUGINS · MCP</small></article>
         </div>
       </div>
-      <div class="chart-foot">
-        <ul class="keyl">
-          <li><i style="background:var(--cyan)"></i>System prompt + project context</li>
-          <li><i style="background:var(--yellow)"></i>Tool schemas (25 tools)</li>
-        </ul>
-        <p>9,011 tokens saved on every message. Measured on the aura-code repo with Aura's own tokenizer, <code>estimateContextTokens</code>.</p>
-      </div>
-    </figure>
-  </section>
+    </section>
 
-  <section id="archimedes" aria-labelledby="ar-h">
-    <figure class="shot film wide">
-      <div class="frame">
-      <video id="loop" muted loop playsinline preload="auto" poster="img/horizon-1280.webp" width="1280" height="720" aria-label="A seamless loop: a white aura wordmark with rainbow stripes stands on a neon grid that scrolls toward the camera, under a striped sun, with cyan wireframe mountains behind.">
-        <source src="media/horizon-loop.webm" type="video/webm">
-        <source src="media/horizon-loop.mp4" type="video/mp4">
-      </video>
-      <button class="btn-pixel vidbtn" type="button" id="vidbtn" aria-label="Play the loop">PLAY</button>
+    <section class="run-sec" id="gazelle" aria-labelledby="gz-title">
+      <div class="wrap">
+        <div class="sec-head rv">
+          <span class="chip">02 · Gazelle mode</span>
+          <h2 class="h2" id="gz-title">26× less context <em>per turn.</em></h2>
+          <p class="lede">Most of what you say to a coding agent isn’t a coding task. “What did we decide about the auth flow?” doesn’t need 25 tool schemas and a project tree. Gazelle is the same Aura on a lean path, just the conversation. <code>/coder</code> is one word away when a request needs hands.</p>
+        </div>
+        <figure class="chart rv">
+          <figcaption class="chart-title">Fixed context sent with every turn, in tokens</figcaption>
+          <div class="bar-row"><b>Coder</b>
+            <div class="track" role="img" aria-label="Coder: 4,793 tokens of system prompt and project context plus 4,574 tokens of tool schemas, 9,367 in total"><span class="seg a" style="width:47.93%"></span><span class="seg b" style="width:45.74%"></span></div>
+          </div>
+          <div class="bar-row"><b>Gazelle</b>
+            <div class="track" role="img" aria-label="Gazelle: 356 tokens of system prompt, no tool schemas"><span class="seg a solo" style="width:3.56%"></span></div>
+          </div>
+          <div class="bar-row"><b class="sr">Totals</b><p class="tot" style="margin:0">9,367 <span style="color:var(--mute);font-weight:400">vs</span> 356</p></div>
+          <ul class="keyl"><li><i style="background:var(--gold)"></i>System prompt + project context</li><li><i style="background:var(--olive)"></i>Tool schemas (25 tools)</li></ul>
+          <p class="chart-foot">9,011 tokens saved on every message. Measured on the aura-code repo with Aura’s own tokenizer, <code>estimateContextTokens</code>.</p>
+        </figure>
       </div>
-      <figcaption>Horizon, 96 frames at 24 fps. The grid travels exactly one cell per loop, so the seam never shows.</figcaption>
-    </figure>
-    <div class="arch col">
-      <div>
-        <p class="kicker">The Archimedes Principle</p>
-        <h2 id="ar-h">Small model first. Cloud when it counts.</h2>
-        <p class="intro">A small local model, Archimedes, attempts the task first. The large cloud model steps in only when Archimedes can't be trusted with it, or when his answer fails verification. Every alternation is kept as an episode, and his track record decides how far he is trusted next time.</p>
-      </div>
-      <div>
-        <ul class="rules">
-          <li><span class="chip local">LOCAL</span><div><b>Fewer than 3 attempts on a pattern</b><span>Archimedes gets a chance, to gather training data.</span></div></li>
-          <li><span class="chip local">LOCAL</span><div><b>Success rate at 0.7 or above</b><span>Archimedes handles the task.</span></div></li>
-          <li><span class="chip cloud">CLOUD</span><div><b>Below 0.7 after enough attempts</b><span>Straight to the large model. Ollama unreachable? Same, at once.</span></div></li>
-        </ul>
-<pre class="conf"><span class="k">"archimedes"</span>: {
+    </section>
+
+    <section class="more" id="archimedes" aria-labelledby="ar-title">
+      <img class="more-bg" src="/nature/cream-2000.webp" width="2000" height="900" alt="" loading="lazy">
+      <div class="arch-in">
+        <div class="rv">
+          <span class="chip chip-light">03 · The Archimedes principle</span>
+          <h2 class="h2" id="ar-title">Small model first. <em>Cloud when it counts.</em></h2>
+          <p class="lede">A small local model, Archimedes, attempts the task first. The large cloud model steps in only when Archimedes can’t be trusted with it, or when his answer fails verification. Every alternation is kept as an episode, and his track record decides how far he is trusted next time.</p>
+        </div>
+        <div class="rv" style="--d:.1s">
+          <ul class="rules">
+            <li><span class="tag-l">LOCAL</span><div><b>Fewer than 3 attempts on a pattern</b><span class="d">Archimedes gets a chance, to gather training data.</span></div></li>
+            <li><span class="tag-l">LOCAL</span><div><b>Success rate at 0.7 or above</b><span class="d">Archimedes handles the task.</span></div></li>
+            <li><span class="tag-c">CLOUD</span><div><b>Below 0.7 after enough attempts</b><span class="d">Straight to the large model. Ollama unreachable? Same, at once.</span></div></li>
+          </ul>
+<pre><span class="k">"archimedes"</span>: {
   <span class="k">"enabled"</span>: <span class="v">true</span>,
   <span class="k">"modelName"</span>: <span class="v">"granite4.1:3b"</span>,
   <span class="k">"competenceThreshold"</span>: <span class="v">0.7</span>,
   <span class="k">"minAttempts"</span>: <span class="v">3</span>
 }</pre>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="start col" id="start" aria-labelledby="st-h">
-    <div>
-      <p class="kicker">Quick start</p>
-      <h2 id="st-h">In 1982 you typed LOAD "" and waited.</h2>
-      <p class="intro">Now it's three lines, and there is nothing to wait for.</p>
-      <p class="small">No key? <code>aura --profile local</code> runs on Ollama with none at all. Or pick any of 31 routing targets over four transports. On Windows? <a href="aura-windows-manual.html">The Windows manual</a> walks through it.</p>
-    </div>
-    <div class="term">
-      <div class="term-bar"><span>SHELL</span><button class="btn-pixel" type="button" id="copy-start" data-copy="npm install -g aura-code&#10;export DEEPSEEK_API_KEY=sk-...&#10;aura 'refactor the auth module to use JWT'" data-select="start-code">COPY</button></div>
+    <section class="control start-sec" id="start" aria-labelledby="st-title">
+      <div class="wrap control-grid">
+        <div class="rv">
+          <span class="chip">04 · Quick start</span>
+          <h2 class="h2" id="st-title" style="margin-top:20px">Three lines, <em>and nothing to wait for.</em></h2>
+          <p class="lede" style="margin-top:20px">Install, add a key, ask. No key? <code>aura --profile local</code> runs on Ollama with none at all. Or pick any of 31 routing targets over four transports.</p>
+          <ul class="levels">
+            <li><b>Install</b><span>One global npm package. Node 18 or newer.</span></li>
+            <li><b>Point her at a model</b><span>A DeepSeek key, another provider, or a local Ollama.</span></li>
+            <li><b>Ask</b><span>She reads the project, does the work, and keeps the lessons.</span></li>
+          </ul>
+          <p class="lede" style="margin-top:26px;font-size:15px">On Windows? <a href="/aura-windows-manual.html" style="color:var(--gold);border-bottom:1px solid rgba(231,207,133,.4)">The Windows manual</a> walks through it.</p>
+        </div>
+        <div class="ctl-stage rv" style="--d:.1s">
+          <img src="/nature/dusk-1600.webp" srcset="/nature/dusk-1600.webp 1600w, /nature/dusk-2400.webp 2400w" sizes="(max-width: 1000px) 100vw, 50vw" width="2400" height="1400" alt="" loading="lazy">
+          <div class="panel term">
+            <div class="term-bar"><span>SHELL</span><button class="copy" type="button" data-copy="#start-code"><svg aria-hidden="true"><use href="#copy"/></svg><span>Copy</span></button></div>
 <pre id="start-code"><span class="p">$ </span>npm install -g aura-code
 <span class="p">$ </span>export DEEPSEEK_API_KEY=sk-...
-<span class="p">$ </span>aura <span class="str">'refactor the auth module to use JWT'</span></pre>
+<span class="p">$ </span>aura 'refactor the auth module to use JWT'</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-frame">
+      <img src="/nature/valley-2000.webp" width="2000" height="1200" alt="" loading="lazy">
+      <div class="foot-top">
+        <div>
+          <h2>The coding agent <em>that remembers.</em></h2>
+          <div class="actions">
+            <a class="pill pill-cream" href="#start">Get started <span class="knob"><svg aria-hidden="true"><use href="#arrow-down"/></svg></span></a>
+            <a class="ghost" href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub ↗</a>
+          </div>
+        </div>
+        <nav class="foot-cols" aria-label="Footer">
+          <div><h3>Aura Code</h3><ul><li><a href="#why">Why Aura</a></li><li><a href="#gazelle">Gazelle</a></li><li><a href="#archimedes">Archimedes</a></li><li><a href="#start">Quick start</a></li></ul></div>
+          <div><h3>Aura family</h3><ul><li><a href="https://aura-droid.vercel.app" target="_blank" rel="noopener">Aura Droid</a></li></ul></div>
+          <div><h3>Project</h3><ul><li><a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">GitHub</a></li><li><a href="/aura-windows-manual.html">Windows manual</a></li><li><a href="https://github.com/DusanCar-sudo/aura-code/blob/master/LICENSE" target="_blank" rel="noopener">MIT licence</a></li></ul></div>
+        </nav>
+      </div>
+      <div class="foot-base"><span>© Aura Code · MIT licence</span><span>Architecture and design by Dušan Milosavljević, Da Nang</span></div>
+      <p class="wordmark" aria-hidden="true">AURA CODE</p>
     </div>
-  </section>
+  </footer>
 
-  <section class="col" id="kit" aria-labelledby="kit-h">
-    <p class="kicker">The kit</p>
-    <h2 id="kit-h">One file draws everything.</h2>
-    <p class="intro">Every mark here, in the renders and on the CRT, comes from <code>brand/glyphs.py</code>: letters built from 3-unit strokes on a 10-unit x-height, and stripes 2.4 wide leaning 5 over 10, in the Sinclair order. The SVGs, the Blender meshes and the 1-bit screen are three renderings of the same geometry.</p>
-    <div class="swatches">
-      <button class="sw" type="button" id="sw-ink" data-copy="#0B0A10" style="--sw:#0B0A10"><span class="chipc"></span><span class="nm">Ink</span><span class="hx" data-label>#0B0A10</span></button>
-      <button class="sw" type="button" id="sw-paper" data-copy="#F2F1F5" style="--sw:#F2F1F5"><span class="chipc"></span><span class="nm">Paper</span><span class="hx" data-label>#F2F1F5</span></button>
-      <button class="sw" type="button" id="sw-red" data-copy="#E4312B" style="--sw:#E4312B"><span class="chipc"></span><span class="nm">Red</span><span class="hx" data-label>#E4312B</span></button>
-      <button class="sw" type="button" id="sw-yellow" data-copy="#F8B91E" style="--sw:#F8B91E"><span class="chipc"></span><span class="nm">Yellow</span><span class="hx" data-label>#F8B91E</span></button>
-      <button class="sw" type="button" id="sw-green" data-copy="#2FAE4E" style="--sw:#2FAE4E"><span class="chipc"></span><span class="nm">Green</span><span class="hx" data-label>#2FAE4E</span></button>
-      <button class="sw" type="button" id="sw-cyan" data-copy="#1AA6E0" style="--sw:#1AA6E0"><span class="chipc"></span><span class="nm">Cyan</span><span class="hx" data-label>#1AA6E0</span></button>
-    </div>
-    <div class="specimens">
-      <div class="spec-row"><p class="sample s-saira">CODE &#x221e;K</p><p class="about"><b>Saira ExtraBold Italic</b>Display type. The badge on the machine, and every headline here.</p></div>
-      <div class="spec-row"><p class="sample s-plex">The agent that remembers</p><p class="about"><b>IBM Plex Sans</b>Running text, and every legend printed on the keys.</p></div>
-      <div class="spec-row"><p class="sample s-pixel">0 OK, 0:1</p><p class="about"><b>Press Start 2P</b>The screen. 8 &#xd7; 8 pixels a character, one ink per cell.</p></div>
-    </div>
-    <div class="tiles">
-      <figure class="tile dark"><svg viewBox="0 0 626 170" role="img" aria-label="aura code lockup on ink"><use href="#lockup"/></svg><figcaption>LOCKUP &#xb7; INK</figcaption></figure>
-      <figure class="tile light"><svg viewBox="0 0 626 170" role="img" aria-label="aura code lockup on paper"><use href="#lockup"/></svg><figcaption>LOCKUP &#xb7; PAPER</figcaption></figure>
-      <figure class="tile icon"><svg viewBox="0 0 512 512" role="img" aria-label="app icon"><rect width="512" height="512" rx="81.92" fill="#0B0A10"/><path fill="#F2F1F5" d="M228.475 256A80.957 80.957 0 1 0 66.56 256A80.957 80.957 0 1 0 228.475 256ZM179.9 256A32.383 32.383 0 1 1 115.134 256A32.383 32.383 0 1 1 179.9 256ZM179.9 336.957H228.475V175.043H179.9Z"/><path fill="#E4312B" d="M254.381 336.957L285.145 336.957L353.149 175.043L322.385 175.043Z"/><path fill="#F8B91E" d="M285.145 336.957L315.908 336.957L383.912 175.043L353.149 175.043Z"/><path fill="#2FAE4E" d="M315.908 336.957L346.672 336.957L414.676 175.043L383.912 175.043Z"/><path fill="#1AA6E0" d="M346.672 336.957L377.436 336.957L445.44 175.043L414.676 175.043Z"/></svg><figcaption>ICON</figcaption></figure>
-    </div>
-  </section>
-</main>
-
-<footer class="foot col">
-  <div class="colophon">
-    <h2>How it was made</h2>
-    <dl>
-      <div><dt>Blender 5.2, Eevee</dt><dd><code>blender/machine.py</code> builds the &#x221e;K from primitives: the wedge body, the deck, forty keys with their legends, the CRT and its lead. <code>blender/hero.py</code> builds the horizon and its loop.</dd></div>
-      <div><dt>ImageMagick and numpy</dt><dd><code>brand/make_screen.py</code> draws the 256 &#xd7; 192 screen and simulates the border bars from the ROM's pulse timings: 855 and 1,710 T-states per half-pulse, 224 per scanline. The screen at the top of this page loads in the same order, a third at a time, then the colour.</dd></div>
-      <div><dt>ffmpeg</dt><dd>The horizon loop, encoded to WebM and MP4.</dd></div>
-    </dl>
-  </div>
-  <div class="sign">
-    <p>Aura Code: architecture and design by Du&#x161;an Milosavljevi&#x107;, Da Nang, Vietnam.<br>Open source, MIT licence. <a href="https://github.com/DusanCar-sudo/aura-code" target="_blank" rel="noopener">github.com/DusanCar-sudo/aura-code</a></p>
-    <svg class="corner" viewBox="0 0 146 100" aria-hidden="true"><use href="#stripes"/></svg>
-  </div>
-</footer>
-
-<script>
-(() => {
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* ------------------------------------------------ copy buttons */
-  document.querySelectorAll('[data-copy]').forEach(b => {
-    b.addEventListener('click', async () => {
-      const label = b.querySelector('[data-label]') || b;
-      const was = label.dataset.was || (label.dataset.was = label.textContent);
-      let msg = label === b ? 'COPIED' : 'Copied';
-      try { await navigator.clipboard.writeText(b.dataset.copy); }
-      catch (e) {
-        const t = b.dataset.select && document.getElementById(b.dataset.select);
-        if (t) { const r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
-        msg = label === b ? 'SELECTED' : 'Selected';
-      }
-      label.textContent = msg;
-      clearTimeout(b._t); b._t = setTimeout(() => { label.textContent = was; }, 1400);
-    });
-  });
-
-  /* ------------------------------------------------ the tape */
-  const cv = document.getElementById('screen'), ctx = cv.getContext('2d');
-  const W = 352, H = 288, BX = 48, BY = 48, PW = 256, PH = 192;
-  const img = ctx.createImageData(W, H), buf = new Uint32Array(img.data.buffer);
-  const px = (r, g, b) => (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
-  const BLACK = px(0, 0, 0), WHITE = px(205, 205, 205);
-  const PILOT = [px(200, 0, 0), px(0, 200, 200)], DATA = [px(0, 0, 200), px(200, 200, 0)];
-  const lit = new Uint8Array(PW * PH), col = new Uint32Array(PW * PH);
-  const btn = document.getElementById('load'), statusEl = document.getElementById('status'), bytesEl = document.getElementById('bytes');
-  const put = () => ctx.putImageData(img, 0, 0);
-
-  function fillBorder(c) {
-    for (let y = 0; y < H; y++) {
-      const r = y * W;
-      if (y < BY || y >= BY + PH) buf.fill(c, r, r + W);
-      else { buf.fill(c, r, r + BX); buf.fill(c, r + BX + PW, r + W); }
-    }
-  }
-  function clearPaper() { for (let y = 0; y < PH; y++) buf.fill(BLACK, (BY + y) * W + BX, (BY + y) * W + BX + PW); }
-  function paperFinal() {
-    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
-      const i = y * PW + x; buf[(BY + y) * W + BX + x] = lit[i] ? col[i] : BLACK;
-    }
-  }
-  // one 8px character row, hard-thresholded so it stays 1-bit
-  function printRow(str, row, c) {
-    const o = document.createElement('canvas'); o.width = PW; o.height = 8;
-    const x = o.getContext('2d');
-    x.font = '8px "Press Start 2P", monospace'; x.textBaseline = 'top'; x.fillStyle = '#fff';
-    x.fillText(str, 0, 0);
-    const d = x.getImageData(0, 0, PW, 8).data;
-    for (let yy = 0; yy < 8; yy++) for (let xx = 0; xx < PW; xx++)
-      buf[(BY + row * 8 + yy) * W + BX + xx] = d[(yy * PW + xx) * 4 + 3] > 110 ? c : BLACK;
-  }
-
-  // The border: every pixel is the ear's bit level at T = line*224 + x/2 T-states.
-  let edges = [], T = 0, level = 0;
-  function tapeFrame(mode) {
-    const pal = mode === 'pilot' ? PILOT : DATA, T1 = T + H * 224;
-    if (!edges.length) edges.push(T + Math.random() * 800);
-    while (edges[edges.length - 1] < T1) {
-      const last = edges[edges.length - 1];
-      if (mode === 'pilot') edges.push(last + 2168);
-      else { const h = Math.random() < 0.5 ? 855 : 1710; edges.push(last + h, last + 2 * h); }
-    }
-    let i = 0; while (i < edges.length && edges[i] <= T) { i++; level ^= 1; }
-    edges.splice(0, i);
-    let e = 0, l = level;
-    for (let y = 0; y < H; y++) {
-      const side = y >= BY && y < BY + PH, base = T + y * 224;
-      for (let x = 0; x < W; x++) {
-        if (side && x === BX) { x = BX + PW - 1; continue; }
-        const t = base + x * 0.5;
-        while (e < edges.length && edges[e] <= t) { e++; l ^= 1; }
-        buf[y * W + x] = pal[l];
-      }
-    }
-    T += 69888;                                  // one 50 Hz frame
-  }
-
-  // Bitmap bytes arrive in display-file order: a third at a time, pixel row 0 of every
-  // character row first, which is what gives Spectrum screens their venetian-blind load.
-  let bm = 0, at = 0;
-  function bitmapTo(n) {
-    for (; bm < n; bm++) {
-      const y = ((bm >> 11) << 6) | (((bm >> 5) & 7) << 3) | ((bm >> 8) & 7), x0 = (bm & 31) << 3;
-      const s = y * PW + x0, d = (BY + y) * W + BX + x0;
-      for (let b = 0; b < 8; b++) buf[d + b] = lit[s + b] ? WHITE : BLACK;
-    }
-  }
-  function attrTo(n) {
-    for (; at < n; at++) {
-      const cy = at >> 5, cx = at & 31;
-      for (let yy = 0; yy < 8; yy++) {
-        const y = cy * 8 + yy, s = y * PW + cx * 8, d = (BY + y) * W + BX + cx * 8;
-        for (let xx = 0; xx < 8; xx++) buf[d + xx] = lit[s + xx] ? col[s + xx] : BLACK;
-      }
-    }
-  }
-
-  const PHASES = [['prompt', 380], ['pilot', 880], ['header', 110], ['gap', 170], ['pilot2', 480], ['bitmap', 2350], ['attr', 430]];
-  let raf = 0, t0 = 0, running = false, phaseSeen = '';
-  const setStatus = (s, n) => { statusEl.textContent = s; if (n != null) bytesEl.textContent = String(n).padStart(4, '0') + ' / 6912'; };
-
-  function finish() {
-    cancelAnimationFrame(raf); running = false;
-    paperFinal(); fillBorder(BLACK); put();
-    setStatus('0 OK, 0:1', 6912);
-    btn.textContent = 'LOAD ""'; btn.setAttribute('aria-label', 'Play the tape again');
-  }
-  function start() {
-    cancelAnimationFrame(raf); running = true;
-    bm = 0; at = 0; edges = []; T = 0; level = 0; phaseSeen = '';
-    clearPaper(); fillBorder(BLACK); printRow('LOAD ""SCREEN$', 23, WHITE); put();
-    setStatus('LOAD ""SCREEN$', 0);
-    btn.textContent = 'BREAK'; btn.setAttribute('aria-label', 'Stop the tape and show the screen');
-    t0 = performance.now(); raf = requestAnimationFrame(tick);
-  }
-  function tick(now) {
-    let t = now - t0, name = null, local = 0;
-    for (const [n, d] of PHASES) { if (t < d) { name = n; local = t / d; break; } t -= d; }
-    if (!name) return finish();
-    const entered = name !== phaseSeen; phaseSeen = name;
-    switch (name) {
-      case 'prompt': break;
-      case 'pilot': if (entered) { printRow('', 23, BLACK); setStatus('Pilot tone'); } tapeFrame('pilot'); break;
-      case 'header': tapeFrame('data'); break;
-      case 'gap': if (entered) { fillBorder(BLACK); printRow('Bytes: aura', 0, WHITE); setStatus('Bytes: aura'); } break;
-      case 'pilot2': tapeFrame('pilot'); break;
-      case 'bitmap': if (entered) setStatus('Loading SCREEN$'); tapeFrame('data'); bitmapTo(Math.floor(6144 * local)); bytesEl.textContent = String(bm).padStart(4, '0') + ' / 6912'; break;
-      case 'attr': bitmapTo(6144); if (entered) setStatus('Attributes'); tapeFrame('data'); attrTo(Math.floor(768 * local)); bytesEl.textContent = String(6144 + at).padStart(4, '0') + ' / 6912'; break;
-    }
-    put();
-    raf = requestAnimationFrame(tick);
-  }
-  btn.addEventListener('click', () => running ? finish() : start());
-
-  const src = new Image();
-  src.onload = () => {
-    const o = document.createElement('canvas'); o.width = PW; o.height = PH;
-    const x = o.getContext('2d'); x.drawImage(src, 0, 0);
-    const d = x.getImageData(0, 0, PW, PH).data;
-    for (let i = 0; i < PW * PH; i++) {
-      const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
-      if (r | g | b) { lit[i] = 1; col[i] = px(r, g, b); }
-    }
-    if (reduce) return finish();
-    const font = document.fonts ? document.fonts.load('8px "Press Start 2P"') : Promise.resolve();
-    Promise.race([font, new Promise(r => setTimeout(r, 1200))]).then(start, start);
-  };
-  fillBorder(BLACK); clearPaper(); put();
-  src.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAADACAMAAADcM01UAAAAElBMVEUAAAD/////AAD//wAA/wAA///TQTpkAAADhklEQVR42u2dYZejIAxFYWf9/395d2dRAgYII6Yd594PtdDUJK8Pa3t6bAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8EOJiXzv3335SFTj07QcqvHGZGd+JT7+8zuxJdZ2X/ElAZQ9TCRrCvBRCrC0/xi7NV0R4NyXOdDPAHFQ0zUB4lyyFxggjmq6KECcSuZvgDis6aoAcSaZuwHiuKbLAsSJZN4GiIaargsQ7cneygCrl8C8AC82wOKDoCnZCw2gVPlVAWTIZDJfAwQl/wIBZEw/WTAJ4GKAzuSsAJeSKf27GKA3u1yA8WwhgMtJ4EIBriU79+/zKeCNBfD5GPiGAnh8DzApQC/qNgHuNMAVAeLdAnh/EdSZXC6A6W3QwwCzJ0L6CYxVAFuyqv97DWA9O7VEzQkwPhX2MYDx84klalKAdjJXA1g/oa4RYObjsJMBnAWwfyPkZgBrTS8S4H4DDIqaiDIJYP1S1NEA/aImomwCGJN5GqBb1ESUUQBTMl8D9IqaiLIKYEnmbIBOVRNRZgHGydwNUJbV76UZNSHAKNkLDAAAAADwDhRnRXJQnjBNnXd9J9TTy7Ll+GQBUktRDHLL+6TYPI5YfQsTcuvC/I8WQBnsLVcCPHEFIABLoDoIFhtl8nn89LdBw4lQVEYPI6qDqt8nCwAAAAAAAAAAAAAAALCU9Mvjzx8ff27rXyLvoz2ujA91fP34/vwqbh9ujfzlWMal3Sz8wbSsNZx2WjRzbEKqSk6p+xP7rGQt86Xm9HExf67pVgHUAtILYBFAFDoSYNta45YAi8iOkhZTCpWPp7sdAeqlcBag3l/ojo/5kCeWCtByQPuV2EwO2FSh8lI+nrRV+8/j2hlFptsFOLpVrTgWoOkAcRhpLDVd+Py8ewSoj9ZBmnpo7QkBgra/8bvA+iUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwXamuuigvylmP6/8V+sr+/09pYb17d/Z/3OScnxesTptjXBXzd2yqr/HctxEgHu3KWmKQlyqOSrP741Kg/Lc4Sl/7fPH3OYoA5d/reAhQWeC4YnnuUqtHEaCyUd1XGV9cC7p8jkz9AgGOFyo3phW0X7L1tERO13ZtCdCyirsA5RKIsmLxwp4FCKcloMXl5RHO26KQlgB3q6AYQF6cOzbWbOGQjgOEhUbHgPJ/AkQd9wqgvU39IP4ASBsmb7dyMTcAAAAASUVORK5CYII=';
-
-  /* ------------------------------------------------ keyboard */
-  const ROWS = [
-    [["1","!","DREAM","ARCHOFF","--AUTO"],["2","@","REM","COMPON","--READONLY"],["3","#","MINE","COMPOFF","--SANDBOXED"],["4","$","LESSONS","APIKEY","--GAZELLE"],["5","%","FORGET","PROVIDER","--VERIFY"],["6","&","CONFESS","SAVE","--PLAN"],["7","'","RESEARCH","DELETE","--MOA"],["8","(","BTW","CLEAR","--BUILD"],["9",")","COUNCIL","HELP","--ARCHITECT"],["0","_","ECCLESIA","DASHBOARD","--DOCTOR"]],
-    [["Q","<=","QUIT","LOCAL","--MODEL"],["W","<>","WORKFLOW","CLOUD","--RESUME"],["E",">=","NEW","ESCALATE","--PROFILE"],["R","<","RESUME","VERIFY","--SPEAK"],["T",">","STATS","RETRY","--FALLBACK"],["Y","AND","APPROVE","LEARN","--CWD"],["U","OR","USAGE","ROUTE","--ANALYZE"],["I","AT","ID","CACHE","--WORKFLOW"],["O",";","COMPACT","STEER","--MODELS"],["P","\"","PLANS","FINISH","--HELP"]],
-    [["A","STOP","ARCHON","IDENTITY","--API-KEY"],["S","NOT","SPEAK","EPISODE","--BASE-URL"],["D","STEP","DOCTOR","LESSON","--CHAT-ID"],["F","TO","COST","DATASET","--MAX-TURNS"],["G","THEN","GAZELLE","FINE-TUNE","--NO-SETUP"],["H","\u2191","HISTORY","SKILL","--ORCHESTRATE"],["J","-","GRAPH","PLUGIN","--BLUEPRINTS"],["K","+","CONTEXT","MCP","--INTERACTIVE"],["L","=","MODEL","SUBAGENT","--NEW-SESSION"],["ENTER","","","",""]],
-    [["CAPS\nSHIFT","","","",""],["Z",":","CODER","TELEGRAM","--VERSION"],["X","\u00a3","CANCEL","EMAIL","--MODE"],["C","?","COMP","CALENDAR","--TEST-COMMAND"],["V","/","VIZ","CRON","--MAX-RETRIES"],["B","*","MACHINA","BROWSER","--RATE-LIMIT-TPM"],["N",",","SESSIONS","WHATSAPP","--NO-SESSION"],["M",".","DESIGNX","SCREEN","--LIST-SESSIONS"],["SYMBOL\nSHIFT","","","",""],["BREAK\nSPACE","","","",""]]
-  ];
-  const STAGGER = [0, .5, .75, .25];
-  const SLASH = new Set(['STATS', 'USAGE', 'COST']);          // these three are /commands
-  const cmd = w => w ? (SLASH.has(w) ? '/' : ':') + w.toLowerCase() : '\u2014';
-  const $ = id => document.getElementById(id);
-  const A = { main: $('a-main'), sym: $('a-sym'), word: $('a-word'), green: $('a-green'), red: $('a-red') };
-  const D = { key: $('d-key'), word: $('d-word'), sym: $('d-sym'), green: $('d-green'), red: $('d-red') };
-  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt) e.textContent = txt; return e; };
-
-  function show(k) {
-    const [main, sym, word, green, red] = k;
-    A.main.textContent = main; A.main.classList.toggle('mod', main.length > 1);
-    A.sym.textContent = sym; A.word.textContent = word;
-    A.green.textContent = green || '\u00a0'; A.red.textContent = red || '\u00a0';
-    D.key.textContent = main.replace('\n', ' ');
-    D.word.textContent = word ? cmd(word) : 'Modifier, as on the original';
-    D.sym.textContent = sym || '\u2014'; D.green.textContent = green || '\u2014'; D.red.textContent = red ? red.toLowerCase() : '\u2014';
-  }
-
-  let pinned = ROWS[2][4], pinnedBtn = null;
-  const rowsEl = $('rows'), deck = $('deck');
-  ROWS.forEach((row, r) => {
-    const rowEl = el('div', 'row'); rowEl.style.setProperty('--s', STAGGER[r]);
-    row.forEach((k, i) => {
-      const [main, sym, word, green, red] = k, mod = main.length > 1;
-      const cell = el('div', 'kc');
-      const b = el('button', 'key' + (mod ? ' mod' : '') + (main.startsWith('SYMBOL') ? ' sym' : ''));
-      b.type = 'button'; b.id = `key-${r}-${i}`;
-      b.append(el('span', 'm', main));
-      if (sym) b.append(el('span', 's', sym));
-      if (word) b.append(el('span', 'w', word));
-      b.setAttribute('aria-label', mod ? main.replace('\n', ' ') + ', modifier key'
-        : `${main}: ${cmd(word)}${sym ? `, symbol ${sym}` : ''}${green ? `, green ${green}` : ''}${red ? `, flag ${red.toLowerCase()}` : ''}`);
-      b.setAttribute('aria-pressed', String(k === pinned));
-      if (k === pinned) pinnedBtn = b;
-      b.addEventListener('mouseenter', () => show(k));
-      b.addEventListener('focus', () => show(k));
-      b.addEventListener('click', () => {
-        if (pinnedBtn) pinnedBtn.setAttribute('aria-pressed', 'false');
-        pinned = k; pinnedBtn = b; b.setAttribute('aria-pressed', 'true'); show(k);
+  <script>
+    (function () {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var $ = function (s, r) { return (r || document).querySelector(s); };
+      var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+      var nav = $('#nav');
+      var onScroll = function () { nav.classList.toggle('scrolled', window.scrollY > 40); };
+      onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+      var rv = $$('.rv');
+      if ('IntersectionObserver' in window && !reduce) {
+        var ro = new IntersectionObserver(function (es) {
+          es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); ro.unobserve(e.target); } });
+        }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+        rv.forEach(function (el) { ro.observe(el); });
+      } else { rv.forEach(function (el) { el.classList.add('in'); }); }
+      $$('.copy').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var target = $(btn.dataset.copy);
+          var text = target.textContent.trim();
+          var label = $('span', btn), was = label.textContent;
+          var done = function () {
+            btn.classList.add('done'); label.textContent = 'Copied';
+            setTimeout(function () { btn.classList.remove('done'); label.textContent = was; }, 1600);
+          };
+          var fallback = function () {
+            var r = document.createRange(); r.selectNodeContents(target);
+            var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+            label.textContent = 'Selected';
+            setTimeout(function () { label.textContent = was; }, 1600);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+          else fallback();
+        });
       });
-      cell.append(el('span', 'lg g', green), b, el('span', 'lg r', red));
-      rowEl.append(cell);
-    });
-    rowsEl.append(rowEl);
-  });
-  deck.addEventListener('mouseleave', () => show(pinned));
-  deck.addEventListener('focusout', e => { if (!deck.contains(e.relatedTarget)) show(pinned); });
-
-  // condense long legends to their slot, as the print on the real deck is
-  function fit() {
-    const k = 64, g = 12;
-    deck.querySelectorAll('.lg').forEach(e => { const w = e.offsetWidth; e.style.setProperty('--fx', w > k + g - 4 ? ((k + g - 4) / w).toFixed(3) : 1); });
-    deck.querySelectorAll('.key .w').forEach(e => { const w = e.offsetWidth; e.style.setProperty('--fx', w > k - 8 ? ((k - 8) / w).toFixed(3) : 1); });
-  }
-  fit();
-  if (document.fonts) document.fonts.ready.then(fit);
-
-  /* ------------------------------------------------ the loop */
-  const v = $('loop'), vb = $('vidbtn');
-  const sync = () => { const p = v.paused; vb.textContent = p ? 'PLAY' : 'PAUSE'; vb.setAttribute('aria-label', p ? 'Play the loop' : 'Pause the loop'); };
-  v.addEventListener('play', sync); v.addEventListener('pause', sync);
-  vb.addEventListener('click', () => { if (v.paused) v.play().catch(() => {}); else v.pause(); });
-  if (!reduce) v.play().catch(sync);
-})();
-</script>
-<script src="aura-kb.js" defer></script>
-<script src="aura-chat.js" data-product="Aura Code" defer></script>
+    })();
+  </script>
+</body>
+</html>

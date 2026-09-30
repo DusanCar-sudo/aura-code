@@ -30,8 +30,8 @@ interface LaneMeta {
 
 const LANES: LaneMeta[] = [
   { key: 'planning', name: 'Planning', rule: 'Read-only. No edits yet.', dot: 'var(--mut)', tint: 'transparent' },
-  { key: 'preparation', name: 'Preparation', rule: 'Plan written, waiting on a gate.', dot: 'var(--acc2)', tint: 'rgba(110,208,234,0.03)' },
-  { key: 'execution', name: 'Execution', rule: 'Editing and running now.', dot: 'var(--acc)', tint: 'rgba(194,103,76,0.05)' },
+  { key: 'preparation', name: 'Preparation', rule: 'Plan written, waiting on a gate.', dot: 'var(--acc2)', tint: 'rgba(231, 207, 133,0.03)' },
+  { key: 'execution', name: 'Execution', rule: 'Editing and running now.', dot: 'var(--acc)', tint: 'rgba(231, 207, 133,0.05)' },
   { key: 'finished', name: 'Finished', rule: 'Verified. Evidence attached.', dot: 'var(--ok)', tint: 'rgba(90,158,110,0.04)' },
 ];
 
@@ -282,7 +282,7 @@ const DEFAULT_MOCK_CARDS: Array<Partial<BoardTask> & {
     tools: ['read_file', 'edit_file', 'run_tests'],
     files: ['src/agent/stream.ts', 'src/server/index.ts'],
     verify: '⟳ parallel worker 2',
-    verifyColor: '#6ed0ea',
+    verifyColor: '#d8cb95',
     model: 'claude-sonnet-4-5-20251001',
     tokens: '14.2k',
     duration: '2m 45s',
@@ -1234,9 +1234,9 @@ export function Board({
                                   type="button"
                                   className="btn-edit-card-chip"
                                   style={{
-                                    background: 'rgba(110, 208, 234, 0.15)',
+                                    background: 'rgba(231, 207, 133, 0.15)',
                                     color: 'var(--acc2)',
-                                    border: '1px solid rgba(110, 208, 234, 0.3)',
+                                    border: '1px solid rgba(231, 207, 133, 0.3)',
                                     borderRadius: '4px',
                                     fontSize: '10.5px',
                                     padding: '2px 6px',
@@ -1373,7 +1373,7 @@ export function Board({
                             )}
 
                             <div className="card-meta-line">
-                              <span style={{ color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)' }}>
+                              <span style={{ color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#d8cb95' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)' }}>
                                 {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isWaiting ? '⧖ waiting' : isExecution ? '⟳ running' : '◯ pending')}
                               </span>
                               <span className="card-model-name">{tItem.model || activeModel}</span>
@@ -1652,7 +1652,7 @@ export function Board({
                           <span style={{
                             fontSize: '12px',
                             fontWeight: 500,
-                            color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#6ed0ea' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)'
+                            color: isPrimaryExecution ? '#ff6b6b' : isParallelExecution ? '#d8cb95' : isWaiting ? '#f0ad4e' : extra.verifyColor || 'var(--mut)'
                           }}>
                             {extra.verify || (tItem.column === 'finished' ? '✓ verified' : isWaiting ? '⧖ waiting' : isExecution ? '⟳ running' : '◯ pending')}
                           </span>
@@ -2000,15 +2000,15 @@ export function Board({
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--acc2)', background: 'rgba(110, 208, 234, 0.1)', padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(110, 208, 234, 0.2)' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--acc2)', background: 'rgba(231, 207, 133, 0.1)', padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(231, 207, 133, 0.2)' }}>
                           🤖 {task.model || activeModel}
                         </span>
                         <button
                           type="button"
                           style={{
-                            background: 'rgba(110, 208, 234, 0.15)',
+                            background: 'rgba(231, 207, 133, 0.15)',
                             color: 'var(--acc2)',
-                            border: '1px solid rgba(110, 208, 234, 0.35)',
+                            border: '1px solid rgba(231, 207, 133, 0.35)',
                             borderRadius: '4px',
                             fontSize: '12px',
                             padding: '4px 10px',
@@ -2225,9 +2225,9 @@ export function Board({
                 {dagNodes.map((node) => {
                   const isTool = node.type === 'tool' || node.type === 'verify';
                   const badgeColor =
-                    node.type === 'gate' ? '#e08e6f' :
+                    node.type === 'gate' ? '#f0dc9c' :
                     node.type === 'llm' ? '#b48ead' :
-                    node.type === 'verify' ? '#a3be8c' : '#6ed0ea';
+                    node.type === 'verify' ? '#a3be8c' : '#d8cb95';
 
                   return (
                     <div

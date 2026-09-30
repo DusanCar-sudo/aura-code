@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
-import { FAINT_HEX } from './diamond.js';
+import { FAINT_HEX, CHROME, CHROME_DIM, ERR } from './diamond.js';
 import { dictate, speakText, listVoices, listDevices, dictationLoop, toggleDictation } from '../tools/dictate.js';
 import minimist from 'minimist';
 
@@ -25,7 +25,7 @@ if (sub === 'toggle') {
   const deviceId = parsed.device || undefined;
   const submit = parsed.submit !== false && !parsed['no-submit'];
   toggleDictation({ deviceId, submit }).catch(e => {
-    console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
+    console.error(ERR(`\nFatal: ${String(e)}`));
     process.exit(1);
   });
 
@@ -37,11 +37,11 @@ if (sub === 'toggle') {
   const textParts = parsed._.slice(1);
   const text = textParts.join(' ').trim();
   if (!text) {
-    console.error(chalk.hex('#b15439')('Usage: dic speak <text> [--voice <id>]\n'));
+    console.error(ERR('Usage: dic speak <text> [--voice <id>]\n'));
     process.exit(1);
   }
   speakText(text, voice).catch(e => {
-    console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
+    console.error(ERR(`\nFatal: ${String(e)}`));
     process.exit(1);
   });
 
@@ -50,20 +50,20 @@ if (sub === 'toggle') {
 
 } else if (sub === 'help' || parsed.help || parsed.h) {
   console.log(`
-  ${chalk.hex('#cc785c').bold('dic')} ${chalk.hex('#8a7768')('— speech-to-text & text-to-speech')}
+  ${CHROME.bold('dic')} ${CHROME_DIM('— speech-to-text & text-to-speech')}
 
   ${chalk.hex(FAINT_HEX)('Usage:')}
-    ${chalk.hex('#8a7768')('dic')}                               Record → transcribe → copy + type into focused window
-    ${chalk.hex('#8a7768')('dic --no-inject')}                   Record → transcribe → clipboard only (no typing)
-    ${chalk.hex('#8a7768')('dic toggle')}                        Hotkey mode: 1st press records, 2nd press sends (types + Enter)
-    ${chalk.hex('#8a7768')('dic toggle --no-submit')}            Toggle, but don't press Enter after typing
-    ${chalk.hex('#8a7768')('dic loop')}                          Continuous: speak → type → repeat (Ctrl+C to stop)
-    ${chalk.hex('#8a7768')('dic loop --silence 2000')}           Continuous with custom silence threshold (ms)
-    ${chalk.hex('#8a7768')('dic --device <name>')}               Record with a specific audio device
-    ${chalk.hex('#8a7768')('dic devices')}                       List available audio input devices
-    ${chalk.hex('#8a7768')('dic speak <text>')}                  Speak text aloud via MiMo TTS
-    ${chalk.hex('#8a7768')('dic speak <text> --voice Chloe')}    Speak with a specific voice
-    ${chalk.hex('#8a7768')('dic voices')}                        List available TTS voices
+    ${CHROME_DIM('dic')}                               Record → transcribe → copy + type into focused window
+    ${CHROME_DIM('dic --no-inject')}                   Record → transcribe → clipboard only (no typing)
+    ${CHROME_DIM('dic toggle')}                        Hotkey mode: 1st press records, 2nd press sends (types + Enter)
+    ${CHROME_DIM('dic toggle --no-submit')}            Toggle, but don't press Enter after typing
+    ${CHROME_DIM('dic loop')}                          Continuous: speak → type → repeat (Ctrl+C to stop)
+    ${CHROME_DIM('dic loop --silence 2000')}           Continuous with custom silence threshold (ms)
+    ${CHROME_DIM('dic --device <name>')}               Record with a specific audio device
+    ${CHROME_DIM('dic devices')}                       List available audio input devices
+    ${CHROME_DIM('dic speak <text>')}                  Speak text aloud via MiMo TTS
+    ${CHROME_DIM('dic speak <text> --voice Chloe')}    Speak with a specific voice
+    ${CHROME_DIM('dic voices')}                        List available TTS voices
 
   ${chalk.hex(FAINT_HEX)('API keys:')}
     PARAKEET_BASE_URL Local NVIDIA Parakeet ASR (self-hosted, no key)
@@ -87,7 +87,7 @@ if (sub === 'toggle') {
   const deviceId = parsed.device || undefined;
   const silenceMs = parsed.silence ? Number(parsed.silence) : 1500;
   dictationLoop({ deviceId, silenceMs }).catch(e => {
-    console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
+    console.error(ERR(`\nFatal: ${String(e)}`));
     process.exit(1);
   });
 
@@ -97,7 +97,7 @@ if (sub === 'toggle') {
   const deviceId = parsed.device || undefined;
   const inject = parsed.inject !== false && !parsed['clip-only'];
   dictate({ deviceId, inject }).catch(e => {
-    console.error(chalk.hex('#b15439')(`\nFatal: ${String(e)}`));
+    console.error(ERR(`\nFatal: ${String(e)}`));
     process.exit(1);
   });
 }

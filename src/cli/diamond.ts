@@ -1,44 +1,33 @@
 import chalk from 'chalk';
+import { peakRows, wordmarkLines, wordmarkWidth, creamInk, stripeBar } from './wordmark.js';
+import { currentTheme, mixHex, type ThemeToken } from './theme.js';
 
-// Ruby palette — matches https://dusancar-sudo.github.io/aura-website/
-// (#e63956 bright ruby, #9b1b30 primary, #4a0d1a deep wine)
-const ruby = chalk.hex('#9b1b30');
+// Every colour here is read from the active theme at load (default: Nature —
+// forest ground, cream text, gold light; BRAND.md §5.2). The export names are
+// the pre-theme ones, kept because the rest of the CLI imports them.
+export function tokenHex(token: ThemeToken | string): string {
+  const t = currentTheme().tokens as Record<string, string>;
+  return t[token as string] ?? '#f2f1f5';
+}
 
-// Primary ruby as a single reusable accent (e.g. the message-bubble left
-// bar) — distinct from the 4-stop gradient, which is for dividers/borders.
-export const RUBY_HEX = '#9b1b30';
-export const RUBY_ACCENT = ruby;
+/** The one accent per surface — gold on Nature. Used for the message-bubble bar. */
+export const RUBY_HEX = tokenHex('accent');
+export const RUBY_ACCENT = chalk.hex(RUBY_HEX);
 
-// ── Palette v3: bluish-dark background, terracotta chrome, white text ──────
-// Terminal background, set via OSC 11 on TUI start (desaturated dark navy).
-export const BG_HEX = '#0f1724';
-// Elevated panel background (code/log blocks) — one step lighter than BG_HEX.
-export const PANEL_BG_HEX = '#1c2739';
-// Tool/UI chrome — the terracotta already used for tool labels and mode
-// indicators across the CLI. Everything that is "the tooling talking to you".
-export const TERRACOTTA_HEX = '#cc785c';
-// Primary text (user input, assistant replies, body copy) — near-white for
-// maximum readability on the bluish background.
-export const TEXT_HEX = '#e8e6e3';
-// Secondary/de-emphasized text — desaturated blue-gray, quieter than TEXT_HEX
-// but still readable on BG_HEX.
-export const TEXT_DIM_HEX = '#8a94a6';
-// Faintest text (rules, timings, ellipses) — visible but receding on BG_HEX.
-export const FAINT_HEX = '#4a5568';
+export const BG_HEX = tokenHex('bg');
+export const PANEL_BG_HEX = tokenHex('panelBg');
+/** Tool/UI chrome — "the tooling talking to you". */
+export const TERRACOTTA_HEX = tokenHex('chrome');
+export const TEXT_HEX = tokenHex('fg');
+export const TEXT_DIM_HEX = tokenHex('dim');
+export const FAINT_HEX = tokenHex('faint');
 export const TEXT = chalk.hex(TEXT_HEX);
 export const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 export const FAINT = chalk.hex(FAINT_HEX);
-// Muted terracotta for unfocused/quiet chrome (e.g. blurred panel borders).
-export const CHROME_DIM = chalk.hex('#8a5a48');
+export const CHROME_DIM = chalk.hex(tokenHex('chromeDim'));
 
-/**
- * The four terracotta stops, dark end → bright end, centered on
- * TERRACOTTA_HEX. Used for every line that separates fields/panels/sections
- * (box borders, rules, column dividers) — per the fixed palette rule,
- * dividers get this same four-stop gradient rather than a single flat hue.
- * (The ruby stops above remain for the mark/wordmark branding only.)
- */
-const GRADIENT_HEXES = ['#7a4636', '#a05a44', TERRACOTTA_HEX, '#e29a80'] as const;
+/** Four stops, dark → bright, for rules, borders and dividers. */
+const GRADIENT_HEXES = currentTheme().gradient;
 const GRADIENT_STOPS = GRADIENT_HEXES.map(hex => chalk.hex(hex));
 
 /**
@@ -87,59 +76,42 @@ export function gradientStopFor(row: number, total: number): chalk.Chalk {
 }
 
 /**
- * The Aura mark: a burst struck through a vertical axis — the shape of a
- * beacon that has just been lit. Hand-drawn at 47×22 and used only at that
- * size: the ray texture is carried by single characters, so any downscale
- * (box-filtering 2×2 cells into one) collapses it into noise. The narrower
- * banner tiers therefore drop the mark rather than shrink it.
+ * The Aura mark: lowercase "aura" and the four Sinclair stripes, from the
+ * ∞K retro identity (aura-retro-design, brand/glyphs.py). One glyph unit is
+ * one pixel — 10-unit x-height, 3-unit stroke — and each text row carries two
+ * pixel rows as half blocks, so the mark prints 5 rows × 59 columns. `#` is
+ * letter ink; `r y g c` are the stripes, which lean one pixel every two rows
+ * so that no cell ever needs two colours. The counters are square: at this
+ * size a round one reads as a "+".
  */
-const MARK: string[] = [
-  '           .              #@#              .',
-  '           .*             :@=             *:',
-  '            ##.           :@=           .##.',
-  '            *##:          :@=          .###',
-  '         *. =###-    #*=--***=-=*#.   :###+  +',
-  '         =#= +###=       :@:@-       -###* =#+',
-  '          *##:.###+      :@:@-      =###:.###',
-  '          =####:*##*     .@:@-     +##*.*###=',
-  '        ==. =###*-###    .@:@-    *##=+###+  -+',
-  '         :##+ :###+###.  .@:@:   *##+###- +##-',
-  '          .####+:*#####. .@:@: .#####*:+####:',
-  '         :   .-###*=###* .%.#: *###+*###=.   :',
-  '          :*###*+-=+###+  .*.. +###+=-=*###*:',
-  '             :-=+######*  *##  *######*=-:',
-  '              :-+###**##:##-##.##**###+-:',
-  '                   =*#*=##. .##++#*+',
-  '                      :###= -###-',
-  '                     -#* -###= *#-',
-  '                      =   *.#   -',
-  '                          *:#',
-  '                          ==+',
-  '                          .+:',
+const MARK_PIXELS: string[] = [
+  '...#######..###....###..#######......#######.......rryyggcc',
+  '.#########..###....###..#########..#########.......rryyggcc',
+  '.#########..###....###..#########..#########......rryyggcc.',
+  '###....###..###....###..####......###....###......rryyggcc.',
+  '###....###..###....###..###.......###....###.....rryyggcc..',
+  '###....###..###....###..###.......###....###.....rryyggcc..',
+  '###....###..###....###..###.......###....###....rryyggcc...',
+  '.#########...#########..###........#########....rryyggcc...',
+  '.#########...#########..###........#########...rryyggcc....',
+  '...#######.....#######..###..........#######...rryyggcc....',
 ];
-const MARK_WIDTH = 47;
-/** The mark's optical center: the axis column, and the burst core — which
- *  sits above the geometric middle, since the tail hangs below it. */
-const MARK_CX = 27;
-const MARK_CY = 9;
+const MARK_WIDTH = 12 + 3 + wordmarkWidth('AURA CODE');
+/** The mark's text rows, plus the "CODE" row under the stripes. */
+const LOCKUP_ROWS = MARK_PIXELS.length / 2 + 1;
 
 /**
- * The mark's glow ramp, core → tips: white-hot at the strike point, through
- * hot ruby, out to the brand ruby at the ray ends. It bottoms out at
- * RUBY_HEX rather than the deep wine so the outermost rays stay legible
- * against BG_HEX.
+ * The stripe colours, in Sinclair order. Fixed, not themed: they are the
+ * logo, and they read on dark and light grounds alike.
  */
-const GLOW_STOPS = ['#fff3f5', '#ffc2cd', '#ff7d92', '#ee4463', '#cc2846', RUBY_HEX] as const;
-
-/**
- * How much ink each glyph of the mark carries. The art shades itself by
- * character weight; feeding that back into the color ramp keeps the drawn
- * highlights bright instead of flattening them under the radial falloff.
- */
-const INK: Record<string, number> = {
-  '@': 1, '%': 0.95, '#': 0.85, '*': 0.6, '+': 0.45,
-  '=': 0.4, '-': 0.28, ':': 0.22, '.': 0.12,
+const STRIPE_HEXES: Record<string, string> = {
+  r: '#e4312b', y: '#f8b91e', g: '#2fae4e', c: '#1aa6e0',
 };
+
+/**
+ * The glow ramp for the motto: near-white into the theme accent.
+ */
+const GLOW_STOPS = [mixHex(RUBY_HEX, '#ffffff', 0.85), mixHex(RUBY_HEX, '#ffffff', 0.5), RUBY_HEX, mixHex(RUBY_HEX, BG_HEX, 0.2)] as const;
 
 export interface BannerInfo {
   version: string;
@@ -197,66 +169,144 @@ function fullRule(): string {
   return chromeRule(Math.max(10, process.stdout.columns ?? 80));
 }
 
-/**
- * Light the mark: distance from the burst core drives the ramp, and each
- * glyph's ink weight biases it back toward the bright end, so the drawn
- * highlights survive the falloff. Terminal cells are about twice as tall
- * as they are wide, hence the doubled vertical term.
+/* ── the lockup, rasterized from the brand geometry ─────────────────────────
+ * Ported from aura-retro-design brand/glyphs.py: fat rounded "aura" (rings +
+ * rects, x-height 10, stroke 3), the four leaning stripes, small caps "CODE"
+ * under the stripes. Sampled twice per terminal row (upper/lower half block)
+ * so the round bowls survive. y is up, like the brand source.
  */
-function shadeMark(): string[] {
-  const maxR = Math.hypot(MARK_CX, MARK_CY * 2);
-  return MARK.map((row, y) => {
-    let out = '';
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x];
-      if (ch === ' ') { out += ' '; continue; }
-      const radial = Math.min(1, Math.pow(Math.hypot(x - MARK_CX, (y - MARK_CY) * 2) / maxR, 0.85) * 1.15);
-      out += ramp(GLOW_STOPS, Math.min(1, radial * 0.72 + (1 - (INK[ch] ?? 0.5)) * 0.28))(ch);
-    }
-    return out;
-  });
+type LockupPrim =
+  | { k: 'rect'; x0: number; y0: number; x1: number; y1: number }
+  | { k: 'ring'; cx: number; cy: number; ri: number; ro: number; a0: number; a1: number };
+
+const ringP = (cx: number, cy: number, ri: number, ro: number, a0 = 0, a1 = 360): LockupPrim => ({ k: 'ring', cx, cy, ri, ro, a0, a1 });
+const rectP = (x0: number, y0: number, x1: number, y1: number): LockupPrim => ({ k: 'rect', x0, y0, x1, y1 });
+
+function glyphA(x: number): LockupPrim[] { return [ringP(x + 5, 5, 2, 5), rectP(x + 7, 0, x + 10, 10)]; }
+function glyphU(x: number): LockupPrim[] { return [rectP(x, 5, x + 3, 10), ringP(x + 5, 5, 2, 5, 180, 360), rectP(x + 7, 0, x + 10, 10)]; }
+function glyphR(x: number): LockupPrim[] { return [rectP(x, 0, x + 3, 10), ringP(x + 5, 5, 2, 5, 32, 180)]; }
+
+const STRIPE_W = 2.4, STRIPE_SLANT = 5, STRIPE_GAP = 2.6, CODE_SCALE = 0.6;
+
+function wordmarkPrims(): { prims: LockupPrim[]; width: number } {
+  const prims: LockupPrim[] = [];
+  let x = 0;
+  prims.push(...glyphA(x)); x += 10 + 1.8;
+  prims.push(...glyphU(x)); x += 10 + 1.8;
+  prims.push(...glyphR(x)); x += 5 + 5 * Math.cos(32 * Math.PI / 180) + 1.3;
+  prims.push(...glyphA(x)); x += 10;
+  return { prims, width: x };
 }
 
-// ── Wordmark ────────────────────────────────────────────────────────────────
-// 5×5 block capitals — the only letterforms in the app drawn as artwork
-// rather than text. AURA carries the ruby (the brand), CODE the terracotta
-// (the tooling), per the palette split used everywhere else in the CLI.
-const GLYPHS: Record<string, string[]> = {
-  A: [' ███ ', '█   █', '█████', '█   █', '█   █'],
-  U: ['█   █', '█   █', '█   █', '█   █', ' ███ '],
-  R: ['████ ', '█   █', '████ ', '█  █ ', '█   █'],
-  C: [' ███ ', '█    ', '█    ', '█    ', ' ███ '],
-  O: [' ███ ', '█   █', '█   █', '█   █', ' ███ '],
-  D: ['████ ', '█   █', '█   █', '█   █', '████ '],
-  E: ['█████', '█    ', '████ ', '█    ', '█████'],
-};
-const WORDMARK_ROWS = 5;
-/** "AURA" + three-column word gap + "CODE", both at 5×5 with 1-column tracking. */
-const WORDMARK_WIDTH = 23 * 2 + 3;
+function inPrim(p: LockupPrim, x: number, y: number): boolean {
+  if (p.k === 'rect') return x >= p.x0 && x <= p.x1 && y >= p.y0 && y <= p.y1;
+  const r = Math.hypot(x - p.cx, y - p.cy);
+  if (r < p.ri || r > p.ro) return false;
+  const span = p.a1 - p.a0;
+  if (span >= 360) return true;
+  let a = Math.atan2(y - p.cy, x - p.cx) * 180 / Math.PI;
+  if (a < 0) a += 360;
+  const a0 = ((p.a0 % 360) + 360) % 360;
+  return ((a - a0) % 360 + 360) % 360 <= span;
+}
 
-/** Paint one word's rows with `stops` swept from `t0` (left) to `t1` (right). */
-function shadeWord(text: string, stops: readonly string[], t0: number, t1: number): string[] {
-  const rows = Array.from({ length: WORDMARK_ROWS }, () => '');
-  const width = text.length * 6 - 1;
-  [...text].forEach((ch, i) => {
-    const glyph = GLYPHS[ch];
-    for (let r = 0; r < WORDMARK_ROWS; r++) {
-      const cells = (i ? ' ' : '') + glyph[r];
-      const originX = i * 6 - (i ? 1 : 0);
-      for (let c = 0; c < cells.length; c++) {
-        rows[r] += cells[c] === ' '
-          ? ' '
-          : ramp(stops, t0 + (t1 - t0) * ((originX + c) / (width - 1))).bold(cells[c]);
-      }
+function stripeAt(i: number, sx0: number, x: number, y: number): boolean {
+  const bx = sx0 + i * STRIPE_W;
+  const shift = STRIPE_SLANT * (y / 10);
+  return y >= 0 && y <= 10 && x >= bx + shift && x <= bx + STRIPE_W + shift;
+}
+
+function scalePrim(p: LockupPrim, s: number, dx: number, dy: number): LockupPrim {
+  if (p.k === 'rect') return { k: 'rect', x0: dx + p.x0 * s, y0: dy + p.y0 * s, x1: dx + p.x1 * s, y1: dy + p.y1 * s };
+  return { k: 'ring', cx: dx + p.cx * s, cy: dy + p.cy * s, ri: p.ri * s, ro: p.ro * s, a0: p.a0, a1: p.a1 };
+}
+
+function codeCapPrims(): { prims: LockupPrim[]; width: number } {
+  const C = 2.2;
+  const capC = (x: number): LockupPrim[] => [ringP(x + 5, 5, 5 - C, 5, 45, 315)];
+  const capO = (x: number): LockupPrim[] => [ringP(x + 5, 5, 5 - C, 5, 0, 360)];
+  const capD = (x: number): LockupPrim[] => [rectP(x, 0, x + C, 10), rectP(x, 0, x + 5, C), rectP(x, 10 - C, x + 5, 10), ringP(x + 5, 5, 5 - C, 5, -90, 90)];
+  const capE = (x: number): LockupPrim[] => [rectP(x, 0, x + C, 10), rectP(x, 10 - C, x + 8, 10), rectP(x, 5 - C / 2, x + 7, 5 + C / 2), rectP(x, 0, x + 8, C)];
+  const prims: LockupPrim[] = [];
+  let x = 0;
+  for (const [fn, w] of [[capC, 5 + 5 * Math.cos(45 * Math.PI / 180)], [capO, 10], [capD, 10], [capE, 8]] as [(x: number) => LockupPrim[], number][]) {
+    for (const q of fn(x)) prims.push(scalePrim(q, CODE_SCALE, 0, 0));
+    x += w + 3.2;
+  }
+  return { prims, width: x - 3.2 };
+}
+
+/** Letter ink by height (y is up, 10 = top of the x-height); stripes lit left to right. */
+export interface LockupPaint {
+  letter?: (y: number) => string | null;
+  lit?: number;
+  unlit?: string;
+}
+
+function sampleColor(x: number, y: number, wm: LockupPrim[], sx0: number, code: LockupPrim[], paint: LockupPaint): string | null {
+  const lit = paint.lit ?? 4;
+  for (let i = 0; i < 4; i++) {
+    if (stripeAt(i, sx0, x, y)) return i < lit ? STRIPE_HEXES[['r', 'y', 'g', 'c'][i]] : (paint.unlit ?? FAINT_HEX);
+  }
+  const ink = paint.letter ? paint.letter(y) : TEXT_HEX;
+  if (!ink) return null;
+  for (const p of wm) if (inPrim(p, x, y)) return ink;
+  for (const p of code) if (inPrim(p, x, y)) return ink;
+  return null;
+}
+
+function markLines(paint: LockupPaint = {}): string[] {
+  const wm = wordmarkPrims();
+  const sx0 = wm.width + STRIPE_GAP;
+  const end = sx0 + 4 * STRIPE_W + STRIPE_SLANT;
+  /* fit the terminal: condense horizontally rather than clip or wrap */
+  const termCols = process.stdout.columns ?? Number(process.env.COLUMNS) ?? 80;
+  const sx = Math.min(1, (termCols - 2) / end);
+  const caps = codeCapPrims();
+  const capsH = 10 * CODE_SCALE;
+  const codeDy = 0.4 - capsH;          /* caps' top just under the stripes' foot */
+  const code = caps.prims.map(q => scalePrim(q, 1, (end - caps.width * CODE_SCALE) * sx, codeDy));
+  const cols = Math.ceil(end * sx) + 1;
+  const rows: string[] = [];
+  const bottom = -4;
+  for (let rowTop = 10; rowTop >= -4; rowTop -= 2) {   /* past the caps' foot so nothing clips */
+    let out = '';
+    for (let c = 0; c < cols; c++) {
+      const x = (c + 0.5) / sx;   /* sample the unscaled geometry */
+      const up = sampleColor(x, rowTop - 0.5, wm.prims, sx0, code, paint);
+      const dn = sampleColor(x, rowTop - 1.5, wm.prims, sx0, code, paint);
+      if (!up && !dn) { out += ' '; continue; }
+      if (up && dn && up === dn) { out += chalk.hex(up)('█'); continue; }
+      if (up && dn) { out += chalk.hex(up).bgHex(dn)('▀'); continue; }
+      if (up && !dn) { out += chalk.hex(up)('▀'); continue; }
+      out += chalk.hex(dn as string)('▄');
     }
-  });
+    rows.push(out.replace(/\s+$/, ''));
+  }
   return rows;
 }
 
-function wordmarkLines(): string[] {
-  const aura = shadeWord('AURA', GLOW_STOPS, 0.25, 0.68);
-  const code = shadeWord('CODE', GRADIENT_HEXES, 0.85, 0.3);
-  return aura.map((row, i) => row + '   ' + code[i]);
+/** The rasterized lockup is the whole mark — stripes and CODE included. */
+export function lockupLines(paint?: LockupPaint): string[] {
+  if (paint) return markLines(paint);
+  // Key-art lockup: the peak beside AURA CODE, stripes under the word.
+  const peak = peakRows(12);
+  const word = [...wordmarkLines('AURA CODE', creamInk()), '', stripeBar()];
+  const h = Math.max(peak.length, word.length);
+  const po = Math.floor((h - peak.length) / 2);
+  const out: string[] = [];
+  for (let i = 0; i < h; i++) {
+    const p = peak[i - po] ?? ' '.repeat(12);
+    out.push((p + '   ' + (word[i] ?? '')).replace(/\s+$/, ''));
+  }
+  return out;
+}
+
+/** The stripes alone in one text row: each ▟ in the next colour on the one before. */
+function stripeRun(): string {
+  const [r, y, g, c] = ['r', 'y', 'g', 'c'].map(k => STRIPE_HEXES[k]);
+  return chalk.hex(r)('▟') + chalk.hex(y).bgHex(r)('▟') + chalk.hex(g).bgHex(y)('▟')
+    + chalk.hex(c).bgHex(g)('▟') + chalk.hex(c)('▘');
 }
 
 // ── Banner ──────────────────────────────────────────────────────────────────
@@ -268,22 +318,24 @@ function visibleWidth(s: string): number {
 }
 
 /**
- * `hero` is the full lockup (mark + wordmark + session card) and needs a
- * terminal that can actually hold it; `standard` drops the mark; `compact`
- * is a single line, for narrow terminals and for the TUI's pinned header,
- * where every banner row is permanently subtracted from the scroll region.
+ * `hero` sets the session card beside the mark and needs a terminal that can
+ * hold both; `standard` stacks the card under it; `compact` is a single
+ * line, for narrow terminals and for the TUI's pinned header, where every
+ * banner row is permanently subtracted from the scroll region.
  */
 export type BannerTier = 'hero' | 'standard' | 'compact';
 
-const HERO_MIN_COLS = MARK_WIDTH + WORDMARK_WIDTH + 4;  // 100
-const HERO_MIN_ROWS = MARK.length + 8;                  // room left to work in
+const TAGLINE = 'praktess · she who acts and executes';
+/** Indent, mark, gutter and bar, then the version + tagline line beside it. */
+const HERO_MIN_COLS = 2 + MARK_WIDTH + 6 + 'v00.00.00   '.length + TAGLINE.length;  // 115
+const HERO_MIN_ROWS = 24;  // the mark greets you without being the whole view
 
 /** The largest tier the current terminal has room for. */
 export function preferredBannerTier(): BannerTier {
   const cols = process.stdout.columns ?? 80;
   const rows = process.stdout.rows ?? 0;
   if (cols >= HERO_MIN_COLS && rows >= HERO_MIN_ROWS) return 'hero';
-  if (cols >= WORDMARK_WIDTH + 4) return 'standard';
+  if (cols >= MARK_WIDTH + 4) return 'standard';
   return 'compact';
 }
 
@@ -303,54 +355,60 @@ function metaLines(info: BannerInfo): string[] {
   ].filter(line => visibleWidth(line) > 0);
 }
 
-/** Wordmark, rule, version/tagline, session facts, motto — the right column. */
-function cardLines(info: BannerInfo): string[] {
-  return [
-    ...wordmarkLines(),
-    '',
-    chromeRule(WORDMARK_WIDTH),
-    chalk.hex(TERRACOTTA_HEX).bold(`v${info.version}`)
-      + FAINT('   praktess · she who acts and executes'),
-    '',
-    ...metaLines(info),
-    '',
-    ramp(GLOW_STOPS, 0.2).italic('"I don\'t try. I verify."'),
-  ];
+function versionLine(info: BannerInfo): string {
+  return chalk.hex(TERRACOTTA_HEX).bold(`v${info.version}`) + FAINT(`   ${TAGLINE}`);
 }
 
-/** Mark on the left, card on the right, card centered against the mark. */
+const MOTTO = ramp(GLOW_STOPS, 0.2)('"I don\'t try. I verify."');
+
+/**
+ * Mark on the left; version, session facts and motto on the right, behind
+ * a terracotta bar and centered against the mark.
+ */
 function heroLines(info: BannerInfo): string[] {
-  const mark = shadeMark();
-  const card = cardLines(info);
+  const mark = lockupLines();
+  const card = [versionLine(info), ...metaLines(info), MOTTO];
   const height = Math.max(mark.length, card.length);
   const cardOffset = Math.floor((height - card.length) / 2);
 
   const lines = [''];
   for (let i = 0; i < height; i++) {
-    const markRow = i < mark.length ? mark[i] : '';
-    const gutter = ' '.repeat(MARK_WIDTH - (i < MARK.length ? MARK[i].length : 0) + 2);
+    const markRow = mark[i] ?? '';
+    const gutter = ' '.repeat(MARK_WIDTH - visibleWidth(markRow) + 3);
+    const bar = ramp(GRADIENT_HEXES, i / Math.max(1, height - 1))('│');
     const cardRow = card[i - cardOffset] ?? '';
-    lines.push((' ' + markRow + gutter + cardRow).replace(/\s+$/, ''));
+    lines.push(('  ' + markRow + gutter + bar + '  ' + cardRow).replace(/\s+$/, ''));
   }
   lines.push('');
   lines.push(fullRule());
   return lines;
 }
 
+/** The mark, then the card under it: rule, version/tagline, facts, motto. */
 function standardLines(info: BannerInfo): string[] {
-  return ['', ...cardLines(info).map(line => (line ? '  ' + line : '')), fullRule()];
+  const card = [
+    ...lockupLines(),
+    '',
+    chromeRule(MARK_WIDTH),
+    versionLine(info),
+    '',
+    ...metaLines(info),
+    '',
+    MOTTO,
+  ];
+  return ['', ...card.map(line => (line ? '  ' + line : '')), fullRule()];
 }
 
 /**
- * One line, for narrow terminals and for the TUI's pinned header. Fields are
- * appended only while they fit: at this size the wordmark has to survive, the
- * model name is the next most useful thing to know, and everything after that
- * is a bonus.
+ * One line, for narrow terminals and for the TUI's pinned header: the mark
+ * as "aura", one row of stripes and "CODE". Fields are appended only while
+ * they fit: at this size the mark has to survive, the model name is the next
+ * most useful thing to know, and everything after that is a bonus.
  */
 function compactLines(info: BannerInfo): string[] {
   const width = Math.max(10, process.stdout.columns ?? 80);
-  let line = ramp(GLOW_STOPS, 0.1).bold('AURA') + ' ' + chalk.hex(TERRACOTTA_HEX).bold('CODE');
-  let used = 2 + 'AURA CODE'.length;
+  let line = TEXT.bold('AURA') + ' ' + stripeRun() + ' ' + TEXT.bold('CODE');
+  let used = 2 + 'AURA ▟▟▟▟▘ CODE'.length;
 
   for (const [gap, part, plain] of [
     ['  ', FAINT(`v${info.version}`), `v${info.version}`],
@@ -390,7 +448,7 @@ export function renderMark(): void {
   const indent = Math.max(0, Math.floor(((process.stdout.columns ?? 80) - MARK_WIDTH) / 2));
   const pad = ' '.repeat(indent);
   console.log('');
-  shadeMark().forEach(row => console.log(pad + row));
+  lockupLines().forEach(row => console.log(pad + row));
   console.log('');
 }
 
@@ -398,3 +456,13 @@ export function renderMark(): void {
 export function renderDiamond(): void {
   console.log('');
 }
+
+export const CHROME = chalk.hex(tokenHex('chrome'));
+export const SOFT = chalk.hex(tokenHex('soft'));
+export const CYAN = chalk.hex(tokenHex('cyan'));
+export const FG_BRIGHT = chalk.hex(tokenHex('fgBright'));
+export const CODE_BG = chalk.bgHex(tokenHex('panelBg'));
+export const OK = chalk.hex(tokenHex('ok'));
+export const WARN = chalk.hex(tokenHex('warn'));
+export const ERR = chalk.hex(tokenHex('err'));
+export const INFO = chalk.hex(tokenHex('info'));

@@ -2,11 +2,10 @@ import chalk from 'chalk';
 import { pickLanAddress, tailscaleAddress } from '../server/lan.js';
 import { createPairingCode, loadDevices, revokeDevice, devicesPath, pendingPairings } from '../server/devices.js';
 
-const CYAN = '#3fb9d8';
-const RUBY = '#b15439';
+import { CYAN, ERR } from './diamond.js';
 
 function heading(text: string): void {
-  console.log('\n  ' + chalk.hex(CYAN).bold(text) + '\n');
+  console.log('\n  ' + CYAN.bold(text) + '\n');
 }
 
 function relativeAge(iso: string | null): string {
@@ -27,7 +26,7 @@ function listDevices(): number {
 
   if (devices.length === 0 && waiting.length === 0) {
     heading('No paired devices');
-    console.log('  Pair one with:  ' + chalk.hex(CYAN)('aura devices add "Mum\'s phone"') + '\n');
+    console.log('  Pair one with:  ' + CYAN('aura devices add "Mum\'s phone"') + '\n');
     return 0;
   }
 
@@ -35,7 +34,7 @@ function listDevices(): number {
     heading(`Waiting to pair (${waiting.length})`);
     for (const p of waiting) {
       const mins = Math.max(0, Math.round((new Date(p.expiresAt).getTime() - Date.now()) / 60_000));
-      console.log('  ' + chalk.bold(p.name) + '  code ' + chalk.hex(CYAN).bold(p.code)
+      console.log('  ' + chalk.bold(p.name) + '  code ' + CYAN.bold(p.code)
         + chalk.dim(`  expires in ${mins}m`));
     }
     console.log('');
@@ -58,7 +57,7 @@ function listDevices(): number {
 
 function addNamedDevice(name: string, port: number): number {
   if (!name.trim()) {
-    console.error(chalk.hex(RUBY)('\n  Give the device a name, e.g. aura devices add "Mum\'s phone"\n'));
+    console.error(ERR('\n  Give the device a name, e.g. aura devices add "Mum\'s phone"\n'));
     return 1;
   }
 
@@ -70,7 +69,7 @@ function addNamedDevice(name: string, port: number): number {
 
   heading(`Pairing "${pairing.name}"`);
   console.log('  Type this code into the phone:\n');
-  console.log('    ' + chalk.hex(CYAN).bold(pairing.code.split('').join(' ')) + '\n');
+  console.log('    ' + CYAN.bold(pairing.code.split('').join(' ')) + '\n');
   console.log('  On that phone, open Aura and enter:\n');
   if (ts) {
     console.log('    Address  ' + chalk.bold(ts.address)
@@ -83,22 +82,22 @@ function addNamedDevice(name: string, port: number): number {
   console.log('    Port     ' + chalk.bold(String(port)));
   console.log('    Code     ' + chalk.bold(pairing.code) + '\n');
   if (ts) {
-    console.log('  Needs ' + chalk.hex(CYAN)('aura serve --tailscale')
+    console.log('  Needs ' + CYAN('aura serve --tailscale')
       + ' here, and Tailscale installed on the');
     console.log('  phone, signed into the same account. Then it works from anywhere —');
     console.log('  mobile data included, nothing exposed to the internet.');
     if (wifi) {
       console.log('  ' + chalk.dim(`Same Wi-Fi only: use ${wifi.address} with `)
-        + chalk.hex(CYAN)('aura serve --lan'));
+        + CYAN('aura serve --lan'));
     }
     console.log('');
   } else if (wifi) {
     console.log('  Wi-Fi needs the server started with '
-      + chalk.hex(CYAN)('aura serve --lan') + '. Same network, no cable.');
+      + CYAN('aura serve --lan') + '. Same network, no cable.');
     console.log('  ' + chalk.dim('Over USB instead: use 127.0.0.1 and run ')
-      + chalk.hex(CYAN)(`adb reverse tcp:${port} tcp:${port}`) + '\n');
+      + CYAN(`adb reverse tcp:${port} tcp:${port}`) + '\n');
   } else {
-    console.log('  Over USB, first run:  ' + chalk.hex(CYAN)(`adb reverse tcp:${port} tcp:${port}`) + '\n');
+    console.log('  Over USB, first run:  ' + CYAN(`adb reverse tcp:${port} tcp:${port}`) + '\n');
   }
   console.log(chalk.dim(`  Valid ${minutes} minutes, once. The phone swaps it for a long token`));
   console.log(chalk.dim('  and stores that, so nobody ever types the long one.') + '\n');
@@ -107,18 +106,18 @@ function addNamedDevice(name: string, port: number): number {
 
 function revokeNamedDevice(idOrName: string): number {
   if (!idOrName.trim()) {
-    console.error(chalk.hex(RUBY)('\n  Which device? Run `aura devices` to see their ids.\n'));
+    console.error(ERR('\n  Which device? Run `aura devices` to see their ids.\n'));
     return 1;
   }
   const removed = revokeDevice(idOrName);
   if (!removed) {
-    console.error(chalk.hex(RUBY)(`\n  No paired device matches "${idOrName}".\n`));
+    console.error(ERR(`\n  No paired device matches "${idOrName}".\n`));
     return 1;
   }
   // The token is only ever compared against the stored hash, so deleting the
   // row is the whole revocation — there is no cached copy to invalidate.
   // A device holding the old token is refused at the next handshake.
-  console.log('\n  ' + chalk.hex(CYAN)('Revoked') + ` "${removed.name}". `
+  console.log('\n  ' + CYAN('Revoked') + ` "${removed.name}". `
     + chalk.dim('It will be refused at its next connection.') + '\n');
   return 0;
 }
@@ -134,7 +133,7 @@ export async function runDevices(sub: string, args: string[], port = 7337): Prom
     case 'remove':
       return revokeNamedDevice(args.join(' '));
     default:
-      console.error(chalk.hex(RUBY)(`\n  Unknown: aura devices ${sub}`));
+      console.error(ERR(`\n  Unknown: aura devices ${sub}`));
       console.log('  Usage: aura devices [list | add <name> | revoke <id|name>]\n');
       return 1;
   }

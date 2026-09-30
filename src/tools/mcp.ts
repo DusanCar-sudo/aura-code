@@ -1,4 +1,6 @@
+import * as fs from 'fs';
 import type { ToolDefinition } from '../providers/types.js';
+import { auraPath } from '../util/aura-home.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MCP Client — connect to MCP servers for extended tool capabilities
@@ -20,7 +22,8 @@ export const MCP_DEFINITION: ToolDefinition = {
   description:
     'Connect to MCP (Model Context Protocol) servers for extended tool capabilities. ' +
     'MCP servers provide tools like Chrome DevTools control, database access, file system operations, etc. ' +
-    'Actions: connect, disconnect, list_tools, call_tool, list_servers.',
+    'Actions: connect, disconnect, list_tools, call_tool, list_servers. ' +
+    'Servers configured in ~/.aura/mcp.json connect by name alone (connect server=<name>, no command).',
   parameters: {
     type: 'object',
     properties: {
@@ -28,7 +31,7 @@ export const MCP_DEFINITION: ToolDefinition = {
       server:    { type: 'string', description: 'Server name or ID (for connect/disconnect/list_tools/call_tool)' },
       tool:      { type: 'string', description: 'Tool name to call (for call_tool action)' },
       args:      { type: 'object', description: 'Arguments for the tool call (for call_tool action)' },
-      command:   { type: 'string', description: 'Command to start MCP server (for connect, e.g. "npx @anthropic-ai/mcp-server-puppeteer")' },
+      command:   { type: 'string', description: 'Command to start MCP server (for connect, e.g. "npx @anthropic-ai/mcp-server-puppeteer"). Omit for servers configured in ~/.aura/mcp.json' },
       args_list: { type: 'array',  description: 'Command arguments (for connect)', items: { type: 'string' } },
     },
     required: ['action'],
@@ -64,46 +67,98 @@ const mcpServers = new Map<string, McpServer>();
 // JSON-RPC 2.0 helpers (MCP uses JSON-RPC over stdio)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function createJsonRpcMessage(method: string, params?: unknown): string {
-  const msg = {
-    jsonrpc: '2.0',
-    id: Date.now(),
-    method,
-    ...(params !== undefined ? { params } : {}),
-  };
-  const body = JSON.stringify(msg);
-  // MCP uses Content-Length header framing
-  return `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+// MCP stdio transport is newline-delimited JSON: one message per line, no
+// embedded newlines (JSON.stringify never emits raw ones). This client used to
+// send LSP-style Content-Length headers, which spec servers never parse — every
+// connect to a real server timed out on `initialize`.
+function frameMessage(msg: unknown): string {
+  return JSON.stringify(msg) + '\n';
 }
 
-function parseJsonRpcMessages(data: string): { messages: any[]; remainder: string } {
+export function parseJsonRpcMessages(data: string): { messages: any[]; remainder: string } {
   const messages: any[] = [];
   let remaining = data;
 
   while (true) {
-    const headerEnd = remaining.indexOf('\r\n\r\n');
-    if (headerEnd === -1) break;
+    remaining = remaining.replace(/^\s+/, '');
+    if (!remaining) break;
 
-    const header = remaining.slice(0, headerEnd);
-    const lengthMatch = header.match(/Content-Length:\s*(\d+)/i);
-    if (!lengthMatch) break;
-
-    const contentLength = parseInt(lengthMatch[1], 10);
-    const bodyStart = headerEnd + 4;
-
-    if (remaining.length < bodyStart + contentLength) break; // incomplete message
-
-    const body = remaining.slice(bodyStart, bodyStart + contentLength);
-    try {
-      messages.push(JSON.parse(body));
-    } catch {
-      // skip malformed messages
+    // Tolerate Content-Length framed replies from older non-spec servers.
+    if (/^Content-Length:/i.test(remaining)) {
+      const headerEnd = remaining.indexOf('\r\n\r\n');
+      if (headerEnd === -1) break;
+      const lengthMatch = remaining.slice(0, headerEnd).match(/Content-Length:\s*(\d+)/i);
+      const bodyStart = headerEnd + 4;
+      const contentLength = lengthMatch ? parseInt(lengthMatch[1], 10) : 0;
+      if (remaining.length < bodyStart + contentLength) break; // incomplete message
+      try {
+        messages.push(JSON.parse(remaining.slice(bodyStart, bodyStart + contentLength)));
+      } catch {
+        // skip malformed messages
+      }
+      remaining = remaining.slice(bodyStart + contentLength);
+      continue;
     }
 
-    remaining = remaining.slice(bodyStart + contentLength);
+    const lineEnd = remaining.indexOf('\n');
+    if (lineEnd === -1) break; // incomplete line — wait for more data
+    const line = remaining.slice(0, lineEnd).trim();
+    remaining = remaining.slice(lineEnd + 1);
+    try {
+      messages.push(JSON.parse(line));
+    } catch {
+      // not JSON-RPC (a server logging to stdout) — skip the line
+    }
   }
 
   return { messages, remainder: remaining };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Configured servers — ~/.aura/mcp.json
+// Same {"mcpServers": {...}} shape Claude Code, Cursor and `summer setup
+// --print` emit, so their snippets paste in unchanged. Config only supplies
+// the command: nothing here connects. Connecting still goes through the
+// `connect` action, so the permission screen and confirm prompt apply.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface McpServerConfig {
+  command: string;
+  args: string[];
+}
+
+/** Read per call (like auraPath itself), so an edited file applies without a restart. */
+export function loadMcpConfig(): Map<string, McpServerConfig> {
+  const servers = new Map<string, McpServerConfig>();
+  let raw: any;
+  try {
+    raw = JSON.parse(fs.readFileSync(auraPath('mcp.json'), 'utf8'));
+  } catch {
+    return servers; // missing or unparseable file = no configured servers
+  }
+  const entries = raw?.mcpServers;
+  if (!entries || typeof entries !== 'object') return servers;
+  for (const [name, entry] of Object.entries(entries as Record<string, any>)) {
+    // Only stdio servers: this client spawns a process, it has no HTTP transport.
+    if (typeof entry?.command !== 'string' || !entry.command.trim()) continue;
+    if (entry.type && entry.type !== 'stdio') continue;
+    const args = Array.isArray(entry.args) ? entry.args.map(String) : [];
+    servers.set(name, { command: entry.command, args });
+  }
+  return servers;
+}
+
+/**
+ * The command a connect call will actually spawn: explicit input wins,
+ * otherwise the configured entry for that server name. Shared with the
+ * permission layer so the confirm prompt shows the real command.
+ */
+export function resolveConnectCommand(input: { server?: unknown; command?: unknown; args_list?: unknown }): McpServerConfig | null {
+  if (typeof input.command === 'string' && input.command.trim()) {
+    return { command: input.command, args: Array.isArray(input.args_list) ? input.args_list.map(String) : [] };
+  }
+  if (typeof input.server !== 'string') return null;
+  return loadMcpConfig().get(input.server) ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,10 +291,7 @@ function sendRequest(server: McpServer, method: string, params?: unknown): Promi
       method,
       ...(params !== undefined ? { params } : {}),
     };
-    const body = JSON.stringify(msg);
-    const framed = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
-
-    server.process.stdin.write(framed);
+    server.process.stdin.write(frameMessage(msg));
 
     // Timeout after 30 seconds
     setTimeout(() => {
@@ -259,10 +311,7 @@ function sendNotification(server: McpServer, method: string, params?: unknown): 
     method,
     ...(params !== undefined ? { params } : {}),
   };
-  const body = JSON.stringify(msg);
-  const framed = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
-
-  server.process.stdin.write(framed);
+  server.process.stdin.write(frameMessage(msg));
 }
 
 async function disconnectServer(name: string): Promise<string> {
@@ -280,8 +329,15 @@ async function disconnectServer(name: string): Promise<string> {
 }
 
 function listServers(): string {
+  const idle = [...loadMcpConfig()].filter(([name]) => !mcpServers.get(name)?.connected);
+  const idleLines = idle.length === 0 ? [] : [
+    '\nConfigured in ~/.aura/mcp.json (not connected — mcp action=connect server=<name>):',
+    ...idle.map(([name, c]) => `  ${name}: ${c.command} ${c.args.join(' ')}`.trimEnd()),
+  ];
+
   if (mcpServers.size === 0) {
-    return 'No MCP servers connected.\n\nTo connect: mcp action=connect server=<name> command="<command>" args_list=["arg1","arg2"]';
+    return ['No MCP servers connected.\n\nTo connect: mcp action=connect server=<name> command="<command>" args_list=["arg1","arg2"]',
+      ...idleLines].join('\n');
   }
 
   const lines: string[] = ['Connected MCP servers:'];
@@ -296,7 +352,7 @@ function listServers(): string {
       });
     }
   }
-  return lines.join('\n');
+  return [...lines, ...idleLines].join('\n');
 }
 
 function listTools(serverName: string): string {
@@ -371,8 +427,14 @@ export async function mcpTool(input: McpInput): Promise<string> {
 
       case 'connect': {
         if (!input.server) return 'Error: server name is required';
-        if (!input.command) return 'Error: command is required (e.g., "npx @anthropic-ai/mcp-server-puppeteer")';
-        return await connectServer(input.server, input.command, input.args_list ?? []);
+        const resolved = resolveConnectCommand(input);
+        if (!resolved) {
+          const configured = [...loadMcpConfig().keys()];
+          return 'Error: command is required (e.g., "npx @anthropic-ai/mcp-server-puppeteer"), ' +
+            `or configure "${input.server}" in ~/.aura/mcp.json` +
+            (configured.length ? `. Configured: ${configured.join(', ')}` : '');
+        }
+        return await connectServer(input.server, resolved.command, resolved.args);
       }
 
       case 'disconnect': {

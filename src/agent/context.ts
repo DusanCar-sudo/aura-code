@@ -178,7 +178,9 @@ function readConfig(root: string): string {
 
 function readGitLog(root: string): string {
   try {
-    return execSync('git log --oneline -10', { cwd: root, encoding: 'utf8' }).trim();
+    // execSync inherits stderr by default, which printed git's raw
+    // "fatal: not a git repository" over the banner outside repos.
+    return execSync('git log --oneline -10', { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
   } catch {
     return '(not a git repository)';
   }

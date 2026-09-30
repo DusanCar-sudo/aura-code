@@ -5,9 +5,7 @@ import chalk from 'chalk';
 import { auraPath } from '../util/aura-home.js';
 import { openExternal } from '../util/open.js';
 
-const CYAN = '#3fb9d8';
-const RUBY = '#b15439';
-const SAGE = '#5a9e6e';
+import { CYAN, ERR, OK } from './diamond.js';
 
 interface TokenRecord {
   token: string;
@@ -59,32 +57,32 @@ function probe(url: string): Promise<number | null> {
 export async function runUrl(port: number, opts: { open?: boolean } = {}): Promise<number> {
   const record = readTokenRecord(port);
   if (!record) {
-    console.error(chalk.hex(RUBY)(`\n  No aura serve session found on port ${port}.`));
-    console.log('  Start one with:  ' + chalk.hex(CYAN)(`aura serve --port ${port}`) + '\n');
+    console.error(ERR(`\n  No aura serve session found on port ${port}.`));
+    console.log('  Start one with:  ' + CYAN(`aura serve --port ${port}`) + '\n');
     return 1;
   }
 
   const url = `http://127.0.0.1:${port}/?token=${record.token}`;
 
   if (!pidLooksAlive(record.pid)) {
-    console.error(chalk.hex(RUBY)(`\n  The server that minted this token (pid ${record.pid}) is not running.`));
-    console.log('  Start a fresh one with:  ' + chalk.hex(CYAN)(`aura serve --port ${port}`) + '\n');
+    console.error(ERR(`\n  The server that minted this token (pid ${record.pid}) is not running.`));
+    console.log('  Start a fresh one with:  ' + CYAN(`aura serve --port ${port}`) + '\n');
     return 1;
   }
 
   const status = await probe(url);
   if (status !== 200) {
-    console.error(chalk.hex(RUBY)(
+    console.error(ERR(
       status === null
         ? `\n  Nothing answered on 127.0.0.1:${port} — the process is alive but the port isn't up yet.`
         : `\n  The stored token was rejected (HTTP ${status}) — it's stale even though pid ${record.pid} is running.`,
     ));
-    console.log('  Restart with:  ' + chalk.hex(CYAN)(`aura serve --port ${port}`) + '\n');
+    console.log('  Restart with:  ' + CYAN(`aura serve --port ${port}`) + '\n');
     return 1;
   }
 
-  console.log('\n  ' + chalk.hex(SAGE)('✓ ') + chalk.bold('Live URL') + '\n');
-  console.log('  ' + chalk.hex(CYAN)(url) + '\n');
+  console.log('\n  ' + OK('✓ ') + chalk.bold('Live URL') + '\n');
+  console.log('  ' + CYAN(url) + '\n');
 
   if (opts.open) openExternal(url);
   return 0;

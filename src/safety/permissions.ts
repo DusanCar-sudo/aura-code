@@ -1,4 +1,5 @@
 import * as readline from 'readline';
+import { resolveConnectCommand } from '../tools/mcp.js';
 import {
   DANGEROUS_PATTERNS, SAFE_SHELL_COMMANDS,
   WINDOWS_DANGEROUS_PATTERNS, WINDOWS_SAFE_SHELL_COMMANDS,
@@ -33,6 +34,29 @@ export class PermissionSystem {
 
   constructor(level: PermissionLevel = 'auto') {
     this.level = level;
+  }
+
+  /**
+   * Set once the current turn has read local data or fetched content. A page
+   * the model just read can tell it to send what it found somewhere in a query
+   * string, so from then on a fetch that can carry data out is confirmed.
+   */
+  private tainted = false;
+
+  newTurn(): void { this.tainted = false; }
+
+  noteToolUse(toolName: string): void {
+    if (['read_file', 'list_dir', 'search_code', 'run_shell', 'web_fetch', 'git_diff'].includes(toolName)) {
+      this.tainted = true;
+    }
+  }
+
+  private fetchCarriesData(input: Record<string, unknown>): boolean {
+    const method = String(input.method ?? 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') return true;
+    let u: URL;
+    try { u = new URL(String(input.url ?? '')); } catch { return true; }
+    return u.search !== '' || u.hash !== '' || u.username !== '' || u.pathname.length > 80;
   }
 
   check(toolName: string, input: Record<string, unknown>): PermissionResult {
@@ -75,6 +99,9 @@ export class PermissionSystem {
     }
 
     // Normal mode: safe ops auto-approved, destructive need confirm
+    if (toolName === 'web_fetch' && this.tainted && this.fetchCarriesData(input)) {
+      return { allowed: true, needsConfirm: true };
+    }
     if (toolName === 'run_shell') {
       const cmd = String(input.command ?? '');
       if (this.isDangerous(cmd)) {
@@ -124,8 +151,11 @@ export class PermissionSystem {
   }
 
   private mcpConnectCommand(input: Record<string, unknown>): string {
-    const args = Array.isArray(input.args_list) ? input.args_list.join(' ') : '';
-    return `${String(input.command ?? '')} ${args}`.trim();
+    // Resolve through ~/.aura/mcp.json too, so a name-only connect is screened
+    // and confirmed against the command that will actually be spawned.
+    const resolved = resolveConnectCommand(input);
+    if (!resolved) return '';
+    return `${resolved.command} ${resolved.args.join(' ')}`.trim();
   }
 
   private isDangerous(cmd: string): boolean {

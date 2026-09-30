@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import type { ExecutionPlan, PlanStep } from '../orchestration/types.js';
 import { formatContextBar as formatContextBarFromHealth, formatContextDashboard } from './context-health.js';
-import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX, gradient } from './diamond.js';
+import { TEXT_HEX, TEXT_DIM_HEX, FAINT_HEX, TERRACOTTA_HEX, gradient, CHROME, ERR, OK, WARN } from './diamond.js';
+import { tokenHex } from './diamond.js';
 
 // The Display interface — used by the loop, easy to swap (web UI later)
 export interface Display {
@@ -96,7 +97,7 @@ export function createTerminalDisplay(): Display {
       const icon = toolIcon(name);
       // Reset thinking icon after processing
       process.stdout.write('\n');
-      const label = chalk.hex('#cc785c').bold(`${icon} ${name}`);
+      const label = CHROME.bold(`${icon} ${name}`);
       const detail = formatInput(name, input);
       console.log(`  ${label}  ${chalk.hex(TEXT_DIM_HEX)(detail)}`);
     },
@@ -112,28 +113,28 @@ export function createTerminalDisplay(): Display {
       const isError = result.startsWith('Error:') || result.startsWith('Tool error');
 
       if (isError) {
-        console.log('  ' + chalk.hex('#b15439')('✗ ') + chalk.hex(TEXT_DIM_HEX)(preview.replace(/\n/g, '\n    ')));
+        console.log('  ' + ERR('✗ ') + chalk.hex(TEXT_DIM_HEX)(preview.replace(/\n/g, '\n    ')));
       } else {
         // Show a compact preview
         const firstLine = lines[0] ?? '';
         if (lines.length <= 3) {
-          console.log('  ' + chalk.hex('#5a9e6e')('✓ ') + chalk.hex(TEXT_DIM_HEX)(result));
+          console.log('  ' + OK('✓ ') + chalk.hex(TEXT_DIM_HEX)(result));
         } else {
-          console.log('  ' + chalk.hex('#5a9e6e')('✓ ') + chalk.hex(TEXT_DIM_HEX)(`${firstLine}`) + chalk.hex(FAINT_HEX)(` (+${lines.length - 1} lines) ${elapsed}`));
+          console.log('  ' + OK('✓ ') + chalk.hex(TEXT_DIM_HEX)(`${firstLine}`) + chalk.hex(FAINT_HEX)(` (+${lines.length - 1} lines) ${elapsed}`));
         }
       }
     },
 
     toolBlocked(name: string, reason: string) {
-      console.log('  ' + chalk.hex('#d4903a')(`⊘ ${name} blocked: ${reason}`));
+      console.log('  ' + WARN(`⊘ ${name} blocked: ${reason}`));
     },
 
     warning(msg: string) {
-      console.log('\n' + chalk.hex('#d4903a')(`  ⚠  ${msg}`));
+      console.log('\n' + WARN(`  ⚠  ${msg}`));
     },
 
     success(msg: string) {
-      console.log('\n' + chalk.hex('#5a9e6e')(`  ✓  ${msg}`));
+      console.log('\n' + OK(`  ✓  ${msg}`));
     },
 
     subagentSpawned(info) {
@@ -143,14 +144,14 @@ export function createTerminalDisplay(): Display {
     },
 
     error(msg: string) {
-      console.error('\n' + chalk.hex('#b15439')(`  ✗  ${msg}`));
+      console.error('\n' + ERR(`  ✗  ${msg}`));
     },
 
     header(title: string, subtitle?: string) {
       const w = process.stdout.columns ?? 80;
       const line = '─'.repeat(Math.min(w - 4, 60));
       console.log('\n' + chalk.hex(FAINT_HEX)(line));
-      console.log(chalk.hex('#cc785c').bold(`  ${title}`));
+      console.log(CHROME.bold(`  ${title}`));
       if (subtitle) console.log(chalk.hex(TEXT_DIM_HEX)(`  ${subtitle}`));
       console.log(chalk.hex(FAINT_HEX)(line));
     },
@@ -159,7 +160,7 @@ export function createTerminalDisplay(): Display {
       const w = process.stdout.columns ?? 80;
       const line = '─'.repeat(Math.min(w - 4, 60));
       console.log('\n' + chalk.hex(FAINT_HEX)(line));
-      console.log(chalk.hex('#5a9e6e').bold('  ✓ Done'));
+      console.log(OK.bold('  ✓ Done'));
       console.log(chalk.hex(TEXT_DIM_HEX)(`  ${turns} turn${turns > 1 ? 's' : ''} · ${toolCount} tool call${toolCount > 1 ? 's' : ''}`));
       if (text) {
         console.log('');
@@ -170,15 +171,15 @@ export function createTerminalDisplay(): Display {
 
     retry(info) {
       const secs = (info.delayMs / 1000).toFixed(1);
-      console.log(chalk.hex('#d4903a')(`  ⟳ ${info.provider} retrying in ${secs}s (attempt ${info.attempt}) — ${info.reason}`));
+      console.log(WARN(`  ⟳ ${info.provider} retrying in ${secs}s (attempt ${info.attempt}) — ${info.reason}`));
     },
 
     failover(info) {
-      console.log(chalk.hex('#d4903a')(`  ⤳ Failing over ${info.from} → ${info.to} (${info.reason})`));
+      console.log(WARN(`  ⤳ Failing over ${info.from} → ${info.to} (${info.reason})`));
     },
 
     circuit(info) {
-      const colour = info.state === 'open' ? '#b15439' : info.state === 'half-open' ? '#d4903a' : '#5a9e6e';
+      const colour = info.state === 'open' ? tokenHex('err') : info.state === 'half-open' ? tokenHex('warn') : tokenHex('ok');
       console.log(chalk.hex(colour)(`  ◯ Circuit ${info.provider}: ${info.state}`));
     },
 
@@ -192,7 +193,7 @@ export function createTerminalDisplay(): Display {
 
     compactionEvent(info) {
       const saved = ((1 - info.afterTokens / info.beforeTokens) * 100).toFixed(0);
-      console.log(chalk.hex('#d4903a')(`  ⚠  Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens (-${saved}%) · gen ${info.generation}`));
+      console.log(WARN(`  ⚠  Context compacted: ${info.beforeTokens.toLocaleString()} → ${info.afterTokens.toLocaleString()} tokens (-${saved}%) · gen ${info.generation}`));
     },
 
     showPlan(plan: ExecutionPlan) {
@@ -201,12 +202,12 @@ export function createTerminalDisplay(): Display {
       // Build a position map so dependency arrows show step numbers, not raw UUIDs
       const idxMap = new Map<string, number>(plan.steps.map((s, i) => [s.id, i + 1]));
       console.log('\n' + chalk.hex(FAINT_HEX)(line));
-      console.log(chalk.hex('#cc785c').bold('  Execution Plan'));
+      console.log(CHROME.bold('  Execution Plan'));
       console.log(chalk.hex(TEXT_DIM_HEX)(`  Goal: ${plan.goal}`));
       console.log(chalk.hex(FAINT_HEX)(line));
       plan.steps.forEach((s, i) => {
         const num    = chalk.hex(FAINT_HEX)(`${i + 1}.`);
-        const spec   = chalk.hex('#cc785c').bold(`[${s.specialist}]`);
+        const spec   = CHROME.bold(`[${s.specialist}]`);
         const task   = chalk.hex(TEXT_HEX)(s.task.length > 55 ? s.task.slice(0, 52) + '…' : s.task);
         const deps   = s.dependsOn.length > 0
           ? chalk.hex(FAINT_HEX)(` ← ${s.dependsOn.map(d => idxMap.get(d) ?? '?').join(', ')}`)
@@ -217,15 +218,15 @@ export function createTerminalDisplay(): Display {
     },
 
     stepStarted(step: PlanStep) {
-      const spec = chalk.hex('#d4903a').bold(`[${step.specialist}]`);
+      const spec = WARN.bold(`[${step.specialist}]`);
       const task = chalk.hex(TEXT_DIM_HEX)(step.task.length > 70 ? step.task.slice(0, 67) + '…' : step.task);
-      console.log('\n' + chalk.hex('#d4903a')('  →') + ` ${spec} ${task}`);
+      console.log('\n' + WARN('  →') + ` ${spec} ${task}`);
     },
 
     stepCompleted(step: PlanStep, _result: string) {
-      const spec = chalk.hex('#5a9e6e').bold(`[${step.specialist}]`);
+      const spec = OK.bold(`[${step.specialist}]`);
       const ms   = step.durationMs != null ? `${step.durationMs}ms` : '?ms';
-      console.log(chalk.hex('#5a9e6e')('  ✓') + ` ${spec} ${chalk.hex(FAINT_HEX)(`done (${ms})`)}`);
+      console.log(OK('  ✓') + ` ${spec} ${chalk.hex(FAINT_HEX)(`done (${ms})`)}`);
     },
   };
 }

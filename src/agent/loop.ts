@@ -38,6 +38,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import type { LLMProvider, HistoryMessage, ToolCall, ToolResult } from '../providers/types.js';
 import { selectTools, selectToolsWithEviction, executeTool } from '../tools/index.js';
+import { resolveConnectCommand } from '../tools/mcp.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { confirm } from '../safety/permissions.js';
 import { buildSystemPrompt } from './system-prompt.js';
@@ -691,6 +692,7 @@ interface BodyArgs {
 
 async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
   const { opts, provider, system, history, profile, pricingModel, display, permissions } = args;
+  permissions.newTurn();
   let { turns, toolCallCount, usage } = args;
   const toolCallLog: Array<{ name: string; input: Record<string, unknown> }> = [];
   const turnUsage: TurnUsage[] = [];
@@ -1316,6 +1318,8 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
           if (perm.approvalKey) opts.permissions.approveForSession(perm.approvalKey);
         }
 
+        permissions.noteToolUse(call.name);
+
         if (opts.checkpoints !== false && !checkpointedThisTurn && MUTATING_TOOLS.has(call.name)) {
           checkpointedThisTurn = true;
           try {
@@ -1749,9 +1753,13 @@ function logTokenUsage(root: string, entry: TokenLogEntry): void {
 function formatCallForConfirmation(call: ToolCall): string {
   if (call.name === 'run_shell') return `$ ${call.input.command}`;
   if (call.name === 'write_file') return `overwrite ${call.input.path}`;
+  if (call.name === 'web_fetch') return `fetch ${call.input.method ?? 'GET'} ${call.input.url}`;
   if (call.name === 'mcp' && call.input.action === 'connect') {
-    const args = Array.isArray(call.input.args_list) ? (call.input.args_list as string[]).join(' ') : '';
-    return `spawn MCP server '${call.input.server}': ${call.input.command} ${args}`.trim();
+    // Name-only connects resolve through ~/.aura/mcp.json — show that command,
+    // not the empty input field, so the user approves what will really run.
+    const resolved = resolveConnectCommand(call.input);
+    const cmd = resolved ? `${resolved.command} ${resolved.args.join(' ')}` : '(no command configured)';
+    return `spawn MCP server '${call.input.server}': ${cmd}`.trim();
   }
   return `${call.name}(${JSON.stringify(call.input).slice(0, 80)})`;
 }

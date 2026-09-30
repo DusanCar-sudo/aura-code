@@ -6,6 +6,8 @@ import chalk from 'chalk';
 import OpenAI from 'openai';
 import * as https from 'https';
 import { auraPath } from '../util/aura-home.js';
+import { CHROME, CHROME_DIM, ERR, OK, WARN } from '../cli/diamond.js';
+import { tokenHex } from '../cli/diamond.js';
 
 const SAMPLE_RATE = 16000;
 const MIMO_BASE = 'https://api.xiaomimimo.com/v1';
@@ -221,12 +223,12 @@ function playWav(wavBuffer: Buffer): Promise<void> {
 // ─── Audio device listing ─────────────────────────────────────────────────
 
 export function listDevices(): void {
-  console.log(chalk.hex('#cc785c').bold('\n  Available Audio Input Devices\n'));
+  console.log(CHROME.bold('\n  Available Audio Input Devices\n'));
   try {
     const output = execSync('pactl list sources short', { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
     const lines = output.trim().split('\n');
     if (lines.length === 0 || (lines.length === 1 && !lines[0].trim())) {
-      console.log(chalk.hex('#ede0cc')('  No audio input devices found.\n'));
+      console.log(chalk.hex(tokenHex('fg'))('  No audio input devices found.\n'));
       return;
     }
     for (const line of lines) {
@@ -235,11 +237,11 @@ export function listDevices(): void {
       const id = parts[1]; // source name
       const state = parts[7] || '';
       const icon = state === 'RUNNING' ? '🎤 ' : '   ';
-      console.log(`  ${icon}${chalk.hex('#ede0cc')(id)}`);
+      console.log(`  ${icon}${chalk.hex(tokenHex('fg'))(id)}`);
     }
-    console.log(chalk.hex('#8a7768')('\n  Use:  dic --device <name>\n'));
+    console.log(CHROME_DIM('\n  Use:  dic --device <name>\n'));
   } catch {
-    console.log(chalk.hex('#cc9e5c')('  Could not list devices (pactl not available).\n'));
+    console.log(WARN('  Could not list devices (pactl not available).\n'));
   }
 }
 
@@ -297,8 +299,8 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
   const client = buildClient(api);
   if (printName) {
     const sizeKb = (fs.statSync(wavPath).size / 1024).toFixed(1);
-    console.log(chalk.hex('#8a7768')('\n  Audio: ' + sizeKb + ' KB  (' + api.name + ')'));
-    console.log(chalk.hex('#cc785c')('  Transcribing\u2026\n'));
+    console.log(CHROME_DIM('\n  Audio: ' + sizeKb + ' KB  (' + api.name + ')'));
+    console.log(CHROME('  Transcribing\u2026\n'));
   }
 
   if (api.name === 'Xiaomi MiMo') {
@@ -377,7 +379,7 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
   const inject = opts.inject ?? false;
   const providers = listProviders();
   if (providers.length === 0) {
-    console.error(chalk.hex('#b15439')(
+    console.error(ERR(
       '\n  No API key found. Set one of:\n' +
       '    PARAKEET_BASE_URL (local NVIDIA Parakeet, no key needed)\n' +
       '    XIAOMI_API_KEY    (recommended, MiMo ASR free tier)\n' +
@@ -389,7 +391,7 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
 
   const recorderInfo = pickRecorder(deviceId);
   if (!recorderInfo) {
-    console.error(chalk.hex('#b15439')('\n  No audio recorder found. Install pw-record, parec, or arecord.\n'));
+    console.error(ERR('\n  No audio recorder found. Install pw-record, parec, or arecord.\n'));
     process.exit(1);
   }
 
@@ -420,9 +422,9 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
 
   // Show device info
   const devName = deviceId || getDefaultDevice();
-  console.log(chalk.hex('#5a9e6e')('\n  \uD83C\uDFA4  Recording \u2014 speak into your microphone.'));
-  if (devName) console.log(chalk.hex('#8a7768')('     Device: ' + devName));
-  console.log(chalk.hex('#8a7768')('     Press Ctrl+C to stop and transcribe.\n'));
+  console.log(OK('\n  \uD83C\uDFA4  Recording \u2014 speak into your microphone.'));
+  if (devName) console.log(CHROME_DIM('     Device: ' + devName));
+  console.log(CHROME_DIM('     Press Ctrl+C to stop and transcribe.\n'));
 
   await new Promise<void>((resolve) => {
     const onSigint = () => {
@@ -437,14 +439,14 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
   await new Promise(r => setTimeout(r, 300));
 
   if (!fs.existsSync(wavPath)) {
-    console.error(chalk.hex('#b15439')('\n  No audio captured.\n'));
+    console.error(ERR('\n  No audio captured.\n'));
     cleanup(tmpDir);
     process.exit(1);
   }
 
   const stat = fs.statSync(wavPath);
   if (stat.size < 512) {
-    console.log(chalk.hex('#cc9e5c')('\n  Recording too short \u2014 nothing to transcribe.\n'));
+    console.log(WARN('\n  Recording too short \u2014 nothing to transcribe.\n'));
     cleanup(tmpDir);
     return;
   }
@@ -470,11 +472,11 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
       break; // success
     } catch (err: any) {
       if (shouldFallThrough(err) && i < providers.length - 1) {
-        console.log(chalk.hex('#cc9e5c')('  ' + api.name + ': unavailable (key/balance), trying next provider...\n'));
+        console.log(WARN('  ' + api.name + ': unavailable (key/balance), trying next provider...\n'));
         continue;
       }
       // Last provider failed or non-recoverable error — bail out
-      console.error(chalk.hex('#b15439')('\n  Transcription failed (' + api.name + '):'), String(err), '\n');
+      console.error(ERR('\n  Transcription failed (' + api.name + '):'), String(err), '\n');
       cleanup(tmpDir);
       process.exit(1);
     }
@@ -482,9 +484,9 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
 
   const cleaned = text.trim();
   if (cleaned) {
-    console.log(chalk.hex('#5a9e6e').bold('  \u2500\u2500 Transcription \u2500\u2500'));
-    console.log(chalk.hex('#ede0cc')('  ' + cleaned));
-    console.log(chalk.hex('#5a9e6e').bold('  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n'));
+    console.log(OK.bold('  \u2500\u2500 Transcription \u2500\u2500'));
+    console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
+    console.log(OK.bold('  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n'));
 
     let onClipboard = false;
     try {
@@ -496,17 +498,17 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
     if (inject) {
       try {
         await injectText(cleaned);
-        console.log(chalk.hex('#8a7768')('  ⌨️  Typed into focused window' + (onClipboard ? ' (also on clipboard).\n' : '.\n')));
+        console.log(CHROME_DIM('  ⌨️  Typed into focused window' + (onClipboard ? ' (also on clipboard).\n' : '.\n')));
       } catch (err) {
-        console.log(chalk.hex('#cc9e5c')(
+        console.log(WARN(
           '  ⌨️  Injection failed (' + String(err) + ')' +
           (onClipboard ? ' — text is on the clipboard, paste manually.\n' : '.\n'),
         ));
       }
     } else if (onClipboard) {
-      console.log(chalk.hex('#8a7768')('  📋  Copied to clipboard.\n'));
+      console.log(CHROME_DIM('  📋  Copied to clipboard.\n'));
     } else {
-      console.log(chalk.hex('#cc9e5c')('  Could not copy to clipboard — text shown above only.\n'));
+      console.log(WARN('  Could not copy to clipboard — text shown above only.\n'));
     }
   } else {
     // Save failed recording for debugging
@@ -519,10 +521,10 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
     } catch {}
     cleanup(tmpDir);
     if (fs.existsSync(savePath)) {
-      console.log(chalk.hex('#cc9e5c')('\n  No speech detected.'));
-      console.log(chalk.hex('#8a7768')('  Recording saved for debugging: ' + savePath + '\n'));
+      console.log(WARN('\n  No speech detected.'));
+      console.log(CHROME_DIM('  Recording saved for debugging: ' + savePath + '\n'));
     } else {
-      console.log(chalk.hex('#cc9e5c')('\n  No speech detected.\n'));
+      console.log(WARN('\n  No speech detected.\n'));
     }
     return;
   }
@@ -618,7 +620,7 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
 
     if (!fs.existsSync(wavFile) || fs.statSync(wavFile).size < 512) {
       notify('🎤 dic', 'Nothing recorded.');
-      console.log(chalk.hex('#cc9e5c')('  Nothing recorded.\n'));
+      console.log(WARN('  Nothing recorded.\n'));
       try { fs.unlinkSync(rawFile); } catch {}
       return;
     }
@@ -627,7 +629,7 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
     const providers = listProviders();
     if (providers.length === 0) {
       notify('🎤 dic', 'No STT API key set.');
-      console.error(chalk.hex('#b15439')('  No STT API key set.\n'));
+      console.error(ERR('  No STT API key set.\n'));
       return;
     }
 
@@ -636,7 +638,7 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
       cleaned = await normalizeAndTranscribe(wavFile, providers);
     } catch (err) {
       notify('🎤 dic', 'Transcription failed.');
-      console.error(chalk.hex('#b15439')('  Transcription failed: ' + String(err) + '\n'));
+      console.error(ERR('  Transcription failed: ' + String(err) + '\n'));
       return;
     } finally {
       try { fs.unlinkSync(wavFile); } catch {}
@@ -645,18 +647,18 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
 
     if (!cleaned) {
       notify('🎤 dic', 'No speech detected.');
-      console.log(chalk.hex('#cc9e5c')('  No speech detected.\n'));
+      console.log(WARN('  No speech detected.\n'));
       return;
     }
 
-    console.log(chalk.hex('#ede0cc')('  ' + cleaned));
+    console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
     try {
       await injectText(cleaned, { submit: opts.submit ?? true });
       notify('🎤 dic', '✓ ' + cleaned.slice(0, 80));
     } catch (err) {
       // injectText already copied to clipboard on the way in.
       notify('🎤 dic', 'Typed failed — on clipboard.');
-      console.log(chalk.hex('#cc9e5c')('  Injection failed (' + String(err) + ') — text is on the clipboard.\n'));
+      console.log(WARN('  Injection failed (' + String(err) + ') — text is on the clipboard.\n'));
     }
     return;
   }
@@ -666,7 +668,7 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
   const recorderInfo = pickRecorder(opts.deviceId);
   if (!recorderInfo) {
     notify('🎤 dic', 'No recorder (install pw-record/arecord).');
-    console.error(chalk.hex('#b15439')('  No audio recorder found.\n'));
+    console.error(ERR('  No audio recorder found.\n'));
     return;
   }
 
@@ -688,14 +690,14 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
   fs.writeFileSync(pidFile, String(child.pid));
 
   notify('🎤 dic', 'Recording… (press again to send)');
-  console.log(chalk.hex('#5a9e6e')('  🎤  Recording — press the hotkey again to stop & send.\n'));
+  console.log(OK('  🎤  Recording — press the hotkey again to stop & send.\n'));
 }
 // ─── TTS: text-to-speech via MiMo TTS ─────────────────────────────────────
 
 export async function speakText(text: string, voice?: string): Promise<void> {
   const apiKey = process.env.XIAOMI_API_KEY;
   if (!apiKey) {
-    console.error(chalk.hex('#b15439')(
+    console.error(ERR(
       '\n  XIAOMI_API_KEY required for MiMo TTS.\n',
     ));
     process.exit(1);
@@ -707,7 +709,7 @@ export async function speakText(text: string, voice?: string): Promise<void> {
   const client = buildClient({ key: apiKey, baseURL });
   const selectedVoice = voice || 'mimo_default';
 
-  console.log(chalk.hex('#cc785c')('  Generating speech (voice: ' + selectedVoice + ')...\n'));
+  console.log(CHROME('  Generating speech (voice: ' + selectedVoice + ')...\n'));
 
   try {
     const response = await client.chat.completions.create({
@@ -733,10 +735,10 @@ export async function speakText(text: string, voice?: string): Promise<void> {
 
     // Decode base64 and play
     const wavBuffer = Buffer.from(audioData, 'base64');
-    console.log(chalk.hex('#8a7768')('  Playing... (' + (wavBuffer.length / 1024).toFixed(0) + ' KB)\n'));
+    console.log(CHROME_DIM('  Playing... (' + (wavBuffer.length / 1024).toFixed(0) + ' KB)\n'));
     await playWav(wavBuffer);
   } catch (err) {
-    console.error(chalk.hex('#b15439')('\n  TTS failed:'), String(err), '\n');
+    console.error(ERR('\n  TTS failed:'), String(err), '\n');
     process.exit(1);
   }
 }
@@ -802,17 +804,17 @@ export async function transcribeFile(audioPath: string): Promise<string> {
 // ─── List available TTS voices ─────────────────────────────────────────────
 
 export function listVoices(): void {
-  console.log(chalk.hex('#cc785c').bold('\n  Xiaomi MiMo TTS Voices\n'));
-  console.log(chalk.hex('#4e3d30')('  ' + 'ID'.padEnd(16) + 'Gender'.padEnd(10) + 'Language'));
-  console.log(chalk.hex('#4e3d30')('  ' + '\u2500'.repeat(36)));
+  console.log(CHROME.bold('\n  Xiaomi MiMo TTS Voices\n'));
+  console.log(chalk.hex(tokenHex('faint'))('  ' + 'ID'.padEnd(16) + 'Gender'.padEnd(10) + 'Language'));
+  console.log(chalk.hex(tokenHex('faint'))('  ' + '\u2500'.repeat(36)));
   for (const [id, meta] of Object.entries(MIMO_VOICES)) {
     const name = id === 'mimo_default' ? 'Auto (cluster default)' : id;
-    console.log('  ' + chalk.hex('#cc785c')(id.padEnd(16)) + ' ' +
-      chalk.hex('#8a7768')(meta.gender.padEnd(10)) + ' ' +
-      chalk.hex('#8a7768')(meta.lang === 'zh' ? 'Chinese' : meta.lang === 'en' ? 'English' : 'Auto'));
+    console.log('  ' + CHROME(id.padEnd(16)) + ' ' +
+      CHROME_DIM(meta.gender.padEnd(10)) + ' ' +
+      CHROME_DIM(meta.lang === 'zh' ? 'Chinese' : meta.lang === 'en' ? 'English' : 'Auto'));
   }
-  console.log(chalk.hex('#4e3d30')('\n  Usage:  dic speak <text> --voice <id>'));
-  console.log(chalk.hex('#4e3d30')('  Default: dic speak <text>\n'));
+  console.log(chalk.hex(tokenHex('faint'))('\n  Usage:  dic speak <text> --voice <id>'));
+  console.log(chalk.hex(tokenHex('faint'))('  Default: dic speak <text>\n'));
 }
 
 // ─── Continuous dictation loop ─────────────────────────────────────────────
@@ -830,7 +832,7 @@ export interface LoopOptions {
 export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
   const providers = listProviders();
   if (providers.length === 0) {
-    console.error(chalk.hex('#b15439')(
+    console.error(ERR(
       '\n  No API key found. Set GROQ_API_KEY, OPENAI_API_KEY, or XIAOMI_API_KEY.\n',
     ));
     process.exit(1);
@@ -841,17 +843,17 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
   const maxDurationMs = opts.maxDurationMs ?? 60000;
   const devName = deviceId || getDefaultDevice();
 
-  console.log(chalk.hex('#5a9e6e').bold('\n  🎙️  Dictation Loop — Continuous voice-to-text'));
-  if (devName) console.log(chalk.hex('#8a7768')('     Device: ' + devName));
-  console.log(chalk.hex('#8a7768')('     Silence threshold: ' + silenceMs + 'ms'));
-  console.log(chalk.hex('#8a7768')('     Transcriptions will be injected into focused window.'));
-  console.log(chalk.hex('#cc9e5c')('     Press Ctrl+C to stop.\n'));
+  console.log(OK.bold('\n  🎙️  Dictation Loop — Continuous voice-to-text'));
+  if (devName) console.log(CHROME_DIM('     Device: ' + devName));
+  console.log(CHROME_DIM('     Silence threshold: ' + silenceMs + 'ms'));
+  console.log(CHROME_DIM('     Transcriptions will be injected into focused window.'));
+  console.log(WARN('     Press Ctrl+C to stop.\n'));
 
   let running = true;
   let roundNum = 0;
   const onSigint = () => {
     running = false;
-    console.log(chalk.hex('#cc9e5c')('\n  Stopping dictation loop...\n'));
+    console.log(WARN('\n  Stopping dictation loop...\n'));
   };
   process.on('SIGINT', onSigint);
 
@@ -863,7 +865,7 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
 
     try {
       // ── Record with silence detection ──────────────────────────────
-      console.log(chalk.hex('#5a9e6e')('  ── Round ' + roundNum + ' ── Listening...\n'));
+      console.log(OK('  ── Round ' + roundNum + ' ── Listening...\n'));
 
       const recArgs = ['-r', String(SAMPLE_RATE), '-f', 'S16_LE', '-c', '1', '-t', 'raw',
         ...(deviceId ? ['-D', deviceId] : []), rawPath];
@@ -919,7 +921,7 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
 
       // ── Convert raw to WAV ─────────────────────────────────────────
       if (!fs.existsSync(rawPath) || fs.statSync(rawPath).size < SAMPLE_RATE) {
-        console.log(chalk.hex('#cc9e5c')('  Too short, skipping...\n'));
+        console.log(WARN('  Too short, skipping...\n'));
         cleanup(tmpDir);
         continue;
       }
@@ -937,7 +939,7 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
             { stdio: 'pipe', timeout: 10000 },
           );
         } catch {
-          console.log(chalk.hex('#cc9e5c')('  Conversion failed, skipping...\n'));
+          console.log(WARN('  Conversion failed, skipping...\n'));
           cleanup(tmpDir);
           continue;
         }
@@ -951,31 +953,31 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
           break;
         } catch (err: any) {
           if (shouldFallThrough(err) && i < providers.length - 1) continue;
-          console.error(chalk.hex('#b15439')('  Transcribe error: ' + String(err)));
+          console.error(ERR('  Transcribe error: ' + String(err)));
           break;
         }
       }
 
       const cleaned = text.trim();
       if (cleaned) {
-        console.log(chalk.hex('#ede0cc')('  ' + cleaned));
+        console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
         try {
           await injectText(cleaned);
-          console.log(chalk.hex('#5a9e6e')('  ✓ Injected\n'));
+          console.log(OK('  ✓ Injected\n'));
         } catch (err) {
           // Fallback to clipboard
           try {
             const clipboardModule = await import('./clipboard.js');
             await clipboardModule.clipboardTool({ action: 'copy', text: cleaned });
-            console.log(chalk.hex('#cc9e5c')('  📋 Copied to clipboard (inject failed)\n'));
+            console.log(WARN('  📋 Copied to clipboard (inject failed)\n'));
           } catch {}
         }
       } else {
-        console.log(chalk.hex('#cc9e5c')('  (no speech detected)\n'));
+        console.log(WARN('  (no speech detected)\n'));
       }
     } catch (err: any) {
       if (!running) break;
-      console.error(chalk.hex('#b15439')('  Error: ' + String(err)));
+      console.error(ERR('  Error: ' + String(err)));
     }
 
     cleanup(tmpDir);
@@ -983,5 +985,5 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
   }
 
   process.removeListener('SIGINT', onSigint);
-  console.log(chalk.hex('#5a9e6e').bold('  Dictation loop ended.\n'));
+  console.log(OK.bold('  Dictation loop ended.\n'));
 }

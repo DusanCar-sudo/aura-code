@@ -18,7 +18,7 @@
 
 import chalk from 'chalk';
 import { sessionStore } from '../agent/session-store.js';
-import { TEXT_DIM_HEX } from './diamond.js';
+import { TEXT_DIM_HEX, ERR, OK } from './diamond.js';
 import type { HistoryMessage } from '../providers/types.js';
 import type { SessionBudget } from '../agent/session-budget.js';
 import { emit } from '../commands/surface.js';
@@ -103,7 +103,7 @@ export async function handleSessionCommand(
       return { handled: true };
     }
     c.budget.reset();   // a different conversation, so a different total
-    emit(chalk.hex('#5a9e6e')(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
+    emit(OK(`\n  ↩ Resuming ${latest.id} — "${latest.title}" (${Math.floor(latest.history.length / 2)} turns)\n`));
     if (fromOtherProject) {
       emit(chalk.hex(TEXT_DIM_HEX)(
         `  ⚠ from another project (${fromOtherProject.slice(0, 40)}) — history loaded, tools run against the current directory.\n`,
@@ -137,11 +137,11 @@ export async function handleSessionCommand(
       }
     }
     if (!loaded) {
-      emit(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}  (try :sessions all)\n`));
+      emit(ERR(`\n  ✗ Session not found: ${rawArg}  (try :sessions all)\n`));
       return { handled: true };
     }
     c.budget.reset();   // a different conversation, so a different total
-    emit(chalk.hex('#5a9e6e')(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
+    emit(OK(`\n  ↩ Resumed ${loaded.id} — "${loaded.title}" (${Math.floor(loaded.history.length / 2)} turns)\n`));
     if (fromOtherProject) {
       emit(chalk.hex(TEXT_DIM_HEX)(
         `  ⚠ This session was saved under a different project (${fromOtherProject.slice(0, 40)}). ` +
@@ -157,7 +157,7 @@ export async function handleSessionCommand(
     // it — otherwise the budget is a process ceiling wearing a session's name
     // and this command cannot clear an exhausted one.
     c.budget.reset();
-    emit(chalk.hex('#5a9e6e')(`\n  ✓ New session started: ${newId}\n`));
+    emit(OK(`\n  ✓ New session started: ${newId}\n`));
     return { handled: true, sessionReplaced: true, newChatId: newId, newHistory: [], newTitle: undefined };
   }
 
@@ -171,7 +171,7 @@ export async function handleSessionCommand(
     // Same reasoning as :new — only the session id survives. The exhaustion
     // message offers this as the other way out, so it has to work too.
     c.budget.reset();
-    emit(chalk.hex('#5a9e6e')('\n  ✓ Conversation history cleared.\n'));
+    emit(OK('\n  ✓ Conversation history cleared.\n'));
     return { handled: true, sessionReplaced: true, newHistory: [] };
   }
 
@@ -183,7 +183,7 @@ export async function handleSessionCommand(
       return { handled: true };
     }
     const session = await sessionStore.upsertSession(cs.projectRoot, cs.activeChatId, cs.activeChatHistory, title ?? cs.activeChatTitle);
-    emit(chalk.hex('#5a9e6e')(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
+    emit(OK(`\n  ✓ Saved as "${session.title}" (${cs.activeChatId})\n`));
     return { handled: true, newTitle: session.title };
   }
 
@@ -206,7 +206,7 @@ export async function handleSessionCommand(
       if (elsewhere) deleted = await sessionStore.deleteSession(elsewhere.projectRoot, id);
     }
     if (deleted) {
-      emit(chalk.hex('#5a9e6e')(`\n  ✓ Deleted session ${id}\n`));
+      emit(OK(`\n  ✓ Deleted session ${id}\n`));
       if (id === c.chatState.activeChatId) {
         const newId = sessionStore.generateId();
         c.budget.reset();   // deleting the active session starts a fresh one
@@ -214,7 +214,7 @@ export async function handleSessionCommand(
         return { handled: true, sessionReplaced: true, newChatId: newId, newHistory: [], newTitle: undefined };
       }
     } else {
-      emit(chalk.hex('#b15439')(`\n  ✗ Session not found: ${rawArg}\n`));
+      emit(ERR(`\n  ✗ Session not found: ${rawArg}\n`));
     }
     return { handled: true };
   }

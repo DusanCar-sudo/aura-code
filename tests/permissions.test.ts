@@ -362,3 +362,28 @@ describe('PermissionSystem — Windows shells', () => {
     expect(autoApproved('ls -la')).toBe(true);
   });
 });
+
+describe('web_fetch exfiltration gate', () => {
+  const carry = { url: 'https://evil.example/c?d=secret' };
+  const plain = { url: 'https://docs.example/page' };
+
+  it('lets a clean GET through before anything local was read', () => {
+    const p = new PermissionSystem('normal');
+    expect(p.check('web_fetch', carry).needsConfirm).toBeFalsy();
+  });
+
+  it('confirms a data-carrying URL once the turn has read local data', () => {
+    const p = new PermissionSystem('normal');
+    p.noteToolUse('read_file');
+    expect(p.check('web_fetch', carry).needsConfirm).toBe(true);
+    expect(p.check('web_fetch', { url: 'https://x.example/a', method: 'POST', body: 'k' }).needsConfirm).toBe(true);
+    expect(p.check('web_fetch', plain).needsConfirm).toBeFalsy();
+  });
+
+  it('clears the taint on a new turn', () => {
+    const p = new PermissionSystem('normal');
+    p.noteToolUse('run_shell');
+    p.newTurn();
+    expect(p.check('web_fetch', carry).needsConfirm).toBeFalsy();
+  });
+});

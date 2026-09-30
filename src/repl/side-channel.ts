@@ -8,6 +8,8 @@
 import type { LLMProvider } from '../providers/types.js';
 import type { ProjectContext } from '../agent/context.js';
 import chalk from 'chalk';
+import { CHROME } from '../cli/diamond.js';
+import { tokenHex } from '../cli/diamond.js';
 
 const BTW_SYSTEM_PROMPT = `You are Aura's "by the way" side channel.
 Answer the user's quick question concisely in 2-4 sentences.
@@ -62,16 +64,16 @@ export function renderBtwAnswer(answer: string, tokens: number): string {
     }
   }
 
-  const top    = chalk.hex('#cc785c')('  ┌' + '─'.repeat(maxWidth + 2) + '┐');
-  const bottom = chalk.hex('#cc785c')('  └' + '─'.repeat(maxWidth + 2) + '┘');
-  const body   = lines.map(l => chalk.hex('#ede0cc')('  │ ') + l.padEnd(maxWidth) + chalk.hex('#cc785c')(' │'));
+  const top    = CHROME('  ┌' + '─'.repeat(maxWidth + 2) + '┐');
+  const bottom = CHROME('  └' + '─'.repeat(maxWidth + 2) + '┘');
+  const body   = lines.map(l => chalk.hex(tokenHex('fg'))('  │ ') + l.padEnd(maxWidth) + CHROME(' │'));
 
   return [
     '',
     top,
     ...body,
     bottom,
-    chalk.hex('#4e3d30')(`  ⚡ ${tokens} tokens — press ENTER to dismiss`),
+    chalk.hex(tokenHex('faint'))(`  ⚡ ${tokens} tokens — press ENTER to dismiss`),
     '',
   ].join('\n');
 }

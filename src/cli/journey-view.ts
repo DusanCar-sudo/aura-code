@@ -15,12 +15,11 @@ import chalk from 'chalk';
 import {
   buildLearningGraph, learningFrames, journeyDetail, type LearningGraph,
 } from '../agent/learning-graph.js';
+import { CHROME, CHROME_DIM, ERR, OK, SOFT } from './diamond.js';
 
-const ACCENT = chalk.hex('#cc785c');
-const OK = chalk.hex('#5a9e6e');
-const ERR = chalk.hex('#b15439');
-const DIM = chalk.hex('#8a7768');
-const TEXT = chalk.hex('#e8d5b7');
+const ACCENT = CHROME;
+const DIM = CHROME_DIM;
+const TEXT = SOFT;
 
 /** Window lengths `w` cycles through, in days. */
 export const WINDOWS = [7, 30, 90, 365];

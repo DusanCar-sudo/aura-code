@@ -1,6 +1,6 @@
 # Aura
 
-![Aura Code](assets/aura_code_hero.png)
+![Aura Code](assets/screenshots/tui-splash.png)
 
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org)
 [![Providers](https://img.shields.io/badge/routing%20targets-31-purple?style=flat-square)](#providers)
 
-**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows guide](docs/WINDOWS.md) · [styled version](https://v2-seven-flax.vercel.app/aura-windows-manual)
+**→ [dusancar-sudo.github.io/aura-website](https://dusancar-sudo.github.io/aura-website/)** · [Windows guide](docs/WINDOWS.md) · [styled version](https://www.leanproiq.com/aura-windows-manual)
 
 *Architecture and design by [Dušan Milosavljević](https://github.com/DusanCar-sudo) — Da Nang, Vietnam*
 
@@ -154,6 +154,13 @@ context, no Archimedes, no verification gate. Just the conversation.
 aura --gazelle                 # or: aura --mode gazelle
 AURA_MODE=gazelle aura         # or set it in the environment
 ```
+
+You can also switch inside a running session: `/gazelle` for the lean path,
+`/coder` to go back to the full agent.
+
+![The slash menu with /gazelle selected](assets/screenshots/tui-slash-menu.png)
+
+![Gazelle mode: a plain conversation, no tools, no project context](assets/screenshots/tui-gazelle.png)
 
 ### What it costs
 

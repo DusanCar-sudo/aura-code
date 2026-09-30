@@ -6,6 +6,7 @@ import type { LiveModel } from '../providers/live-models.js';
 import { getApiKey, saveToAgentsEnv } from '../util/env.js';
 import { saveKey } from '../setup/key-store.js';
 import type { ProviderEntry } from '../providers/live-models.js';
+import { FG_BRIGHT, WARN, CHROME, OK, TEXT_DIM } from './diamond.js';
 
 /**
  * True when switching prevModel → newModel crosses a provider family
@@ -81,9 +82,6 @@ export function modelCount(rows: ModelRow[]): number {
  */
 // ─── Two-level :provider selector ────────────────────────────────────────────
 
-const ACCENT = '#cc785c';
-const GREEN = '#5a9e6e';
-const DIM = '#8a8a8a';
 
 const LIVE_FETCH_TIMEOUT_MS = 5_000;
 
@@ -130,21 +128,21 @@ async function interactiveList(title: string, items: ListItem[], opts?: { filter
         start = Math.min(Math.max(0, selected - Math.floor(maxRows / 2)), vis.length - maxRows);
       }
       const lines: string[] = [];
-      lines.push(chalk.hex(ACCENT).bold(`\n  ${title}\n`));
+      lines.push(CHROME.bold(`\n  ${title}\n`));
       if (filtering || filter) {
-        lines.push(chalk.hex(DIM)(`  filter: `) + chalk.hex(ACCENT)(filter) + (filtering ? chalk.hex(DIM)('▏') : '') + '\n');
+        lines.push(TEXT_DIM(`  filter: `) + CHROME(filter) + (filtering ? TEXT_DIM('▏') : '') + '\n');
       }
       if (vis.length === 0) {
-        lines.push(chalk.hex(DIM)('  (no matches)\n'));
+        lines.push(TEXT_DIM('  (no matches)\n'));
       }
       for (let r = start; r < Math.min(start + maxRows, vis.length); r++) {
         const it = items[vis[r]];
-        lines.push((r === selected ? chalk.hex(ACCENT)('  ❯ ') : '    ') + it.render + '\n');
+        lines.push((r === selected ? CHROME('  ❯ ') : '    ') + it.render + '\n');
       }
       if (vis.length > maxRows) {
-        lines.push(chalk.hex(DIM)(`  … ${vis.length} matches (${start + 1}–${Math.min(start + maxRows, vis.length)} shown)\n`));
+        lines.push(TEXT_DIM(`  … ${vis.length} matches (${start + 1}–${Math.min(start + maxRows, vis.length)} shown)\n`));
       }
-      lines.push(chalk.hex(DIM)(`\n  ↑/↓ move · Enter select · ESC back${opts?.filter ? ' · / filter' : ''}\n`));
+      lines.push(TEXT_DIM(`\n  ↑/↓ move · Enter select · ESC back${opts?.filter ? ' · / filter' : ''}\n`));
       process.stdout.write('\x1b[2J\x1b[H' + lines.join(''));
     };
 
@@ -196,9 +194,9 @@ async function interactiveList(title: string, items: ListItem[], opts?: { filter
 
 /** Numbered prompt for non-TTY stdin (pipes, tests) — no raw mode available. */
 async function numberedListFallback(title: string, items: ListItem[]): Promise<ListResult> {
-  console.log(chalk.hex(ACCENT).bold(`\n  ${title}\n`));
-  items.forEach((it, i) => console.log(`  ${chalk.hex(ACCENT)(String(i + 1).padStart(3))}. ${it.render}`));
-  const answer = await askLine(chalk.hex(DIM)('\n  Number (Enter to cancel): '));
+  console.log(CHROME.bold(`\n  ${title}\n`));
+  items.forEach((it, i) => console.log(`  ${CHROME(String(i + 1).padStart(3))}. ${it.render}`));
+  const answer = await askLine(TEXT_DIM('\n  Number (Enter to cancel): '));
   const n = parseInt(answer.trim(), 10);
   if (isNaN(n) || n < 1 || n > items.length) return { kind: 'cancel' };
   return { kind: 'pick', index: n - 1 };
@@ -345,7 +343,7 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
   const title = `${entry?.name ?? providerId} — models`;
 
   if (providerId === 'custom') {
-    const id = (await askLine(chalk.hex(ACCENT)('  Model id (e.g. openrouter/vendor/model, Enter to cancel): '))).trim();
+    const id = (await askLine(CHROME('  Model id (e.g. openrouter/vendor/model, Enter to cancel): '))).trim();
     return id || undefined;
   }
 
@@ -353,7 +351,7 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
   // Known providers only fetch when flagged; unknown ids get a best-effort try.
   if (entry ? entry.liveFetch === true : true) {
     const spinner = process.stdout.isTTY
-      ? setInterval(() => process.stdout.write(`\r  ${chalk.hex(ACCENT)('◐◓◑◒'[Math.floor(Date.now() / 120) % 4])} Fetching models...`), 120)
+      ? setInterval(() => process.stdout.write(`\r  ${CHROME('◐◓◑◒'[Math.floor(Date.now() / 120) % 4])} Fetching models...`), 120)
       : undefined;
     try {
       live = await withTimeout(fetchLiveModels(providerId), LIVE_FETCH_TIMEOUT_MS, []);
@@ -367,19 +365,19 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
     : staticModelsForProvider(providerId).map(m => ({ id: m.id, label: m.name }));
 
   if (models.length === 0) {
-    console.log(chalk.hex(DIM)(`\n  No models found for ${entry?.name ?? providerId} (live fetch empty, no static entries).`));
-    const id = (await askLine(chalk.hex(ACCENT)('  Model id (Enter to go back): '))).trim();
+    console.log(TEXT_DIM(`\n  No models found for ${entry?.name ?? providerId} (live fetch empty, no static entries).`));
+    const id = (await askLine(CHROME('  Model id (Enter to go back): '))).trim();
     if (!id) return 'back';
     const prefixed = applyRoutePrefix(providerId, id);
-    if (prefixed !== id) console.log(chalk.hex(DIM)(`  Routing as ${prefixed}`));
+    if (prefixed !== id) console.log(TEXT_DIM(`  Routing as ${prefixed}`));
     return prefixed;
   }
 
   const items: ListItem[] = models.map(m => ({
     label: `${m.label} ${m.id}`,
-    render: chalk.hex('#eee8e2')(m.label)
-      + (m.id !== m.label ? chalk.hex(DIM)(`  ${m.id}`) : '')
-      + (m.free ? chalk.hex(GREEN)(' [free]') : ''),
+    render: FG_BRIGHT(m.label)
+      + (m.id !== m.label ? TEXT_DIM(`  ${m.id}`) : '')
+      + (m.free ? OK(' [free]') : ''),
   }));
 
   const r = await interactiveList(title, items, { filter: true });
@@ -516,32 +514,32 @@ async function readSingleKey(): Promise<string> {
 /** [K] Update API key — masked current value, hidden input, agents.env save. */
 async function updateApiKeyFlow(entry: ProviderEntry): Promise<void> {
   if (!entry.envKey) {
-    console.log(chalk.hex(DIM)(`\n  ${entry.name} needs no API key.\n`));
+    console.log(TEXT_DIM(`\n  ${entry.name} needs no API key.\n`));
     return;
   }
   const current = getApiKey(entry.envKey);
-  console.log(chalk.hex(DIM)(`\n  ${entry.envKey}: ${current ? maskKey(current) : chalk.hex('#d4903a')('not set')}`));
-  const key = await readHiddenLine(chalk.hex(ACCENT)(`  New key (hidden, Enter to cancel): `));
+  console.log(TEXT_DIM(`\n  ${entry.envKey}: ${current ? maskKey(current) : WARN('not set')}`));
+  const key = await readHiddenLine(CHROME(`  New key (hidden, Enter to cancel): `));
   if (!key) {
-    console.log(chalk.hex(DIM)('  Unchanged.\n'));
+    console.log(TEXT_DIM('  Unchanged.\n'));
     return;
   }
   saveKey(entry.envKey, key);
-  console.log(chalk.hex(GREEN)(`  ✓ Key saved`) + chalk.hex(DIM)(` (${entry.envKey} → ~/.aura/keys.json)\n`));
+  console.log(OK(`  ✓ Key saved`) + TEXT_DIM(` (${entry.envKey} → ~/.aura/keys.json)\n`));
 }
 
 /** [U] Change base URL — visible input, agents.env save. */
 async function updateBaseUrlFlow(entry: ProviderEntry): Promise<void> {
   const envVar = baseUrlEnvFor(entry);
   const current = process.env[envVar];
-  console.log(chalk.hex(DIM)(`\n  ${envVar}: ${current ?? chalk.hex('#d4903a')('not set (provider default)')}`));
-  const url = (await askLine(chalk.hex(ACCENT)('  New base URL (Enter to cancel): '))).trim();
+  console.log(TEXT_DIM(`\n  ${envVar}: ${current ?? WARN('not set (provider default)')}`));
+  const url = (await askLine(CHROME('  New base URL (Enter to cancel): '))).trim();
   if (!url) {
-    console.log(chalk.hex(DIM)('  Unchanged.\n'));
+    console.log(TEXT_DIM('  Unchanged.\n'));
     return;
   }
   const file = saveToAgentsEnv(envVar, url);
-  console.log(chalk.hex(GREEN)(`  ✓ URL saved`) + chalk.hex(DIM)(` (${envVar} → ${file})\n`));
+  console.log(OK(`  ✓ URL saved`) + TEXT_DIM(` (${envVar} → ${file})\n`));
 }
 
 /** Per-provider action submenu: browse models / update key / change URL. */
@@ -551,12 +549,12 @@ async function providerActionMenu(entry: ProviderEntry): Promise<'models' | 'key
     ? (key ? `current: ${maskKey(key)}` : 'not set')
     : 'no key needed';
   process.stdout.write('\x1b[2J\x1b[H');
-  console.log(chalk.hex(ACCENT).bold(`\n  ${entry.name}`));
-  console.log(chalk.hex(DIM)(`  ${entry.desc}\n`));
-  console.log(`  ${chalk.hex(ACCENT)('[M]')} Browse models`);
-  console.log(`  ${chalk.hex(ACCENT)('[K]')} Update API key  ${chalk.hex(DIM)(`(${keyLabel})`)}`);
-  console.log(`  ${chalk.hex(ACCENT)('[U]')} Change base URL`);
-  console.log(`  ${chalk.hex(DIM)('ESC Back')}\n`);
+  console.log(CHROME.bold(`\n  ${entry.name}`));
+  console.log(TEXT_DIM(`  ${entry.desc}\n`));
+  console.log(`  ${CHROME('[M]')} Browse models`);
+  console.log(`  ${CHROME('[K]')} Update API key  ${TEXT_DIM(`(${keyLabel})`)}`);
+  console.log(`  ${CHROME('[U]')} Change base URL`);
+  console.log(`  ${TEXT_DIM('ESC Back')}\n`);
   for (;;) {
     const k = await readSingleKey();
     if (k === 'm' || k === 'return' || k === 'enter') return 'models';
@@ -578,9 +576,9 @@ export async function showProviderSelector(): Promise<string | undefined> {
       const configured = p.envKey ? Boolean(getApiKey(p.envKey)) : false;
       return {
         label: `${p.name} ${p.desc}`,
-        render: chalk.hex('#eee8e2')(p.name.padEnd(28))
-          + (configured ? chalk.hex(GREEN)('✓ ') : '  ')
-          + chalk.hex(DIM)(p.desc),
+        render: FG_BRIGHT(p.name.padEnd(28))
+          + (configured ? OK('✓ ') : '  ')
+          + TEXT_DIM(p.desc),
       };
     });
     const r = await interactiveList('Select provider', items, { filter: true });
@@ -602,7 +600,7 @@ export async function showProviderSelector(): Promise<string | undefined> {
           // Hermes-style: first use of a keyed provider prompts for the key
           // once, stores it, and moves straight on to the live model list.
           if (entry.envKey && !getApiKey(entry.envKey)) {
-            console.log(chalk.hex(DIM)(`\n  ${entry.name} needs an API key (${entry.envKey}).`));
+            console.log(TEXT_DIM(`\n  ${entry.name} needs an API key (${entry.envKey}).`));
             await updateApiKeyFlow(entry);
             if (!getApiKey(entry.envKey)) continue; // declined — back to submenu
           }
@@ -624,25 +622,25 @@ export async function promptAuthKeyUpdate(model: string): Promise<string | undef
   const envKey = apiKeyEnvVarForModel(model);
   const family = modelProviderFamily(model);
   const label = PROVIDER_LIST.find(p => p.envKey === envKey)?.name ?? family;
-  console.log(chalk.hex('#d4903a')(`\n  ⚠ API key rejected for ${label}. Press K to update key or ESC to cancel.`));
+  console.log(WARN(`\n  ⚠ API key rejected for ${label}. Press K to update key or ESC to cancel.`));
   const k = await readSingleKey();
   if (k !== 'k') {
-    console.log(chalk.hex(DIM)('  Cancelled.\n'));
+    console.log(TEXT_DIM('  Cancelled.\n'));
     return undefined;
   }
   if (!envKey) {
-    console.log(chalk.hex(DIM)(`  No API-key env var known for model "${model}" — set it with :apikey instead.\n`));
+    console.log(TEXT_DIM(`  No API-key env var known for model "${model}" — set it with :apikey instead.\n`));
     return undefined;
   }
   const current = getApiKey(envKey);
-  console.log(chalk.hex(DIM)(`  ${envKey}: ${current ? maskKey(current) : 'not set'}`));
-  const key = await readHiddenLine(chalk.hex(ACCENT)('  New key (hidden, Enter to cancel): '));
+  console.log(TEXT_DIM(`  ${envKey}: ${current ? maskKey(current) : 'not set'}`));
+  const key = await readHiddenLine(CHROME('  New key (hidden, Enter to cancel): '));
   if (!key) {
-    console.log(chalk.hex(DIM)('  Unchanged.\n'));
+    console.log(TEXT_DIM('  Unchanged.\n'));
     return undefined;
   }
   saveKey(envKey, key);
-  console.log(chalk.hex(GREEN)('  ✓ Key saved') + chalk.hex(DIM)(` (${envKey} → ~/.aura/keys.json)\n`));
+  console.log(OK('  ✓ Key saved') + TEXT_DIM(` (${envKey} → ~/.aura/keys.json)\n`));
   return key;
 }
 

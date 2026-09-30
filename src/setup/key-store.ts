@@ -13,8 +13,17 @@ import { auraPath } from '../util/aura-home.js';
 // key every time" pain). This store fixes it: keys live in one file, loaded
 // into process.env at startup so every run and every provider sees them.
 //
-// Precedence: a key already present in the real environment WINS (so a shell
-// export or a per-run `KEY=… aura` override is never clobbered by the store).
+// Precedence: the STORE wins over the inherited environment. It used to be the
+// other way round, and that is how a key saved with :apikey kept losing to a
+// dead `export` left in ~/.bashrc or environment.d — every new session quietly
+// used the old key (OpenRouter, Groq and Xiaomi all hit this). A key saved in
+// Aura is the key Aura uses. AURA_KEYS_ENV_WINS=1 restores the old order for a
+// deliberate per-run `KEY=… aura` override.
+//
+// Running sessions follow the file too: once loadKeysIntoEnv has run, a change
+// to keys.json made by another session is picked up on the next key lookup,
+// and currentKey() lets an already-built provider swap a replaced key for the
+// new one without a restart.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function keyStorePath(): string {
@@ -34,18 +43,60 @@ function readStore(): KeyMap {
   }
 }
 
-/**
- * Merge stored keys into process.env WITHOUT overriding anything already set
- * in the real environment. Call once at startup, before any provider is built.
- */
-export function loadKeysIntoEnv(): void {
-  const store = readStore();
-  for (const [name, value] of Object.entries(store)) {
+/** mtime of keys.json when last applied; null until loadKeysIntoEnv runs, which
+ *  keeps the live refresh inert in tests and library use. */
+let appliedMtime: number | null = null;
+/** Key values the store has replaced in this process → their replacement. */
+const superseded = new Map<string, string>();
+
+function storeMtime(): number {
+  try { return fs.statSync(keyStorePath()).mtimeMs; } catch { return 0; }
+}
+
+function setLive(name: string, value: string): void {
+  const prev = process.env[name];
+  if (prev && prev !== value) superseded.set(prev, value);
+  // The new value is current now, not superseded — keeps a revert (A→B→A)
+  // from leaving a cycle in the map.
+  superseded.delete(value);
+  process.env[name] = value;
+}
+
+function applyStore(): void {
+  const envWins = process.env.AURA_KEYS_ENV_WINS === '1';
+  for (const [name, value] of Object.entries(readStore())) {
     if (!value || !String(value).trim()) continue;
     const existing = process.env[name];
-    if (existing && existing.trim()) continue; // real env wins
-    process.env[name] = String(value);
+    if (envWins && existing && existing.trim()) continue;
+    setLive(name, String(value));
   }
+}
+
+/**
+ * Merge stored keys into process.env, overriding inherited values (see the
+ * precedence note above). Call once at startup, before any provider is built.
+ */
+export function loadKeysIntoEnv(): void {
+  appliedMtime = storeMtime();
+  applyStore();
+}
+
+/** Re-apply keys.json if another process changed it since it was last read.
+ *  A no-op until loadKeysIntoEnv has run. */
+export function refreshKeysFromStore(): void {
+  if (appliedMtime === null) return;
+  const m = storeMtime();
+  if (m === appliedMtime) return;
+  appliedMtime = m;
+  applyStore();
+}
+
+/** The key to use in place of `key`: its replacement if the store has since
+ *  replaced it, otherwise `key` itself. For providers holding a key they
+ *  resolved at construction. */
+export function currentKey(key: string): string {
+  refreshKeysFromStore();
+  return superseded.get(key) ?? key;
 }
 
 /**
@@ -61,7 +112,9 @@ export function saveKey(name: string, value: string): string {
   fs.writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, p);
   try { fs.chmodSync(p, 0o600); } catch { /* best effort */ }
-  process.env[name] = value; // live immediately
+  if (value) setLive(name, value); // live immediately
+  else process.env[name] = value;
+  if (appliedMtime !== null) appliedMtime = storeMtime(); // our own write, already applied
   return p;
 }
 

@@ -2,15 +2,13 @@
  * Inline diff renderer — shows file edits as colored +/- lines,
  * like `git diff` but with Aura's palette.
  */
-import chalk from 'chalk';
-import { TEXT_DIM_HEX, FAINT_HEX, RUBY_ACCENT } from './diamond.js';
+import { TEXT_DIM, FAINT, RUBY_ACCENT, CHROME, ERR, OK } from './diamond.js';
 
-const TEXT_DIM = chalk.hex(TEXT_DIM_HEX);
 const RUBY = RUBY_ACCENT;
-const ADDED = chalk.hex('#5a9e6e');
-const REMOVED = chalk.hex('#b15439');
-const HUNK_HEADER = chalk.hex(FAINT_HEX);
-const FILE_HEADER = chalk.hex('#cc785c');
+const ADDED = OK;
+const REMOVED = ERR;
+const HUNK_HEADER = FAINT;
+const FILE_HEADER = CHROME;
 
 export interface DiffLine {
   type: 'add' | 'remove' | 'context' | 'hunk' | 'file';

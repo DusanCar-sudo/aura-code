@@ -34,6 +34,7 @@ import { getApiKey } from '../util/env.js';
 import { loadProviderConfig } from './provider-wizard.js';
 import { apiKeyEnvVarForModel } from '../providers/factory.js';
 import { auraHome, auraPath } from '../util/aura-home.js';
+import { CHROME, CHROME_DIM, ERR, OK, SOFT } from '../cli/diamond.js';
 
 const execAsync = promisify(exec);
 
@@ -72,26 +73,26 @@ export async function runTelegramWizard(existingRl?: readline.Interface): Promis
   const rl = existingRl || readline.createInterface({ input: process.stdin, output: process.stdout });
 
   try {
-    console.log(chalk.hex('#cc785c')('\n  ✦  Telegram Bot Setup Wizard'));
-    console.log(chalk.hex('#8a7768')('  Get Aura running as a Telegram bot in a few steps.\n'));
+    console.log(CHROME('\n  ✦  Telegram Bot Setup Wizard'));
+    console.log(CHROME_DIM('  Get Aura running as a Telegram bot in a few steps.\n'));
 
     // ── Step 1: Bot token ─────────────────────────────────────────────────
     const botToken = await configureBotToken(rl);
     if (!botToken) return null;
 
     // ── Step 2: Verify it for real ────────────────────────────────────────
-    console.log(chalk.hex('#cc785c')('\n  Verifying token with Telegram...'));
+    console.log(CHROME('\n  Verifying token with Telegram...'));
     const botUsername = await testBotToken(botToken);
     if (!botUsername) {
-      console.log(chalk.hex('#b15439')('  ✗ Could not verify this token. Double-check it and try again.\n'));
+      console.log(ERR('  ✗ Could not verify this token. Double-check it and try again.\n'));
       return null;
     }
-    console.log(chalk.hex('#5a9e6e')(`  ✓ Connected as @${botUsername}\n`));
+    console.log(OK(`  ✓ Connected as @${botUsername}\n`));
 
     // ── Step 3: Authorized users ──────────────────────────────────────────
     const allowedUserIds = await configureAuthorizedUsers(rl);
     if (allowedUserIds.length === 0) {
-      console.log(chalk.hex('#b15439')('  ✗ At least one authorized user ID is required — the bot refuses to start without one.\n'));
+      console.log(ERR('  ✗ At least one authorized user ID is required — the bot refuses to start without one.\n'));
       return null;
     }
 
@@ -103,7 +104,7 @@ export async function runTelegramWizard(existingRl?: readline.Interface): Promis
 
     // ── Save telegram.json ─────────────────────────────────────────────────
     saveTelegramConfig(botToken, allowedUserIds);
-    console.log(chalk.hex('#8a7768')(`\n  ✓ Saved to ${telegramConfigPath()}`));
+    console.log(CHROME_DIM(`\n  ✓ Saved to ${telegramConfigPath()}`));
 
     // ── Step 6: systemd service (optional) ────────────────────────────────
     const systemdGenerated = await offerSystemdService(rl, {
@@ -126,27 +127,27 @@ export async function runTelegramWizard(existingRl?: readline.Interface): Promis
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function configureBotToken(rl: readline.Interface): Promise<string | null> {
-  console.log(chalk.hex('#cc785c')('  Step 1: Bot token\n'));
+  console.log(CHROME('  Step 1: Bot token\n'));
 
   const existing = loadExistingTelegramConfig();
   if (existing?.bot_token) {
-    console.log(chalk.hex('#8a7768')(`  Existing token found (ends in ...${existing.bot_token.slice(-6)})\n`));
-    console.log(chalk.hex('#8a7768')('   1. Keep this token'));
-    console.log(chalk.hex('#8a7768')('   2. Replace with a new token\n'));
+    console.log(CHROME_DIM(`  Existing token found (ends in ...${existing.bot_token.slice(-6)})\n`));
+    console.log(CHROME_DIM('   1. Keep this token'));
+    console.log(CHROME_DIM('   2. Replace with a new token\n'));
     const choice = await askInput(rl, '  ▸ Choose (1 or 2): ');
     if (choice !== '2') return existing.bot_token;
   } else {
-    console.log(chalk.hex('#8a7768')('  No bot token configured yet.'));
+    console.log(CHROME_DIM('  No bot token configured yet.'));
   }
 
-  console.log(chalk.hex('#8a7768')('  Need one? Message @BotFather on Telegram:'));
-  console.log(chalk.hex('#8a7768')('    1. Send /newbot'));
-  console.log(chalk.hex('#8a7768')('    2. Pick a display name, then a username ending in "bot"'));
-  console.log(chalk.hex('#8a7768')('    3. BotFather replies with a token like 123456789:ABC-DEF1234...\n'));
+  console.log(CHROME_DIM('  Need one? Message @BotFather on Telegram:'));
+  console.log(CHROME_DIM('    1. Send /newbot'));
+  console.log(CHROME_DIM('    2. Pick a display name, then a username ending in "bot"'));
+  console.log(CHROME_DIM('    3. BotFather replies with a token like 123456789:ABC-DEF1234...\n'));
 
   const token = await askInput(rl, '  ▸ Paste your bot token: ');
   if (!token) {
-    console.log(chalk.hex('#b15439')('  ✗ No token provided.'));
+    console.log(ERR('  ✗ No token provided.'));
     return null;
   }
   return token;
@@ -170,16 +171,16 @@ export async function testBotToken(token: string): Promise<string | null> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function configureAuthorizedUsers(rl: readline.Interface): Promise<string[]> {
-  console.log(chalk.hex('#cc785c')('  Step 2: Authorized users\n'));
-  console.log(chalk.hex('#8a7768')('  Only these Telegram user IDs will be able to use the bot.'));
-  console.log(chalk.hex('#8a7768')("  Don't know yours? Message @userinfobot on Telegram — it replies instantly.\n"));
+  console.log(CHROME('  Step 2: Authorized users\n'));
+  console.log(CHROME_DIM('  Only these Telegram user IDs will be able to use the bot.'));
+  console.log(CHROME_DIM("  Don't know yours? Message @userinfobot on Telegram — it replies instantly.\n"));
 
   const existing = loadExistingTelegramConfig();
   const ids: string[] = existing?.allowed_user_ids
     ? existing.allowed_user_ids.split(',').map(s => s.trim()).filter(Boolean)
     : [];
   if (ids.length > 0) {
-    console.log(chalk.hex('#8a7768')(`  Currently authorized: ${ids.join(', ')}\n`));
+    console.log(CHROME_DIM(`  Currently authorized: ${ids.join(', ')}\n`));
   }
 
   for (;;) {
@@ -189,7 +190,7 @@ async function configureAuthorizedUsers(rl: readline.Interface): Promise<string[
     const input = await askInput(rl, prompt);
     if (!input) break;
     if (!/^\d+$/.test(input)) {
-      console.log(chalk.hex('#b15439')("  ✗ That doesn't look like a numeric Telegram ID — try again."));
+      console.log(ERR("  ✗ That doesn't look like a numeric Telegram ID — try again."));
       continue;
     }
     if (!ids.includes(input)) ids.push(input);
@@ -202,23 +203,23 @@ async function configureAuthorizedUsers(rl: readline.Interface): Promise<string[
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function configureTaskModel(rl: readline.Interface): Promise<{ taskModel?: string; providerApiKey?: string }> {
-  console.log(chalk.hex('#cc785c')('\n  Step 3: Which model should the bot use?\n'));
+  console.log(CHROME('\n  Step 3: Which model should the bot use?\n'));
 
   const saved = loadProviderConfig();
   if (saved?.model) {
-    console.log(chalk.hex('#8a7768')(`  Found an existing :provider setup: ${chalk.hex('#e8d5b7')(saved.model)} (${saved.provider})\n`));
-    console.log(chalk.hex('#8a7768')('   1. Use this for the bot too'));
-    console.log(chalk.hex('#8a7768')('   2. Skip — configure this manually later\n'));
+    console.log(CHROME_DIM(`  Found an existing :provider setup: ${SOFT(saved.model)} (${saved.provider})\n`));
+    console.log(CHROME_DIM('   1. Use this for the bot too'));
+    console.log(CHROME_DIM('   2. Skip — configure this manually later\n'));
     const choice = await askInput(rl, '  ▸ Choose (1 or 2): ');
     if (choice !== '2') {
       return { taskModel: saved.model, providerApiKey: saved.apiKey };
     }
   } else {
-    console.log(chalk.hex('#8a7768')('  No existing provider setup found.'));
+    console.log(CHROME_DIM('  No existing provider setup found.'));
   }
 
-  console.log(chalk.hex('#8a7768')('  Run :provider first if you want this filled in automatically,'));
-  console.log(chalk.hex('#8a7768')('  or set TELEGRAM_BOT_MODEL plus the matching API key manually later.\n'));
+  console.log(CHROME_DIM('  Run :provider first if you want this filled in automatically,'));
+  console.log(CHROME_DIM('  or set TELEGRAM_BOT_MODEL plus the matching API key manually later.\n'));
   return {};
 }
 
@@ -227,13 +228,13 @@ async function configureTaskModel(rl: readline.Interface): Promise<{ taskModel?:
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function configureVoiceSupport(rl: readline.Interface): Promise<string | null> {
-  console.log(chalk.hex('#cc785c')('\n  Step 4: Voice messages (optional)\n'));
-  console.log(chalk.hex('#8a7768')('  Lets the bot transcribe voice messages and reply with spoken audio.'));
-  console.log(chalk.hex('#8a7768')('  Needs a free Groq API key: https://console.groq.com/keys\n'));
+  console.log(CHROME('\n  Step 4: Voice messages (optional)\n'));
+  console.log(CHROME_DIM('  Lets the bot transcribe voice messages and reply with spoken audio.'));
+  console.log(CHROME_DIM('  Needs a free Groq API key: https://console.groq.com/keys\n'));
 
   const existing = getApiKey('GROQ_API_KEY', 'groq_api_key');
   if (existing) {
-    console.log(chalk.hex('#8a7768')(`  Found one already: ${chalk.hex('#5a9e6e')(maskKey(existing))}\n`));
+    console.log(CHROME_DIM(`  Found one already: ${OK(maskKey(existing))}\n`));
     const choice = await askInput(rl, '  ▸ Use this key for the bot? (Y/n): ');
     if (choice.toLowerCase() !== 'n') return existing;
   }
@@ -320,9 +321,9 @@ export function buildSystemdServiceContent(
 }
 
 async function offerSystemdService(rl: readline.Interface, inputs: SystemdInputs): Promise<boolean> {
-  console.log(chalk.hex('#cc785c')('\n  Step 5: Run automatically with systemd? (Linux only)\n'));
-  console.log(chalk.hex('#8a7768')('  Keeps the bot running in the background, restarts it if it crashes,'));
-  console.log(chalk.hex('#8a7768')('  and starts it again automatically next time you log in.\n'));
+  console.log(CHROME('\n  Step 5: Run automatically with systemd? (Linux only)\n'));
+  console.log(CHROME_DIM('  Keeps the bot running in the background, restarts it if it crashes,'));
+  console.log(CHROME_DIM('  and starts it again automatically next time you log in.\n'));
 
   const choice = await askInput(rl, '  ▸ Generate a systemd service file now? (y/N): ');
   if (choice.toLowerCase() !== 'y') return false;
@@ -330,7 +331,7 @@ async function offerSystemdService(rl: readline.Interface, inputs: SystemdInputs
   const projectRoot = process.cwd();
   const botScript = path.join(projectRoot, 'dist', 'tools', 'telegram-bot.js');
   if (!fs.existsSync(botScript)) {
-    console.log(chalk.hex('#b15439')(`  ✗ ${botScript} doesn't exist yet — run "npm run build" first, then re-run this step.`));
+    console.log(ERR(`  ✗ ${botScript} doesn't exist yet — run "npm run build" first, then re-run this step.`));
     return false;
   }
 
@@ -342,15 +343,15 @@ async function offerSystemdService(rl: readline.Interface, inputs: SystemdInputs
   const servicePath = path.join(serviceDir, 'aura-telegram.service');
   fs.writeFileSync(servicePath, content);
 
-  console.log(chalk.hex('#5a9e6e')(`\n  ✓ Wrote ${servicePath}`));
-  console.log(chalk.hex('#8a7768')('\n  Run these to start it:\n'));
-  console.log(chalk.hex('#e8d5b7')('    systemctl --user daemon-reload'));
-  console.log(chalk.hex('#e8d5b7')('    systemctl --user enable --now aura-telegram.service'));
-  console.log(chalk.hex('#e8d5b7')('    systemctl --user status aura-telegram.service\n'));
+  console.log(OK(`\n  ✓ Wrote ${servicePath}`));
+  console.log(CHROME_DIM('\n  Run these to start it:\n'));
+  console.log(SOFT('    systemctl --user daemon-reload'));
+  console.log(SOFT('    systemctl --user enable --now aura-telegram.service'));
+  console.log(SOFT('    systemctl --user status aura-telegram.service\n'));
   // journald is authoritative; the logfile below only exists for units this
   // wizard generated. Point at the one that always works.
-  console.log(chalk.hex('#8a7768')('  To watch it (works regardless of logfile settings):\n'));
-  console.log(chalk.hex('#e8d5b7')('    journalctl --user -u aura-telegram --since "10 min ago"\n'));
+  console.log(CHROME_DIM('  To watch it (works regardless of logfile settings):\n'));
+  console.log(SOFT('    journalctl --user -u aura-telegram --since "10 min ago"\n'));
 
   return true;
 }
@@ -361,16 +362,16 @@ async function offerSystemdService(rl: readline.Interface, inputs: SystemdInputs
 
 function askInput(rl: readline.Interface, prompt: string): Promise<string> {
   return new Promise(resolve => {
-    rl.question(chalk.hex('#cc785c')(prompt), answer => resolve((answer ?? '').trim()));
+    rl.question(CHROME(prompt), answer => resolve((answer ?? '').trim()));
   });
 }
 
 function printSummary(botUsername: string, systemdGenerated: boolean): void {
-  console.log(chalk.hex('#cc785c')('\n  ✦  Setup complete\n'));
-  console.log(chalk.hex('#8a7768')(`  Bot: ${chalk.hex('#e8d5b7')('@' + botUsername)}`));
+  console.log(CHROME('\n  ✦  Setup complete\n'));
+  console.log(CHROME_DIM(`  Bot: ${SOFT('@' + botUsername)}`));
   if (!systemdGenerated) {
-    console.log(chalk.hex('#8a7768')('\n  To run it now:'));
-    console.log(chalk.hex('#e8d5b7')(`    node dist/tools/telegram-bot.js\n`));
+    console.log(CHROME_DIM('\n  To run it now:'));
+    console.log(SOFT(`    node dist/tools/telegram-bot.js\n`));
   }
-  console.log(chalk.hex('#8a7768')('  Message your bot on Telegram to try it.\n'));
+  console.log(CHROME_DIM('  Message your bot on Telegram to try it.\n'));
 }
