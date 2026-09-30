@@ -2,6 +2,31 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.20.0] — 2026-09-30
+
+### Changed — Nature identity
+
+- **Nature theme** across the terminal, the web studio and the site: forest `#070907`, cream `#f2ebc9`, gold `#e7cf85`, olive `#535c37`, red/yellow/green/cyan stripes, heavy-caps Geist, the peak mark, no emoji. `:theme` switches themes in the REPL; the splash and wordmark are new.
+- **Web studio restyled**: board, workflow DAG, execution list, canvas, code, chat, agents and models all follow the palette (the leftover navy and slate surfaces are gone). Settings > Autonomy had no styles at all; its permission and sandbox cards now do.
+- **README, badges and the screenshot gallery** are rebuilt from the new UI (`assets/screenshots/web-*.png`); the old numbered shots are removed. Website links point to https://www.leanproiq.com.
+
+### Added
+
+- **`aura-mcp-computer`**: Aura's computer tool as a stdio MCP server, so another MCP client can drive the screen through Aura's gate, disclosure and release hooks. It needs both the `--computer` flag and `AURA_COMPUTER_USE=1`, exactly like `aura --computer`.
+- **Key store wins**: a key saved with `:apikey` now beats a stale `export` in `~/.bashrc` or `environment.d` (`AURA_KEYS_ENV_WINS=1` restores the old order for one run), and running sessions pick up a replaced key without a restart.
+- **NVIDIA NIM catalog** refreshed against the live API (2026-09-29); the retired Nemotron/Llama/R1 entries are replaced by current models.
+
+### Security
+
+- **`web_fetch` confirms when it could carry data out**: after a turn has read local files or fetched a page, a fetch with a query string, fragment, credentials, a very long path or a non-GET method asks first, because a page the model just read can tell it to send what it found in a URL.
+- **MCP `connect`** resolves a bare server name through `~/.aura/mcp.json`, so the dangerous-command screen and the confirmation apply to the command that will really be spawned.
+- Includes all of 0.19.1 below. It is merged, not reimplemented: the `cron` screen and the `web_fetch` check sit side by side in the permission gate.
+
+### Fixed
+
+- Local model servers (Ollama and similar) are no longer listed as configured when nothing is listening.
+- Telegram `/whoami` reports the package's real version (it was hard-coded).
+
 ## [0.19.1] — 2026-09-19
 
 ### Security hardening
