@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aura — Inference Roadmap</title>
+<style>
+  :root{
+    --bg:#0d1512; --panel:#12201a; --line:#1f3a2d;
+    --ink:#e8f2ec; --dim:#8fb3a3;
+    --lime:#a8e063; --moss:#5f9e6e; --gold:#e0b45c; --sky:#6db3d8;
+    font-family:"Geist",system-ui,sans-serif;
+  }
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.5}
+  .wrap{max-width:960px;margin:0 auto;padding:48px 24px 96px}
+  h1{font-size:2rem;margin:0 0 4px}
+  .kicker{color:var(--lime);text-transform:uppercase;letter-spacing:.2em;font-size:.75rem;font-weight:600}
+  .sub{color:var(--dim);margin:8px 0 40px}
+  h2{font-size:1.1rem;margin:56px 0 12px;color:var(--lime)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;overflow-x:auto}
+  svg{display:block;margin:0 auto}
+  text{font-family:"Geist",system-ui,sans-serif}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--dim);font-size:.85rem;margin-top:14px}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+  footer{color:var(--dim);font-size:.8rem;margin-top:64px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">Aura · 2026</div>
+  <h1>From AI client to AI provider</h1>
+  <p class="sub">The three-phase path: aura-code already speaks to every model vendor —
+  next Aura becomes the provider itself, then trains its own model behind the same endpoint.</p>
+
+  <!-- ══════════ Diagram 1: The three phases ══════════ -->
+  <h2>1 · The path — three phases</h2>
+  <div class="panel">
+  <svg viewBox="0 0 900 300" width="100%" role="img" aria-label="Three phase roadmap timeline">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0L10 5L0 10z" fill="#a8e063"/>
+      </marker>
+    </defs>
+    <!-- baseline arrow -->
+    <line x1="60" y1="150" x2="840" y2="150" stroke="#1f3a2d" stroke-width="3"/>
+    <line x1="60" y1="150" x2="860" y2="150" stroke="#a8e063" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <!-- Phase nodes -->
+    <g font-size="15">
+      <circle cx="140" cy="150" r="34" fill="#0d1512" stroke="#5f9e6e" stroke-width="3"/>
+      <text x="140" y="155" text-anchor="middle" fill="#e8f2ec" font-weight="700">0</text>
+      <text x="140" y="80" text-anchor="middle" fill="#e8f2ec" font-weight="700">Aura speaks to all</text>
+      <text x="140" y="102" text-anchor="middle" fill="#8fb3a3" font-size="12.5">provider layer exists</text>
+      <text x="140" y="205" text-anchor="middle" fill="#5f9e6e" font-size="12.5" font-weight="600">DONE</text>
+
+      <circle cx="450" cy="150" r="34" fill="#a8e063"/>
+      <text x="450" y="155" text-anchor="middle" fill="#0d1512" font-weight="800">1</text>
+      <text x="450" y="80" text-anchor="middle" fill="#e8f2ec" font-weight="700">Aura becomes a provider</text>
+      <text x="450" y="102" text-anchor="middle" fill="#8fb3a3" font-size="12.5">OpenAI-compatible gateway</text>
+      <text x="450" y="205" text-anchor="middle" fill="#a8e063" font-size="12.5" font-weight="600">BUILT 2026-10-10</text>
+
+      <circle cx="760" cy="150" r="34" fill="#0d1512" stroke="#e0b45c" stroke-width="3" stroke-dasharray="5 4"/>
+      <text x="760" y="155" text-anchor="middle" fill="#e0b45c" font-weight="700">2·3</text>
+      <text x="760" y="80" text-anchor="middle" fill="#e8f2ec" font-weight="700">Aura's own model</text>
+      <text x="760" y="102" text-anchor="middle" fill="#8fb3a3" font-size="12.5">aura-1 router → aura-1-local</text>
+      <text x="760" y="205" text-anchor="middle" fill="#e0b45c" font-size="12.5" font-weight="600">NEXT</text>
+    </g>
+  </svg>
+  </div>
+
+  <!-- ══════════ Diagram 2: Architecture ══════════ -->
+  <h2>2 · The Aura Inference Gateway (phase 1, built)</h2>
+  <div class="panel">
+  <svg viewBox="0 0 900 430" width="100%" role="img" aria-label="Gateway architecture diagram">
+    <defs>
+      <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0L10 5L0 10z" fill="#6db3d8"/>
+      </marker>
+    </defs>
+    <g font-size="13">
+      <!-- Left: clients -->
+      <g>
+        <rect x="30" y="40"  width="180" height="44" rx="10" fill="#12201a" stroke="#1f3a2d"/>
+        <text x="120" y="66" text-anchor="middle" fill="#e8f2ec">Scripts &amp; cron jobs</text>
+        <rect x="30" y="104" width="180" height="44" rx="10" fill="#12201a" stroke="#1f3a2d"/>
+        <text x="120" y="130" text-anchor="middle" fill="#e8f2ec">Aura web &amp; phone client</text>
+        <rect x="30" y="168" width="180" height="44" rx="10" fill="#12201a" stroke="#1f3a2d"/>
+        <text x="120" y="194" text-anchor="middle" fill="#e8f2ec">Third-party apps</text>
+        <rect x="30" y="232" width="180" height="44" rx="10" fill="#12201a" stroke="#1f3a2d"/>
+        <text x="120" y="258" text-anchor="middle" fill="#e8f2ec">Aura OS / adOS</text>
+        <text x="120" y="310" text-anchor="middle" fill="#8fb3a3" font-size="12">Speak the OpenAI</text>
+        <text x="120" y="328" text-anchor="middle" fill="#8fb3a3" font-size="12">wire format</text>
+      </g>
+
+      <!-- Center: gateway -->
+      <rect x="300" y="90" width="260" height="170" rx="16" fill="#a8e063"/>
+      <text x="430" y="128" text-anchor="middle" fill="#0d1512" font-weight="800" font-size="17">Aura Inference Gateway</text>
+      <text x="430" y="152" text-anchor="middle" fill="#26401a" font-size="12.5" font-family="monospace">POST /v1/chat/completions</text>
+      <text x="430" y="172" text-anchor="middle" fill="#26401a" font-size="12.5" font-family="monospace">GET /v1/models</text>
+      <text x="430" y="200" text-anchor="middle" fill="#26401a" font-size="12">one URL · one token · any model</text>
+      <rect x="330" y="216" width="200" height="30" rx="8" fill="#0d1512" opacity=".85"/>
+      <text x="430" y="236" text-anchor="middle" fill="#a8e063" font-weight="700" font-family="monospace" font-size="13">model: "aura-1"</text>
+      <text x="430" y="292" text-anchor="middle" fill="#8fb3a3" font-size="12">behind the existing auth gate</text>
+
+      <!-- Right: providers -->
+      <g>
+        <rect x="660" y="24"  width="210" height="42" rx="10" fill="#12201a" stroke="#5f9e6e"/>
+        <text x="765" y="50" text-anchor="middle" fill="#e8f2ec">Anthropic</text>
+        <rect x="660" y="76"  width="210" height="42" rx="10" fill="#12201a" stroke="#5f9e6e"/>
+        <text x="765" y="102" text-anchor="middle" fill="#e8f2ec">Google</text>
+        <rect x="660" y="128" width="210" height="42" rx="10" fill="#12201a" stroke="#5f9e6e"/>
+        <text x="765" y="154" text-anchor="middle" fill="#e8f2ec">DeepSeek · Zhipu · OpenAI-compat</text>
+        <rect x="660" y="180" width="210" height="42" rx="10" fill="#12201a" stroke="#5f9e6e"/>
+        <text x="765" y="206" text-anchor="middle" fill="#e8f2ec">LM Studio · Ollama (local)</text>
+        <rect x="660" y="232" width="210" height="42" rx="10" fill="#0d1512" stroke="#e0b45c" stroke-dasharray="5 4"/>
+        <text x="765" y="258" text-anchor="middle" fill="#e0b45c" font-weight="700">aura-1-local (our model)</text>
+      </g>
+
+      <!-- flows -->
+      <line x1="210" y1="105" x2="298" y2="140" stroke="#6db3d8" stroke-width="2" marker-end="url(#ar2)"/>
+      <line x1="210" y1="185" x2="298" y2="185" stroke="#6db3d8" stroke-width="2" marker-end="url(#ar2)"/>
+      <line x1="210" y1="254" x2="298" y2="215" stroke="#6db3d8" stroke-width="2" marker-end="url(#ar2)"/>
+      <line x1="560" y1="140" x2="658" y2="70"  stroke="#6db3d8" stroke-width="2" marker-end="url(#ar2)"/>
+      <line x1="560" y1="175" x2="658" y2="150" stroke="#6db3d8" stroke-width="2" marker-end="url(#ar2)"/>
+      <line x1="560" y1="215" x2="658" y2="252" stroke="#6db3d8" stroke-width="2" marker-end="url(#ar2)" stroke-dasharray="6 4"/>
+
+      <!-- bottom bar: what makes it defensible -->
+      <rect x="60" y="345" width="780" height="58" rx="12" fill="#12201a" stroke="#1f3a2d"/>
+      <text x="450" y="370" text-anchor="middle" fill="#8fb3a3" font-size="12.5">Under the hood — already in aura-code</text>
+      <text x="450" y="390" text-anchor="middle" fill="#e8f2ec" font-size="13.5">
+        resilient fallback · archimedes cost log · provider-descriptor routing · memory (Mnemai)</text>
+    </g>
+  </svg>
+  </div>
+
+  <!-- ══════════ Diagram 3: phases 2-3 zoom ══════════ -->
+  <h2>3 · From alias to our own brain (phases 2–3)</h2>
+  <div class="panel">
+  <svg viewBox="0 0 900 300" width="100%" role="img" aria-label="aura-1 evolution">
+    <defs>
+      <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0L10 5L0 10z" fill="#e0b45c"/>
+      </marker>
+    </defs>
+    <g font-size="13">
+      <!-- today -->
+      <rect x="40" y="90" width="240" height="130" rx="14" fill="#12201a" stroke="#5f9e6e" stroke-width="2"/>
+      <text x="160" y="120" text-anchor="middle" fill="#5f9e6e" font-weight="700" font-size="12" letter-spacing="2">PHASE 1 — TODAY</text>
+      <text x="160" y="150" text-anchor="middle" fill="#e8f2ec" font-family="monospace" font-weight="700" font-size="15">"aura-1"</text>
+      <text x="160" y="175" text-anchor="middle" fill="#8fb3a3" font-size="12.5">alias →</text>
+      <text x="160" y="195" text-anchor="middle" fill="#8fb3a3" font-size="12.5">one fixed default model</text>
+
+      <!-- phase 2 -->
+      <rect x="330" y="70" width="240" height="170" rx="14" fill="#12201a" stroke="#6db3d8" stroke-width="2"/>
+      <text x="450" y="100" text-anchor="middle" fill="#6db3d8" font-weight="700" font-size="12" letter-spacing="2">PHASE 2 — ROUTER</text>
+      <text x="450" y="130" text-anchor="middle" fill="#e8f2ec" font-family="monospace" font-weight="700" font-size="15">"aura-1"</text>
+      <text x="450" y="158" text-anchor="middle" fill="#8fb3a3" font-size="12.5">picks the brain per request:</text>
+      <g font-size="12">
+        <rect x="352" y="172" width="88" height="24" rx="6" fill="#0d1512"/><text x="396" y="188" text-anchor="middle" fill="#a8e063">cheap local</text>
+        <rect x="450" y="172" width="88" height="24" rx="6" fill="#0d1512"/><text x="494" y="188" text-anchor="middle" fill="#6db3d8">strong cloud</text>
+        <text x="450" y="218" text-anchor="middle" fill="#8fb3a3" font-size="12">fallback · cost caps · effort scaling</text>
+      </g>
+
+      <!-- phase 3 -->
+      <rect x="620" y="70" width="240" height="170" rx="14" fill="#12201a" stroke="#e0b45c" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="740" y="100" text-anchor="middle" fill="#e0b45c" font-weight="700" font-size="12" letter-spacing="2">PHASE 3 — OWN MODEL</text>
+      <text x="740" y="130" text-anchor="middle" fill="#e8f2ec" font-family="monospace" font-weight="700" font-size="15">"aura-1-local"</text>
+      <text x="740" y="158" text-anchor="middle" fill="#8fb3a3" font-size="12.5">small model distilled on</text>
+      <text x="740" y="178" text-anchor="middle" fill="#8fb3a3" font-size="12.5">Aura conversations + memory</text>
+      <text x="740" y="205" text-anchor="middle" fill="#8fb3a3" font-size="12">runs on-device via LM Studio</text>
+      <text x="740" y="223" text-anchor="middle" fill="#e0b45c" font-size="12" font-weight="600">same endpoint, zero client changes</text>
+
+      <line x1="282" y1="155" x2="326" y2="155" stroke="#e0b45c" stroke-width="2" marker-end="url(#ar3)"/>
+      <line x1="572" y1="155" x2="616" y2="155" stroke="#e0b45c" stroke-width="2" marker-end="url(#ar3)"/>
+    </g>
+  </svg>
+  </div>
+
+  <!-- ══════════ Diagram 4: revenue layers ══════════ -->
+  <h2>4 · Why this is a business</h2>
+  <div class="panel">
+  <svg viewBox="0 0 900 330" width="100%" role="img" aria-label="Revenue layers pyramid">
+    <g font-size="13">
+      <rect x="150" y="240" width="600" height="70" rx="12" fill="#1f3a2d"/>
+      <text x="450" y="270" text-anchor="middle" fill="#e8f2ec" font-weight="700">Phase 1 — Infrastructure</text>
+      <text x="450" y="293" text-anchor="middle" fill="#8fb3a3">"Your apps, our provider." Per-token or per-seat gateway access</text>
+
+      <rect x="200" y="155" width="500" height="70" rx="12" fill="#5f9e6e"/>
+      <text x="450" y="185" text-anchor="middle" fill="#0d1512" font-weight="700">Phase 2 — Managed routing</text>
+      <text x="450" y="208" text-anchor="middle" fill="#123024">aura-1 as a service: smart routing, fallback, zero keys to manage</text>
+
+      <rect x="250" y="70" width="400" height="70" rx="12" fill="#a8e063"/>
+      <text x="450" y="100" text-anchor="middle" fill="#0d1512" font-weight="700">Phase 3 — The model itself</text>
+      <text x="450" y="123" text-anchor="middle" fill="#26401a">trained on data only Aura has — the defensible asset</text>
+
+      <text x="810" y="110" text-anchor="start" fill="#e0b45c" font-size="12" font-weight="600">acquirer /</text>
+      <text x="810" y="127" text-anchor="start" fill="#e0b45c" font-size="12" font-weight="600">investor view ↑</text>
+    </g>
+  </svg>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#5f9e6e"></span>existing / done</span>
+    <span><span class="dot" style="background:#a8e063"></span>built now</span>
+    <span><span class="dot" style="background:#e0b45c"></span>next</span>
+    <span><span class="dot" style="background:#6db3d8"></span>data flow</span>
+  </div>
+
+  <footer>Aura · docs/inference-roadmap.html · 2026-10-10 · see INFERENCE-ROADMAP.md</footer>
+</div>
+</body>
+</html>
