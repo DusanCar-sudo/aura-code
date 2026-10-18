@@ -137,6 +137,14 @@ export interface Episode {
   durationMs: number;
   /** Task category assigned by the router or orchestrator. */
   taskCategory: TaskCategory;
+  /** Files written or edited during the episode, from the tool call log. */
+  filesTouched?: string[];
+  /** Git diff of the working tree after the episode (best-effort; may be absent). */
+  diff?: string;
+  /** Whether tests ran during the episode and how they ended. */
+  testResult?: 'pass' | 'fail' | 'none';
+  /** Why verification rejected an answer (the escalation trigger). */
+  reviewerReason?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

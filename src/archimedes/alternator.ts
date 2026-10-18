@@ -185,6 +185,42 @@ function isNonEmptyResult(text: string | undefined): boolean {
 }
 
 /**
+ * Derives the aura-learn enrichment fields from the winning loop run:
+ * files written/edited, whether tests ran and their outcome, and the git diff.
+ * Every step is best-effort — learning data must never fail the task.
+ */
+export async function episodeLearningFields(
+  loopResult: LoopResult | undefined,
+  projectRoot: string,
+  reviewerReason: string | undefined,
+): Promise<Pick<Episode, 'filesTouched' | 'diff' | 'testResult' | 'reviewerReason'>> {
+  const fields: Pick<Episode, 'filesTouched' | 'diff' | 'testResult' | 'reviewerReason'> = {};
+  if (reviewerReason) fields.reviewerReason = reviewerReason;
+  if (!loopResult) return fields;
+
+  const touched = new Set<string>();
+  let testsRan = false;
+  for (const call of loopResult.toolCallLog) {
+    if ((call.name === 'edit_file' || call.name === 'write_file') && typeof call.input.path === 'string') {
+      touched.add(call.input.path);
+    }
+    if (call.name === 'run_tests') testsRan = true;
+  }
+  if (touched.size > 0) fields.filesTouched = [...touched].sort();
+  if (testsRan) fields.testResult = loopResult.success ? 'pass' : 'fail';
+
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const { stdout } = await promisify(execFile)('git', ['diff'], { cwd: projectRoot, maxBuffer: 32 * 1024 * 1024 });
+    if (stdout.trim()) fields.diff = stdout;
+  } catch {
+    /* not a git repo or git missing — diff is optional */
+  }
+  return fields;
+}
+
+/**
  * Checks whether the configured local endpoint (Ollama or LM Studio) responds.
  * Both serve an OpenAI-compatible `/v1/models`, so one probe covers either.
  * Never throws.
@@ -500,6 +536,9 @@ export class ArchimedesAlternator {
     // call isn't blind to what Archimedes already tried. Never fed back into the
     // Episode — only into the large model's task text for this run.
     let archimedesFailureContext: string | undefined;
+    // Why verification rejected an answer — recorded on the Episode so aura-learn
+    // can use the rejection reason as signal, not just the escalation fact.
+    let reviewerReason: string | undefined;
 
     // Steering read by the Archimedes attempt is replayed if that attempt is
     // discarded — see recordingSteeringProxy.
@@ -604,6 +643,7 @@ export class ArchimedesAlternator {
                 finalLoopResult = loopResult;
                 this.display.success('Archimedes handled the task without escalation.');
               } else {
+                reviewerReason = verification.reason;
                 archimedesFailureContext = [
                   `Archimedes's answer failed verification: ${verification.reason}`,
                   ``,
@@ -699,6 +739,7 @@ export class ArchimedesAlternator {
             noteVerification(largeModelVerification);
 
             if (!largeModelVerification.valid) {
+              reviewerReason = largeModelVerification.reason;
               this.display.warning(
                 `Large model answer failed verification (${largeModelVerification.reason}) — checking council escalation…`,
               );
@@ -821,10 +862,18 @@ export class ArchimedesAlternator {
       },
       durationMs: Date.now() - startMs,
       taskCategory,
+      ...episodeLearningFields(finalLoopResult, projectRoot, reviewerReason),
     };
 
     try {
-      await episodeStore.saveEpisode(projectRoot, episode);
+      // Per-project learning opt-out: .aura.json `learning.exclude` produces
+      // zero episodes for this project. Checked at save so routing still runs.
+      const { loadProjectConfig } = await import('../config/project-config.js');
+      if (loadProjectConfig(projectRoot).learning?.exclude) {
+        this.display.warning(`Learning capture disabled for this project (learning.exclude) — episode not saved.`);
+      } else {
+        await episodeStore.saveEpisode(projectRoot, episode);
+      }
     } catch (e) {
       this.display.warning(`Failed to save episode: ${String(e)}`);
     }
