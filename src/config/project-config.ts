@@ -83,6 +83,11 @@ export interface ProjectConfig {
     /** Model that verifies answers; omitted = the large model grades itself. */
     verifierModel?: string;
   };
+  /** Learning-data capture (aura-learn episode enrichment). */
+  learning?: {
+    /** When true, this project produces zero saved episodes / training rows. */
+    exclude?: boolean;
+  };
 }
 
 /**
