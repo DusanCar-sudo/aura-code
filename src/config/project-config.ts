@@ -170,6 +170,14 @@ function normalise(raw: unknown): ProjectConfig {
     if (typeof rb.verifierModel === 'string' && rb.verifierModel.trim()) archimedes.verifierModel = rb.verifierModel.trim();
     out.archimedes = archimedes;
   }
+  if (typeof r.learning === 'object' && r.learning !== null) {
+    const rl = r.learning as Record<string, unknown>;
+    if (rl.exclude === true) out.learning = { exclude: true };
+  }
+  if (typeof r.learning === 'object' && r.learning !== null) {
+    const rl = r.learning as Record<string, unknown>;
+    if (rl.exclude === true) out.learning = { exclude: true };
+  }
   if (Array.isArray(r.providers)) {
     out.providers = r.providers
       .filter((p: unknown): p is Record<string, unknown> =>
