@@ -10,7 +10,7 @@
 **Autonomous AI coding agent with persistent memory, TUI, and Telegram control**
 
 [![Website](https://img.shields.io/badge/website-leanproiq.com-e7cf85?style=flat-square&labelColor=070907)](https://www.leanproiq.com)
-[![Version](https://img.shields.io/badge/version-v0.20.0-e7cf85?style=flat-square&labelColor=070907)](https://github.com/DusanCar-sudo/aura-code/releases)
+[![Version](https://img.shields.io/badge/version-v0.20.1-e7cf85?style=flat-square&labelColor=070907)](https://github.com/DusanCar-sudo/aura-code/releases)
 [![License](https://img.shields.io/badge/license-MIT-535c37?style=flat-square&labelColor=070907)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-535c37?style=flat-square&labelColor=070907)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-535c37?style=flat-square&labelColor=070907)](https://www.typescriptlang.org)
