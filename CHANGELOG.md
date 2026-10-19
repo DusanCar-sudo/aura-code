@@ -2,6 +2,19 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.20.1] — 2026-10-19
+
+### Added
+
+- **Aura Inference Gateway**: an OpenAI-compatible endpoint in `aura serve` (`704dd00`).
+- **Partner stance** in the agent system prompt: act, verify, report honestly (`25e8997`).
+- **Richer episodes** for aura-learn: episodes record files touched, the diff, the test result and the reviewer reason (`2bd4c06`).
+
+### Fixed
+
+- **Stranded board tiles** can be run; Run no longer deadlocks (`b11435f`).
+- **`learning.exclude`** is kept when project config is normalised (`6d52561`).
+
 ## [0.20.0] — 2026-09-30
 
 ### Changed — Nature identity
