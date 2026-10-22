@@ -242,8 +242,11 @@ async function screenshot(sc: ScreenSidecar): Promise<ToolOutput> {
     sourceWidth: Number(r.source_width), sourceHeight: Number(r.source_height),
     width: Number(r.width), height: Number(r.height),
   };
-  const { readFileSync } = await import('fs');
+  const { readFileSync, rmSync } = await import('fs');
   const b64 = readFileSync(String(r.path)).toString('base64');
+  // Each capture is a full-screen PNG the model has already received as base64;
+  // leaving it in tmp adds up over a long session.
+  rmSync(String(r.path), { force: true });
 
   const lessons = formatLessonsBlock(geometryKey(lastCapture));
   return {
