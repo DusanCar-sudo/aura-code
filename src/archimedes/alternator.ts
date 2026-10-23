@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
-import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
+import { OpenAICompatibleProvider, type StreamStats } from '../providers/openai-compatible.js';
+import { LOCAL_FIRST_CHUNK_MS } from '../providers/stream-timeout.js';
 import { createProvider } from '../providers/factory.js';
 import { runAgentLoop, type LoopResult } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
@@ -408,7 +409,7 @@ export async function verifyArchimedesAnswer(
 
 function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProvider {
   const endpoint = resolveEndpoint(config);
-  return new OpenAICompatibleProvider(
+  const provider = new OpenAICompatibleProvider(
     {
       model: wireModelName(config),
       baseUrl: endpoint.baseUrl,
@@ -416,6 +417,18 @@ function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProv
     },
     `Archimedes (${endpoint.label})`,
   );
+  // Every Archimedes backend is local (resolveEndpoint returns LM Studio or Ollama).
+  provider.firstChunkMs = LOCAL_FIRST_CHUNK_MS;
+  return provider;
+}
+
+/** One line per small-model call: time to first token, throughput, and how much of the wait was prefill vs reasoning. */
+export function formatSmallCallStats(s: StreamStats): string {
+  const genMs = s.totalMs - s.firstChunkMs;
+  const tps = s.outputTokens && genMs > 0 ? (s.outputTokens / (genMs / 1000)).toFixed(1) : '?';
+  const answer = s.firstAnswerMs === undefined ? 'none' : `${(s.firstAnswerMs / 1000).toFixed(1)}s`;
+  return `[archimedes] prompt=${s.promptTokens ?? '?'}tok ttft=${(s.firstChunkMs / 1000).toFixed(1)}s ` +
+    `first-answer=${answer} out=${s.outputTokens ?? '?'}tok ${tps} tok/s reasoning=${s.reasoningChars}ch total=${(s.totalMs / 1000).toFixed(1)}s`;
 }
 
 /**
@@ -612,6 +625,7 @@ export class ArchimedesAlternator {
 
           try {
             const archimedesProvider = buildArchimedesProvider(archimedesConfig);
+            archimedesProvider.onStreamStats = (s) => this.display.success(formatSmallCallStats(s));
             const loopResult = await runAgentLoop({
               provider: archimedesProvider,
               task,

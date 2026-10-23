@@ -140,3 +140,9 @@ Those 27 are out of scope for this branch.
 3. **The missing `await` at alternator.ts:865** gets fixed as the first commit.
 4. **This is a repair, not a rewrite.** Build on `checks.ts`, `claim-evidence.ts`, the escalation-correctness harness, `cost-log.ts` and `mining/corrections.ts`.
 5. **First step of §2:** replace `startsWith('VALID')` with a strictly parsed typed verdict (`accept | reject | abstain | unreachable`), and record errors separately from rejects.
+
+## 9. Repair list (recorded 2026-10-23, not yet fixed)
+
+1. **Silent Ollama fallback.** `src/archimedes/endpoint.ts:89-90` falls back to `'ollama'` when `backend` is missing, and it ignores a `"provider"` key. A `.aura.json` with `"provider": "lmstudio"` therefore sent LM Studio's port to the Ollama client and labelled it Ollama. Fix: error on a missing or unknown backend, or accept `"provider"` as an alias.
+2. **localhost resolves to ::1.** Inside the CLI, `localhost` resolves to `::1`, but LM Studio listens on `127.0.0.1:1234` only, so the reachability ping gets `ECONNREFUSED`. Fix: default the local base URLs (`DEFAULT_LMSTUDIO_BASE_URL` and `DEFAULT_OLLAMA_BASE_URL`, endpoint.ts:15-16) to `127.0.0.1`, or try both addresses.
+3. **Reasoning eats small token budgets.** lfm2.5-2.6b spent all 10 tokens of a `max_tokens: 10` call on reasoning and returned empty content. With 400 it returned "OK" after 97 reasoning tokens. Fix: the small-model call needs a token floor that leaves room for content.
