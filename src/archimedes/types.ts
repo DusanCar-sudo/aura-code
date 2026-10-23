@@ -75,6 +75,13 @@ export interface ArchimedesConfig {
    */
   epsilonProbeRate: number;
   /**
+   * Hard wall-clock budget for the whole Archimedes attempt, including every
+   * turn of its read-only agent loop. Without this a stalled local model can
+   * hold the session open indefinitely; the small attempt is aborted and the
+   * task escalates to the large model. Defaults to 5 minutes.
+   */
+  deadlineMs?: number;
+  /**
    * Model that verifies answers, when it should not be the model that wrote
    * them. Omitted (the default) keeps the long-standing behaviour: the large
    * model verifies, including on the escalation and council paths where it is
@@ -97,6 +104,7 @@ export const DEFAULT_ARCHIMEDES_CONFIG: ArchimedesConfig = {
   minAttempts: 3,
   enabled: true,
   epsilonProbeRate: 0.05,
+  deadlineMs: 180_000,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

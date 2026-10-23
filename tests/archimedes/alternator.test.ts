@@ -205,6 +205,28 @@ describe('ArchimedesAlternator.run() — result threading', () => {
       expect.objectContaining({ initialHistory: priorHistory }),
     );
   });
+
+  it('aborts a stalled Archimedes attempt at its deadline and escalates', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    const largeResult = makeLoopResult({ summary: 'large model rescue' });
+
+    // The small loop never returns on its own; it only settles when the
+    // alternator's deadline aborts the signal it was given.
+    mockRunAgentLoop.mockImplementationOnce((opts: any) => new Promise(resolve => {
+      opts.abortSignal.addEventListener('abort', () => {
+        resolve(makeLoopResult({ success: false, summary: 'aborted by deadline' }));
+      }, { once: true });
+    })).mockResolvedValueOnce(largeResult);
+
+    const alternator = makeAlternator({ ...enabledArchimedesConfig, deadlineMs: 25 });
+    const { loopResult, usedArchimedes, episode } = await alternator.run('slow task');
+
+    expect(usedArchimedes).toBe(false);
+    expect(loopResult).toEqual(largeResult);
+    expect(episode.archimedesAttempted).toBe(true);
+    expect(episode.archimedesSucceeded).toBe(false);
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('ArchimedesAlternator.run() — forceArchimedes (:small1 override)', () => {

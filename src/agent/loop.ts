@@ -828,7 +828,7 @@ async function runLoopBody(args: BodyArgs): Promise<LoopResult> {
 
     // Abort check — user requested stop via :stop / Ctrl+C
     if (opts.abortSignal?.aborted) {
-      display.warning('Task cancelled by user — stopping loop.');
+      display.warning('Task cancelled — stopping loop.');
       break;
     }
 

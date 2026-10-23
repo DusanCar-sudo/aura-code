@@ -68,6 +68,7 @@ import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { applyModelOverride } from '../archimedes/endpoint.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler, confirm } from '../safety/permissions.js';
 import { inSandbox, sandboxPreflight, sandboxBanner, reexecSandboxed } from '../safety/sandbox.js';
 import { createTerminalDisplay } from './display.js';
@@ -1385,7 +1386,7 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
-    } else if (archimedesOverride ?? fileConfig.archimedes?.enabled) {
+    } else if (archimedesOverride ?? fileConfig.archimedes?.enabled ?? DEFAULT_ARCHIMEDES_CONFIG.enabled) {
       const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
       if (!baseArchimedesConfig) {
         display.warning(reason);
@@ -1870,7 +1871,9 @@ let abortController: AbortController | null = null;
           display: tuiDisplay,
         });
         result = wrapperResult.loopResult;
-      } else if (small1Override || (archimedesOverride !== undefined ? archimedesOverride : fileConfig.archimedes?.enabled)) {
+      } else if (small1Override || (archimedesOverride !== undefined
+        ? archimedesOverride
+        : (fileConfig.archimedes?.enabled ?? DEFAULT_ARCHIMEDES_CONFIG.enabled))) {
         const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
         if (!baseArchimedesConfig) {
           tuiDisplay.warning(reason);

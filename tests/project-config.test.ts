@@ -184,3 +184,43 @@ describe('loadProjectConfig — providers', () => {
     expect(cfg.providers![0].models).toBeUndefined();
   });
 });
+
+describe('archimedes config', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-cfg-arch-'));
+  });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
+
+  it('accepts provider as a legacy alias for backend', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { enabled: true, provider: 'lmstudio', modelName: 'lfm2.5-2.6b' },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.backend).toBe('lmstudio');
+  });
+
+  it('prefers backend when both backend and provider are present', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { backend: 'ollama', provider: 'lmstudio' },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.backend).toBe('ollama');
+  });
+
+  it('reads the Archimedes deadline', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { deadlineMs: 120_000 },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.deadlineMs).toBe(120_000);
+  });
+
+  it('drops a non-positive deadline', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { deadlineMs: 0 },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.deadlineMs).toBeUndefined();
+  });
+});

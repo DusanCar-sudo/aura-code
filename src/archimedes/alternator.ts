@@ -18,6 +18,7 @@ import type {
   TaskCategory,
   VerifierVerdict,
 } from './types.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from './types.js';
 import { assessCompetence, shouldFineTune, derivePatternKey } from './competence.js';
 import { resolveEndpoint, wireModelName } from './endpoint.js';
 import { episodeStore } from './episode-capture.js';
@@ -184,6 +185,36 @@ function taskMode(task: string): 'retrieval' | 'design' {
 
 function isNonEmptyResult(text: string | undefined): boolean {
   return typeof text === 'string' && text.trim().length > 0;
+}
+
+/**
+ * Fuses the session's abort signal with the Archimedes deadline. Avoids
+ * AbortSignal.any so this keeps working on Node versions without it, and
+ * returns a disposer that removes the listeners.
+ */
+function combineAbortSignals(signals: Array<AbortSignal | undefined>): {
+  signal?: AbortSignal;
+  dispose: () => void;
+} {
+  const active = signals.filter((s): s is AbortSignal => s !== undefined);
+  if (active.length === 0) return { dispose: () => {} };
+  if (active.length === 1) return { signal: active[0], dispose: () => {} };
+
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  for (const signal of active) {
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const signal of active) signal.removeEventListener('abort', onAbort);
+    },
+  };
 }
 
 /**
@@ -626,8 +657,23 @@ export class ArchimedesAlternator {
           archimedesAttempted = true;
           this.display.success(`Trying Archimedes (${wireModelName(archimedesConfig)} on ${endpoint.label})…`);
 
+          const deadlineMs = archimedesConfig.deadlineMs
+            ?? DEFAULT_ARCHIMEDES_CONFIG.deadlineMs
+            ?? 180_000;
+          const deadlineController = new AbortController();
+          const deadlineTimer = setTimeout(() => deadlineController.abort(), deadlineMs);
+          const combinedAbort = combineAbortSignals([
+            this.opts.abortSignal,
+            deadlineController.signal,
+          ]);
+          let timedOut = false;
+
           try {
             const archimedesProvider = buildArchimedesProvider(archimedesConfig);
+            archimedesProvider.abortSignal = combinedAbort.signal;
+            archimedesProvider.onFirstChunk = (ms) => this.display.success(
+              `Archimedes: first token after ${(ms / 1000).toFixed(1)}s — generating…`,
+            );
             archimedesProvider.onStreamStats = (s) => this.display.success(formatSmallCallStats(s));
             const loopResult = await runAgentLoop({
               provider: archimedesProvider,
@@ -643,7 +689,7 @@ export class ArchimedesAlternator {
               maxTurns: Math.min(this.opts.maxTurns ?? 15, 15),
               confirmFn: this.opts.confirmFn,
               initialHistory: this.opts.initialHistory,
-              abortSignal: this.opts.abortSignal,
+              abortSignal: combinedAbort.signal,
               steering: steering.proxy,
               healthTracker: this.opts.healthTracker,
               allowedTools: ARCHIMEDES_TOOLS,
@@ -659,7 +705,11 @@ export class ArchimedesAlternator {
               tokensOut: loopResult.usage.outputTokens,
             };
 
-            if (isNonEmptyResult(archimedesOutput) && loopResult.success) {
+            // The outer abort could also be the user's :stop — only a deadline
+            // hit gets the timeout explanation.
+            timedOut = deadlineController.signal.aborted && !this.opts.abortSignal?.aborted;
+
+            if (!timedOut && isNonEmptyResult(archimedesOutput) && loopResult.success) {
               const verification = await verifyArchimedesAnswer(
                 task,
                 archimedesOutput!,
@@ -692,20 +742,34 @@ export class ArchimedesAlternator {
                 );
               }
             } else {
+              const deadlineNote = `Archimedes exceeded its ${(deadlineMs / 1000).toFixed(0)}s deadline`;
               archimedesFailureContext = [
-                loopResult.success
-                  ? `Archimedes produced no usable output.`
-                  : `Archimedes did not complete the task (${loopResult.summary}).`,
+                timedOut
+                  ? `${deadlineNote} — the local model was too slow to finish a turn.`
+                  : loopResult.success
+                    ? `Archimedes produced no usable output.`
+                    : `Archimedes did not complete the task (${loopResult.summary}).`,
                 ``,
                 `Archimedes's tool activity:`,
                 summarizeToolActivity(loopResult.history),
               ].join('\n');
-              this.display.warning('Archimedes did not produce a usable result — escalating.');
+              this.display.warning(
+                timedOut
+                  ? `${deadlineNote} — escalating to the large model.`
+                  : 'Archimedes did not produce a usable result — escalating.',
+              );
             }
           } catch (e) {
-            this.display.warning(`Archimedes error: ${String(e)} — escalating.`);
-            archimedesOutput = archimedesOutput ?? `Error: ${String(e)}`;
-            archimedesFailureContext = `Archimedes errored before producing output: ${String(e)}`;
+            const timedOutNow = deadlineController.signal.aborted && !this.opts.abortSignal?.aborted;
+            const reason = timedOutNow
+              ? `Archimedes exceeded its ${(deadlineMs / 1000).toFixed(0)}s deadline`
+              : `Archimedes error: ${String(e)}`;
+            this.display.warning(`${reason} — escalating.`);
+            archimedesOutput = archimedesOutput ?? `Error: ${reason}`;
+            archimedesFailureContext = `${reason} before producing output.`;
+          } finally {
+            clearTimeout(deadlineTimer);
+            combinedAbort.dispose();
           }
         }
       }

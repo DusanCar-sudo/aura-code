@@ -279,7 +279,9 @@ Before each task, `assessCompetence` checks Archimedes's historical success rate
 - **Success rate ≥ `competenceThreshold` (default 0.7)** → Archimedes handles the task.
 - **Below threshold after enough attempts** → escalate straight to the large model.
 
-If Ollama isn't reachable, Aura escalates immediately rather than hanging.
+If the local server isn't reachable, Aura escalates immediately rather than hanging. If it is reachable but too slow, the whole Archimedes attempt is bounded by `deadlineMs` (default 180000, i.e. 3 minutes); on expiry the attempt is aborted and the task escalates to the large model.
+
+The alternator is on by default. Set `archimedes.enabled: false` in `.aura.json` to route every task straight to the large model, or use `:archoff` for one session.
 
 ### The verification gate
 
@@ -302,13 +304,17 @@ The override lasts for the current session only; restart returns control to the 
 {
   "archimedes": {
     "enabled": true,
+    "backend": "ollama",
     "modelName": "granite4.1:3b",
-    "ollamaBaseUrl": "http://localhost:11434/v1",
+    "ollamaBaseUrl": "http://127.0.0.1:11434/v1",
     "competenceThreshold": 0.7,
-    "minAttempts": 3
+    "minAttempts": 3,
+    "deadlineMs": 180000
   }
 }
 ```
+
+`backend` is `ollama` or `lmstudio`; the legacy `provider` key is accepted as an alias. A `modelName` prefixed with `ollama/` or `lmstudio/` also selects the backend. Local URLs default to `127.0.0.1` rather than `localhost`, because `localhost` can resolve to IPv6 `::1` while both local servers bind IPv4 only.
 
 When enough Archimedes failures accumulate (20 by default), Aura flags the project as ready for fine-tuning — failed episodes become instruction-tuning rows for the local model.
 

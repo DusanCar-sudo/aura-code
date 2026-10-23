@@ -12,8 +12,10 @@ import type { ArchimedesBackend, ArchimedesConfig } from './types.js';
 // model. This module is the single place that knows which local server we are
 // talking to and how to reach it.
 
-export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
-export const DEFAULT_LMSTUDIO_BASE_URL = 'http://localhost:1234/v1';
+// 127.0.0.1, not `localhost`: on hosts where localhost resolves to ::1 first,
+// both servers bind IPv4 only and every probe fails with ECONNREFUSED.
+export const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434/v1';
+export const DEFAULT_LMSTUDIO_BASE_URL = 'http://127.0.0.1:1234/v1';
 
 /** How long a liveness/discovery probe may take before it counts as down. */
 export const PROBE_TIMEOUT_MS = 3_000;
@@ -51,7 +53,11 @@ export interface LocalModel {
 export function normalizeV1(baseUrl: string): string {
   const trimmed = (baseUrl ?? '').trim().replace(/\/+$/, '');
   if (!trimmed) return '';
-  return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
+  // `localhost` can resolve to ::1 first; both local servers bind IPv4 only.
+  // Rewriting the host is safe — localhost is local by definition — and makes
+  // every env var and hand-written .aura.json behave the same way.
+  const v4 = trimmed.replace(/^(https?:\/\/)localhost(?=[:/]|$)/i, '$1127.0.0.1');
+  return /\/v1$/.test(v4) ? v4 : `${v4}/v1`;
 }
 
 /** Strips the `/v1` suffix — the native REST APIs live one level up. */

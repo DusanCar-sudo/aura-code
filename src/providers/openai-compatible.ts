@@ -38,6 +38,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
   firstChunkMs?: number;
   /** Called once per completed stream with where its time went. */
   onStreamStats?: (stats: StreamStats) => void;
+  /**
+   * Optional external cancellation. Aborts the in-flight request as soon as
+   * the signal fires, rather than waiting for the loop's next turn boundary.
+   */
+  abortSignal?: AbortSignal;
+  /** Called once when the first chunk of a stream arrives, with its latency. */
+  onFirstChunk?: (ms: number) => void;
 
   constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
@@ -123,7 +130,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // own benchmarks) before writing any visible content. "high" keeps useful
       // reasoning for code quality while roughly halving that token burn.
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
-    } as OpenAI.ChatCompletionCreateParamsNonStreaming));
+    } as OpenAI.ChatCompletionCreateParamsNonStreaming, { signal: this.abortSignal }));
     return fromOpenAIResponse(response);
   }
 
@@ -195,6 +202,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const messages = toOpenAIMessages(system, history);
     // Lets the idle guard tear down the socket instead of leaking it.
     const controller = new AbortController();
+    const externalAbort = this.abortSignal;
+    const onExternalAbort = () => controller.abort();
+    if (externalAbort) {
+      if (externalAbort.aborted) controller.abort();
+      else externalAbort.addEventListener('abort', onExternalAbort, { once: true });
+    }
     this.syncKey();
     const startedAt = Date.now();
     const rawStream = await this.withAuthHint(this.client.chat.completions.create({
@@ -214,6 +227,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       onStall: () => controller.abort(),
     });
     let firstChunkAt: number | undefined;
+    let firstChunkNotified = false;
     let firstAnswerAt: number | undefined;
     let reasoningTokens: number | undefined;
 
@@ -241,6 +255,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
       firstChunkAt ??= Date.now();
+      if (!firstChunkNotified) {
+        firstChunkNotified = true;
+        this.onFirstChunk?.(firstChunkAt - startedAt);
+      }
       if (chunk.usage) {
         const { cacheHit, cacheMiss, reported } = readCacheStats(chunk.usage);
         usage = {
@@ -299,6 +317,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
     drained = true;
     } finally {
+      externalAbort?.removeEventListener('abort', onExternalAbort);
       // Only when the consumer walked away mid-stream; aborting a request that
       // already finished would be a no-op at best and an error at worst.
       if (!drained) controller.abort();

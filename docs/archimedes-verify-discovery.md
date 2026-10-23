@@ -149,3 +149,14 @@ Those 27 are out of scope for this branch.
 4. **LM Studio's temp dir was missing, which broke every load.** `lms load lfm2.5-2.6b --gpu off --context-length 8192` failed with `ENOENT: no such file or directory, mkdtemp '/home/dusan/.lmstudio/.internal/temp/lmstudio-chat-template-…'`. `mkdir -p ~/.lmstudio/.internal/temp` fixed it, and the model then loaded in 9.92 s (1.81 GiB). This is a machine fix, not a code fix. Aura's setup or doctor command could check for this directory.
 5. **The CPU runtime works, but memory is tight.** Runtime `llama.cpp-linux-x86_64-avx2@2.63.0` loads lfm2.5 (arch lfm2). Before the load, `free -h` showed 12 GiB total, 2.5 GiB available and 4.0/4.0 GiB swap used. During the load the kernel logged `kswapd0: page allocation failure: order:0` (no OOM kill, no amdgpu reset). Context 8192 is safe; do not raise it on this machine.
 6. **The `local/` provider descriptor has the same localhost default.** `src/providers/provider-descriptors.ts:339` falls back to `http://localhost:1234/v1`, so it hits the same `::1` problem as item 2 when `LMSTUDIO_BASE_URL` is unset.
+
+## 10. Repair status (same day, branch `fix/archimedes-activation`)
+
+- **Fixed:** the runtime gate now honours `DEFAULT_ARCHIMEDES_CONFIG.enabled`, and `--doctor` uses the same episode store instead of a duplicate hash implementation.
+- **Fixed:** the episode namespace is SHA-256 (`projectHash`), with a read-through of the old base64-prefix directory filtered by `projectRoot`. New writes never use the colliding namespace.
+- **Fixed:** `.aura.json` accepts `provider` as an alias for `backend`; `backend` wins when both are set.
+- **Fixed:** local base URLs default to `127.0.0.1`, and `normalizeV1` rewrites an explicit `localhost` so `::1` cannot break local probes.
+- **Fixed:** the Archimedes attempt has a configurable whole-attempt `deadlineMs` (default 180 s). On expiry the signal aborts the in-flight request, the attempt is recorded as failed, and the task escalates.
+- **Added:** the first streamed chunk prints its latency, and final stats keep TTFT / tok/s / reasoning-vs-content so a slow model is distinguishable from a stuck one.
+
+Items 3 (reasoning token floor) and 5 (memory pressure) remain environment/model concerns rather than code fixes. The web/API session path still does not wire the alternator — it runs `runAgentLoop` directly.

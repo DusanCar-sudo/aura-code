@@ -10,9 +10,9 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { isNativeWindows, isWSL } from '../util/platform.js';
 import type { Finding, Category } from './types.js';
-import type { Episode } from '../archimedes/types.js';
 import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
 import { getCompetenceReport } from '../archimedes/competence.js';
+import { loadEpisodesSync } from '../archimedes/episode-capture.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { fetchLatestVersion, isUpdateAvailable } from '../util/update-check.js';
 
@@ -546,19 +546,10 @@ export function checkArchimedes(root: string): Finding[] {
     fixable: false,
   });
 
-  // Episodes for THIS project (same hash scheme as episodeStore.projectDir)
-  const home = process.env.HOME ?? '/tmp';
-  const hash = Buffer.from(root, 'utf8').toString('base64').slice(0, 8);
-  const epDir = path.join(home, '.aura', 'episodes', hash);
-  const episodes: Episode[] = [];
-  if (exists(epDir)) {
-    try {
-      for (const f of fs.readdirSync(epDir).filter(f => f.endsWith('.json'))) {
-        const ep = readJson<Episode>(path.join(epDir, f));
-        if (ep?.id) episodes.push(ep);
-      }
-    } catch { /* best-effort */ }
-  }
+  // Episodes for THIS project. The store owns the hash scheme (SHA-256 now,
+  // with a filtered read-through of the old base64-prefix directory) so the
+  // doctor cannot drift from the alternator or pool projects that collide.
+  const episodes = loadEpisodesSync(root);
 
   if (episodes.length === 0) {
     out.push({
