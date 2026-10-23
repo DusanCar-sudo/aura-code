@@ -391,3 +391,34 @@ describe('ArchimedesAlternator.run() — episode learning fields', () => {
     expect(episode.testResult).toBe('pass');
   });
 });
+
+describe('ArchimedesAlternator.run() — typed verifier verdict on the episode', () => {
+  function withVerifier(complete: LLMProvider['complete']) {
+    return new ArchimedesAlternator({ ...baseOpts(), archimedesConfig: enabledArchimedesConfig, largeModelProvider: { ...fakeProvider, complete } as LLMProvider });
+  }
+
+  it('records accept when the small answer is approved', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult());
+    const { episode } = await withVerifier(async () => ({ text: 'VALID' }) as any).run('fix a small bug');
+    expect(episode.verifierVerdict).toBe('accept');
+  });
+
+  it('escalates on "VALIDATION FAILED" instead of accepting it', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult()).mockResolvedValueOnce(makeLoopResult({ summary: 'large' }));
+    const { usedArchimedes, episode } = await withVerifier(async () => ({ text: 'VALIDATION FAILED: made up' }) as any).run('fix a small bug');
+    expect(usedArchimedes).toBe(false);
+    expect(episode.verifierVerdict).toBe('abstain');
+  });
+
+  it('records a verifier error as unreachable, not as a reject reason', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult()).mockResolvedValueOnce(makeLoopResult({ summary: 'large' }));
+    const { usedArchimedes, episode } = await withVerifier(async () => { throw new Error('timeout'); }).run('fix a small bug');
+    expect(usedArchimedes).toBe(false);
+    expect(episode.verifierVerdict).toBe('unreachable');
+    expect(episode.verifierError).toContain('timeout');
+    expect(episode.reviewerReason).toBeUndefined();
+  });
+});

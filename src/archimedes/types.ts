@@ -145,7 +145,14 @@ export interface Episode {
   testResult?: 'pass' | 'fail' | 'none';
   /** Why verification rejected an answer (the escalation trigger). */
   reviewerReason?: string;
+  /** Typed verdict the verifier gave the small model's answer, when it was verified. */
+  verifierVerdict?: VerifierVerdict;
+  /** Verifier call failure (timeout, provider error) — kept apart from rejects. */
+  verifierError?: string;
 }
+
+/** accept/reject come from a parsed reply; abstain = unparseable reply; unreachable = the call failed. */
+export type VerifierVerdict = 'accept' | 'reject' | 'abstain' | 'unreachable';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Alternation decision

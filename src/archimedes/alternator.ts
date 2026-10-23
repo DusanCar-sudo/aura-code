@@ -15,6 +15,7 @@ import type {
   Episode,
   ArchimedesConfig,
   TaskCategory,
+  VerifierVerdict,
 } from './types.js';
 import { assessCompetence, shouldFineTune, derivePatternKey } from './competence.js';
 import { resolveEndpoint, wireModelName } from './endpoint.js';
@@ -243,8 +244,11 @@ async function isLocalBackendAvailable(config: ArchimedesConfig): Promise<boolea
 }
 
 interface ArchimedesVerification {
-  valid: boolean;
+  verdict: VerifierVerdict;
+  /** Reject reason, or why the reply could not be parsed. Empty on accept/unreachable. */
   reason: string;
+  /** Set only for 'unreachable': the call failed, so this is not a judgement of the answer. */
+  error?: string;
   /** Real usage reported by the verifier call, when the provider reports it. */
   usage?: { inputTokens: number; outputTokens: number };
 }
@@ -304,13 +308,25 @@ function summarizeToolActivity(history: HistoryMessage[], answer?: string): stri
 /**
  * Cheap correctness gate on Archimedes's answer: one `complete()` call to the large
  * model with no tools and no history — deliberately NOT a full agent loop.
- * Fail-safe: any verification error counts as invalid (escalate), never as
- * silent trust.
+ * Fail-safe: only 'accept' passes; reject, abstain and unreachable all
+ * escalate, never silent trust.
  *
  * Verification rubric branches by task mode (retrieval vs design):
  * - Retrieval tasks: strict tool-evidence corroboration (original behavior)
  * - Design tasks: factual premises still strict, recommendations judged on coherence/relevance
  */
+/**
+ * Strict parse of the verifier's one-line reply. Only an exact "VALID" accepts;
+ * "VALIDATION FAILED", "VALID\nbut…" or prose abstain instead of passing.
+ */
+export function parseVerifierReply(raw: string): { verdict: VerifierVerdict; reason: string } {
+  const text = raw.trim();
+  if (/^VALID\.?$/i.test(text)) return { verdict: 'accept', reason: '' };
+  const invalid = /^INVALID\b:?\s*([\s\S]*)$/i.exec(text);
+  if (invalid) return { verdict: 'reject', reason: invalid[1].trim() || 'failed verification' };
+  return { verdict: 'abstain', reason: text ? `unparseable verifier reply: ${text.slice(0, 120)}` : 'empty verifier reply' };
+}
+
 export async function verifyArchimedesAnswer(
   task: string,
   answer: string,
@@ -384,13 +400,9 @@ export async function verifyArchimedesAnswer(
           inputTokens: countText(systemMsg) + countText(prompt),
           outputTokens: countText(text),
         };
-    if (text.toUpperCase().startsWith('VALID')) {
-      return { valid: true, reason: '', usage };
-    }
-    const reason = text.replace(/^INVALID:?\s*/i, '') || 'failed verification';
-    return { valid: false, reason, usage };
+    return { ...parseVerifierReply(text), usage };
   } catch (e) {
-    return { valid: false, reason: `verification error: ${String(e)}` };
+    return { verdict: 'unreachable', reason: '', error: String(e) };
   }
 }
 
@@ -525,6 +537,8 @@ export class ArchimedesAlternator {
     let largeUsage: CostModelUsage | undefined;
     let verifierTokens = { input: 0, output: 0 };
     let verifierCalled = false;
+    let verifierVerdict: VerifierVerdict | undefined;
+    let verifierError: string | undefined;
     const noteVerification = (v: ArchimedesVerification): void => {
       if (v.usage) {
         verifierTokens.input += v.usage.inputTokens;
@@ -636,16 +650,19 @@ export class ArchimedesAlternator {
                 verifierProvider,
               );
               noteVerification(verification);
-              if (verification.valid) {
+              verifierVerdict = verification.verdict;
+              verifierError = verification.error;
+              const verifyNote = verification.reason || `verifier unreachable: ${verification.error}`;
+              if (verification.verdict === 'accept') {
                 archimedesSucceeded = true;
                 usedArchimedes = true;
                 result = archimedesOutput!;
                 finalLoopResult = loopResult;
                 this.display.success('Archimedes handled the task without escalation.');
               } else {
-                reviewerReason = verification.reason;
+                reviewerReason = verification.reason || undefined;
                 archimedesFailureContext = [
-                  `Archimedes's answer failed verification: ${verification.reason}`,
+                  `Archimedes's answer failed verification: ${verifyNote}`,
                   ``,
                   `Archimedes's tool activity:`,
                   summarizeToolActivity(loopResult.history, archimedesOutput),
@@ -654,7 +671,7 @@ export class ArchimedesAlternator {
                   archimedesOutput!,
                 ].join('\n');
                 this.display.warning(
-                  `Archimedes's answer failed verification (${verification.reason}) — escalating.`,
+                  `Archimedes's answer failed verification (${verifyNote}) — escalating.`,
                 );
               }
             } else {
@@ -738,10 +755,10 @@ export class ArchimedesAlternator {
             );
             noteVerification(largeModelVerification);
 
-            if (!largeModelVerification.valid) {
-              reviewerReason = largeModelVerification.reason;
+            if (largeModelVerification.verdict !== 'accept') {
+              reviewerReason = largeModelVerification.reason || largeModelVerification.error;
               this.display.warning(
-                `Large model answer failed verification (${largeModelVerification.reason}) — checking council escalation…`,
+                `Large model answer failed verification (${reviewerReason}) — checking council escalation…`,
               );
 
               // Rough estimate: 5 panel agents × 6 turns × 2k tokens + synthesis × 2k = ~62k tokens
@@ -770,7 +787,7 @@ export class ArchimedesAlternator {
                   // Gap 5: Pass the failed attempt so council agents don't repeat
                   // the same factual errors that got the large model rejected.
                   const failedAttemptContext = [
-                    `A previous attempt at this task failed verification: ${largeModelVerification.reason}`,
+                    `A previous attempt at this task failed verification: ${reviewerReason}`,
                     ``,
                     `Previous attempt's tool activity:`,
                     summarizeToolActivity(loopResult.history),
@@ -814,7 +831,7 @@ export class ArchimedesAlternator {
                     );
                     noteVerification(councilVerification);
 
-                    if (councilVerification.valid) {
+                    if (councilVerification.verdict === 'accept') {
                       result = councilAnswer;
                       finalLoopResult = {
                         ...loopResult,
@@ -863,6 +880,8 @@ export class ArchimedesAlternator {
       durationMs: Date.now() - startMs,
       taskCategory,
       ...(await episodeLearningFields(finalLoopResult, projectRoot, reviewerReason)),
+      ...(verifierVerdict ? { verifierVerdict } : {}),
+      ...(verifierError ? { verifierError } : {}),
     };
 
     try {

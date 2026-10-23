@@ -61,7 +61,7 @@ async function checkAnswer(answer: string, case_: EscalationCase): Promise<{ val
   if (!verifierProvider) throw new Error('verifier not initialized');
   const history = buildHistory(case_);
   const verification = await verifyArchimedesAnswer(case_.task, answer, history, verifierProvider);
-  return { valid: verification.valid, reason: verification.reason };
+  return { valid: verification.verdict === 'accept', reason: verification.reason || verification.error || '' };
 }
 
 beforeAll(async () => {
