@@ -72,6 +72,10 @@ async function checkAnswer(answer: string, case_: EscalationCase): Promise<{ val
   return { valid: verification.verdict === 'accept', reason: verification.reason || verification.error || '' };
 }
 
+function assertAllJudged(): void {
+  expect(unjudged, `calls with no verdict:\n${unjudged.join('\n')}`).toEqual([]);
+}
+
 beforeAll(async () => {
   // Same key source as the CLI (src/cli/index.ts loadKeysIntoEnv): ~/.aura/keys.json.
   loadKeysIntoEnv();
@@ -121,6 +125,18 @@ describe('Escalation-correctness benchmark', () => {
       expect(c.correctAnswer.trim().length).toBeGreaterThan(5);
       expect(c.wrongAnswer.trim().length).toBeGreaterThan(5);
       expect(c.task.trim().length).toBeGreaterThan(5);
+    }
+  });
+
+  it('fails the run when the verifier is unreachable', async () => {
+    const real = verifierProvider;
+    verifierProvider = { name: 'dead', model: 'dead-verifier', complete: async () => { throw new Error('ECONNREFUSED'); } } as unknown as LLMProvider;
+    try {
+      await checkAnswer(CASES[0].correctAnswer, CASES[0]);
+      expect(assertAllJudged).toThrow(/calls with no verdict/);
+    } finally {
+      verifierProvider = real;
+      unjudged.length = 0;
     }
   });
 
@@ -194,6 +210,6 @@ describe('Escalation-correctness benchmark', () => {
     // The point of the harness is measurement; we assert the harness ran,
     // not require a specific pass rate (the verifier is a live model).
     expect(total).toBe(30);
-    expect(unjudged, `calls with no verdict:\n${unjudged.join('\n')}`).toEqual([]);
+    assertAllJudged();
   });
 });
