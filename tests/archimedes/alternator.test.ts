@@ -374,3 +374,20 @@ describe('ArchimedesAlternator — claim-type-aware verification', () => {
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(2); // Archimedes + large model escalation
   });
 });
+
+describe('ArchimedesAlternator.run() — episode learning fields', () => {
+  it('awaits episodeLearningFields so filesTouched/testResult land on the episode', async () => {
+    const largeResult = makeLoopResult({
+      toolCallLog: [
+        { name: 'write_file', input: { path: 'src/a.ts' } },
+        { name: 'run_tests', input: {} },
+      ] as LoopResult['toolCallLog'],
+    });
+    mockRunAgentLoop.mockResolvedValueOnce(largeResult);
+
+    const { episode } = await makeAlternator({ ...enabledArchimedesConfig, enabled: false }).run('fix a small bug');
+
+    expect(episode.filesTouched).toEqual(['src/a.ts']);
+    expect(episode.testResult).toBe('pass');
+  });
+});

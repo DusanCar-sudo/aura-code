@@ -862,7 +862,7 @@ export class ArchimedesAlternator {
       },
       durationMs: Date.now() - startMs,
       taskCategory,
-      ...episodeLearningFields(finalLoopResult, projectRoot, reviewerReason),
+      ...(await episodeLearningFields(finalLoopResult, projectRoot, reviewerReason)),
     };
 
     try {
