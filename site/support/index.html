@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Aura Support &#xb7; help for Aura Code and the editor plugins</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Get help with Aura Code, the Aura editor plugins for VS Code and Zed, and Aura adOS. Report a bug, ask a question, report a security issue.">
+<meta name="author" content="Du&#x161;an Milosavljevi&#x107;">
+<meta name="theme-color" content="#070907">
+<link rel="canonical" href="https://www.leanproiq.com/support">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.leanproiq.com/support">
+<meta property="og:title" content="Aura Support">
+<meta property="og:description" content="Help for Aura Code, the editor plugins and Aura adOS.">
+<meta property="og:image" content="https://www.leanproiq.com/og-nature.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+@font-face{font-family:"Geist";font-style:normal;font-weight:400 700;font-display:swap;src:url(https://www.leanproiq.com/fonts/geist.woff2) format("woff2")}
+@font-face{font-family:"Geist Mono";font-style:normal;font-weight:400 500;font-display:swap;src:url(https://www.leanproiq.com/fonts/geist-mono.woff2) format("woff2")}
+:root{color-scheme:dark;--ink:#070907;--ink-2:#0c100c;--ink-3:#141a14;--line:#252920;--dim:#8b8e7a;--paper:#f2ebc9;--mute:#b9baa2;--gold:#e7cf85;--cyan:#1AA6E0;
+  --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--gutter:clamp(16px,3.2vw,44px)}
+body{margin:0;background:var(--ink);color:var(--paper);font:400 17px/1.6 var(--sans);padding-inline:var(--gutter);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.col{max-width:860px;margin-inline:auto}
+a{color:var(--gold)}a:hover{color:var(--paper)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+code,pre{font-family:var(--mono)}
+p code,li code{font-size:.92em;background:var(--ink-3);padding:.08em .35em;border-radius:3px;overflow-wrap:anywhere}
+pre{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:14px 16px;overflow-x:auto;font-size:14px;margin:14px 0}
+::selection{background:var(--gold);color:var(--ink)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-block:22px}
+.brand{display:block;color:var(--paper)}.brand svg{display:block;width:140px;height:auto}
+.top nav{display:flex;flex-wrap:wrap;gap:6px 22px;font:500 14px/1 var(--sans)}
+.top nav a{color:var(--mute);text-decoration:none;padding-block:6px}.top nav a:hover{color:var(--paper)}
+.eyebrow{font:500 12px/1.6 var(--mono);letter-spacing:.06em;color:var(--cyan);margin:36px 0 18px}
+h1{font-weight:500;font-size:clamp(40px,6vw,72px);line-height:1;letter-spacing:-.05em;margin:0 0 22px}
+h2{font-weight:500;font-size:clamp(24px,3vw,32px);letter-spacing:-.03em;margin:0 0 12px}
+.lede{color:var(--mute);max-width:40em;font-size:clamp(17px,1.4vw,19px)}
+section{padding-block:clamp(28px,4vw,48px);border-top:1px solid var(--line)}
+section p,section li{color:var(--mute);max-width:62ch}
+section strong{color:var(--paper);font-weight:500}
+.cta{display:inline-block;margin-top:8px;font:500 14px/1 var(--mono);letter-spacing:.04em;color:var(--ink);background:var(--gold);border-radius:4px;padding:13px 16px;text-decoration:none}
+.cta:hover{color:var(--ink);background:var(--paper)}
+dl{margin:0}dt{color:var(--paper);font-weight:500;margin-top:18px}dd{margin:4px 0 0;color:var(--mute);max-width:62ch}
+footer{padding-block:40px;color:var(--dim);font-size:14px;border-top:1px solid var(--line)}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="stripes" viewBox="0 0 146 100"><path fill="#E4312B" d="M0 100L24 100L74 0L50 0Z"/><path fill="#F8B91E" d="M24 100L48 100L98 0L74 0Z"/><path fill="#2FAE4E" d="M48 100L72 100L122 0L98 0Z"/><path fill="#1AA6E0" d="M72 100L96 100L146 0L122 0Z"/></symbol>
+  <symbol id="lockup" viewBox="54 54 626 170">
+    <path fill="currentColor" d="M160 110A50 50 0 1 0 60 110A50 50 0 1 0 160 110ZM130 110A20 20 0 1 1 90 110A20 20 0 1 1 130 110ZM130 160H160V60H130ZM178 110H208V60H178ZM178 110A50 50 0 0 0 278 110L248 110A20 20 0 0 1 208 110ZM248 160H278V60H248ZM296 160H326V60H296ZM388.402 83.504A50 50 0 0 0 296 110L326 110A20 20 0 0 1 362.961 99.402ZM501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402ZM570.722 206.1A11.9 11.9 0 1 0 546.922 206.1A11.9 11.9 0 1 0 570.722 206.1ZM563.922 206.1A5.1 5.1 0 1 1 553.722 206.1A5.1 5.1 0 1 1 563.922 206.1ZM563.922 218H570.722V194.2H563.922ZM602.682 206.1A11.9 11.9 0 1 0 578.882 206.1A11.9 11.9 0 1 0 602.682 206.1ZM595.882 206.1A5.1 5.1 0 1 1 585.682 206.1A5.1 5.1 0 1 1 595.882 206.1ZM595.882 218H602.682V184H595.882ZM644.842 201A17 17 0 1 0 610.842 201A17 17 0 1 0 644.842 201ZM638.042 201A10.2 10.2 0 1 1 617.642 201A10.2 10.2 0 1 1 638.042 201ZM672.787 190.711A10.2 10.2 0 1 0 663.202 204.4L663.202 197.6A3.4 3.4 0 1 1 666.397 193.037ZM653.618 211.289A10.2 10.2 0 1 0 663.202 197.6L663.202 204.4A3.4 3.4 0 1 1 660.007 208.963Z"/>
+    <path fill="#E4312B" d="M527.402 160L551.402 160L601.402 60L577.402 60Z"/><path fill="#F8B91E" d="M551.402 160L575.402 160L625.402 60L601.402 60Z"/><path fill="#2FAE4E" d="M575.402 160L599.402 160L649.402 60L625.402 60Z"/><path fill="#1AA6E0" d="M599.402 160L623.402 160L673.402 60L649.402 60Z"/>
+  </symbol>
+</svg>
+
+<header class="top col" id="top">
+  <a class="brand" href="https://www.leanproiq.com/" aria-label="Aura, home"><svg viewBox="0 0 626 170" role="img" aria-label="aura"><use href="#lockup"/></svg></a>
+  <nav aria-label="Site"><a href="https://www.leanproiq.com/">Aura Code</a><a href="https://www.leanproiq.com/ados">adOS</a><a href="https://github.com/DusanCar-sudo/aura-code">GitHub</a></nav>
+</header>
+
+<main class="col">
+  <p class="eyebrow">AURA &#xb7; SUPPORT</p>
+  <h1>Something not working? We will fix it.</h1>
+  <p class="lede">Help for <strong>Aura Code</strong>, the <strong>Aura plugins for VS Code and Zed</strong>, and <strong>Aura adOS</strong>. The fastest route is a GitHub issue: it is public, so the next person with the same problem finds the answer too.</p>
+  <p><a class="cta" href="https://github.com/DusanCar-sudo/aura-code/issues/new">Open an issue on GitHub</a></p>
+
+  <section aria-labelledby="before">
+    <h2 id="before">Before you write</h2>
+    <p>Two quick checks solve most problems.</p>
+    <pre>aura --version     # which version you have
+node --version     # Aura needs Node 18 or newer</pre>
+    <p>If Aura is behind, update it with <code>npm install -g aura-code</code> and try again.</p>
+  </section>
+
+  <section aria-labelledby="common">
+    <h2 id="common">Common questions</h2>
+    <dl>
+      <dt>Aura says there is no API key.</dt>
+      <dd>Aura works with the model provider you choose, and you bring your own key. Add it in Aura&#8217;s setup. Keys stay on your machine, in your own key store, and are never sent to us.</dd>
+      <dt>The editor plugin cannot find Aura.</dt>
+      <dd>The plugin drives the <code>aura</code> command. Install Aura first, then reload the editor so it sees the command on your PATH.</dd>
+      <dt>Will Aura change my files without asking?</dt>
+      <dd>It asks before it runs commands or edits files, unless you have turned that off yourself.</dd>
+      <dt>What leaves my computer?</dt>
+      <dd>Your prompts, and the file content Aura needs to answer them, go to the model provider you picked, under their terms. Nothing is sent to us. Voice features send audio to the voice provider you configure.</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="report">
+    <h2 id="report">What to put in a bug report</h2>
+    <ul>
+      <li>Your Aura version, your operating system and your editor, if the plugin is involved.</li>
+      <li>What you did, what you expected, and what happened instead.</li>
+      <li>Any error text, copied as text. <strong>Remove API keys and passwords first.</strong></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="security">
+    <h2 id="security">Security problems</h2>
+    <p>If you found a vulnerability, please do not post it publicly. Follow the private reporting steps in
+    <a href="https://github.com/DusanCar-sudo/aura-code/blob/master/SECURITY.md">SECURITY.md</a>.</p>
+  </section>
+</main>
+
+<footer class="col">Aura is open source under the MIT licence. Made by Du&#x161;an Milosavljevi&#x107;, Zrenjanin.</footer>

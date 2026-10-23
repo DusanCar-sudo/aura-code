@@ -22,9 +22,20 @@ if (sub === 'toggle') {
   // One-hotkey dictation: 1st press starts recording, 2nd press stops +
   // transcribes + types into the focused window (with Enter). Built for a
   // global shortcut (e.g. KDE Super+Space bound to `dic toggle`).
+  //
+  // --auto[=ms] / DIC_AUTO_STOP: one-press mode — a watcher stops the
+  // recording by itself after the given silence (default 2000 ms).
+  // --no-auto keeps the classic two-press behavior. --clip-only never types
+  // (clipboard only); minimized typing is important for audit/testing.
   const deviceId = parsed.device || undefined;
   const submit = parsed.submit !== false && !parsed['no-submit'];
-  toggleDictation({ deviceId, submit }).catch(e => {
+  const inject = parsed.inject !== false && !parsed['clip-only'];
+  const autoArg = parsed.auto;
+  const auto = parsed['no-auto'] ? 0
+    : typeof autoArg === 'number' ? autoArg
+    : typeof autoArg === 'string' && autoArg.trim() !== '' ? (Number(autoArg) || 0)
+    : undefined; // undefined → DIC_AUTO_STOP env decides inside toggleDictation
+  toggleDictation({ deviceId, submit, inject, auto }).catch(e => {
     console.error(ERR(`\nFatal: ${String(e)}`));
     process.exit(1);
   });

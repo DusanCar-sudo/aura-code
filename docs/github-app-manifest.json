@@ -1,0 +1,14 @@
+{
+  "name": "aura-git",
+  "url": "https://github.com/DusanCar-sudo/aura-code",
+  "description": "Aura Code's self-hosted GitHub App — repo, file, PR and comment automation for the Aura agent. API-only; no webhooks.",
+  "public": false,
+  "redirect_url": "",
+  "default_permissions": {
+    "metadata": "read",
+    "contents": "write",
+    "pull_requests": "write",
+    "issues": "write"
+  },
+  "default_events": []
+}

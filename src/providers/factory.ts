@@ -206,10 +206,16 @@ export const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = buildKnownBaseUr
  * localhost. Both the bare `host:port` and the `host:port/v1` spellings are
  * accepted, since the picker documents one and .aura.json the other.
  */
+/** A bare `host:port` (saved by the picker's URL prompt) gets `http://`; the SDK rejects scheme-less URLs. */
+function withScheme(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `http://${url}`;
+}
+
 function localBaseUrl(envVar: string, fallback: string): string {
   const raw = process.env[envVar]?.trim().replace(/\/+$/, '');
   if (!raw) return fallback;
-  return /\/v1$/.test(raw) ? raw : `${raw}/v1`;
+  const url = withScheme(raw);
+  return /\/v1$/.test(url) ? url : `${url}/v1`;
 }
 
 function baseUrlFamily(url: string | undefined): string | undefined {
@@ -318,10 +324,10 @@ export function resolveTaskModelBaseUrl(opts: {
  *   local/*              → Local OpenAI-compatible (localhost:1234)
  *   anything else        → OpenAI-compatible (uses baseUrl from config)
  */
-/** Trim an operator-supplied endpoint: no whitespace, no trailing slashes. */
+/** Trim an operator-supplied endpoint: no whitespace, no trailing slashes, scheme always present. */
 function normalizeEnvUrl(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim().replace(/\/+$/, '');
-  return trimmed || undefined;
+  return trimmed ? withScheme(trimmed) : undefined;
 }
 
 /**

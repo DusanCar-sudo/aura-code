@@ -189,7 +189,7 @@ const KNOWN_FLAGS = new Set([
   'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed',
   'allow-plugin-install', 'allow-api-keys', 'no-api-keys',
   // consumed in serve/device/web branches
-  'lan', 'tailscale', 'port', 'open', 'remote', 'includes', 'interactive', 'speak',
+  'lan', 'tailscale', 'port', 'open', 'no-open', 'remote', 'includes', 'interactive', 'speak',
 ]);
 
 const argv = minimist(process.argv.slice(2), {

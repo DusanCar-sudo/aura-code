@@ -38,6 +38,9 @@ from evdev import UInput, AbsInfo, ecodes as e    # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from screen_encode import encode_png  # noqa: E402
+from frame_gate import FreshnessGate, SETTLE_MS  # noqa: E402
+
+INPUT_CMDS = frozenset({"move", "click", "drag", "scroll", "type", "key"})
 
 PORTAL = "org.freedesktop.portal.Desktop"
 PATH = "/org/freedesktop/portal/desktop"
@@ -66,6 +69,7 @@ class Portal:
         self.sink = None
         self.pipeline = None
         self.last_sample = None     # see frame(): reused when the screen is unchanged
+        self.gate = FreshnessGate() # did a frame arrive after the last input?
 
     def _token(self):
         return "aura%d" % random.randint(0, 2 ** 31)
@@ -158,6 +162,7 @@ class Portal:
         s = self.sink.emit("try-pull-sample", first_wait)
         while s is not None:
             sample = s
+            self.gate.note_frame()
             s = self.sink.emit("try-pull-sample", 0)
         if sample is None:
             sample = self.last_sample
@@ -180,6 +185,18 @@ class Portal:
                 raise RuntimeError(f"frame buffer too small: {len(data)} for {w}x{h}")
             data = b"".join(data[r * stride: r * stride + w * 3] for r in range(h))
         return data, w, h
+
+    def frame_after_input(self):
+        """frame(), but keep pulling until a frame newer than the last input arrives.
+
+        Gives up after SETTLE_MS; the caller then reports fresh=false rather than
+        presenting the pre-action picture as the current screen.
+        """
+        deadline = time.monotonic() + SETTLE_MS / 1000.0
+        result = self.frame()
+        while not self.gate.is_fresh() and time.monotonic() < deadline:
+            result = self.frame()
+        return result
 
     def close(self):
         if self.pipeline:
@@ -474,11 +491,12 @@ def main():
                     reply({"ok": False, "error": "not initialised — send init first"})
 
                 elif cmd == "capture":
-                    data, w, h = portal.frame()
+                    data, w, h = portal.frame_after_input()
                     out = req.get("path") or "/tmp/aura-screen.png"
                     tw, th, scale = encode_png(data, w, h, out, req.get("max_pixels", 1_100_000))
                     reply({"ok": True, "path": out, "width": tw, "height": th,
-                           "source_width": w, "source_height": h, "scale": scale})
+                           "source_width": w, "source_height": h, "scale": scale,
+                           "fresh": portal.gate.is_fresh()})
 
                 elif cmd == "accessibility_tree":
                     reply(accessibility_tree(req.get("max_depth", 8),
@@ -512,6 +530,8 @@ def main():
 
                 else:
                     reply({"ok": False, "error": f"unknown command: {cmd}"})
+                if cmd in INPUT_CMDS and portal is not None:
+                    portal.gate.mark_input()   # frames after this point show the action
             except Exception as ex:                      # one bad command must
                 reply({"ok": False, "error": f"{type(ex).__name__}: {ex}"})   # not kill the sidecar
     finally:

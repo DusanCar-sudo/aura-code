@@ -249,11 +249,17 @@ async function screenshot(sc: ScreenSidecar): Promise<ToolOutput> {
   rmSync(String(r.path), { force: true });
 
   const lessons = formatLessonsBlock(geometryKey(lastCapture));
+  // fresh=false: the screen did not update within the settle window after the last
+  // action, so this picture may still show the state before it.
+  const staleNote = r.fresh === false
+    ? ' The screen had not updated since the last action; this may be the old picture. Take another screenshot before acting on it.'
+    : '';
   return {
     text:
       `Screenshot: ${lastCapture.width}x${lastCapture.height} `
       + `(screen is ${lastCapture.sourceWidth}x${lastCapture.sourceHeight}). `
       + 'Give x/y in the coordinates of THIS image; they are converted for you.'
+      + staleNote
       + lessons,
     images: [`data:image/png;base64,${b64}`],
   };

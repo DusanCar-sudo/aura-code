@@ -558,12 +558,14 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     // authenticate. httpOnly keeps it away from page scripts; SameSite=Strict
     // keeps another origin from riding it; Secure only under TLS, since the
     // default bind is plain http on loopback where Secure would drop it.
+    // 400 days (the browser cap) rather than hours: the token itself never
+    // expires, so a short cookie only sent the user back for the URL again.
     if (explicit && explicit === provided) {
       res.cookie?.(AUTH_COOKIE, explicit, {
         httpOnly: true,
         sameSite: 'strict',
         secure: req.protocol === 'https',
-        maxAge: 12 * 60 * 60 * 1000,
+        maxAge: 400 * 24 * 60 * 60 * 1000,
         path: '/',
       });
     }

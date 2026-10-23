@@ -1,0 +1,46 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 792 >>
+stream
+BT /F1 11 Tf 56 780 Td (INVOICE) Tj ET
+BT /F1 11 Tf 56 762 Td () Tj ET
+BT /F1 11 Tf 56 744 Td (Supplier:   Telekom Balkan AD) Tj ET
+BT /F1 11 Tf 56 726 Td (Invoice No: TB-2026-101877) Tj ET
+BT /F1 11 Tf 56 708 Td (Issue Date: 2026-06-05) Tj ET
+BT /F1 11 Tf 56 690 Td (Due Date:   2026-06-20) Tj ET
+BT /F1 11 Tf 56 672 Td (Currency:   EUR) Tj ET
+BT /F1 11 Tf 56 654 Td () Tj ET
+BT /F1 11 Tf 56 636 Td (Item:       Business internet and telephony  May 2026) Tj ET
+BT /F1 11 Tf 56 618 Td (Net:        3.483,33) Tj ET
+BT /F1 11 Tf 56 600 Td (VAT \(20%\):  696,67) Tj ET
+BT /F1 11 Tf 56 582 Td (Total:      4.180,00) Tj ET
+BT /F1 11 Tf 56 564 Td () Tj ET
+BT /F1 11 Tf 56 546 Td (Payment by bank transfer to the account on file.) Tj ET
+BT /F1 11 Tf 56 528 Td (Thank you for your business.) Tj ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1154
+%%EOF

@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -10,6 +10,58 @@ import { tokenHex } from '../cli/diamond.js';
 
 const SAMPLE_RATE = 16000;
 const MIMO_BASE = 'https://api.xiaomimimo.com/v1';
+
+// Vocabulary hints for Whisper-family models. A prompt is not a hint to the
+// decoder — Whisper conditions on it, so proper nouns it would otherwise
+// mangle ("Aura" -> "Or a", "MiMo" -> "my mo", "Milosavljevic" -> "Miles of
+// Alge") come out right. Override with DIC_PROMPT, or set it empty to disable.
+const DIC_PROMPT = process.env.DIC_PROMPT ??
+  'Aura, Aura OS, Aura Code, dic, Coastline Drive, Los Belgrados, Godot, ' +
+  'DeepSeek, MiMo, Groq, Whisper, PipeWire, Wayland, sway, Vega, ATR, ' +
+  'Dusan Milosavljevic, Milosavljevic.';
+
+/**
+ * Language for STT. Whisper's auto-detect misfires on short clips (it has
+ * produced Georgian from room tone), so the dictation language is explicit:
+ * DIC_LANGUAGE, else ~/.config/aura-mic/lang, else English.
+ */
+function dicLanguage(): string {
+  if (process.env.DIC_LANGUAGE) return process.env.DIC_LANGUAGE;
+  try {
+    const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+    const v = fs.readFileSync(path.join(base, 'aura-mic', 'lang'), 'utf8').trim();
+    if (v && v !== 'auto') return v;
+  } catch {}
+  return 'en';
+}
+
+/**
+ * Peak sample (0-32768) of a 16-bit PCM WAV, or -1 if it can't be read.
+ * Used as a cheap speech gate before spending a network round-trip: a dead
+ * Bluetooth mic records digital silence and Whisper hallucinates a word
+ * ("you", "Thank you.") that would otherwise get typed into the window.
+ */
+function wavPeak(wavPath: string): number {
+  try {
+    const buf = fs.readFileSync(wavPath);
+    let off = 12; // skip RIFF header
+    while (off + 8 <= buf.length) {
+      const id = buf.toString('ascii', off, off + 4);
+      const size = buf.readUInt32LE(off + 4);
+      if (id === 'data') {
+        const end = Math.min(buf.length, off + 8 + size);
+        let peak = 0;
+        for (let i = off + 8; i + 1 < end; i += 2) {
+          const v = Math.abs(buf.readInt16LE(i));
+          if (v > peak) peak = v;
+        }
+        return peak;
+      }
+      off += 8 + size + (size & 1);
+    }
+  } catch {}
+  return -1;
+}
 
 const MIMO_VOICES: Record<string, { gender: string; lang: string }> = {
   mimo_default: { gender: 'auto', lang: 'auto' },
@@ -45,6 +97,13 @@ function listProviders(): ApiProvider[] {
       name: 'GLM-ASR',
     });
   }
+  // Groq first: whisper-large-v3-turbo is the most accurate provider here and
+  // it takes the DIC_PROMPT vocabulary hint. MiMo has no prompt support and,
+  // when its free quota is exhausted, answers 429 after ~5 s — putting it
+  // first made every dictation pay that timeout before Groq was tried.
+  if (process.env.GROQ_API_KEY) {
+    providers.push({ key: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1', name: 'Groq' });
+  }
   if (process.env.XIAOMI_API_KEY) {
     const key = process.env.XIAOMI_API_KEY;
     const baseURL = key.startsWith('tp-')
@@ -54,9 +113,6 @@ function listProviders(): ApiProvider[] {
   }
   if (process.env.OPENAI_API_KEY) {
     providers.push({ key: process.env.OPENAI_API_KEY, baseURL: 'https://api.openai.com/v1', name: 'OpenAI' });
-  }
-  if (process.env.GROQ_API_KEY) {
-    providers.push({ key: process.env.GROQ_API_KEY, baseURL: 'https://api.groq.com/openai/v1', name: 'Groq' });
   }
   return providers;
 }
@@ -322,7 +378,7 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
           input_audio: { data: 'data:audio/wav;base64,' + audioBase64 },
         }],
       }],
-      asr_options: { language: 'auto' },
+      asr_options: { language: dicLanguage() },
     });
     return (response.choices[0]?.message?.content ?? '').trim();
   }
@@ -341,6 +397,11 @@ async function transcribeWith(api: ApiProvider, wavPath: string, printName: bool
     file: fs.createReadStream(wavPath),
     model,
     response_format: 'text',
+    // Whisper-family only: MiMo/GLM/Parakeet reject unknown fields, and only
+    // Whisper actually uses a text prompt to bias proper nouns.
+    ...(api.name === 'Groq' || api.name === 'OpenAI'
+      ? { language: dicLanguage(), prompt: DIC_PROMPT }
+      : {}),
   });
   const text = typeof transcription === 'string'
     ? transcription
@@ -363,6 +424,97 @@ function shouldFallThrough(err: any): boolean {
   if (/audio > 25 MB|too large/i.test(msg)) return false; // fatal input — don't retry
   if (err?.status === 401 || err?.status === 403 || err?.status === 429) return true;
   return /401|403|429|Invalid API Key|1113|Insufficient balance|no resource package|Connection error| ETIMEDOUT|ECONNRESET|ENOTFOUND|network|timeout|fetch failed/i.test(msg);
+}
+
+// ─── Provider health cache ───────────────────────────────────────────────
+// A provider that just answered 429/quota/auth-stays-broken for minutes (MiMo's
+// exhausted quota answers after ~5 s). Remember failures so the next dictation
+// skips dead providers instead of paying that timeout again; clear on success.
+const providerCooldown = new Map<string, number>();
+const PROVIDER_COOLDOWN_MS = 10 * 60_000;
+
+/** False only when the provider is in cooldown — except never skip the last one. */
+function providerAvailable(name: string, isLast: boolean): boolean {
+  const until = providerCooldown.get(name) ?? 0;
+  if (Date.now() < until) return isLast;
+  return true;
+}
+
+function markProviderFailure(name: string): void {
+  providerCooldown.set(name, Date.now() + PROVIDER_COOLDOWN_MS);
+}
+
+function markProviderSuccess(name: string): void {
+  providerCooldown.delete(name);
+}
+
+// ─── Deterministic post-formatter ────────────────────────────────────────
+// STT output is a wall of lowercase text: mis-cased proper nouns, no punctua-
+// tion, the odd filler. These rules are idempotent and only used for dictation
+// (never for transcripts shown back as source). Set DIC_FORMAT=0 to disable.
+const DIC_TERMS: Array<[RegExp, string]> = [
+  // Multi-word first so the single-word rules can't eat half a phrase.
+  [/\bcoast\s?line\s+drive\b/gi, 'Coastline Drive'],
+  [/\blos\s+belgrados\b/gi, 'Los Belgrados'],
+  [/\baura\s+code\b/gi, 'Aura Code'],
+  [/\baura\s+os\b/gi, 'Aura OS'],
+  [/\bdeep\s?seek\b/gi, 'DeepSeek'],
+  // Whisper hears "Groq" as "grok"/"rock" surprisingly often.
+  [/\bgrok\b/gi, 'Groq'],
+  [/\bgroq\b/gi, 'Groq'],
+  [/\bmimo\b/gi, 'MiMo'],
+  [/\bwhisper\b/gi, 'Whisper'],
+  [/\bgodot\b/gi, 'Godot'],
+  [/\bpipewire\b/gi, 'PipeWire'],
+  [/\bwayland\b/gi, 'Wayland'],
+  [/\bsway\b/gi, 'sway'],
+  [/\bcach\s?y\s?os\b/gi, 'CachyOS'],
+  [/\bmnemai\b/gi, 'Mnemai'],
+  [/\bvega\b/gi, 'Vega'],
+  [/\batr\b/gi, 'ATR'],
+  [/\baura\b/gi, 'Aura'],
+  [/\bdusan\b/gi, 'Dusan'],
+  [/\bmilosavljevic\b/gi, 'Milosavljevic'],
+];
+
+export function formatTranscript(raw: string): string {
+  let text = raw.trim();
+  if (!text || process.env.DIC_FORMAT === '0') return text;
+
+  // Spoken punctuation: "hello comma world period" → "Hello, world. "
+  // Word-boundary anchored. "comma" is safe (almost never a noun); but
+  // "period" IS a real word (waveform periods), so treat it as sentence-final
+  // spoken punctuation only at the very end of the text or before a
+  // capitalized word (the shape "...period. Something new" has). These two
+  // rules deliberately skip the /i flag — with /i, the [A-Z][a-z] lookahead
+  // degrades to "any word" and "the period of a waveform" gets mangled.
+  text = text
+    .replace(/\s*\bcomma\b[,.]?\s*/gi, ', ')
+    .replace(/\s*\b(?:full\s+stop|period)\b[.]?(?=\s*$)/gi, '.')
+    .replace(/\s*\b(?:[Ff]ull\s+[Ss]top|[Pp]eriod)\b[.]?(?=\s+[A-Z][a-z])/g, '.')
+    .replace(/\s*\bquestion\s+mark\b\??\s*/gi, '? ')
+    .replace(/\s*\b(?:exclamation\s+(?:mark|point)|bang)\b!?\s*/gi, '! ')
+    .replace(/\s*\bnew\s+(?:line|paragraph)\b\s*/gi, ' ');
+
+  // Filler words that escaped the model's own cleanup.
+  text = text.replace(/\b(?:um+|uh+|erm+)\b[,]?\s*/gi, ' ');
+
+  // Vocabulary casing.
+  for (const [re, replacement] of DIC_TERMS) text = text.replace(re, replacement);
+
+  // Spacing tidy: duplicates, orphan double punctuation, space before ends.
+  // The "add space after punctuation" pass is deliberately narrow — only
+  // sentence-terminal marks followed by a letter — so decimals ("3.14") and
+  // file names ("aura.txt") survive.
+  text = text
+    .replace(/[\t ]{2,}/g, ' ')
+    .replace(/\s+([,.!?])/g, '$1')
+    .replace(/,(?=[A-Za-z])/g, ', ')
+    .replace(/([!?])(?=[A-Za-z])/g, '$1 ')
+    .replace(/\.(?=[A-Z][a-z])/g, '. ')
+    .trim();
+
+  return text;
 }
 
 // ─── STT: record mic + transcribe ────────────────────────────────────────
@@ -465,22 +617,25 @@ export async function dictate(opts: DictateOptions = {}): Promise<void> {
   let text = '';
   for (let i = 0; i < providers.length; i++) {
     const api = providers[i];
+    if (!providerAvailable(api.name, i === providers.length - 1)) continue;
     try {
       text = await transcribeWith(api, wavPath, i === 0);
+      markProviderSuccess(api.name);
       break; // success
     } catch (err: any) {
-      if (shouldFallThrough(err) && i < providers.length - 1) {
-        console.log(WARN('  ' + api.name + ': unavailable (key/balance), trying next provider...\n'));
-        continue;
+      if (!shouldFallThrough(err) || i >= providers.length - 1) {
+        // Last provider failed or non-recoverable error — bail out
+        if (shouldFallThrough(err)) markProviderFailure(api.name);
+        console.error(ERR('\n  Transcription failed (' + api.name + '):'), String(err), '\n');
+        cleanup(tmpDir);
+        process.exit(1);
       }
-      // Last provider failed or non-recoverable error — bail out
-      console.error(ERR('\n  Transcription failed (' + api.name + '):'), String(err), '\n');
-      cleanup(tmpDir);
-      process.exit(1);
+      markProviderFailure(api.name);
+      console.log(WARN('  ' + api.name + ': unavailable (key/balance), trying next provider...\n'));
     }
   }
 
-  const cleaned = text.trim();
+  const cleaned = formatTranscript(text);
   if (cleaned) {
     console.log(OK.bold('  \u2500\u2500 Transcription \u2500\u2500'));
     console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
@@ -556,10 +711,15 @@ async function normalizeAndTranscribe(wavPath: string, providers: ApiProvider[])
   }
 
   for (let i = 0; i < providers.length; i++) {
+    if (!providerAvailable(providers[i].name, i === providers.length - 1)) continue;
     try {
-      return (await transcribeWith(providers[i], wavPath, false)).trim();
+      const text = (await transcribeWith(providers[i], wavPath, false)).trim();
+      markProviderSuccess(providers[i].name);
+      return text;
     } catch (err: any) {
-      if (shouldFallThrough(err) && i < providers.length - 1) continue;
+      if (!shouldFallThrough(err)) throw err;
+      markProviderFailure(providers[i].name);
+      if (i < providers.length - 1) continue;
       throw err;
     }
   }
@@ -576,10 +736,132 @@ function notify(title: string, body: string, replaceTag = 'dic-toggle'): void {
   } catch { /* notifications are optional */ }
 }
 
+/** Where the compiled CLI (dic.js / dic-autostop.js) lives. */
+function dicCliDir(): string {
+  // Compiled output is CommonJS inside dist/tools — __dirname resolves to the
+  // install dir, and the sibling cli/ directory holds dic.js + dic-autostop.js.
+  const cli = path.join(__dirname, '..', 'cli', 'dic.js');
+  if (fs.existsSync(cli)) return path.dirname(cli);
+  return path.dirname(process.argv[1] ?? '.');
+}
+
+/**
+ * Stop-half of toggle: kill the recorder, flush, transcribe with fallback,
+ * format, and deliver (typed + Enter, or clipboard-only). Split out of
+ * toggleDictation so the auto-stop watcher route and the second hotkey press
+ * share one code path, and so a stop lock can wrap every exit uniformly.
+ */
+async function stopAndInject(
+  stateDir: string,
+  pidFile: string,
+  wavFile: string,
+  rawFile: string,
+  opts: ToggleOptions,
+): Promise<void> {
+  let pid = 0;
+  try { pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10); } catch {}
+  const isParec = fs.existsSync(path.join(stateDir, 'parec'));
+
+  // Stop the recorder; a stale pid (process already gone) is fine.
+  if (pid > 0) { try { process.kill(pid, 'SIGTERM'); } catch {} }
+  try { fs.unlinkSync(pidFile); } catch {}
+  await new Promise(r => setTimeout(r, 400)); // let the file flush/close
+
+  // parec path recorded raw PCM → wrap to wav.
+  if (isParec && fs.existsSync(rawFile)) {
+    try {
+      execSync(
+        `ffmpeg -y -f s16le -ar ${SAMPLE_RATE} -ac 1 -i "${rawFile}" "${wavFile}" 2>/dev/null`,
+        { stdio: 'pipe', timeout: 10000 },
+      );
+    } catch {}
+  }
+  try { fs.unlinkSync(path.join(stateDir, 'parec')); } catch {}
+
+  if (!fs.existsSync(wavFile) || fs.statSync(wavFile).size < 512) {
+    notify('🎤 dic', 'Nothing recorded.');
+    console.log(WARN('  Nothing recorded.\n'));
+    try { fs.unlinkSync(rawFile); } catch {}
+    return;
+  }
+
+  // Silence gate before any network call. Only room tone / a dead mic gets
+  // here; transcribing it would return a hallucinated word and type it into
+  // the focused window. Threshold matches aura-mic (DIC_RMS_FLOOR, 200).
+  const floor = Number(process.env.DIC_RMS_FLOOR ?? 200);
+  const peak = wavPeak(wavFile);
+  if (peak >= 0 && peak < floor) {
+    notify('🎤 dic', 'Heard nothing (silence).');
+    console.log(WARN('  Heard nothing (silence) — not transcribed.\n'));
+    try { fs.unlinkSync(wavFile); } catch {}
+    try { fs.unlinkSync(rawFile); } catch {}
+    return;
+  }
+
+  notify('🎤 dic', 'Transcribing…');
+  const providers = listProviders();
+  if (providers.length === 0) {
+    notify('🎤 dic', 'No STT API key set.');
+    console.error(ERR('  No STT API key set.\n'));
+    try { fs.unlinkSync(wavFile); } catch {}
+    try { fs.unlinkSync(rawFile); } catch {}
+    return;
+  }
+
+  let cleaned = '';
+  try {
+    cleaned = await normalizeAndTranscribe(wavFile, providers);
+  } catch (err) {
+    notify('🎤 dic', 'Transcription failed.');
+    console.error(ERR('  Transcription failed: ' + String(err) + '\n'));
+    return;
+  } finally {
+    try { fs.unlinkSync(wavFile); } catch {}
+    try { fs.unlinkSync(rawFile); } catch {}
+  }
+
+  cleaned = formatTranscript(cleaned);
+  if (!cleaned) {
+    notify('🎤 dic', 'No speech detected.');
+    console.log(WARN('  No speech detected.\n'));
+    return;
+  }
+
+  console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
+
+  if (opts.inject === false) {
+    // Clipboard-only delivery (audit/testing, or "don't type here" contexts).
+    try {
+      const clipboardModule = await import('./clipboard.js');
+      await clipboardModule.clipboardTool({ action: 'copy', text: cleaned });
+      notify('🎤 dic', '📋 ' + cleaned.slice(0, 80));
+      console.log(CHROME_DIM('  📋  Copied to clipboard.\n'));
+    } catch (err) {
+      notify('🎤 dic', 'Copy failed.');
+      console.log(WARN('  Copy failed (' + String(err) + ').\n'));
+    }
+    return;
+  }
+
+  try {
+    await injectText(cleaned, { submit: opts.submit ?? true });
+    notify('🎤 dic', '✓ ' + cleaned.slice(0, 80));
+  } catch (err) {
+    // injectText already copied to clipboard on the way in.
+    notify('🎤 dic', 'Typed failed — on clipboard.');
+    console.log(WARN('  Injection failed (' + String(err) + ') — text is on the clipboard.\n'));
+  }
+}
+
 export interface ToggleOptions {
   deviceId?: string;
   /** Press Enter after typing (submit the prompt). Default true. */
   submit?: boolean;
+  /** Clipboard only — never type into the focused window. Default: type. */
+  inject?: boolean;
+  /** One-press mode: auto-stop after this many ms of trailing silence
+   *  (0/undefined = two-press mode; DIC_AUTO_STOP env sets a default). */
+  auto?: number;
 }
 
 /**
@@ -595,68 +877,15 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
 
   // ── STOP branch: a recording is already in progress ──────────────────────
   if (fs.existsSync(pidFile)) {
-    let pid = 0;
-    try { pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10); } catch {}
-    const isParec = fs.existsSync(path.join(stateDir, 'parec'));
-
-    // Stop the recorder; a stale pid (process already gone) is fine.
-    if (pid > 0) { try { process.kill(pid, 'SIGTERM'); } catch {} }
-    try { fs.unlinkSync(pidFile); } catch {}
-    await new Promise(r => setTimeout(r, 400)); // let the file flush/close
-
-    // parec path recorded raw PCM → wrap to wav.
-    const srcRaw = isParec ? rawFile : wavFile;
-    if (isParec && fs.existsSync(rawFile)) {
-      try {
-        execSync(
-          `ffmpeg -y -f s16le -ar ${SAMPLE_RATE} -ac 1 -i "${rawFile}" "${wavFile}" 2>/dev/null`,
-          { stdio: 'pipe', timeout: 10000 },
-        );
-      } catch {}
-    }
-    try { fs.unlinkSync(path.join(stateDir, 'parec')); } catch {}
-
-    if (!fs.existsSync(wavFile) || fs.statSync(wavFile).size < 512) {
-      notify('🎤 dic', 'Nothing recorded.');
-      console.log(WARN('  Nothing recorded.\n'));
-      try { fs.unlinkSync(rawFile); } catch {}
-      return;
-    }
-
-    notify('🎤 dic', 'Transcribing…');
-    const providers = listProviders();
-    if (providers.length === 0) {
-      notify('🎤 dic', 'No STT API key set.');
-      console.error(ERR('  No STT API key set.\n'));
-      return;
-    }
-
-    let cleaned = '';
+    // Stop lock: a hotkey press racing the auto-stop watcher would otherwise
+    // kill / transcribe the same recording twice (two injected lines).
+    const stopLock = path.join(stateDir, 'stopping');
+    if (fs.existsSync(stopLock)) return;
+    try { fs.closeSync(fs.openSync(stopLock, 'w')); } catch {}
     try {
-      cleaned = await normalizeAndTranscribe(wavFile, providers);
-    } catch (err) {
-      notify('🎤 dic', 'Transcription failed.');
-      console.error(ERR('  Transcription failed: ' + String(err) + '\n'));
-      return;
+      await stopAndInject(stateDir, pidFile, wavFile, rawFile, opts);
     } finally {
-      try { fs.unlinkSync(wavFile); } catch {}
-      try { fs.unlinkSync(rawFile); } catch {}
-    }
-
-    if (!cleaned) {
-      notify('🎤 dic', 'No speech detected.');
-      console.log(WARN('  No speech detected.\n'));
-      return;
-    }
-
-    console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
-    try {
-      await injectText(cleaned, { submit: opts.submit ?? true });
-      notify('🎤 dic', '✓ ' + cleaned.slice(0, 80));
-    } catch (err) {
-      // injectText already copied to clipboard on the way in.
-      notify('🎤 dic', 'Typed failed — on clipboard.');
-      console.log(WARN('  Injection failed (' + String(err) + ') — text is on the clipboard.\n'));
+      try { fs.unlinkSync(stopLock); } catch {}
     }
     return;
   }
@@ -687,8 +916,39 @@ export async function toggleDictation(opts: ToggleOptions = {}): Promise<void> {
   child.unref();
   fs.writeFileSync(pidFile, String(child.pid));
 
-  notify('🎤 dic', 'Recording… (press again to send)');
-  console.log(OK('  🎤  Recording — press the hotkey again to stop & send.\n'));
+  // One-press mode: a detached watcher follows the growing recording and —
+  // once speech is followed by `autoMs` of silence, or 45 s pass — triggers
+  // the same stop+transcribe path a second press would take. Forward the
+  // delivery options so the stop the watcher triggers behaves identically to
+  // a manual one (--no-submit in terminals, --clip-only, --device).
+  const autoMs = opts.auto ?? (Number(process.env.DIC_AUTO_STOP) || 0);
+  if (autoMs > 0) {
+    try {
+      const watcherPath = path.join(dicCliDir(), 'dic-autostop.js');
+      if (fs.existsSync(watcherPath)) {
+        fs.writeFileSync(
+          path.join(stateDir, 'watch-args.json'),
+          JSON.stringify({
+            submit: opts.submit !== false,
+            inject: opts.inject !== false,
+            device: opts.deviceId,
+          }),
+        );
+        const watcher = spawn(process.execPath, [watcherPath, stateDir, String(autoMs)], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        watcher.unref();
+      }
+    } catch { /* auto-stop is best-effort; two-press still works */ }
+  }
+
+  notify('🎤 dic', autoMs > 0
+    ? 'Recording… (auto-stop on silence)'
+    : 'Recording… (press again to send)');
+  console.log(OK('  🎤  Recording' + (autoMs > 0
+    ? ` — stops automatically after ${(autoMs / 1000).toFixed(1)}s of silence.\n`
+    : ' — press the hotkey again to stop & send.\n')));
 }
 // ─── TTS: text-to-speech via MiMo TTS ─────────────────────────────────────
 
@@ -946,17 +1206,24 @@ export async function dictationLoop(opts: LoopOptions = {}): Promise<void> {
       // ── Transcribe ─────────────────────────────────────────────────
       let text = '';
       for (let i = 0; i < providers.length && running; i++) {
+        const api = providers[i];
+        if (!providerAvailable(api.name, i === providers.length - 1)) continue;
         try {
-          text = await transcribeWith(providers[i], wavPath, false);
+          text = await transcribeWith(api, wavPath, false);
+          markProviderSuccess(api.name);
           break;
         } catch (err: any) {
-          if (shouldFallThrough(err) && i < providers.length - 1) continue;
-          console.error(ERR('  Transcribe error: ' + String(err)));
-          break;
+          if (!shouldFallThrough(err) || i >= providers.length - 1) {
+            if (shouldFallThrough(err)) markProviderFailure(api.name);
+            console.error(ERR('  Transcribe error: ' + String(err)));
+            break;
+          }
+          markProviderFailure(api.name);
+          console.log(WARN('  ' + api.name + ': unavailable, trying next…\n'));
         }
       }
 
-      const cleaned = text.trim();
+      const cleaned = formatTranscript(text);
       if (cleaned) {
         console.log(chalk.hex(tokenHex('fg'))('  ' + cleaned));
         try {

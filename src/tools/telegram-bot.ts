@@ -341,10 +341,23 @@ function apiGet(method: string, params?: Record<string, string>): Promise<any> {
   });
 }
 
-async function sendMessage(chatId: string | number, text: string): Promise<void> {
+// Keep Telegram's "typing…" indicator alive for as long as we work on the
+// reply. Telegram expires a sendChatAction after ~5s, so re-ping every 4.5s.
+// Returns a stop() that ends the loop; safe to call stop() twice.
+function startTypingLoop(chatId: string | number): () => void {
+  const ping = () => apiPost('sendChatAction', { chat_id: chatId, action: 'typing' })
+    .catch(() => { /* transient API errors must not kill the loop */ });
+  void ping();
+  const timer = setInterval(ping, 4_500);
+  return () => { clearInterval(timer); };
+}
+
+async function sendMessage(chatId: string | number, text: string, replyMarkup?: Record<string, unknown>): Promise<void> {
   const chunks = splitMessage(text, 4000);
   for (const chunk of chunks) {
-    await apiPost('sendMessage', { chat_id: chatId, text: chunk });
+    await apiPost('sendMessage', replyMarkup
+      ? { chat_id: chatId, text: chunk, reply_markup: replyMarkup }
+      : { chat_id: chatId, text: chunk });
   }
 }
 
@@ -565,6 +578,108 @@ function splitMessage(text: string, maxLen: number): string[] {
     remaining = remaining.slice(maxLen);
   }
   return chunks;
+}
+
+// ── Model/provider picker + home-surveillance control ────────────────────────
+const SUR_TIMER = 'webcam-surveillance.timer';
+
+function sysd(args: string[]): string {
+  try {
+    return execFileSync('systemctl', ['--user', ...args], { timeout: 10_000, encoding: 'utf8' }).trim();
+  } catch { return ''; }
+}
+
+/** /model <id> and picker taps both land here. */
+function switchChatModel(chatId: number | string, newModel: string): string {
+  if (!isModelConfigured(newModel)) {
+    return `\u274c Model not configured or missing API key: ${newModel}\n\n\u{1F4A1} Use /models to see available models.`;
+  }
+  const isPremium = /opus|claude-sonnet-4-5|gpt-4/i.test(newModel);
+  const tierHint = isPremium ? ` \u26a0\u{FE0F} Premium tier (higher cost)` : '';
+  const newProvider = createProvider({ model: newModel, temperature: 0.7, maxTokens: CHAT_MAX_TOKENS });
+  chatProviders.set(String(chatId), newProvider);
+  console.log(`[${ts()}] \u{1F504} Chat ${chatId} switched model: ${newModel} (${newProvider.name})`);
+  return `\u2705 Switched to ${newModel}${tierHint}`;
+}
+
+/** /models renders this: every configured model, grouped by provider, as
+ *  inline buttons (two per row). Taps come back as 'mp|<model_id>'. */
+async function sendModelPicker(chatId: number | string): Promise<void> {
+  const current = chatProviders.get(String(chatId))?.name ?? DEFAULT_CHAT_MODEL;
+  const live = getAllModels().filter(m => isModelConfigured(m.id) && !LOCAL_ONLY_PROVIDERS.includes(m.provider));
+  const byProvider = new Map<string, typeof live>();
+  for (const m of live) {
+    if (!byProvider.has(m.provider)) byProvider.set(m.provider, []);
+    byProvider.get(m.provider)!.push(m);
+  }
+  const order = [...TELEGRAM_PROVIDERS, ...[...byProvider.keys()].filter(p => !TELEGRAM_PROVIDERS.includes(p))]
+    .filter(p => byProvider.has(p));
+  const rows: { text: string; callback_data: string }[][] = [];
+  for (const p of order) {
+    const models = byProvider.get(p)!;
+    for (let i = 0; i < models.length; i += 2) {
+      const row = [{ text: (models[i].id === current ? '\u2705 ' : '') + models[i].id, callback_data: `mp|${models[i].id}` }];
+      if (models[i + 1]) row.push({ text: (models[i + 1].id === current ? '\u2705 ' : '') + models[i + 1].id, callback_data: `mp|${models[i + 1].id}` });
+      rows.push(row);
+    }
+  }
+  await apiPost('sendMessage', {
+    chat_id: chatId,
+    text: `\u{1F916} Pick a model \u2014 current: ${current}`,
+    reply_markup: { inline_keyboard: rows },
+  });
+}
+
+/** /sur — drive the home-surveillance systemd timer from Telegram. */
+async function handleSurveillance(chatId: number | string, arg: string): Promise<string> {
+  const sub = (arg || '').trim().toLowerCase();
+  const active = sysd(['is-active', SUR_TIMER]) === 'active';
+  if (sub === '' || sub === 'status') {
+    const lines = [
+      `\u{1F3A5} Surveillance: ${active ? '\u{1F7E2} RUNNING' : '\u26AA stopped'}`,
+      `   unit: ${SUR_TIMER} (${sysd(['is-enabled', SUR_TIMER])})`,
+    ];
+    if (active) {
+      const t = sysd(['list-timers', '--no-pager']).split('\n').find(l => l.includes('webcam-surveillance'));
+      if (t) lines.push(`   ${t.trim()}`);
+    }
+    lines.push('', '/sur start \u2014 photo every 15 min to this chat', '/sur stop \u2014 stop, free the camera', '/sur shot \u2014 one photo right now');
+    return lines.join('\n');
+  }
+  if (sub === 'start' || sub === 'on') {
+    sysd(['enable', '--now', SUR_TIMER]);
+    return sysd(['is-active', SUR_TIMER]) === 'active'
+      ? '\u{1F7E2} Surveillance started \u2014 a photo every 15 min. /sur stop when you are home.'
+      : '\u274C Failed to start \u2014 check: journalctl --user -u webcam-surveillance';
+  }
+  if (sub === 'stop' || sub === 'off') {
+    sysd(['disable', '--now', SUR_TIMER]);
+    return sysd(['is-active', SUR_TIMER]) === 'active'
+      ? '\u274C Failed to stop the timer.'
+      : '\u26AA Surveillance stopped \u2014 camera released.';
+  }
+  if (sub === 'shot') {
+    if (!ALLOW_CAM) return '\u{1F512} /cam is off (allow_cam in telegram.json).';
+    await sendMessage(chatId, '\u{1F4F8} Capturing snapshot\u2026');
+    const shot = captureWebcam('/dev/video0');
+    await sendPhoto(chatId, shot, `\u{1F4F8} ${new Date().toLocaleString('sr-RS')}`);
+    return '\u2705 Sent.';
+  }
+  return 'Usage: /sur [start|stop|status|shot]';
+}
+
+/** /sur with no argument: status + a one-tap start/stop button. */
+async function sendSurveillancePanel(chatId: number | string): Promise<void> {
+  const active = sysd(['is-active', SUR_TIMER]) === 'active';
+  const kb = { inline_keyboard: [[
+    { text: active ? '\u{1F6D1} Stop surveillance' : '\u25B6\u{FE0F} Start surveillance',
+      callback_data: active ? 'sur:off' : 'sur:on' },
+  ]] };
+  await apiPost('sendMessage', {
+    chat_id: chatId,
+    text: `\u{1F3E0} Home surveillance\n${active ? '\u{1F7E2} RUNNING \u2014 photos every 15 min' : '\u26AA stopped'}\n\n/sur on \u00B7 /sur off \u00B7 or tap:`,
+    reply_markup: kb,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1296,6 +1411,8 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       `/find <pattern> — Find files on your PC`,
       ALLOW_RUN ? `/run <cmd> — Run a shell command on your PC` : `/run — off (allow_run in telegram.json)`,
       ALLOW_CAM ? `/cam — Capture and send a camera image (surveillance)` : `/cam — off (allow_cam in telegram.json)`,
+      `/sur — Home surveillance: /sur on · /sur off · /sur shot · /sur`,
+      `/model, /models — Switch AI model (tap buttons, per chat)`,
       `/git — Git status`,
       ``,
       `🎛 Task control:`,
@@ -1474,25 +1591,13 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
       if (!showAll && featured.length > 0 && live.length > featured.length) {
         lines.push(`${live.length - featured.length} more configured elsewhere — /models all lists them all.`);
       }
-      lines.push(`💡 /model <model_id> to switch (this chat only) · ${live.length} model${live.length === 1 ? '' : 's'} with keys`);
+      lines.push(`💡 Tap a model below, or /model <model_id>`);
+      try { await sendModelPicker(chatId); } catch (e: any) { console.error(`[${ts()}] model picker failed: ${e.message}`); }
       return lines.join('\n');
     }
 
-    // With argument: switch to that model
-    const newModel = modelArg;
-    if (!isModelConfigured(newModel)) {
-      return `❌ Model not configured or missing API key: ${newModel}\n\n💡 Use /models to see available models.`;
-    }
-
-    // Detect cost tier for hint
-    const isPremium = /opus|claude-sonnet-4-5|gpt-4/i.test(newModel);
-    const tierHint = isPremium ? ` ⚠️ Premium tier (higher cost)` : '';
-
-    const newProvider = createProvider({ model: newModel, temperature: 0.7, maxTokens: CHAT_MAX_TOKENS });
-    chatProviders.set(String(chatId), newProvider);
-
-    console.log(`[${ts()}] 🔄 Chat ${chatId} switched model: ${newModel} (${newProvider.name})`);
-    return `✅ Switched to ${newModel}${tierHint}`;
+    // With argument: switch to that model (shared with picker taps)
+    return switchChatModel(chatId, modelArg);
   }
 
   if (lower === '/whoami') {
@@ -1637,6 +1742,11 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
   }
 
   // /cam or /photo — capture a webcam snapshot and send it (surveillance).
+  // ── /sur — home surveillance: every 15 min a webcam photo to this chat ────
+  if (lower === '/sur' || lower.startsWith('/sur ')) {
+    return await handleSurveillance(chatId, lower.split(/\s+/)[1] || '');
+  }
+
   if (lower === '/cam' || lower === '/photo' || lower.startsWith('/cam ') || lower.startsWith('/photo ')) {
     if (!ALLOW_CAM) return '🔒 /cam is off. To allow webcam snapshots over Telegram, set "allow_cam": true in ~/.aura/telegram.json and restart the bot.';
     const device = text.split(/\s+/)[1] || '/dev/video0';
@@ -1752,6 +1862,24 @@ async function poll(): Promise<void> {
   console.log('');
 
 
+  // Register the Telegram command menu (the ≡ button in the chat UI).
+  try {
+    await apiPost('setMyCommands', {
+      commands: [
+        { command: 'sur', description: 'Home surveillance on/off/shot' },
+        { command: 'models', description: 'List & pick AI model (buttons)' },
+        { command: 'model', description: 'Switch AI model: /model <id>' },
+        { command: 'status', description: 'What is running + system status' },
+        { command: 'cam', description: 'One webcam snapshot now' },
+        { command: 'stop', description: 'Stop the current task' },
+        { command: 'help', description: 'All commands' },
+      ],
+    });
+    console.log(`[${ts()}]   Command menu registered (7 commands)`);
+  } catch (e: any) {
+    console.error(`[${ts()}]   ⚠️ Menu registration failed: ${e.message}`);
+  }
+
   // Load chat history from disk on startup — enables conversation continuity across restarts
   await initializeChatHistory();
   // Delete any webhook on startup — webhooks and getUpdates conflict (409)
@@ -1804,23 +1932,45 @@ async function poll(): Promise<void> {
           continue;
         }
 
-        // Approval button taps (✅/❌) arrive as callback_query, not messages.
+// Approval button taps and picker taps arrive as callback_query, not messages.
         const cb = update.callback_query;
         if (cb) {
           const cbAuthorized = isAuthorized(cb.from?.id);
           const data: string = cb.data ?? '';
-          const m = data.match(/^(ok|no):(.+)$/);
           let note = 'Expired or already handled.';
-          if (cbAuthorized && m) {
-            const pending = pendingApprovals.get(m[2]);
+          // Model picker taps: 'mp|<model_id>' (buttons built by sendModelPicker)
+          const pm = data.match(/^mp\|(.+)$/);
+          // Surveillance toggle buttons: 'sur:on' / 'sur:off' (/sur panel)
+          const sm = data.match(/^sur:(on|off)$/);
+          // Approval buttons: 'ok:<id>' / 'no:<id>'
+          const am = data.match(/^(ok|no):(.+)$/);
+          const chat = String(cb.message?.chat?.id ?? cb.from?.id ?? '');
+          if (!cbAuthorized) {
+            note = '🚫 Not authorized.';
+          } else if (pm) {
+            note = switchChatModel(chat, pm[1]);
+          } else if (sm) {
+            note = await handleSurveillance(chat, sm[1]);
+            // Rewrite the whole message: fresh status + a button for the other action.
+            try {
+              await apiPost('editMessageText', {
+                chat_id: cb.message?.chat?.id,
+                message_id: cb.message?.message_id,
+                text: `🏠 Home surveillance\n${await handleSurveillance(chat, '')}\n\n/sur on · /sur off · or tap:`,
+                reply_markup: { inline_keyboard: [[
+                  { text: sm[1] === 'on' ? '⏹ Stop surveillance' : '▶️ Start surveillance',
+                    callback_data: sm[1] === 'on' ? 'sur:off' : 'sur:on' },
+                ]] },
+              });
+            } catch { /* ignore */ }
+          } else if (am) {
+            const pending = pendingApprovals.get(am[2]);
             if (pending) {
-              pendingApprovals.delete(m[2]);
-              const approved = m[1] === 'ok';
+              pendingApprovals.delete(am[2]);
+              const approved = am[1] === 'ok';
               pending.resolve(approved);
               note = approved ? '✅ Approved' : '❌ Denied';
             }
-          } else if (!cbAuthorized) {
-            note = '🚫 Not authorized.';
           }
           // Acknowledge the tap (removes the spinner) and update the message.
           try { await apiPost('answerCallbackQuery', { callback_query_id: cb.id, text: note }); } catch { /* ignore */ }
@@ -1862,6 +2012,9 @@ async function poll(): Promise<void> {
         const inFlightId = update.update_id;
         inFlightUpdateIds.add(inFlightId);
         persistWatermark();
+        // Typing… from the moment the message is accepted until the reply is
+        // fully out (text, then optional voice note) — not just for the LLM call.
+        const stopTyping = startTypingLoop(chatId);
         void (async () => {
           try {
             let text: string = msg.text ?? '';
@@ -1881,7 +2034,7 @@ async function poll(): Promise<void> {
             const lower = text.toLowerCase().trim();
             const conversational = !lower.startsWith('/') && !isDirectShellText(lower);
             const response = await handleCommand(chatId, text, from);
-            await sendMessage(chatId, response);
+            if (response) await sendMessage(chatId, response);
             // Voice note alongside the text, per the audio-reply policy:
             // voice-in always speaks back; 'auto' also speaks substantial
             // conversational replies (task summaries), never command output.
@@ -1929,6 +2082,7 @@ async function poll(): Promise<void> {
             console.error(`[${ts()}] ❌ Reply error: ${e.message}`);
             try { await sendMessage(chatId, `❌ Greška: ${e.message}`); } catch { /* give up */ }
           } finally {
+            stopTyping();
             // Handled (or definitively failed) — let the durable offset move
             // past this update.
             inFlightUpdateIds.delete(inFlightId);

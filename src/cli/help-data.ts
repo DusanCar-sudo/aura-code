@@ -60,7 +60,7 @@ export const HELP_TEXT = [
   '',
   '  ── Memory / Side ─────────────────────────────────',
   '  /dream                  Consolidate recent episodes into a dream entry',
-  '  /dream full             Consolidate ALL episodes, ignoring last-dream cutoff',
+  '  /dream full | all       Consolidate ALL episodes, ignoring last-dream cutoff',
   '  /rem                    Show reconciled memory (or latest dream)',
   '  /mine [--refine]        Mine episodes for patterns; --refine judges concepts with the local model',
   '  /mine --corrections    Write direct correction pairs from escalation episodes (Path B)',

@@ -97,14 +97,15 @@ function fingerprintOf(certPem: string): string {
   return new crypto.X509Certificate(certPem).fingerprint256;
 }
 
-/** True when the cert still covers every name given and is not near expiry. */
-function certCovers(certPem: string, ips: string[], dnsNames: string[]): boolean {
+/**
+ * True when the cert parses and is not near expiry. Deliberately not checked:
+ * whether it names the current address. The phone pins the exact certificate
+ * and skips name checks, so reissuing for a new address only forced a fresh
+ * pairing code — every DHCP move or `--lan`/`--tailscale` switch.
+ */
+function certStillValid(certPem: string): boolean {
   try {
     const x = new crypto.X509Certificate(certPem);
-    // subjectAltName reads like "IP Address:192.168.1.5, DNS:host.ts.net".
-    const san = x.subjectAltName ?? '';
-    for (const ip of ips) if (!san.includes(`IP Address:${ip}`)) return false;
-    for (const dns of dnsNames) if (!san.includes(`DNS:${dns}`)) return false;
     const validTo = new Date(x.validTo).getTime();
     return Number.isFinite(validTo) && validTo - Date.now() > 7 * 24 * 3600_000;
   } catch {
@@ -113,11 +114,11 @@ function certCovers(certPem: string, ips: string[], dnsNames: string[]): boolean
 }
 
 /**
- * Load the LAN certificate, generating one if it is missing, expiring, or was
- * issued for a different address (which happens whenever DHCP moves the
- * machine). Regenerating changes the fingerprint, so paired phones have to be
- * re-paired — that is the correct failure: a changed key is exactly what
- * pinning is meant to notice.
+ * Load the LAN certificate, generating one only if it is missing, unreadable,
+ * or expiring. The addresses given are written into a new certificate but never
+ * force one, so a paired phone's pin lasts the certificate's whole life.
+ * Regenerating changes the fingerprint and paired phones have to re-pair —
+ * the correct failure, since a changed key is what pinning is meant to notice.
  */
 export function ensureLanCert(ips: string[], dnsNames: string[] = []): LanCert {
   const certPath = CERT_PATH();
@@ -126,7 +127,7 @@ export function ensureLanCert(ips: string[], dnsNames: string[] = []): LanCert {
   try {
     const cert = fs.readFileSync(certPath, 'utf8');
     const key = fs.readFileSync(keyPath, 'utf8');
-    if (certCovers(cert, ips, dnsNames)) return { cert, key, fingerprint: fingerprintOf(cert) };
+    if (certStillValid(cert)) return { cert, key, fingerprint: fingerprintOf(cert) };
   } catch {
     // Missing or unreadable — fall through and issue a new one.
   }

@@ -241,8 +241,9 @@ export async function runCoreCommand(input: string, c: CommandCtx): Promise<Repl
     return { handled: true };
   }
 
-  if (input === ':dream' || input === ':dream full') {
-    const full = input === ':dream full';
+  // `all` is an alias for `full` — same run, same wording users reach for.
+  if (input === ':dream' || input === ':dream full' || input === ':dream all') {
+    const full = input !== ':dream';
     const { runDream } = await import('../dream/dream.js');
     c.display.agentThinking();
     const res = await runDream({ projectRoot: c.ctx.root, provider: c.buildProvider(c.display), full });

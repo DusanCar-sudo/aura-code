@@ -212,13 +212,20 @@ export async function runDream(opts: DreamOptions): Promise<DreamResult> {
     }
   }
 
+  // Reasoning models sometimes leak chain-of-thought before the first
+  // `## ` section. The dream contract is "four sections, headers first", and
+  // the parser treats pre-header lines as unparsed prose — so trim anything
+  // above the first section header before it reaches the dream store.
+  const firstSection = body.search(/^##\s+/m);
+  const cleanBody = firstSection > 0 ? body.slice(firstSection) : body;
+
   const dreamPath = todayFile(root);
   const dateLabel = new Date().toISOString().slice(0, 10);
   const header =
     `# Dream — ${dateLabel}\n\n`
     + `${episodes.length} episodes recalled (categories: ${categories.join(', ')})\n\n`;
   fs.mkdirSync(dreamsDir(root), { recursive: true });
-  fs.writeFileSync(dreamPath, header + body + '\n');
+  fs.writeFileSync(dreamPath, header + cleanBody + '\n');
   advanceCutoff(root, Math.max(...episodes.map(e => e.timestamp)));
 
   let reconciled = false;

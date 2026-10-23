@@ -131,6 +131,22 @@ describe('runDream', () => {
     expect(lastDreamTimestamp(projectRoot)).toBe(2500);
   });
 
+  it('strips reasoning-model preamble before the first section header', async () => {
+    const messy =
+      'Let me analyze these episodes. Key observations:\n\n1. Dates cluster on 2026-09-14...\n\n' +
+      GOOD_BODY;
+    loadEpisodesMock.mockResolvedValue([makeEpisode({ timestamp: 1000 })]);
+
+    const res = await runDream({ projectRoot, provider: fakeProvider(messy) });
+
+    expect(res.skipped).toBe(false);
+    const md = fs.readFileSync(res.path!, 'utf8');
+    expect(md).toContain('## Lessons');
+    expect(md).not.toContain('Key observations');
+    // Everything below the first `## ` header is kept intact.
+    expect(md).toContain('recurring parser tweaks');
+  });
+
   it('full:true ignores the cutoff and consolidates everything', async () => {
     const eps = [makeEpisode({ timestamp: 10 }), makeEpisode({ timestamp: 20 })];
     loadEpisodesMock.mockResolvedValue(eps);
