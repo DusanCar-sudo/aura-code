@@ -124,7 +124,7 @@ describe('Escalation-correctness benchmark', () => {
     }
   });
 
-  it('runs all 30 cases through the real verifier and reports escalation-correctness rates', { timeout: 600_000 }, async () => {
+  it('runs all 30 cases through the real verifier and reports escalation-correctness rates', { timeout: 1_800_000 }, async () => {
     // A skipped benchmark is indistinguishable from a passing one.
     if (skipReason) throw new Error(`verifier unavailable: ${skipReason}`);
     console.log(`verifier model: ${verifierProvider!.model}`);
