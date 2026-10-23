@@ -215,6 +215,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     });
     let firstChunkAt: number | undefined;
     let firstAnswerAt: number | undefined;
+    let reasoningTokens: number | undefined;
 
     let textBuffer = '';
     let reasoningBuffer = '';
@@ -247,6 +248,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           outputTokens: chunk.usage.completion_tokens ?? 0,
           ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
         };
+        reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens ?? reasoningTokens;
         // Only when the provider actually reported cache figures: otherwise
         // `miss` is inferred from the prompt size and printing it would imply
         // a measured miss where nothing was measured at all.
@@ -326,6 +328,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         firstAnswerMs: firstAnswerAt === undefined ? undefined : firstAnswerAt - startedAt,
         totalMs: endedAt - startedAt,
         reasoningChars: reasoning.length,
+        reasoningTokens,
       });
     }
 
@@ -556,4 +559,6 @@ export interface StreamStats {
   firstAnswerMs?: number;
   totalMs: number;
   reasoningChars: number;
+  /** completion_tokens_details.reasoning_tokens, when the server reports it (LM Studio does). */
+  reasoningTokens?: number;
 }

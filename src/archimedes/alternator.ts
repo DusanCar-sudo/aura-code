@@ -427,8 +427,11 @@ export function formatSmallCallStats(s: StreamStats): string {
   const genMs = s.totalMs - s.firstChunkMs;
   const tps = s.outputTokens && genMs > 0 ? (s.outputTokens / (genMs / 1000)).toFixed(1) : '?';
   const answer = s.firstAnswerMs === undefined ? 'none' : `${(s.firstAnswerMs / 1000).toFixed(1)}s`;
+  const split = s.reasoningTokens !== undefined && s.outputTokens !== undefined
+    ? `reasoning=${s.reasoningTokens}tok content=${s.outputTokens - s.reasoningTokens}tok`
+    : `reasoning=${s.reasoningChars}ch`;
   return `[archimedes] prompt=${s.promptTokens ?? '?'}tok ttft=${(s.firstChunkMs / 1000).toFixed(1)}s ` +
-    `first-answer=${answer} out=${s.outputTokens ?? '?'}tok ${tps} tok/s reasoning=${s.reasoningChars}ch total=${(s.totalMs / 1000).toFixed(1)}s`;
+    `first-answer=${answer} out=${s.outputTokens ?? '?'}tok ${tps} tok/s ${split} total=${(s.totalMs / 1000).toFixed(1)}s`;
 }
 
 /**
