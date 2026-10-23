@@ -30,6 +30,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { verifyArchimedesAnswer } from '../../src/archimedes/alternator.js';
 import { createResilientProvider } from '../../src/providers/resilient-factory.js';
+import { loadKeysIntoEnv } from '../../src/setup/key-store.js';
 import type { LLMProvider } from '../../src/providers/types.js';
 import type { HistoryMessage } from '../../src/providers/types.js';
 import type { ToolCall, ToolResult } from '../../src/providers/types.js';
@@ -57,14 +58,23 @@ function buildHistory(case_: EscalationCase): HistoryMessage[] {
   return history;
 }
 
+// Every call that never produced a judgement. A baseline with any of these is
+// not a measurement, so the run fails instead of counting them as INVALID.
+const unjudged: string[] = [];
+
 async function checkAnswer(answer: string, case_: EscalationCase): Promise<{ valid: boolean; reason: string }> {
   if (!verifierProvider) throw new Error('verifier not initialized');
   const history = buildHistory(case_);
   const verification = await verifyArchimedesAnswer(case_.task, answer, history, verifierProvider);
+  if (verification.verdict === 'unreachable' || verification.error) {
+    unjudged.push(`${case_.id}: ${verification.verdict} ${verification.error ?? ''}`.trim());
+  }
   return { valid: verification.verdict === 'accept', reason: verification.reason || verification.error || '' };
 }
 
 beforeAll(async () => {
+  // Same key source as the CLI (src/cli/index.ts loadKeysIntoEnv): ~/.aura/keys.json.
+  loadKeysIntoEnv();
   // AURA_ESCALATION_VERIFIER_MODEL lets this run against whichever provider is
   // actually funded. It was pinned to deepseek-chat, which silently skipped the
   // whole benchmark once that account ran out of balance — a benchmark that
@@ -115,10 +125,9 @@ describe('Escalation-correctness benchmark', () => {
   });
 
   it('runs all 30 cases through the real verifier and reports escalation-correctness rates', { timeout: 600_000 }, async () => {
-    if (skipReason) {
-      console.warn(`\n⚠ SKIPPED: ${skipReason}`);
-      return;
-    }
+    // A skipped benchmark is indistinguishable from a passing one.
+    if (skipReason) throw new Error(`verifier unavailable: ${skipReason}`);
+    console.log(`verifier model: ${verifierProvider!.model}`);
     const results: Record<string, { mode: string; shouldHandle: boolean; correctVerdict: string; wrongVerdict: string; classification: string; correctReason: string; wrongReason: string }> = {};
 
     for (const case_ of CASES) {
@@ -185,5 +194,6 @@ describe('Escalation-correctness benchmark', () => {
     // The point of the harness is measurement; we assert the harness ran,
     // not require a specific pass rate (the verifier is a live model).
     expect(total).toBe(30);
+    expect(unjudged, `calls with no verdict:\n${unjudged.join('\n')}`).toEqual([]);
   });
 });
