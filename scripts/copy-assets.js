@@ -21,6 +21,7 @@ const path = require('path');
 
 const ASSETS = [
   'tools/screen/aura_screen.py', 'tools/screen/aura_record.py',
+  'tools/screen/screen_encode.py',
   // Dashboard enrichment: spawned as child processes by viz/index.ts to splice
   // the 8 relation-graph panels (bundling/chord/arc/matrix/sankey/radial/
   // particles/hulls) into a generated dashboard.html.
