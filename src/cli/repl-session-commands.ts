@@ -33,7 +33,7 @@ export interface ChatState {
 
 /** Which loop a typed line runs through: the full tool-using agent, or lean
  *  conversation. See the :gazelle/:coder branches in index.ts. */
-export type ReplMode = 'coder' | 'gazelle';
+export type ReplMode = 'coder' | 'gazelle' | 'accountant1' | 'accountant2';
 
 export interface ReplCommandResult {
   handled: boolean;

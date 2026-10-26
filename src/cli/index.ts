@@ -57,6 +57,8 @@ import { loadProjectContext, loadGraphSummary } from '../agent/context.js';
 import { generateDashboard, generateGlobalDashboard, openDashboard } from '../viz/index.js';
 import { extractGraph } from '../perception/graphify.js';
 import { runAgentLoop, costFor } from '../agent/loop.js';
+import { buildAccountantPrompt, ACCOUNTANT_TOOLS } from '../agent/accountant-prompt.js';
+import { tryAccountantFastPath, buildAccountant2Prompt, ACCOUNTANT2_TOOLS } from '../agent/accountant2.js';
 import { runGazelleLoop, createLineReader, type LoopOutcome } from '../agent/gazelle-loop.js';
 import { tokenHex } from './diamond.js';
 import { createGazelleChat, type GazelleChat } from '../agent/gazelle-chat.js';
@@ -186,7 +188,7 @@ const KNOWN_FLAGS = new Set([
   'test-command', 'workflow', 'resume-workflow', 'workflow-name', 'apply-harness', 'blueprint', 'build', 'image',
   'help', 'h', 'version', 'v', 'auto', 'readonly', 'models', 'no-session', 'no-setup', 'reset-setup',
   'orchestrate', 'plan', 'architect', 'list-sessions', 'new-session', 'verify', 'analyze', 'workflows',
-  'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'web', 'computer', 'sandboxed',
+  'propose-harness', 'blueprints', 'moa', 'doctor', 'gazelle', 'accountant1', 'accountant-1', 'accountant2', 'accountant-2', 'web', 'computer', 'sandboxed',
   'allow-plugin-install', 'allow-api-keys', 'no-api-keys',
   // consumed in serve/device/web branches
   'lan', 'tailscale', 'port', 'open', 'no-open', 'remote', 'includes', 'interactive', 'speak',
@@ -270,6 +272,18 @@ const cliFallbacks: string[] =
 const gazelleMode = argv.gazelle === true
   || argv.mode === 'gazelle'
   || process.env.AURA_MODE === 'gazelle';
+
+// Accountant modes: --accountant1 / --accountant-1 / --accountant2 / --accountant-2,
+// --mode accountant1, or AURA_MODE=accountant1|accountant2. Same module-scope
+// detection as gazelleMode so the non-TTY help gate lets piped accountant
+// sessions through instead of printing help.
+const accountantMode = (argv['accountant1'] === true || argv['accountant-1'] === true
+  || argv.mode === 'accountant1' || process.env.AURA_MODE === 'accountant1')
+  ? 'accountant1'
+  : (argv['accountant2'] === true || argv['accountant-2'] === true
+    || argv.mode === 'accountant2' || process.env.AURA_MODE === 'accountant2')
+    ? 'accountant2'
+    : null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Help / version
@@ -552,7 +566,7 @@ if (argv.help) {
 // When run with no args + a TTY or piped input, fall through to the REPL/wizard.
 // Skip this gate when --reset-setup is set (the wizard should fire even if env
 // vars make needsWizard() return false).
-if (argv._.length === 0 && !argv.interactive && !argv.doctor && !gazelleMode && process.stdin.isTTY !== true && !argv['reset-setup']) {
+if (argv._.length === 0 && !argv.interactive && !argv.doctor && !gazelleMode && !accountantMode && process.stdin.isTTY !== true && !argv['reset-setup']) {
   if (!needsWizard({})) {
     printHelp();
     process.exit(0);
@@ -1364,7 +1378,29 @@ async function main() {
     }
 
     let result;
-    if (doVerify) {
+    if (accountantMode === 'accountant1' || accountantMode === 'accountant2') {
+      // Accountant modes: lean prompt + 5-tool allowlist, no verification,
+      // no Archimedes. Accountant Two's fast path serves simple commands
+      // with zero LLM calls.
+      if (accountantMode === 'accountant2') {
+        const fast = await tryAccountantFastPath(task, activeChatHistory);
+        if (fast) result = fast;
+      }
+      if (!result) {
+        result = await runAgentLoop({
+          provider, task, context: ctx, permissions, display,
+          initialHistory: activeChatHistory,
+          maxTurns: resolved.maxTurns,
+          systemPromptOverride: accountantMode === 'accountant2' ? buildAccountant2Prompt() : buildAccountantPrompt(),
+          allowedTools: accountantMode === 'accountant2' ? ACCOUNTANT2_TOOLS : ACCOUNTANT_TOOLS,
+          spawnConfig: {
+            apiKey: argv['api-key'] ?? undefined,
+            baseUrl: resolved.baseUrl ?? undefined,
+          },
+          sessionPath,
+        });
+      }
+    } else if (doVerify) {
       const { runWithVerification } = await import('../verify/index.js');
       const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
       const testCommand = cliTestCommand ?? fileConfig.testCommand;
@@ -1608,7 +1644,7 @@ let abortController: AbortController | null = null;
   // the same stdin the TUI holds in raw mode, and two readers on one stream
   // double every keypress (see the ReplCtx.rl comment). Only what a turn *does*
   // changes: no tools, no ProjectContext, no Archimedes, no verification gate.
-  let replMode: ReplMode = 'coder';
+  let replMode: ReplMode = accountantMode ?? 'coder';
   let gazelleChat: GazelleChat | null = null;
   // The TUI keeps accepting input while a reply streams and does not await
   // processLine, so a second line can arrive mid-turn. Two concurrent respond()
@@ -1623,7 +1659,7 @@ let abortController: AbortController | null = null;
       // changes it mid-session, and a bar that keeps announcing the startup
       // value makes the toggle look like a command that did nothing.
       provider.name, runtimeConfig.model, permissions.getLevel(),
-      ...(replMode === 'gazelle' ? ['gazelle'] : []),
+      ...(replMode === 'gazelle' ? ['gazelle'] : replMode === 'accountant1' ? ['accountant1'] : replMode === 'accountant2' ? ['accountant2'] : []),
       // Always visible while on. A feature that can move the real pointer
       // should never be running without a standing reminder that it is.
       ...(isComputerUseEnabled() ? ['computer'] : []),
@@ -1652,6 +1688,18 @@ let abortController: AbortController | null = null;
     if (next === 'gazelle') {
       gazelleChat = makeGazelleChat();
       tuiDisplay.success('Conversational (Gazelle) mode — no tools, no project context. :coder switches back.');
+    } else if (next === 'accountant1') {
+      if (gazelleChat && gazelleChat.totals().messages > 0) {
+        tuiDisplay.warning(gazelleChat.statsLine());
+      }
+      gazelleChat = null;
+      tuiDisplay.success('Accountant One — lean bookkeeping agent (5 tools). :coder switches back.');
+    } else if (next === 'accountant2') {
+      if (gazelleChat && gazelleChat.totals().messages > 0) {
+        tuiDisplay.warning(gazelleChat.statsLine());
+      }
+      gazelleChat = null;
+      tuiDisplay.success('Accountant Two — Accountant One + deterministic fast path. :coder switches back.');
     } else {
       // Only worth a line if something was actually said — an immediate
       // :gazelle → :coder otherwise reports "0 tokens over 0 message(s)".
@@ -1845,7 +1893,36 @@ let abortController: AbortController | null = null;
 
       const effectiveMaxTurns = turnsOverride !== undefined ? turnsOverride : resolved.maxTurns;
       const doVerify = argv.verify === true || !!fileConfig.verify;
-      if (doVerify) {
+      if (replMode === 'accountant1' || replMode === 'accountant2') {
+        // Accountant modes skip the coder dispatch entirely: no verification
+        // wrapper (a coding-workflow feature), no Archimedes alternator, and
+        // a lean prompt + 5-tool allowlist. Accountant Two tries the
+        // deterministic fast path first — simple one-step bookkeeping
+        // commands never reach an LLM at all.
+        if (replMode === 'accountant2') {
+          const fast = await tryAccountantFastPath(input, activeChatHistory);
+          if (fast) result = fast;
+        }
+        if (!result) {
+          result = await runAgentLoop({
+            provider: currentProvider, task: input,
+            context: ctx, permissions, display: tuiDisplay,
+            initialHistory: activeChatHistory,
+            maxTurns: effectiveMaxTurns,
+            budget: replBudget,
+            systemPromptOverride: replMode === 'accountant2' ? buildAccountant2Prompt() : buildAccountantPrompt(),
+            allowedTools: replMode === 'accountant2' ? ACCOUNTANT2_TOOLS : ACCOUNTANT_TOOLS,
+            spawnConfig: {
+              apiKey: runtimeConfig.apiKey,
+              baseUrl: runtimeConfig.baseUrl ?? undefined,
+            },
+            sessionPath,
+            abortSignal,
+            steering,
+            healthTracker,
+          });
+        }
+      } else if (doVerify) {
         const { runWithVerification } = await import('../verify/index.js');
         const maxRetries = cliMaxVerifyRetries ?? fileConfig.maxVerifyRetries ?? DEFAULTS.maxVerifyRetries;
         const testCommand = cliTestCommand ?? fileConfig.testCommand;
@@ -2111,7 +2188,7 @@ function trySetModel(c: ReplCtx, newModel: string): { ok: true } | { ok: false; 
     console.log(OK(`  ✓ Switched to ${test.name} · ${newModel}`));
     // Update the TUI status line so the model change is immediately visible.
     // The mode marker has to be re-appended — setStatusLine replaces the line.
-    setStatusLine([test.name, newModel, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
+    setStatusLine([test.name, newModel, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : c.mode === 'accountant1' ? 'accountant1' : c.mode === 'accountant2' ? 'accountant2' : '']
       .filter(Boolean).join(' · '));
     // Remember the choice for the next session. The saved baseUrl belongs to
     // the wizard-configured model — keep it only when switching back to that
@@ -2458,7 +2535,7 @@ async function handleReplCommand(input: string, c: ReplCtx): Promise<ReplCommand
           console.log(ERR(`  ✗ ${r.err}`));
         } else {
           await postModelSwitch(c);
-          setStatusLine([resolved.model ?? modelId, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : '']
+          setStatusLine([resolved.model ?? modelId, permissionLevel, c.mode === 'gazelle' ? 'gazelle' : c.mode === 'accountant1' ? 'accountant1' : c.mode === 'accountant2' ? 'accountant2' : '']
             .filter(Boolean).join(' · '));
           if (fileConfig.model && fileConfig.model !== modelId) {
             writeOutput(chalk.hex(TEXT_DIM_HEX)(

@@ -10,6 +10,8 @@ export const HELP_TEXT = [
   '  ── Modes ────────────────────────────────────────',
   '  /coder                  Switch to full coding-agent mode (tools, project context)',
   '  /gazelle                Switch to lean conversational mode',
+  '  /accountant1            Switch to lightweight bookkeeping agent (5 tools)',
+  '  /accountant2            Accountant One + deterministic fast path',
   '',
   '  ── Session ──────────────────────────────────────',
   '  /id                     Show current chat ID',

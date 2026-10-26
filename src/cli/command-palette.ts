@@ -32,6 +32,8 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   // Modes
   { id: '/coder', label: 'Coder mode', description: 'Full coding agent — tools and project context', category: 'Modes' },
   { id: '/gazelle', label: 'Gazelle mode', description: 'Lean conversation — no tools, no project context', category: 'Modes' },
+  { id: '/accountant1', label: 'Accountant One', description: 'Lean bookkeeping agent — 5 tools, no coding overhead', category: 'Modes' },
+  { id: '/accountant2', label: 'Accountant Two', description: 'Accountant One + deterministic fast path for simple commands', category: 'Modes' },
   // Session
   { id: '/id', label: 'Show session ID', description: 'Current chat ID', category: 'Session' },
   { id: '/sessions', label: 'List sessions', description: 'All saved sessions', category: 'Session' },
