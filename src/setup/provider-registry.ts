@@ -332,6 +332,16 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     ],
   },
   {
+    name: 'Inception',
+    baseUrl: 'https://api.inceptionlabs.ai/v1',
+    envKey: 'INCEPTION_API_KEY',
+    signupUrl: 'https://platform.inceptionlabs.ai/',
+    models: [
+      { id: 'mercury-3', label: 'Mercury 3', speed: 'Diffusion · fast', contextWindow: 1_000_000 },
+      { id: 'mercury-2.5', label: 'Mercury 2.5', speed: 'Diffusion · fast', contextWindow: 260_000 },
+    ],
+  },
+  {
     name: 'GMI Cloud',
     baseUrl: 'https://api.gmi-serving.com/v1',
     envKey: 'GMI_API_KEY',

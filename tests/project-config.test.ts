@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadProjectConfig, resolveConfig } from '../src/config/project-config.js';
+import { loadProjectConfig, resolveConfig, withGlobalProviders } from '../src/config/project-config.js';
 
 describe('loadProjectConfig', () => {
   let tmpDir: string;
@@ -222,5 +222,34 @@ describe('archimedes config', () => {
     }));
     const cfg = loadProjectConfig(tmpDir);
     expect(cfg.archimedes?.deadlineMs).toBeUndefined();
+  });
+});
+
+describe('withGlobalProviders', () => {
+  let home: string;
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-home-'));
+  });
+  afterEach(() => fs.rmSync(home, { recursive: true }));
+
+  const def = (name: string, baseUrl = 'https://x/v1') => ({ name, baseUrl, prefixes: ['th/'] });
+
+  it('adds ~/.aura.json providers a project config never reaches', () => {
+    fs.writeFileSync(path.join(home, '.aura.json'), JSON.stringify({ providers: [def('Token Harbor')] }));
+    expect(withGlobalProviders([], home).map(p => p.name)).toEqual(['Token Harbor']);
+  });
+
+  it('keeps the project entry when both define the same name', () => {
+    fs.writeFileSync(path.join(home, '.aura.json'), JSON.stringify({ providers: [def('Token Harbor', 'https://global/v1')] }));
+    const out = withGlobalProviders([def('Token Harbor', 'https://project/v1')], home);
+    expect(out).toHaveLength(1);
+    expect(out[0].baseUrl).toBe('https://project/v1');
+  });
+
+  it('returns the project list when ~/.aura.json is missing or malformed', () => {
+    const project = [def('P')];
+    expect(withGlobalProviders(project, home)).toBe(project);
+    fs.writeFileSync(path.join(home, '.aura.json'), '{not json');
+    expect(withGlobalProviders(project, home)).toBe(project);
   });
 });

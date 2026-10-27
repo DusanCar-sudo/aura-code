@@ -216,6 +216,12 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     baseUrl: 'https://tokenhub.tencentmaas.com/v1', baseUrlEnv: ['TENCENT_BASE_URL'],
   },
   {
+    family: 'inception', displayName: 'Inception',
+    prefixes: ['inception/'], apiKeyEnv: ['INCEPTION_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.inceptionlabs.ai/v1', baseUrlEnv: ['INCEPTION_BASE_URL'],
+  },
+  {
     family: 'gmi', displayName: 'GMI Cloud',
     prefixes: ['gmi/'], apiKeyEnv: ['GMI_API_KEY'],
     transport: 'openai-compatible',

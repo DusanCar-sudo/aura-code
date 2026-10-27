@@ -11,7 +11,7 @@ import { exec, execFileSync } from 'child_process';
 import { run } from '../util/exec.js';
 import { isSecretPath } from '../safety/secret-paths.js';
 import { createProvider, registerCustomProviders, getAllModels, isModelConfigured, LOCAL_ONLY_PROVIDERS } from '../providers/factory.js';
-import { loadProjectConfig } from '../config/project-config.js';
+import { loadProjectConfig, withGlobalProviders } from '../config/project-config.js';
 import { rtkWrap } from '../util/rtk.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
 import {
@@ -121,11 +121,9 @@ function refusalFor(userId: string | number | undefined): string {
   ].join('\n');
 }
 
-// Register custom providers from project's .aura.json (needed for deepseek/ etc.)
+// Register custom providers from project's .aura.json, then ~/.aura.json
 const projectCfg = loadProjectConfig(process.cwd());
-if (projectCfg.providers && projectCfg.providers.length > 0) {
-  registerCustomProviders(projectCfg.providers);
-}
+registerCustomProviders(withGlobalProviders(projectCfg.providers));
 
 // Connection pooling is fine now that the single-instance lock (below) makes a
 // competing poller impossible. keepAlive:false was papering over 409 Conflict

@@ -41,7 +41,14 @@ import { selectTools, selectToolsWithEviction, executeTool } from '../tools/inde
 import { resolveConnectCommand } from '../tools/mcp.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { confirm } from '../safety/permissions.js';
-import { buildSystemPrompt } from './system-prompt.js';
+import { buildSystemPrompt, buildLiteSystemPrompt } from './system-prompt.js';
+
+// Core tools kept in lite mode (small local providers). Everything else
+// (telegram, email, computer, github, …) stays available on cloud providers.
+const LITE_TOOLSET = [
+  'read_file', 'list_dir', 'edit_file', 'write_file', 'search_code',
+  'run_shell', 'run_tests', 'web_fetch', 'web_search', 'image_read',
+];
 import { buildTaskGuidance, TASK_GUIDANCE_DELIMITER } from './task-guidance.js';
 import type { ProjectContext } from './context.js';
 import type { Display } from '../cli/display.js';
@@ -633,7 +640,17 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const profile = getLoopProfile(opts.maxTurns);
   const pricingModel = opts.pricingModel ?? provider.model;
 
-  const system = opts.systemPromptOverride ?? buildSystemPrompt(context, provider.name);
+  // Lite mode: local small-context providers get a trimmed system prompt, no
+  // kickoff guidance, and a core-only toolset — a ~40k-token first turn is
+  // fatal for 1B-class models. AURA_NO_LITE=1 opts back into the full payload.
+  const liteMode = !opts.systemPromptOverride
+    && process.env.AURA_NO_LITE !== '1'
+    && (/lm ?studio|ollama|archimedes|llama|\blocal\b/i.test(provider.name)
+      || /^(lmstudio|local|ollama)\//i.test(provider.model ?? ''));
+  if (liteMode && !opts.allowedTools) opts.allowedTools = LITE_TOOLSET;
+  const system = opts.systemPromptOverride ?? (liteMode
+    ? buildLiteSystemPrompt(context, provider.name)
+    : buildSystemPrompt(context, provider.name));
   // Task-derived guidance (domain expertise, conditional plugin skills) rides
   // on the kickoff user message rather than the system prompt — see
   // task-guidance.ts. Skipped when the caller owns the prompt (orchestration
@@ -642,7 +659,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   // display, tools gating and budget messages, and selectTools() re-gates on
   // this message below via stripTaskGuidance-cleaned history.
   const useDefaultPrompt = !opts.systemPromptOverride;
-  const guidance = useDefaultPrompt ? buildTaskGuidance(task) : '';
+  const guidance = useDefaultPrompt && !liteMode ? buildTaskGuidance(task) : '';
   const kickoffContent = guidance
     ? `${finalTask}${TASK_GUIDANCE_DELIMITER}${guidance}`
     : finalTask;

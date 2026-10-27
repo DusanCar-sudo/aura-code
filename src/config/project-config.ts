@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { ArchimedesBackend } from '../archimedes/types.js';
 import { parseEffort, type EffortLevel } from '../providers/effort.js';
@@ -120,6 +121,23 @@ export function loadProjectConfig(cwd: string): ProjectConfig {
     if (dir === root) return {};
     dir = path.dirname(dir);
   }
+}
+
+/**
+ * The project's custom providers plus those in ~/.aura.json (project wins on
+ * name). loadProjectConfig stops at the first .aura.json up the tree and never
+ * reaches $HOME for projects outside it (e.g. /mnt/...), so a provider defined
+ * once globally was missing from every such project.
+ */
+export function withGlobalProviders(project: ProviderDef[] = [], home = os.homedir()): ProviderDef[] {
+  let global: ProviderDef[];
+  try {
+    global = normalise(JSON.parse(fs.readFileSync(path.join(home, '.aura.json'), 'utf8'))).providers ?? [];
+  } catch {
+    return project;
+  }
+  const names = new Set(project.map(p => p.name));
+  return [...project, ...global.filter(p => !names.has(p.name))];
 }
 
 function normalise(raw: unknown): ProjectConfig {
