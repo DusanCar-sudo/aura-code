@@ -42,10 +42,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage gate
+        run: npm run test:coverage
 
-  lint:
+  # Not a linter: there is no ESLint/Prettier config in the repo. This job only
+  # proves the build (tsc type check) still passes on Node 22.
+  build-node22:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
