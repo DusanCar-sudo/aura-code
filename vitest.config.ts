@@ -25,6 +25,10 @@ export default defineConfig({
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts'],
       exclude: ['src/cli/index.ts', 'src/server/index.ts', 'src/types/**'],
+      // Floor, not a target: measured 64.1% lines / 80.2% branches / 75.2%
+      // functions on 2026-10-27, set ~2 points under so noise does not fail CI.
+      // Raise these when coverage rises; only enforced under `--coverage`.
+      thresholds: { statements: 62, lines: 62, functions: 73, branches: 78 },
     },
     testTimeout: 10_000,
   },

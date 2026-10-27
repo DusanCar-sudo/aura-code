@@ -22,6 +22,7 @@ coverage/
 
 # Build artifacts
 *.tsbuildinfo
+src-tauri/target/
 
 # Runtime state
 .aura/
