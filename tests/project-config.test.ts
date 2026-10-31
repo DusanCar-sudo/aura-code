@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadProjectConfig, resolveConfig } from '../src/config/project-config.js';
+import { loadProjectConfig, resolveConfig, withGlobalProviders } from '../src/config/project-config.js';
 
 describe('loadProjectConfig', () => {
   let tmpDir: string;
@@ -182,5 +182,74 @@ describe('loadProjectConfig — providers', () => {
     const cfg = loadProjectConfig(tmpDir);
     expect(cfg.providers).toHaveLength(1);
     expect(cfg.providers![0].models).toBeUndefined();
+  });
+});
+
+describe('archimedes config', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-cfg-arch-'));
+  });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
+
+  it('accepts provider as a legacy alias for backend', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { enabled: true, provider: 'lmstudio', modelName: 'lfm2.5-2.6b' },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.backend).toBe('lmstudio');
+  });
+
+  it('prefers backend when both backend and provider are present', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { backend: 'ollama', provider: 'lmstudio' },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.backend).toBe('ollama');
+  });
+
+  it('reads the Archimedes deadline', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { deadlineMs: 120_000 },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.deadlineMs).toBe(120_000);
+  });
+
+  it('drops a non-positive deadline', () => {
+    fs.writeFileSync(path.join(tmpDir, '.aura.json'), JSON.stringify({
+      archimedes: { deadlineMs: 0 },
+    }));
+    const cfg = loadProjectConfig(tmpDir);
+    expect(cfg.archimedes?.deadlineMs).toBeUndefined();
+  });
+});
+
+describe('withGlobalProviders', () => {
+  let home: string;
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-home-'));
+  });
+  afterEach(() => fs.rmSync(home, { recursive: true }));
+
+  const def = (name: string, baseUrl = 'https://x/v1') => ({ name, baseUrl, prefixes: ['th/'] });
+
+  it('adds ~/.aura.json providers a project config never reaches', () => {
+    fs.writeFileSync(path.join(home, '.aura.json'), JSON.stringify({ providers: [def('Token Harbor')] }));
+    expect(withGlobalProviders([], home).map(p => p.name)).toEqual(['Token Harbor']);
+  });
+
+  it('keeps the project entry when both define the same name', () => {
+    fs.writeFileSync(path.join(home, '.aura.json'), JSON.stringify({ providers: [def('Token Harbor', 'https://global/v1')] }));
+    const out = withGlobalProviders([def('Token Harbor', 'https://project/v1')], home);
+    expect(out).toHaveLength(1);
+    expect(out[0].baseUrl).toBe('https://project/v1');
+  });
+
+  it('returns the project list when ~/.aura.json is missing or malformed', () => {
+    const project = [def('P')];
+    expect(withGlobalProviders(project, home)).toBe(project);
+    fs.writeFileSync(path.join(home, '.aura.json'), '{not json');
+    expect(withGlobalProviders(project, home)).toBe(project);
   });
 });

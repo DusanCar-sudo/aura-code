@@ -68,6 +68,7 @@ import { writeConversationalMemory } from '../agent/gazelle-memory-writer.js';
 import { ArchimedesAlternator } from '../archimedes/index.js';
 import { resolveArchimedesConfig } from '../archimedes/resolve-config.js';
 import { applyModelOverride } from '../archimedes/endpoint.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from '../archimedes/types.js';
 import { PermissionSystem, setSharedReadline, getSharedReadline, setConfirmHandler, confirm } from '../safety/permissions.js';
 import { inSandbox, sandboxPreflight, sandboxBanner, reexecSandboxed } from '../safety/sandbox.js';
 import { createTerminalDisplay } from './display.js';
@@ -77,7 +78,7 @@ import { runSidecar } from '../protocol/stdio.js';
 import { runDevices } from './devices-command.js';
 import { runUrl } from './url-command.js';
 import type { PermissionLevel } from '../safety/permissions.js';
-import { loadProjectConfig, resolveConfig } from '../config/project-config.js';
+import { loadProjectConfig, resolveConfig, withGlobalProviders } from '../config/project-config.js';
 import pkg from '../../package.json';
 
 import { DEFAULTS, FALLBACK_CHAIN } from '../config/defaults.js';
@@ -305,6 +306,8 @@ if (argv.sandboxed && !inSandbox()) {
 }
 
 if (argv.models) {
+  // Runs before the main registration below, so load .aura.json providers here too.
+  registerCustomProviders(withGlobalProviders(loadProjectConfig(process.cwd()).providers));
   console.log('\n' + CHROME.bold('  Supported models:\n'));
   const allModels = getAllModels();
   const byProvider = allModels.reduce<Record<string, typeof allModels>>((acc, m) => {
@@ -633,8 +636,8 @@ const resolved = resolveConfig(
   { model: undefined as unknown as string, mode: 'auto', ignore: [] },
 );
 
-// Register custom providers from .aura.json
-registerCustomProviders(resolved.providers);
+// Register custom providers from .aura.json (project, then ~/.aura.json)
+registerCustomProviders(withGlobalProviders(resolved.providers));
 
 // Install the configured compaction ladder before any loop can run, so the
 // engine and the context bar read the same thresholds from turn one.
@@ -1385,7 +1388,7 @@ async function main() {
         display,
       });
       result = wrapperResult.loopResult;
-    } else if (archimedesOverride ?? fileConfig.archimedes?.enabled) {
+    } else if (archimedesOverride ?? fileConfig.archimedes?.enabled ?? DEFAULT_ARCHIMEDES_CONFIG.enabled) {
       const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
       if (!baseArchimedesConfig) {
         display.warning(reason);
@@ -1870,7 +1873,9 @@ let abortController: AbortController | null = null;
           display: tuiDisplay,
         });
         result = wrapperResult.loopResult;
-      } else if (small1Override || (archimedesOverride !== undefined ? archimedesOverride : fileConfig.archimedes?.enabled)) {
+      } else if (small1Override || (archimedesOverride !== undefined
+        ? archimedesOverride
+        : (fileConfig.archimedes?.enabled ?? DEFAULT_ARCHIMEDES_CONFIG.enabled))) {
         const { config: baseArchimedesConfig, reason } = await resolveArchimedesConfig(fileConfig.archimedes);
         if (!baseArchimedesConfig) {
           tuiDisplay.warning(reason);
@@ -2259,6 +2264,7 @@ const FAMILY_TO_PROVIDER_ID: Record<string, string | undefined> = {
   upstage: 'upstage',
   arcee: 'arcee',
   tencent: 'tencent',
+  inception: 'inception',
   gmi: 'gmi',
   kilocode: 'kilocode',
   alibaba: 'alibaba',

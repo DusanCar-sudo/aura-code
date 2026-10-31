@@ -34,6 +34,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private frequencyPenalty: number;
   private presencePenalty: number;
   private reasoningEffort?: string;
+  /** Overrides the stall budget for the first chunk only; see LOCAL_FIRST_CHUNK_MS. */
+  firstChunkMs?: number;
+  /** Called once per completed stream with where its time went. */
+  onStreamStats?: (stats: StreamStats) => void;
+  /**
+   * Optional external cancellation. Aborts the in-flight request as soon as
+   * the signal fires, rather than waiting for the loop's next turn boundary.
+   */
+  abortSignal?: AbortSignal;
+  /** Called once when the first chunk of a stream arrives, with its latency. */
+  onFirstChunk?: (ms: number) => void;
 
   constructor(config: ProviderConfig, providerName?: string) {
     this.model = config.model;
@@ -119,7 +130,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // own benchmarks) before writing any visible content. "high" keeps useful
       // reasoning for code quality while roughly halving that token burn.
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
-    } as OpenAI.ChatCompletionCreateParamsNonStreaming));
+    } as OpenAI.ChatCompletionCreateParamsNonStreaming, { signal: this.abortSignal }));
     return fromOpenAIResponse(response);
   }
 
@@ -191,7 +202,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const messages = toOpenAIMessages(system, history);
     // Lets the idle guard tear down the socket instead of leaking it.
     const controller = new AbortController();
+    const externalAbort = this.abortSignal;
+    const onExternalAbort = () => controller.abort();
+    if (externalAbort) {
+      if (externalAbort.aborted) controller.abort();
+      else externalAbort.addEventListener('abort', onExternalAbort, { once: true });
+    }
     this.syncKey();
+    const startedAt = Date.now();
     const rawStream = await this.withAuthHint(this.client.chat.completions.create({
       model: this.model,
       max_tokens: this.maxTokens,
@@ -205,8 +223,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
     } as OpenAI.ChatCompletionCreateParamsStreaming, { signal: controller.signal }));
     const stream = withIdleTimeout(rawStream, {
       idleMs: streamIdleMs(),
+      firstChunkMs: this.firstChunkMs,
       onStall: () => controller.abort(),
     });
+    let firstChunkAt: number | undefined;
+    let firstChunkNotified = false;
+    let firstAnswerAt: number | undefined;
+    let reasoningTokens: number | undefined;
 
     let textBuffer = '';
     let reasoningBuffer = '';
@@ -231,6 +254,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // stays undefined, token/cost accounting reads 0, and compaction never
     // fires. Drain the entire stream, then finalize.
     for await (const chunk of stream) {
+      firstChunkAt ??= Date.now();
+      if (!firstChunkNotified) {
+        firstChunkNotified = true;
+        this.onFirstChunk?.(firstChunkAt - startedAt);
+      }
       if (chunk.usage) {
         const { cacheHit, cacheMiss, reported } = readCacheStats(chunk.usage);
         usage = {
@@ -238,6 +266,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           outputTokens: chunk.usage.completion_tokens ?? 0,
           ...(cacheHit > 0 ? { cachedTokens: cacheHit } : {}),
         };
+        reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens ?? reasoningTokens;
         // Only when the provider actually reported cache figures: otherwise
         // `miss` is inferred from the prompt size and printing it would imply
         // a measured miss where nothing was measured at all.
@@ -261,6 +290,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // something to fall back on instead of surfacing as an empty answer.
       reasoningBuffer += readReasoningField(delta);
 
+      if (delta.content || delta.tool_calls?.length) firstAnswerAt ??= Date.now();
       if (delta.content) {
         // Other stacks put the same trace in-band as <think>…</think>; strip
         // it here rather than leaking it into the visible answer.
@@ -287,6 +317,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
     drained = true;
     } finally {
+      externalAbort?.removeEventListener('abort', onExternalAbort);
       // Only when the consumer walked away mid-stream; aborting a request that
       // already finished would be a no-op at best and an error at worst.
       if (!drained) controller.abort();
@@ -305,6 +336,19 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // Content-only-in-reasoning: nothing was streamed to the display, so
       // emit the fallback now rather than completing with a blank screen.
       yield { type: 'text', text: answer };
+    }
+
+    if (this.onStreamStats) {
+      const endedAt = Date.now();
+      this.onStreamStats({
+        promptTokens: usage?.inputTokens,
+        outputTokens: usage?.outputTokens,
+        firstChunkMs: (firstChunkAt ?? endedAt) - startedAt,
+        firstAnswerMs: firstAnswerAt === undefined ? undefined : firstAnswerAt - startedAt,
+        totalMs: endedAt - startedAt,
+        reasoningChars: reasoning.length,
+        reasoningTokens,
+      });
     }
 
     const calls: ToolCall[] = [];
@@ -524,4 +568,16 @@ function resolveBaseUrl(config: ProviderConfig): string | undefined {
   const m = config.model.toLowerCase();
   if (m.includes('grok')) return 'https://api.x.ai/v1';
   return undefined; // default OpenAI
+}
+
+/** Timing of one streamed call. firstChunkMs ≈ prefill; firstAnswerMs − firstChunkMs ≈ streamed reasoning. */
+export interface StreamStats {
+  promptTokens?: number;
+  outputTokens?: number;
+  firstChunkMs: number;
+  firstAnswerMs?: number;
+  totalMs: number;
+  reasoningChars: number;
+  /** completion_tokens_details.reasoning_tokens, when the server reports it (LM Studio does). */
+  reasoningTokens?: number;
 }

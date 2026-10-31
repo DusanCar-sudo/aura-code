@@ -1,6 +1,7 @@
 import * as readline from 'readline';
 import chalk from 'chalk';
-import { apiKeyEnvVarForModel, modelProviderFamily, getAllModels } from '../providers/factory.js';
+import { apiKeyEnvVarForModel, modelProviderFamily, getAllModels, getCustomProviders } from '../providers/factory.js';
+import type { ProviderDef } from '../config/project-config.js';
 import { PROVIDER_LIST, fetchLiveModels } from '../providers/live-models.js';
 import type { LiveModel } from '../providers/live-models.js';
 import { getApiKey, saveToAgentsEnv } from '../util/env.js';
@@ -230,6 +231,7 @@ function staticModelsForProvider(providerId: string): { id: string; name: string
       case 'byteplus': return p.includes('byteplus') || id.startsWith('byteplus/');
       case 'fireworks': return p.includes('fireworks') || id.startsWith('fireworks/');
       case 'tencent': return p.includes('tencent') || id.startsWith('tencent/');
+      case 'inception': return p.includes('inception') || id.startsWith('inception/');
       case 'gmi': return p.includes('gmi') || id.startsWith('gmi/');
       case 'kilocode': return p.includes('kilocode') || id.startsWith('kilocode/');
       case 'huggingface': return p.includes('hugging') || id.startsWith('huggingface/');
@@ -315,6 +317,11 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
     { id: 'tencent/hunyuan-large', name: 'Hunyuan Large' },
     { id: 'tencent/hunyuan-standard', name: 'Hunyuan Standard' },
   ],
+  inception: [
+    { id: 'inception/mercury-3', name: 'Mercury 3' },
+    { id: 'inception/mercury-2.5', name: 'Mercury 2.5' },
+    { id: 'inception/mercury-2', name: 'Mercury 2' },
+  ],
   gmi: [
     { id: 'gmi/deepseek-ai/deepseek-r1', name: 'DeepSeek R1' },
     { id: 'gmi/deepseek-ai/deepseek-v3', name: 'DeepSeek V3' },
@@ -340,7 +347,8 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
  */
 export async function showModelSelectorForProvider(providerId: string): Promise<string | 'back' | undefined> {
   const entry = PROVIDER_LIST.find(p => p.id === providerId);
-  const title = `${entry?.name ?? providerId} — models`;
+  const customDef = customProviderFor(providerId);
+  const title = `${entry?.name ?? customDef?.name ?? providerId} — models`;
 
   if (providerId === 'custom') {
     const id = (await askLine(CHROME('  Model id (e.g. openrouter/vendor/model, Enter to cancel): '))).trim();
@@ -349,7 +357,8 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
 
   let live: LiveModel[] = [];
   // Known providers only fetch when flagged; unknown ids get a best-effort try.
-  if (entry ? entry.liveFetch === true : true) {
+  // .aura.json providers list their declared models instead.
+  if (!customDef && (entry ? entry.liveFetch === true : true)) {
     const spinner = process.stdout.isTTY
       ? setInterval(() => process.stdout.write(`\r  ${CHROME('◐◓◑◒'[Math.floor(Date.now() / 120) % 4])} Fetching models...`), 120)
       : undefined;
@@ -360,15 +369,17 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
     }
   }
 
-  const models: { id: string; label: string; free?: boolean }[] = live.length > 0
-    ? live.map(m => ({ id: m.id, label: m.name ?? m.id, free: m.free }))
-    : staticModelsForProvider(providerId).map(m => ({ id: m.id, label: m.name }));
+  const models: { id: string; label: string; free?: boolean }[] = customDef
+    ? (customDef.models ?? []).map(m => ({ id: customRouteId(customDef, m.id), label: m.name ?? m.id }))
+    : live.length > 0
+      ? live.map(m => ({ id: m.id, label: m.name ?? m.id, free: m.free }))
+      : staticModelsForProvider(providerId).map(m => ({ id: m.id, label: m.name }));
 
   if (models.length === 0) {
     console.log(TEXT_DIM(`\n  No models found for ${entry?.name ?? providerId} (live fetch empty, no static entries).`));
     const id = (await askLine(CHROME('  Model id (Enter to go back): '))).trim();
     if (!id) return 'back';
-    const prefixed = applyRoutePrefix(providerId, id);
+    const prefixed = customDef ? customRouteId(customDef, id) : applyRoutePrefix(providerId, id);
     if (prefixed !== id) console.log(TEXT_DIM(`  Routing as ${prefixed}`));
     return prefixed;
   }
@@ -418,6 +429,7 @@ const ROUTE_PREFIX: Record<string, string> = {
   upstage: 'upstage/',
   arcee: 'arcee/',
   tencent: 'tencent/',
+  inception: 'inception/',
   gmi: 'gmi/',
   kilocode: 'kilocode/',
   alibaba: 'alibaba/',
@@ -434,8 +446,38 @@ export function applyRoutePrefix(providerId: string, id: string): string {
   const prefix = ROUTE_PREFIX[providerId];
   if (!prefix || id.startsWith(prefix)) return id;
   // Already carries some other known routing prefix (user typed it fully) — leave alone.
-  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|gmi|kilocode|alibaba|byteplus|fpt|vertex|vertex-google|google-vertex|cerebras|sambanova|mistral|together|cohere)\//.test(id)) return id;
+  if (/^(openrouter|ollama|lmstudio|local|groq|nvidia|gemini|huggingface|deepseek|kimi|qwen|zen|opencode|go-anthropic|zhipu|xiaomi|mimo|xai|minimax|stepfun|fireworks|upstage|arcee|tencent|inception|gmi|kilocode|alibaba|byteplus|fpt|vertex|vertex-google|google-vertex|cerebras|sambanova|mistral|together|cohere)\//.test(id)) return id;
   return prefix + id;
+}
+
+/** Selector id for a .aura.json provider; `custom:` keeps it clear of built-in ids. */
+const CUSTOM_ID_PREFIX = 'custom:';
+
+function customProviderFor(providerId: string): ProviderDef | undefined {
+  if (!providerId.startsWith(CUSTOM_ID_PREFIX)) return undefined;
+  return getCustomProviders().find(d => CUSTOM_ID_PREFIX + d.name === providerId);
+}
+
+/** .aura.json providers as /provider menu entries. */
+function customProviderEntries(): ProviderEntry[] {
+  return getCustomProviders().map(d => ({
+    id: CUSTOM_ID_PREFIX + d.name,
+    name: d.name,
+    desc: `.aura.json · ${d.baseUrl}`,
+    envKey: d.apiKeyEnv,
+  }));
+}
+
+/**
+ * A custom provider's model id with its first routing prefix added when it
+ * carries none. Without the prefix the factory never routes to this provider
+ * (a bare `deepseek-v4-flash` goes to DeepSeek's own API with a DeepSeek key).
+ * Exported for tests.
+ */
+export function customRouteId(def: Pick<ProviderDef, 'prefixes'>, id: string): string {
+  const lower = id.toLowerCase();
+  if (def.prefixes.length === 0 || def.prefixes.some(p => lower.startsWith(p.toLowerCase()))) return id;
+  return def.prefixes[0] + id;
 }
 
 /** Mask a secret: last 6 chars visible, e.g. "sk-or-****9f9802". */
@@ -530,6 +572,10 @@ async function updateApiKeyFlow(entry: ProviderEntry): Promise<void> {
 
 /** [U] Change base URL — visible input, agents.env save. */
 async function updateBaseUrlFlow(entry: ProviderEntry): Promise<void> {
+  if (customProviderFor(entry.id)) {
+    console.log(TEXT_DIM(`\n  ${entry.name} is defined in .aura.json — change its "baseUrl" there.\n`));
+    return;
+  }
   const envVar = baseUrlEnvFor(entry);
   const current = process.env[envVar];
   console.log(TEXT_DIM(`\n  ${envVar}: ${current ?? WARN('not set (provider default)')}`));
@@ -572,7 +618,8 @@ async function providerActionMenu(entry: ProviderEntry): Promise<'models' | 'key
  */
 export async function showProviderSelector(): Promise<string | undefined> {
   for (;;) {
-    const items: ListItem[] = PROVIDER_LIST.map(p => {
+    const providers = [...customProviderEntries(), ...PROVIDER_LIST];
+    const items: ListItem[] = providers.map(p => {
       const configured = p.envKey ? Boolean(getApiKey(p.envKey)) : false;
       return {
         label: `${p.name} ${p.desc}`,
@@ -583,7 +630,7 @@ export async function showProviderSelector(): Promise<string | undefined> {
     });
     const r = await interactiveList('Select provider', items, { filter: true });
     if (r.kind !== 'pick') return undefined;
-    const entry = PROVIDER_LIST[r.index];
+    const entry = providers[r.index];
 
     submenu: for (;;) {
       const action = await providerActionMenu(entry);

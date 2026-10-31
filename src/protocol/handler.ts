@@ -20,6 +20,7 @@ import { formatContextDashboard, formatContextBar } from '../cli/context-health.
 import { runCoreCommand, isTerminalOnlyCommand, TERMINAL_ONLY_COMMANDS, type CommandCtx } from '../commands/core.js';
 import { collectingSurface, withSurface } from '../commands/surface.js';
 import { PALETTE_COMMANDS } from '../cli/command-palette.js';
+import { currentTheme } from '../cli/theme.js';
 import type { HistoryMessage } from '../providers/types.js';
 import {
   M,
@@ -500,7 +501,6 @@ export class ProtocolHandler {
     this.emit(M.turnStarted, s.id, { turnId });
 
     const ask: Ask = (message, ctx) => this.askApproval(s, turnId, message, ctx);
-    console.log('[diag] runTurn start', turnId, 'model=', s.model); // TEMP DIAGNOSTIC
 
     try {
       const provider = createProvider({
@@ -593,10 +593,8 @@ export class ProtocolHandler {
           this.boardCommit(root, bState);
         }
       } catch { /* best effort */ }
-      console.log('[diag] runTurn success', turnId, 'success=', result.success, 'summary=', result.summary.slice(0, 200)); // TEMP DIAGNOSTIC
       return { success: result.success, summary: result.summary, files: modifiedFiles };
     } catch (e) {
-      console.log('[diag] runTurn threw', turnId, String(e)); // TEMP DIAGNOSTIC
       this.emit(M.turnError, s.id, {
         turnId,
         message: e instanceof Error ? e.message : String(e),
@@ -750,10 +748,16 @@ export class ProtocolHandler {
   private async commandRun(req: ReqFrame, p: Record<string, unknown>): Promise<void> {
     const s = this.lookup(req, p);
     if (!s) return;
-    const input = typeof p.command === 'string' ? p.command.trim() : '';
-    if (!input) {
+    const raw = typeof p.command === 'string' ? p.command.trim() : '';
+    if (!raw) {
       return this.fail(req.id, { code: 'bad_params', message: 'params.command must be a non-empty string.' });
     }
+    // The web palette (/api/commands) advertises slash ids, and users type
+    // /machina because that is what /help prints — but the core matches on
+    // ':'-prefixed input only. Normalize the prefix at this one boundary so
+    // every advertised command actually runs instead of answering
+    // { handled: false } and vanishing.
+    const input = raw.startsWith('/') ? `:${raw.slice(1)}` : raw;
 
     const elsewhere = isTerminalOnlyCommand(input);
     if (elsewhere) {
@@ -846,6 +850,12 @@ export class ProtocolHandler {
       /** `:catchthis run` hands back a task rather than doing the work here —
        *  the client sends it as an ordinary turn, the same as the REPL does. */
       runTask: result.runTask,
+      // A :theme change must reach the browser as pixels, not just as chalk
+      // codes the terminal would have worn — the client recolours itself from
+      // this instead of waiting for a restart.
+      ...(input.startsWith(':theme')
+        ? { theme: (({ id, name, tokens, dark }) => ({ id, name, tokens, dark }))(currentTheme()) }
+        : {}),
     });
   }
 
@@ -1098,9 +1108,15 @@ export class ProtocolHandler {
     if (!task) {
       return this.fail(req.id, { code: 'no_such_task', message: `No task with id "${id}".` });
     }
-    if (task.column === 'execution') {
+    if (task.column === 'execution' && task.sessionId) {
       return this.fail(req.id, { code: 'session_busy', message: `Task "${task.title}" is already running.` });
     }
+    // A tile in execution with NO sessionId was never dispatched — created
+    // straight into execution (a swarm modal, a chat-created tile), then the
+    // tab closed, or the server restarted mid-creation. Refusing to run it
+    // made Run permanently dead for the one tile that most needs running
+    // ("already running" for a thing that never ran). Starting it here is the
+    // same rescue reclaimStrandedTasks does at startup, done on demand.
 
     const preset = AGENT_PRESETS[task.agent] ?? AGENT_PRESETS.aura;
     // The caller's own permission level, capped by the agent's preset — see
@@ -1117,6 +1133,10 @@ export class ProtocolHandler {
       const activeWriter = state.tasks.find((t) => {
         if (t.column !== 'execution') return false;
         if (t.waiting) return false;
+        // A tile nobody dispatched (a chat-created task parked here with no
+        // session) holds no writer lease — treating it as one let a zombie
+        // tile wedge the queue so every Run answered { queued: true } forever.
+        if (!t.sessionId) return false;
         const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
         return tPreset.permission !== 'read-only';
       });
@@ -1257,10 +1277,15 @@ export class ProtocolHandler {
     };
 
     // Everyone starts pending, persisted before the first loop spins up, so a
-    // client connecting mid-run still sees the full roster.
+    // client connecting mid-run still sees the full roster. A swarm gets a
+    // sessionId like any other dispatched run: without one the tile is
+    // indistinguishable from a zombie nobody dispatched, and the writer-lease
+    // checks that exempt zombies would either wedge the queue on a dead tile
+    // or treat a live swarm as dead.
     const begin = loadBoard(root);
     updateTask(begin, id, {
       column: 'execution',
+      sessionId: randomUUID(),
       result: undefined,
       failed: false,
       waiting: undefined,
@@ -1274,22 +1299,41 @@ export class ProtocolHandler {
 
     this.ok(req.id, { swarm: true, agents: agents.length });
 
-    const outcomes = await runSwarm({
-      task,
-      context,
-      model,
-      ...(apiKey ? { apiKey } : {}),
-      ...(this.opts.defaultBaseUrl ? { baseUrl: this.opts.defaultBaseUrl } : {}),
-      permission,
-      allowedTools: preset.allowedTools ?? null,
-      onAgentUpdate: persistAgent,
-      shouldStop: () => {
-        try {
-          const t = loadBoard(root).tasks.find((x) => x.id === id);
-          return !t || t.column !== 'execution';
-        } catch { return false; }
-      },
-    });
+    // A thrown error here used to strand the tile in execution for ever: the
+    // code below the await never ran, the roster stayed pending, and the tile
+    // held the writer lease so every queued task behind it waited forever.
+    // A swarm that dies reports on its tile and releases the queue.
+    let outcomes;
+    try {
+      outcomes = await runSwarm({
+        task,
+        context,
+        model,
+        ...(apiKey ? { apiKey } : {}),
+        ...(this.opts.defaultBaseUrl ? { baseUrl: this.opts.defaultBaseUrl } : {}),
+        permission,
+        allowedTools: preset.allowedTools ?? null,
+        onAgentUpdate: persistAgent,
+        shouldStop: () => {
+          try {
+            const t = loadBoard(root).tasks.find((x) => x.id === id);
+            return !t || t.column !== 'execution';
+          } catch { return false; }
+        },
+      });
+    } catch (e) {
+      const after = loadBoard(root);
+      updateTask(after, id, {
+        column: 'finished',
+        result: `Swarm failed before any agent could report: ${e instanceof Error ? e.message : String(e)}`,
+        failed: true,
+        attention: true,
+        waiting: undefined,
+      });
+      this.boardCommit(root, after);
+      await this.processQueue(root);
+      return;
+    }
 
     const merged = mergeSwarmOutcomes(outcomes);
 
@@ -1342,6 +1386,10 @@ export class ProtocolHandler {
       const activeWriter = state.tasks.find((t) => {
         if (t.column !== 'execution') return false;
         if (t.waiting) return false;
+        // A tile nobody dispatched (a chat-created task parked here with no
+        // session) holds no writer lease — treating it as one let a zombie
+        // tile wedge the queue so every Run answered { queued: true } forever.
+        if (!t.sessionId) return false;
         const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
         return tPreset.permission !== 'read-only';
       });
@@ -1407,6 +1455,11 @@ export class ProtocolHandler {
     const activeWriter = state.tasks.find((t) => {
       if (t.column !== 'execution') return false;
       if (t.waiting) return false;
+      // Same zombie rule as boardRun and runLinked: a tile nobody dispatched
+      // (parked here with no session) holds no writer lease — treating it as
+      // one let a dead tile wedge the queue so every queued task waited
+      // forever behind nothing.
+      if (!t.sessionId) return false;
       const tPreset = AGENT_PRESETS[t.agent] ?? AGENT_PRESETS.aura;
       return tPreset.permission !== 'read-only';
     });

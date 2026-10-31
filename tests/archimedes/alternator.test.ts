@@ -205,6 +205,28 @@ describe('ArchimedesAlternator.run() — result threading', () => {
       expect.objectContaining({ initialHistory: priorHistory }),
     );
   });
+
+  it('aborts a stalled Archimedes attempt at its deadline and escalates', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    const largeResult = makeLoopResult({ summary: 'large model rescue' });
+
+    // The small loop never returns on its own; it only settles when the
+    // alternator's deadline aborts the signal it was given.
+    mockRunAgentLoop.mockImplementationOnce((opts: any) => new Promise(resolve => {
+      opts.abortSignal.addEventListener('abort', () => {
+        resolve(makeLoopResult({ success: false, summary: 'aborted by deadline' }));
+      }, { once: true });
+    })).mockResolvedValueOnce(largeResult);
+
+    const alternator = makeAlternator({ ...enabledArchimedesConfig, deadlineMs: 25 });
+    const { loopResult, usedArchimedes, episode } = await alternator.run('slow task');
+
+    expect(usedArchimedes).toBe(false);
+    expect(loopResult).toEqual(largeResult);
+    expect(episode.archimedesAttempted).toBe(true);
+    expect(episode.archimedesSucceeded).toBe(false);
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('ArchimedesAlternator.run() — forceArchimedes (:small1 override)', () => {
@@ -372,5 +394,53 @@ describe('ArchimedesAlternator — claim-type-aware verification', () => {
     expect(usedArchimedes).toBe(false); // should have escalated
     expect(episode.archimedesSucceeded).toBe(false); // verification failed
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(2); // Archimedes + large model escalation
+  });
+});
+
+describe('ArchimedesAlternator.run() — episode learning fields', () => {
+  it('awaits episodeLearningFields so filesTouched/testResult land on the episode', async () => {
+    const largeResult = makeLoopResult({
+      toolCallLog: [
+        { name: 'write_file', input: { path: 'src/a.ts' } },
+        { name: 'run_tests', input: {} },
+      ] as LoopResult['toolCallLog'],
+    });
+    mockRunAgentLoop.mockResolvedValueOnce(largeResult);
+
+    const { episode } = await makeAlternator({ ...enabledArchimedesConfig, enabled: false }).run('fix a small bug');
+
+    expect(episode.filesTouched).toEqual(['src/a.ts']);
+    expect(episode.testResult).toBe('pass');
+  });
+});
+
+describe('ArchimedesAlternator.run() — typed verifier verdict on the episode', () => {
+  function withVerifier(complete: LLMProvider['complete']) {
+    return new ArchimedesAlternator({ ...baseOpts(), archimedesConfig: enabledArchimedesConfig, largeModelProvider: { ...fakeProvider, complete } as LLMProvider });
+  }
+
+  it('records accept when the small answer is approved', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult());
+    const { episode } = await withVerifier(async () => ({ text: 'VALID' }) as any).run('fix a small bug');
+    expect(episode.verifierVerdict).toBe('accept');
+  });
+
+  it('escalates on "VALIDATION FAILED" instead of accepting it', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult()).mockResolvedValueOnce(makeLoopResult({ summary: 'large' }));
+    const { usedArchimedes, episode } = await withVerifier(async () => ({ text: 'VALIDATION FAILED: made up' }) as any).run('fix a small bug');
+    expect(usedArchimedes).toBe(false);
+    expect(episode.verifierVerdict).toBe('abstain');
+  });
+
+  it('records a verifier error as unreachable, not as a reject reason', async () => {
+    fetchSpy.mockResolvedValue({ ok: true } as Response);
+    mockRunAgentLoop.mockResolvedValueOnce(makeLoopResult()).mockResolvedValueOnce(makeLoopResult({ summary: 'large' }));
+    const { usedArchimedes, episode } = await withVerifier(async () => { throw new Error('timeout'); }).run('fix a small bug');
+    expect(usedArchimedes).toBe(false);
+    expect(episode.verifierVerdict).toBe('unreachable');
+    expect(episode.verifierError).toContain('timeout');
+    expect(episode.reviewerReason).toBeUndefined();
   });
 });

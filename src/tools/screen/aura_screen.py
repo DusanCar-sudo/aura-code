@@ -36,6 +36,9 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Gio, GLib, Gst, Atspi  # noqa: E402
 from evdev import UInput, AbsInfo, ecodes as e    # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from screen_encode import encode_png  # noqa: E402
+
 PORTAL = "org.freedesktop.portal.Desktop"
 PATH = "/org/freedesktop/portal/desktop"
 RD = "org.freedesktop.portal.RemoteDesktop"
@@ -227,8 +230,9 @@ class Input:
             + list(_BUTTONS.values())))
         caps = {
             e.EV_KEY: keys,
-            e.EV_ABS: [(e.ABS_X, AbsInfo(0, 0, width, 0, 0, 0)),
-                       (e.ABS_Y, AbsInfo(0, 0, height, 0, 0, 0))],
+            # max is the last addressable pixel (width-1), not the width itself.
+            e.EV_ABS: [(e.ABS_X, AbsInfo(0, 0, width - 1, 0, 0, 0)),
+                       (e.ABS_Y, AbsInfo(0, 0, height - 1, 0, 0, 0))],
             e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
         }
         self.ui = UInput(caps, name="aura-virtual-pointer", version=1)
@@ -240,8 +244,8 @@ class Input:
     def move(self, x, y):
         x = max(0, min(int(x), self.w))
         y = max(0, min(int(y), self.h))
-        self.ui.write(e.EV_ABS, e.ABS_X, x)
-        self.ui.write(e.EV_ABS, e.ABS_Y, y)
+        self.ui.write(e.EV_ABS, e.ABS_X, min(x, self.w - 1))
+        self.ui.write(e.EV_ABS, e.ABS_Y, min(y, self.h - 1))
         self.ui.syn()
 
     def click(self, button="left", count=1):
@@ -331,19 +335,6 @@ class Input:
             self.ui.close()
         except Exception:
             pass
-
-
-def encode_png(data, w, h, out_path, max_pixels):
-    """Raw RGB -> downscaled PNG, via ImageMagick so nothing new is installed."""
-    scale = min(1.0, (max_pixels / float(w * h)) ** 0.5) if max_pixels else 1.0
-    tw, th = max(1, int(w * scale)), max(1, int(h * scale))
-    p = subprocess.run(
-        ["convert", "-size", f"{w}x{h}", "-depth", "8", "RGB:-",
-         "-resize", f"{tw}x{th}!", out_path],
-        input=data, capture_output=True)
-    if p.returncode != 0:
-        raise RuntimeError("convert failed: " + p.stderr.decode()[:200])
-    return tw, th, scale
 
 
 def die_with_parent():

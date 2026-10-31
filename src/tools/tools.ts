@@ -56,10 +56,46 @@ export function listDir(input: ListDirInput, cwd: string): string {
 
 export interface WriteFileInput { path: string; content: string }
 
+/**
+ * Sampling degeneration detector: a model that falls into a repetition loop
+ * emits a line with one token repeated many times (e.g. "exit ${X:-9}" x24).
+ * Catching it HERE fails the call in one round trip with corrective guidance,
+ * instead of writing a broken file (or running a broken heredoc) and burning
+ * several full retries before the model notices.
+ */
+export function detectDegenerate(text: string): string | null {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.length > 500) {
+      const counts = new Map<string, number>();
+      for (const tok of line.split(/\s+/)) {
+        if (tok.length < 4) continue; // punctuation-only, brackets, etc.
+        const n = (counts.get(tok) ?? 0) + 1;
+        counts.set(tok, n);
+        if (n >= 8) return `line ${i + 1}: token ${JSON.stringify(tok)} repeated ${n}x`;
+      }
+    }
+    // Same non-trivial line repeated back to back (loop without growth).
+    if (i >= 4 && line.trim().length > 10 &&
+        line === lines[i - 1] && line === lines[i - 2] && line === lines[i - 3] && line === lines[i - 4]) {
+      return `line ${i + 1}: identical line repeated 5+ times`;
+    }
+  }
+  return null;
+}
+
+const DEGENERATE_ADVICE =
+  'The content looks corrupted by a generation repetition loop and was NOT written/executed. ' +
+  'Do NOT retry the same large payload. Rewrite in small chunks instead: ' +
+  'append ≤20 lines per run_shell heredoc call (cat >> file), then verify with bash -n.';
+
 export function writeFile(input: WriteFileInput, cwd: string): string {
   let filePath: string;
   try { filePath = resolveInRoot(cwd, input.path); }
   catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
+  const degenerate = detectDegenerate(input.content);
+  if (degenerate) return `Error: corrupted write (${degenerate}). ${DEGENERATE_ADVICE}`;
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const existed = fs.existsSync(filePath);
@@ -162,6 +198,9 @@ export function runShell(input: RunShellInput, projectCwd: string): string {
   try { workDir = input.cwd ? resolveInRoot(projectCwd, input.cwd) : projectCwd; }
   catch (e) { if (e instanceof PathJailError) return `Error: ${e.message}`; throw e; }
   const timeout = input.timeout ?? 30_000;
+
+  const degenerate = detectDegenerate(input.command);
+  if (degenerate) return `Error: corrupted command (${degenerate}). ${DEGENERATE_ADVICE}`;
 
   try {
     // Through RTK when it's installed — its compressed output is what keeps a

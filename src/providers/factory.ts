@@ -597,6 +597,11 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'tencent/hunyuan-large',    name: 'Hunyuan Large',    provider: 'Tencent TokenHub', speed: 'Powerful · MoE' },
   { id: 'tencent/hunyuan-standard', name: 'Hunyuan Standard', provider: 'Tencent TokenHub', speed: 'Balanced · 32k' },
 
+  // ── Inception (Mercury diffusion LLMs) ───────────────────────────────────
+  { id: 'inception/mercury-3',   name: 'Mercury 3',   provider: 'Inception', speed: 'Diffusion · 1M ctx · ~1000 tok/s' },
+  { id: 'inception/mercury-2.5', name: 'Mercury 2.5', provider: 'Inception', speed: 'Diffusion · 260k ctx' },
+  { id: 'inception/mercury-2',   name: 'Mercury 2',   provider: 'Inception', speed: 'Diffusion · 128k ctx' },
+
   // ── GMI Cloud ────────────────────────────────────────────────────────────
   { id: 'gmi/deepseek-ai/deepseek-r1', name: 'DeepSeek R1 (GMI)', provider: 'GMI Cloud', speed: 'Reasoning · direct' },
   { id: 'gmi/deepseek-ai/deepseek-v3', name: 'DeepSeek V3 (GMI)', provider: 'GMI Cloud', speed: 'Powerful · direct' },
@@ -700,7 +705,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
 const LIVE_PREFERRED_PROVIDERS = new Set([
   'Anthropic', 'OpenAI', 'Google', 'OpenRouter', 'DeepSeek', 'Qwen', 'MiniMax',
   'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'BytePlus ModelArk', 'Upstage',
-  'Arcee AI', 'Tencent TokenHub', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
+  'Arcee AI', 'Tencent TokenHub', 'Inception', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
   'Xiaomi MiMo', 'Zhipu', 'Cerebras', 'SambaNova', 'Mistral AI', 'Together AI', 'Cohere',
 ]);
 

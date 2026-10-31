@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { ArchimedesBackend } from '../archimedes/types.js';
 import { parseEffort, type EffortLevel } from '../providers/effort.js';
@@ -75,13 +76,27 @@ export interface ProjectConfig {
     modelName?: string;
     /** Which local server to use; inferred from a modelName prefix when omitted. */
     backend?: ArchimedesBackend;
+    /**
+     * Legacy alias for `backend`. Older configs wrote `"provider": "lmstudio"`
+     * while the loader only understood `backend`, so the value was silently
+     * dropped and the request fell back to Ollama. `backend` wins when both
+     * are present.
+     */
+    provider?: ArchimedesBackend;
     ollamaBaseUrl?: string;
     lmstudioBaseUrl?: string;
     competenceThreshold?: number;
     minAttempts?: number;
     epsilonProbeRate?: number;
+    /** Hard wall-clock budget for one Archimedes attempt. */
+    deadlineMs?: number;
     /** Model that verifies answers; omitted = the large model grades itself. */
     verifierModel?: string;
+  };
+  /** Learning-data capture (aura-learn episode enrichment). */
+  learning?: {
+    /** When true, this project produces zero saved episodes / training rows. */
+    exclude?: boolean;
   };
 }
 
@@ -106,6 +121,23 @@ export function loadProjectConfig(cwd: string): ProjectConfig {
     if (dir === root) return {};
     dir = path.dirname(dir);
   }
+}
+
+/**
+ * The project's custom providers plus those in ~/.aura.json (project wins on
+ * name). loadProjectConfig stops at the first .aura.json up the tree and never
+ * reaches $HOME for projects outside it (e.g. /mnt/...), so a provider defined
+ * once globally was missing from every such project.
+ */
+export function withGlobalProviders(project: ProviderDef[] = [], home = os.homedir()): ProviderDef[] {
+  let global: ProviderDef[];
+  try {
+    global = normalise(JSON.parse(fs.readFileSync(path.join(home, '.aura.json'), 'utf8'))).providers ?? [];
+  } catch {
+    return project;
+  }
+  const names = new Set(project.map(p => p.name));
+  return [...project, ...global.filter(p => !names.has(p.name))];
 }
 
 function normalise(raw: unknown): ProjectConfig {
@@ -156,14 +188,31 @@ function normalise(raw: unknown): ProjectConfig {
     const archimedes: NonNullable<ProjectConfig['archimedes']> = {};
     if (rb.enabled === true || rb.enabled === false) archimedes.enabled = rb.enabled;
     if (typeof rb.modelName === 'string') archimedes.modelName = rb.modelName;
-    if (rb.backend === 'ollama' || rb.backend === 'lmstudio') archimedes.backend = rb.backend;
+    // Accept `provider` as an alias for `backend`; prefer `backend` when both
+    // are present. Without this an old config's `"provider": "lmstudio"` was
+    // silently ignored and the request fell back to Ollama.
+    const backend = rb.backend === 'ollama' || rb.backend === 'lmstudio'
+      ? rb.backend
+      : rb.provider === 'ollama' || rb.provider === 'lmstudio'
+        ? rb.provider
+        : undefined;
+    if (backend) archimedes.backend = backend;
     if (typeof rb.ollamaBaseUrl === 'string') archimedes.ollamaBaseUrl = rb.ollamaBaseUrl;
     if (typeof rb.lmstudioBaseUrl === 'string') archimedes.lmstudioBaseUrl = rb.lmstudioBaseUrl;
     if (typeof rb.competenceThreshold === 'number') archimedes.competenceThreshold = rb.competenceThreshold;
     if (typeof rb.minAttempts === 'number' && rb.minAttempts > 0) archimedes.minAttempts = Math.floor(rb.minAttempts);
     if (typeof rb.epsilonProbeRate === 'number' && rb.epsilonProbeRate >= 0 && rb.epsilonProbeRate <= 1) archimedes.epsilonProbeRate = rb.epsilonProbeRate;
+    if (typeof rb.deadlineMs === 'number' && rb.deadlineMs > 0) archimedes.deadlineMs = Math.floor(rb.deadlineMs);
     if (typeof rb.verifierModel === 'string' && rb.verifierModel.trim()) archimedes.verifierModel = rb.verifierModel.trim();
     out.archimedes = archimedes;
+  }
+  if (typeof r.learning === 'object' && r.learning !== null) {
+    const rl = r.learning as Record<string, unknown>;
+    if (rl.exclude === true) out.learning = { exclude: true };
+  }
+  if (typeof r.learning === 'object' && r.learning !== null) {
+    const rl = r.learning as Record<string, unknown>;
+    if (rl.exclude === true) out.learning = { exclude: true };
   }
   if (Array.isArray(r.providers)) {
     out.providers = r.providers

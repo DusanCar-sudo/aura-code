@@ -51,4 +51,10 @@ describe('resolveInRoot', () => {
     fs.mkdirSync(sibling);
     expect(() => resolveInRoot(root, '../project-evil/x')).toThrow(PathJailError);
   });
+
+  it('names the project root in the error so a model can correct its path', () => {
+    const bad = '/mnt/elsewhere/realrun/file.ts';
+    expect(() => resolveInRoot(root, bad)).toThrow(fs.realpathSync(root));
+    expect(() => resolveInRoot(root, bad)).toThrow(bad);
+  });
 });
