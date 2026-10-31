@@ -644,7 +644,7 @@ h1{font-weight:800;font-stretch:87.5%;font-size:clamp(54px,7.4vw,104px);line-hei
     A.main.textContent = main; A.main.classList.toggle('mod', main.length > 1);
     A.sym.textContent = sym; A.word.textContent = word;
     A.green.textContent = green || '\u00a0'; A.red.textContent = red || '\u00a0';
-    D.key.textContent = main.replace('\n', ' ');
+    D.key.textContent = main.replaceAll('\n', ' ');
     D.word.textContent = word ? cmd(word) : 'Modifier, as on the original';
     D.sym.textContent = sym || '\u2014'; D.green.textContent = green || '\u2014'; D.red.textContent = red ? red.toLowerCase() : '\u2014';
   }
@@ -661,7 +661,7 @@ h1{font-weight:800;font-stretch:87.5%;font-size:clamp(54px,7.4vw,104px);line-hei
       b.append(el('span', 'm', main));
       if (sym) b.append(el('span', 's', sym));
       if (word) b.append(el('span', 'w', word));
-      b.setAttribute('aria-label', mod ? main.replace('\n', ' ') + ', modifier key'
+      b.setAttribute('aria-label', mod ? main.replaceAll('\n', ' ') + ', modifier key'
         : `${main}: ${cmd(word)}${sym ? `, symbol ${sym}` : ''}${green ? `, green ${green}` : ''}${red ? `, flag ${red.toLowerCase()}` : ''}`);
       b.setAttribute('aria-pressed', String(k === pinned));
       if (k === pinned) pinnedBtn = b;
