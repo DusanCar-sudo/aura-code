@@ -22,6 +22,7 @@
 import type { ToolDefinition } from '../providers/types.js';
 import type { ToolOutput } from './index.js';
 import { ScreenSidecar } from './screen/sidecar.js';
+import { SwaySession, swayBackendAvailable } from './screen/sway.js';
 import { imageToLogical, isInsideImage, geometryKey, type CaptureGeometry } from './screen/coords.js';
 import { checkComputerUseGate, COMPUTER_USE_DISCLOSURE, isAcknowledged } from './screen/disclosure.js';
 import { recordLesson, formatLessonsBlock } from './screen/lessons.js';
@@ -67,7 +68,9 @@ export interface ComputerInput {
   max_depth?: number; max_nodes?: number; include_hidden?: boolean;
 }
 
-let sidecar: ScreenSidecar | null = null;
+/** sway/wlroots gets the grim+swaymsg+wtype backend; everything else the portal sidecar. */
+type Screen = ScreenSidecar | SwaySession;
+let sidecar: Screen | null = null;
 /** Geometry of the most recent capture — how image coordinates are converted.
  *  Null until the first screenshot, which is why positional actions demand one. */
 let lastCapture: CaptureGeometry | null = null;
@@ -140,7 +143,7 @@ export async function computerTool(input: ComputerInput): Promise<ToolOutput> {
 
   try {
     if (!sidecar) {
-      sidecar = new ScreenSidecar();
+      sidecar = swayBackendAvailable() ? new SwaySession() : new ScreenSidecar();
       await sidecar.start();
     }
 
@@ -233,7 +236,7 @@ export async function computerTool(input: ComputerInput): Promise<ToolOutput> {
   }
 }
 
-async function screenshot(sc: ScreenSidecar): Promise<ToolOutput> {
+async function screenshot(sc: Screen): Promise<ToolOutput> {
   const out = path.join(os.tmpdir(), `aura-screen-${Date.now()}.png`);
   const r = await sc.send({ cmd: 'capture', path: out, max_pixels: 1_100_000 });
   if (!r.ok) return `Error: ${r.error ?? 'capture failed'}`;
