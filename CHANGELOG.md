@@ -2,6 +2,16 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.20.6] — 2026-11-05
+
+### Added
+
+- **`/nolimit`**: alias for `/turnsoff` (unlimited turns per task). Shows in the as-you-type slash suggestions and in `/help`.
+
+### Note
+
+- Version numbering: npm has 0.20.0 and 0.20.2; 0.20.3–0.20.5 were local builds from a stale base and never shipped. 0.20.6 is the next version on top of GitHub master.
+
 ## [0.20.0] — 2026-09-30
 
 ### Changed — Nature identity
