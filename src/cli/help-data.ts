@@ -116,7 +116,7 @@ export const HELP_TEXT = [
   '  /approve off            Re-enable confirmation for destructive commands',
   '',
   '  ── Turn Limit ────────────────────────────────────',
-  '  /turnsoff               Turn off loop turn limit (unlimited turns per task)',
+  '  /turnsoff / /nolimit    Turn off loop turn limit (unlimited turns per task)',
   '  /turnson                Turn on loop turn limit (restore 50-turn cap)',
   '  /turns [n|off|on]       Show or set turn limit for this session',
   '',

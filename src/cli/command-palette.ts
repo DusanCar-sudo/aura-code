@@ -95,6 +95,7 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: '/archoff', label: 'Archimedes Off', description: 'Disable Archimedes Alternator for this session', category: 'System' },
   { id: '/archmodel', label: 'Archimedes Model', description: 'Set Archimedes local model for this session  e.g. /archmodel qwen3-vl:4b', category: 'System' },
   { id: '/turnsoff', label: 'Turns Off', description: 'Disable per-task turn limit (unlimited)', category: 'System' },
+  { id: '/nolimit', label: 'No Limit', description: 'Disable per-task turn limit (unlimited) — same as /turnsoff', category: 'System' },
   { id: '/turnson', label: 'Turns On', description: 'Enable per-task turn limit (default: 50)', category: 'System' },
   { id: '/turns', label: 'Turn limit', description: 'Show or set the per-task turn cap', category: 'System' },
   { id: '/small1', label: 'Start with Archimedes', description: 'Bypass the competence gate for this session', category: 'System' },

@@ -15,7 +15,7 @@ export interface TurnCommandCtx {
 
 /**
  * Handles turn cap toggle/inspection commands:
- * - :turnsoff / /turnsoff / :turns off / :turn off -> Turn off the turn cap (unlimited)
+ * - :turnsoff / /turnsoff / :turns off / :turn off / /nolimit -> Turn off the turn cap (unlimited)
  * - :turnson / /turnson / :turns on / :turn on -> Turn on / restore turn cap
  * - :turns <number> -> Set custom turn cap for this session (0 = off)
  * - :turns -> Show current turn cap status
@@ -34,7 +34,9 @@ export function handleTurnCommand(
     norm === '/turns off' ||
     norm === ':turn off' ||
     norm === '/turn off' ||
-    norm === ':noturns'
+    norm === ':noturns' ||
+    norm === ':nolimit' ||
+    norm === '/nolimit'
   ) {
     c.display.success('Turn limit: OFF for this session (unlimited turns per task). Use :turnson to restore the cap.');
     return { handled: true, newTurnsOverride: Infinity };
