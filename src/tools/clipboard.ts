@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import type { ToolDefinition } from '../providers/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,7 +25,24 @@ export const CLIPBOARD_DEFINITION: ToolDefinition = {
   },
 };
 
+// Windows: no xclip/xsel/wl-copy exists, so use PowerShell's clipboard cmdlets.
+// Text goes over stdin (copy) so quoting and Unicode survive intact.
+function winClipboardCopy(text: string): void {
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '[Console]::InputEncoding=[Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())'],
+    { input: text, timeout: 5000, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+  if (r.status !== 0) throw new Error(String(r.stderr || 'powershell Set-Clipboard failed').trim());
+}
+function winClipboardPaste(): string {
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw'],
+    { encoding: 'utf8', timeout: 5000, windowsHide: true });
+  if (r.status !== 0) throw new Error(String(r.stderr || 'powershell Get-Clipboard failed').trim());
+  return r.stdout || '';
+}
+
 function detectClipboardCommand(): { copy: string[]; paste: string[] } | null {
+  if (process.platform === 'win32') return { copy: ['__win32__'], paste: ['__win32__'] };
   // Try xclip (X11)
   try {
     execSync('which xclip', { stdio: 'pipe' });
@@ -71,6 +88,13 @@ function detectClipboardCommand(): { copy: string[]; paste: string[] } | null {
  * a sync mouse-event path and a deliberate click can afford one `execSync`.
  */
 export function readClipboardSync(): string | null {
+  if (process.platform === 'win32') {
+    try {
+      return winClipboardPaste();
+    } catch {
+      return null;
+    }
+  }
   const cmds = detectClipboardCommand();
   if (!cmds) return null;
   try {
@@ -82,6 +106,25 @@ export function readClipboardSync(): string | null {
 }
 
 export async function clipboardTool(input: ClipboardInput): Promise<string> {
+  if (process.platform === 'win32') {
+    if (input.action === 'copy') {
+      if (input.text === undefined) return 'Error: text is required for copy';
+      try {
+        winClipboardCopy(input.text);
+        return `Copied ${input.text.length} characters to clipboard.`;
+      } catch (e: any) {
+        return `Error copying to clipboard: ${e?.message}`;
+      }
+    }
+    if (input.action === 'paste') {
+      try {
+        return `Clipboard contents:\n${winClipboardPaste()}`;
+      } catch (e: any) {
+        return `Error reading clipboard: ${e?.message}`;
+      }
+    }
+    return `Error: Unknown clipboard action: ${input.action}`;
+  }
   const cmds = detectClipboardCommand();
   if (!cmds) {
     return 'Error: No clipboard utility found. Install xclip, xsel, or wl-clipboard.';

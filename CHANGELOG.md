@@ -2,6 +2,20 @@
 
 All notable changes to Aura Code are documented here.
 
+## [0.20.7] — 2026-11-15
+
+### Fixed
+
+- Windows TUI: copy/paste — Ctrl+V now pastes, right-click after a copied selection pastes instead of copying again, and the win32 PowerShell clipboard branch is in the source (it previously existed only as a hand-patch on the installed copy, lost on every update).
+- TUI scroll mode no longer flips the input box into a dimmed -- SCROLL -- state; the box stays INSERT and scroll frames repaint only the output rows, so wheel scrolling does not flash the whole UI.
+- Agent tools run_shell, run_tests, search_code, git_status and git_diff execute asynchronously — a long command no longer freezes the TUI (spinner, keyboard and streaming all stopped while execSync blocked the event loop).
+- search_code now finds ripgrep on Windows (`where rg`); it previously probed `which rg` and fell back to grep, which also does not exist there.
+- Provider and model picker: live model lists are cached (5 min, empty results 30 s) and the list repaints without a full-screen clear, so re-opening a provider and arrow-key navigation are instant.
+
+### Changed
+
+- Version bump: 0.20.7.
+
 ## [0.20.6] — 2026-11-05
 
 ### Added

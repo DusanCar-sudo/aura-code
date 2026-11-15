@@ -8,6 +8,12 @@ vi.mock('child_process', () => ({
     if (cmd.includes('xclip') && cmd.includes('-o')) return 'clipboard content';
     return '';
   }),
+  // Windows branch: PowerShell Set-Clipboard (copy goes in over stdin opts.input),
+  // Get-Clipboard (paste comes back on stdout).
+  spawnSync: vi.fn().mockImplementation((_cmd: string, _args: string[], opts: { input?: string }) => {
+    if (opts && opts.input !== undefined) return { status: 0, stderr: '' };
+    return { status: 0, stdout: 'clipboard content', stderr: '' };
+  }),
 }));
 
 describe('CLIPBOARD_DEFINITION', () => {

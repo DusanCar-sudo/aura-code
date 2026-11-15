@@ -143,7 +143,9 @@ async function interactiveList(title: string, items: ListItem[], opts?: { filter
         lines.push(TEXT_DIM(`  … ${vis.length} matches (${start + 1}–${Math.min(start + maxRows, vis.length)} shown)\n`));
       }
       lines.push(TEXT_DIM(`\n  ↑/↓ move · Enter select · ESC back${opts?.filter ? ' · / filter' : ''}\n`));
-      process.stdout.write('\x1b[2J\x1b[H' + lines.join(''));
+      // Home + clear-tail per row instead of a full-screen clear: the whole
+      // 2J repaint flashed on every keypress and read as input lag.
+      process.stdout.write('\x1b[H\x1b[K' + lines.join('').replace(/\n/g, '\x1b[K\n') + '\x1b[J');
     };
 
     readline.emitKeypressEvents(process.stdin);
@@ -338,6 +340,26 @@ const SELECTOR_STATIC_FALLBACK: Record<string, { id: string; name: string }[]> =
  * when neither has anything. Returns the chosen model id, 'back' on ESC,
  * or undefined on cancel. Never throws.
  */
+// Live model lists are fetched on every visit to a provider's model page, and
+// a cold fetch waits on the network for up to LIVE_FETCH_TIMEOUT_MS before the
+// list even shows — re-opening the same provider re-paid the whole wait. Cache
+// successes for a few minutes; short-cache empty results so a slow/offline
+// provider doesn't charge its full timeout again on the immediate retry.
+const LIVE_CACHE_TTL_MS = 5 * 60_000;
+const LIVE_CACHE_EMPTY_MS = 30_000;
+const liveCache = new Map<string, { models: LiveModel[]; at: number }>();
+
+async function fetchLiveModelsCached(providerId: string): Promise<LiveModel[]> {
+  const hit = liveCache.get(providerId);
+  if (hit) {
+    const ttl = hit.models.length > 0 ? LIVE_CACHE_TTL_MS : LIVE_CACHE_EMPTY_MS;
+    if (Date.now() - hit.at < ttl) return hit.models;
+  }
+  const models = await withTimeout(fetchLiveModels(providerId), LIVE_FETCH_TIMEOUT_MS, []);
+  liveCache.set(providerId, { models, at: Date.now() });
+  return models;
+}
+
 export async function showModelSelectorForProvider(providerId: string): Promise<string | 'back' | undefined> {
   const entry = PROVIDER_LIST.find(p => p.id === providerId);
   const title = `${entry?.name ?? providerId} — models`;
@@ -354,7 +376,7 @@ export async function showModelSelectorForProvider(providerId: string): Promise<
       ? setInterval(() => process.stdout.write(`\r  ${CHROME('◐◓◑◒'[Math.floor(Date.now() / 120) % 4])} Fetching models...`), 120)
       : undefined;
     try {
-      live = await withTimeout(fetchLiveModels(providerId), LIVE_FETCH_TIMEOUT_MS, []);
+      live = await fetchLiveModelsCached(providerId);
     } finally {
       if (spinner) { clearInterval(spinner); process.stdout.write('\r\x1b[K'); }
     }

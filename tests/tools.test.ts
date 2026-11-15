@@ -106,21 +106,30 @@ describe('runShell', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-test-'));
   });
-  afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
+  afterEach(async () => {
+    // A timed-out child (and its grandchildren — killing cmd.exe on Windows
+    // does not kill what it spawned) can hold the cwd for several seconds
+    // after the kill, which surfaces as EPERM if the cleanup races it.
+    for (let i = 0; i < 19; i++) {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); return; }
+      catch { await new Promise(r => setTimeout(r, 250)); }
+    }
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
 
-  it('runs echo', () => {
-    const out = runShell({ command: 'echo hello' }, tmpDir);
+  it('runs echo', async () => {
+    const out = await runShell({ command: 'echo hello' }, tmpDir);
     expect(out).toBe('hello');
   });
 
-  it('respects cwd override', () => {
+  it('respects cwd override', async () => {
     fs.writeFileSync(path.join(tmpDir, 'marker.txt'), 'present');
-    const out = runShell({ command: 'ls marker.txt' }, tmpDir);
+    const out = await runShell({ command: 'ls marker.txt' }, tmpDir);
     expect(out).toContain('marker.txt');
   });
 
-  it('times out gracefully', () => {
-    const out = runShell({ command: 'sleep 5', timeout: 100 }, tmpDir);
+  it('times out gracefully', async () => {
+    const out = await runShell({ command: process.platform === 'win32' ? 'ping -n 6 127.0.0.1 >nul' : 'sleep 5', timeout: 100 }, tmpDir);
     expect(out).toMatch(/timed out/i);
   });
 });
@@ -132,25 +141,25 @@ describe('searchCode', () => {
   });
   afterEach(() => fs.rmSync(tmpDir, { recursive: true }));
 
-  it('finds matches across files', () => {
+  it('finds matches across files', async () => {
     fs.writeFileSync(path.join(tmpDir, 'a.ts'), 'const x = 1;');
     fs.writeFileSync(path.join(tmpDir, 'b.ts'), 'const y = 2;');
-    const out = searchCode({ pattern: 'const', literal: true, case_sensitive: true, max_results: 10 }, tmpDir);
+    const out = await searchCode({ pattern: 'const', literal: true, case_sensitive: true, max_results: 10 }, tmpDir);
     expect(out).toContain('2 results');
     expect(out).toContain('a.ts');
     expect(out).toContain('b.ts');
   });
 
-  it('reports no results', () => {
-    const out = searchCode({ pattern: 'doesnotexist_anywhere_xyz123', literal: true, case_sensitive: true, max_results: 10 }, tmpDir);
+  it('reports no results', async () => {
+    const out = await searchCode({ pattern: 'doesnotexist_anywhere_xyz123', literal: true, case_sensitive: true, max_results: 10 }, tmpDir);
     expect(out).toMatch(/No results/);
   });
 
-  it('caps total output chars so 50 long matches cannot flood context', () => {
+  it('caps total output chars so 50 long matches cannot flood context', async () => {
     for (let i = 0; i < 30; i++) {
       fs.writeFileSync(path.join(tmpDir, `f${i}.ts`), `needle${i} ` + 'x'.repeat(900));
     }
-    const out = searchCode({ pattern: 'needle', literal: true, case_sensitive: true, max_results: 30 }, tmpDir);
+    const out = await searchCode({ pattern: 'needle', literal: true, case_sensitive: true, max_results: 30 }, tmpDir);
     expect(out).toMatch(/Found 30 results/);
     expect(out).toMatch(/cut at the 12K-char cap/);
     // ripgrep walks the directory in parallel, so *which* files survive is not
@@ -183,22 +192,22 @@ describe('gitDiff', () => {
     execSync(`git commit -qm ${JSON.stringify(msg)}`, { cwd: tmpDir });
   }
 
-  it('returns the diff and a clean-tree message', () => {
+  it('returns the diff and a clean-tree message', async () => {
     fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'one');
     commitAll('init');
-    expect(gitDiff({ path: '', staged: false }, tmpDir)).toMatch(/No changes/);
+    expect(await gitDiff({ path: '', staged: false }, tmpDir)).toMatch(/No changes/);
 
     fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'two');
-    const out = gitDiff({ path: '', staged: false }, tmpDir);
+    const out = await gitDiff({ path: '', staged: false }, tmpDir);
     expect(out).toContain('-one');
     expect(out).toContain('+two');
   });
 
-  it('caps a whole-tree diff with a head + tail window instead of a head-only cut', () => {
+  it('caps a whole-tree diff with a head + tail window instead of a head-only cut', async () => {
     fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'A');
     commitAll('init');
     fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'B' + 'y'.repeat(29_000));
-    const out = gitDiff({ path: '', staged: false }, tmpDir);
+    const out = await gitDiff({ path: '', staged: false }, tmpDir);
     expect(out).toMatch(/chars omitted — diff a file or directory in smaller pieces/);
     // Both ends survive: the +B at the start of the hunk and the real diff tail
     // (git marks the missing trailing newline AFTER the content line, so the

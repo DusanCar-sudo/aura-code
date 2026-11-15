@@ -506,8 +506,11 @@ function buildBottomRows(): string[] {
   const label = ` ask aura${idTag} `;
   const innerWidth = boxWidth - 4;
   const wrapped = wrapInput(innerWidth);
-  const focused = !scrollMode;
-  const modeTag = focused ? ACCENT.bold('-- INSERT --') : ACCENT.bold('-- SCROLL --');
+  // The box never changes state with the pager: scrolling keeps it INSERT and
+  // fully lit, so the wheel doesn't repaint or flip the thing the user is
+  // typing in. Scroll state is shown on the indicator row only.
+  const focused = true;
+  const modeTag = ACCENT.bold('-- INSERT --');
   const agentTag = agentMode === 'plan' ? ACCENT(' [plan]') : '';
   const cursorChar = focused ? ACCENT('█') : '';
   const rows: string[] = [];
@@ -786,7 +789,6 @@ function maxScrollOffset(): number {
 }
 
 function renderScrollView(): void {
-  const bottomRows = buildBottomRows();
   const vh = viewHeight();
   const liveLines = liveScrollLines();
   scrollOffset = Math.max(0, Math.min(scrollOffset, maxScrollOffset()));
@@ -794,26 +796,17 @@ function renderScrollView(): void {
   const visible = liveLines.slice(start, start + vh);
   const width = Math.max(10, cols() - MARGIN);
   const sr = screenRows();
-  const bannerRowCount = visibleBannerRowCount(sr);
+  const top = contentTopRow(sr);
 
-  rawWrite('\x1b[2J\x1b[H');
-  // Banner
-  if (bannerRowCount > 0) {
-    bannerLines.forEach(line => { rawWrite(truncVisible(line, width)); rawWrite('\n'); });
-  }
+  // Partial repaint: only the content rows and the indicator row change
+  // between scroll frames. The banner and the bottom block are identical to
+  // what the live view drew — repainting them (a full-screen clear) made
+  // every wheel tick flash the whole UI, box included.
   const span = selectionSpan();
-  visible.forEach((line, i) => {
-    const idx = start + i;
-    rawWrite(paintLine(line, idx, span, width));
-    rawWrite('\n');
-  });
-  for (let i = visible.length; i < vh; i++) rawWrite('\n');
-
-  // Bottom block
-  const startRow = sr - FIXED_BOTTOM + 1;
-  for (let i = 0; i < bottomRows.length; i++) {
-    rawWrite(`\x1b[${startRow + i};1H`);
-    rawWrite(bottomRows[i]);
+  for (let i = 0; i < vh; i++) {
+    rawWrite(`\x1b[${top + i};1H`);
+    clearEol();
+    if (i < visible.length) rawWrite(paintLine(visible[i], start + i, span, width));
   }
 
   const bottom = start + visible.length;
@@ -829,7 +822,9 @@ function renderScrollView(): void {
         + (unseenLines > 0 ? ACCENT.bold(`↓ ${unseenLines} new · G `) : '')
         + TEXT_DIM(`${start + 1}-${bottom}/${liveLines.length} ${pos} · drag to select · wheel · j/k · gg/G · Shift+drag = terminal select`);
   rawWrite(`\x1b[${sr};1H`);
+  clearEol();
   rawWrite(truncVisible(indicator, width));
+  moveCursorToOutputBase(sr);
 }
 
 /**
@@ -972,7 +967,9 @@ function copySelection(): void {
 function pasteFromClipboard(): void {
   const raw = readClipboardSync();
   if (raw == null) {
-    selToast = 'no clipboard utility (install xclip, xsel, or wl-clipboard)';
+    selToast = process.platform === 'win32'
+      ? 'clipboard read failed (PowerShell Get-Clipboard)'
+      : 'no clipboard utility (install xclip, xsel, or wl-clipboard)';
     if (scrollMode) renderScrollView(); else drawPromptBottom();
     return;
   }
@@ -1011,11 +1008,13 @@ function handleMouse(button: number, col: number, row: number, pressed: boolean)
   // Right button — the classic terminal right-click, restored. Aura runs on
   // the alternate screen and does its own line selection (see the note on
   // `selecting`), so the terminal's own right-click menu operates on an empty
-  // native selection and is useless here. Context-aware: with a scroll-mode
-  // selection it copies, otherwise it pastes the clipboard into the input.
+  // native selection and is useless here. Context-aware: an untouched
+  // scroll-mode selection copies (drag then right-click = copy); a selection
+  // that was already copied, or no selection at all, pastes into the input —
+  // otherwise every paste after a drag-selection was unreachable.
   if (btn === 2) {
     if (!pressed || motion) return;   // act on the press, ignore drag/release
-    if (scrollMode && selectionRange() !== null) {
+    if (scrollMode && selectionRange() !== null && !selToast) {
       copySelection();
     } else {
       pasteFromClipboard();
@@ -1474,6 +1473,11 @@ function handleKey(key: string): void {
       return;
     }
   }
+
+  // Ctrl+V — paste from the system clipboard into the input line (0x16).
+  // Before the scroll-mode gate: a paste belongs in the input wherever the
+  // view happens to be, and pasteFromClipboard exits the pager itself.
+  if (key === '\x16') { pasteFromClipboard(); return; }
 
   // Ctrl+P — command palette (0x10)
   if (key === '\x10') { openOverlay('palette'); return; }
