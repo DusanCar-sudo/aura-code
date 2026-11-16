@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+
+// Aura Code — model-agnostic AI coding agent (Praktess framework).
+// Copyright (c) 2026 Dušan Milosavljević <leanproiq@gmail.com>
+// SPDX-License-Identifier: MIT
+// This file is part of Aura Code, licensed under the MIT License;
+// see the LICENSE file at the repository root for the full text.
+
 // Node 20+ enables Happy Eyeballs (autoSelectFamily) by default. On hosts that
 // publish AAAA records while the machine has no usable IPv6 route, the attempt
 // stalls instead of falling back to IPv4, and every request surfaces as the

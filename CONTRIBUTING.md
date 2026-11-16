@@ -5,7 +5,7 @@ Thanks for your interest in contributing! Aura Code is built by humans and AI ag
 ## Getting Started
 
 ```bash
-git clone https://github.com/milodule3-debug/aura-code.git
+git clone https://github.com/DusanCar-sudo/aura-code.git
 cd aura-code
 npm install
 npm run build
@@ -15,7 +15,7 @@ npm test
 ## Development Workflow
 
 1. **Fork** the repository
-2. **Create a branch** from `main`: `git checkout -b feature/your-feature`
+2. **Create a branch** from `master`: `git checkout -b feature/your-feature`
 3. **Make changes** — keep commits focused and atomic
 4. **Run tests**: `npm test` (must pass, zero failures)
 5. **Build**: `npm run build` (must be clean, no type errors)
@@ -57,7 +57,7 @@ npm run test:coverage                         # With coverage report
 
 ## Reporting Issues
 
-- Use [GitHub Issues](https://github.com/milodule3-debug/aura-code/issues)
+- Use [GitHub Issues](https://github.com/DusanCar-sudo/aura-code/issues)
 - Include: Aura version (`aura --version`), Node.js version, OS, steps to reproduce
 - For security issues, email leanproiq@gmail.com directly
 

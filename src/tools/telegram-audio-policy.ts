@@ -1,3 +1,9 @@
+// Aura Code — model-agnostic AI coding agent (Praktess framework).
+// Copyright (c) 2026 Dušan Milosavljević <leanproiq@gmail.com>
+// SPDX-License-Identifier: MIT
+// This file is part of Aura Code, licensed under the MIT License;
+// see the LICENSE file at the repository root for the full text.
+
 // Audio-reply policy for the Telegram bot — pure helpers, no I/O.
 // Lives outside telegram-bot.ts (which starts live polling at import time)
 // so the decision logic is unit-testable, same as telegram-safety.ts.

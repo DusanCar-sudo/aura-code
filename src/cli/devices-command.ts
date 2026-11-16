@@ -1,3 +1,9 @@
+// Aura Code — model-agnostic AI coding agent (Praktess framework).
+// Copyright (c) 2026 Dušan Milosavljević <leanproiq@gmail.com>
+// SPDX-License-Identifier: MIT
+// This file is part of Aura Code, licensed under the MIT License;
+// see the LICENSE file at the repository root for the full text.
+
 import chalk from 'chalk';
 import { pickLanAddress, tailscaleAddress } from '../server/lan.js';
 import { createPairingCode, loadDevices, revokeDevice, devicesPath, pendingPairings } from '../server/devices.js';
