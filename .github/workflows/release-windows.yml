@@ -23,6 +23,11 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 30
+    # "Attach to release" edits the published release to add the installer;
+    # without this the default token is read-only and the step 403s after the
+    # installer already built and passed its install test.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
