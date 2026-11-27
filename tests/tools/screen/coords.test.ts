@@ -35,14 +35,14 @@ describe('imageToLogical', () => {
 
   it('maps the origin and the far corner exactly', () => {
     expect(imageToLogical(0, 0, G)).toEqual({ x: 0, y: 0 });
-    expect(imageToLogical(G.width, G.height, G)).toEqual({ x: 2259, y: 2471 });
+    expect(imageToLogical(G.width, G.height, G)).toEqual({ x: 2258, y: 2470 });
   });
 
   it('clamps a point outside the image instead of saturating silently', () => {
     // An absolute input device clamps internally, so an unclamped coordinate
     // lands somewhere nobody asked for and looks like a misgrounded click.
     expect(imageToLogical(-50, -50, G)).toEqual({ x: 0, y: 0 });
-    expect(imageToLogical(99999, 99999, G)).toEqual({ x: 2259, y: 2471 });
+    expect(imageToLogical(99999, 99999, G)).toEqual({ x: 2258, y: 2470 });
   });
 
   it('refuses a geometry with no size rather than dividing by zero', () => {

@@ -11,7 +11,7 @@ import { exec, execFileSync } from 'child_process';
 import { run } from '../util/exec.js';
 import { isSecretPath } from '../safety/secret-paths.js';
 import { createProvider, registerCustomProviders, getAllModels, isModelConfigured, LOCAL_ONLY_PROVIDERS } from '../providers/factory.js';
-import { loadProjectConfig } from '../config/project-config.js';
+import { loadProjectConfig, withGlobalProviders } from '../config/project-config.js';
 import { rtkWrap } from '../util/rtk.js';
 import { transcribeFile, synthesizeSpeech } from './dictate.js';
 import {
@@ -121,11 +121,9 @@ function refusalFor(userId: string | number | undefined): string {
   ].join('\n');
 }
 
-// Register custom providers from project's .aura.json (needed for deepseek/ etc.)
+// Register custom providers from project's .aura.json, then ~/.aura.json
 const projectCfg = loadProjectConfig(process.cwd());
-if (projectCfg.providers && projectCfg.providers.length > 0) {
-  registerCustomProviders(projectCfg.providers);
-}
+registerCustomProviders(withGlobalProviders(projectCfg.providers));
 
 // Connection pooling is fine now that the single-instance lock (below) makes a
 // competing poller impossible. keepAlive:false was papering over 409 Conflict
@@ -133,6 +131,17 @@ if (projectCfg.providers && projectCfg.providers.length > 0) {
 // it means a SECOND PROCESS is polling the same token. Dropping the pool did
 // not and could not fix that; the lock does.
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 1 });
+
+// req.setTimeout is an INACTIVITY timer: it only fires when the socket sits
+// idle with no bytes flowing. A keep-alive socket killed silently mid-request
+// (NAT rebind, carrier path drop, Telegram 5xx stall) delivers no 'end', no
+// 'error' and no idle tick — so the promise never settles and the caller's
+// while-loop stops turning over. Observed 2026-11-05: heartbeat logged until
+// 10:35:49, socket then sat ESTABLISHED for 7h at 0% CPU, bot deaf and mute
+// while systemd reported "active (running)". A wall-clock deadline that
+// destroys the request guarantees the promise settles and the loop resumes.
+const INACTIVITY_TIMEOUT_MS = 35_000;
+const HARD_TIMEOUT_MS = 45_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Single-instance lock
@@ -292,10 +301,16 @@ function apiPost(method: string, body?: Record<string, unknown>): Promise<any> {
     });
 
     req.on('error', (e: any) => reject(new Error(`HTTPS error: ${e?.message || e?.code || JSON.stringify(e)}`)));
-    req.setTimeout(35000, () => {
+    req.setTimeout(INACTIVITY_TIMEOUT_MS, () => {
       req.destroy();
-      reject(new Error('Request timeout (35s)'));
+      reject(new Error(`Request timeout (${INACTIVITY_TIMEOUT_MS / 1000}s idle)`));
     });
+    const postDeadline = setTimeout(() => {
+      req.destroy();
+      reject(new Error(`Request timeout (hard deadline ${HARD_TIMEOUT_MS / 1000}s)`));
+    }, HARD_TIMEOUT_MS);
+    if (typeof postDeadline.unref === 'function') postDeadline.unref();
+    req.on('close', () => clearTimeout(postDeadline));
 
     if (data) req.write(data);
     req.end();
@@ -332,10 +347,16 @@ function apiGet(method: string, params?: Record<string, string>): Promise<any> {
     });
 
     req.on('error', (e: any) => reject(new Error(`HTTPS error: ${e?.message || e?.code || JSON.stringify(e)}`)));
-    req.setTimeout(35000, () => {
+    req.setTimeout(INACTIVITY_TIMEOUT_MS, () => {
       req.destroy();
-      reject(new Error('Request timeout (35s)'));
+      reject(new Error(`Request timeout (${INACTIVITY_TIMEOUT_MS / 1000}s idle)`));
     });
+    const getDeadline = setTimeout(() => {
+      req.destroy();
+      reject(new Error(`Request timeout (hard deadline ${HARD_TIMEOUT_MS / 1000}s)`));
+    }, HARD_TIMEOUT_MS);
+    if (typeof getDeadline.unref === 'function') getDeadline.unref();
+    req.on('close', () => clearTimeout(getDeadline));
 
     req.end();
   });
@@ -572,6 +593,38 @@ function splitMessage(text: string, maxLen: number): string[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_CHAT_MODEL = config.model || 'deepseek/deepseek-v4-flash';
+
+// Models tried, in order, when the configured one cannot serve the request.
+// A dead provider must not make the bot deaf-and-mute: on 2026-11-04/05
+// DeepSeek returned 402 "Insufficient Balance" (balance $0.00) for every
+// message, so each reply was a greška even though polling was healthy.
+// Entries are tried only on provider-side failures (402/429/5xx/balance/
+// quota/timeout); a normal model answer never triggers a fallback.
+// Free models are first on purpose: when the paid model is out of credit the
+// bot must still answer, and a free model that works beats a good model that
+// does not. Every id below was probed live on 2026-11-05 — answered in
+// <3.5 s, supports the `tools` parameter, and replied in Serbian when asked.
+// OpenRouter retires :free ids without notice (the four that shipped in
+// provider-registry.ts were already dead), so this list is a cache of a probe,
+// not a fact: re-run the probe when the fallback stops answering.
+const FALLBACK_CHAT_MODELS: string[] = [
+  // Free tier, best quality first.
+  'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+  'openrouter/nvidia/nemotron-3.5-super-vl:free',
+  'openrouter/cohere/north-mini-code:free',
+  'openrouter/dots-studio/dots-3-note-preview:free',
+  'openrouter/recursive/flint-v1.0:free',
+  'openrouter/nvidia/nemotron-3.5-lightning:free',
+  // Paid last: it costs money, so it is tried only once the free tier failed.
+  'openrouter/deepseek/deepseek-chat',
+  'openrouter/meta-llama/llama-3.3-70b-instruct',
+];
+
+/** True when the error means "this provider cannot serve us right now". */
+function isProviderUnavailable(e: any): boolean {
+  const m = String(e?.message ?? e ?? '');
+  return /\b40[123]\b|\b429\b|\b5\d\d\b|insufficient|balance|quota|credit|payment|rate.?limit|too many requests|timeout|ECONN|socket hang up|fetch failed|overloaded|capacity/i.test(m);
+}
 const CHAT_HISTORY_MAX = 50; // keep last N messages per chat for context
 function SESSION_DIR(): string { return auraPath('sessions', 'telegram'); }
 
@@ -593,6 +646,10 @@ const TELEGRAM_PROVIDERS = [
 // Per-chat provider instances — one Telegram user's /provider switch MUST NOT
 // affect another user's messages. Map<chatId, provider>.
 const chatProviders = new Map<string, LLMProvider>();
+// Which model id each chat is bound to. createProvider() only exposes a
+// display name, so the id is tracked separately — the fallback path needs
+// it to skip re-trying the model that just failed.
+const chatModelIds = new Map<string, string>();
 let _identityBlock = ''; // loaded from memory on startup
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -743,6 +800,7 @@ function getChatProvider(chatId: string): LLMProvider {
   if (!chatProviders.has(chatId)) {
     const provider = createProvider({ model: DEFAULT_CHAT_MODEL, temperature: 0.7, maxTokens: CHAT_MAX_TOKENS });
     chatProviders.set(chatId, provider);
+    chatModelIds.set(String(chatId), DEFAULT_CHAT_MODEL);
     console.log(`[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]   Chat ${chatId} model: ${DEFAULT_CHAT_MODEL} (${provider.name})`);
   }
   return chatProviders.get(chatId)!;
@@ -880,6 +938,35 @@ async function requestApproval(chatId: string | number, label: string, command: 
       }
     }, APPROVAL_TIMEOUT_MS);
   });
+}
+
+/**
+ * Flatten a tool-loop history into plain user/assistant turns.
+ *
+ * The thread a mid-turn failure hands to the fallback can contain native
+ * tool_calls and matching tool_result turns. Those are wire artifacts of the
+ * model that just died: a different model rejects a tool_result nothing asked
+ * for, and an assistant turn carrying tool_calls with no tool back is refused
+ * outright. Rendering them as prose keeps the information and drops the
+ * dialect. O(n) over the thread, which is capped at CHAT_HISTORY_MAX.
+ */
+function flattenHistoryForFallback(history: HistoryMessage[]): HistoryMessage[] {
+  const out: HistoryMessage[] = [];
+  for (const m of history) {
+    if (m.role === 'tool_result') {
+      const text = m.results.map((r: any) => String(r?.content ?? r?.output ?? '')).filter(Boolean).join('\n');
+      if (text) out.push({ role: 'user', content: `[result]\n${text}` });
+      continue;
+    }
+    if (m.role === 'assistant' && m.toolCalls?.length) {
+      const acts = m.toolCalls.map((c: any) => `${c.name}: ${String(c.arguments ?? c.args ?? '')}`);
+      const body = [m.content?.trim(), acts.join('\n')].filter(Boolean).join('\n');
+      if (body) out.push({ role: 'assistant', content: body });
+      continue;
+    }
+    out.push(m);
+  }
+  return out;
 }
 
 async function chatWithLLM(chatId: string, userMessage: string, userName: string): Promise<string> {
@@ -1142,10 +1229,50 @@ async function chatWithLLM(chatId: string, userMessage: string, userName: string
     return finalReply;
   } catch (e: any) {
     console.error(`[${ts0()}] LLM error: ${e?.message || String(e)}`);
+
+    // Provider-side failure (402 balance / 429 / 5xx / timeout): try the
+    // fallback list before giving up, so a dead configured model degrades the
+    // bot to "slower" rather than to "unusable".
+    if (isProviderUnavailable(e)) {
+      for (const model of FALLBACK_CHAT_MODELS) {
+        if (model === getChatProviderModel(chatId)) continue;
+        try {
+          console.error(`[${ts0()}]   ↳ falling back to ${model}`);
+          const p = createProvider({ model, temperature: 0.7, maxTokens: CHAT_MAX_TOKENS });
+          // Same system prompt and same thread the primary model would have
+          // seen. Passing '' and the bare message here made the fallback a
+          // stranger: no identity, no memory of the conversation, so a
+          // degraded reply read as a different bot answering.
+          const reply = await p.complete(systemPrompt, flattenHistoryForFallback(history), TOOL_DEFINITIONS);
+          const text = stripDirectives(reply?.text || '').trim();
+          if (text) {
+            await pushToHistory(String(chatId), { role: 'assistant', content: text });
+            // Bind the chat to the model that actually works, so the next
+            // message starts here instead of paying a failed primary call and
+            // a fallback scan on every single turn.
+            chatProviders.set(String(chatId), p);
+            chatModelIds.set(String(chatId), model);
+            console.error(`[${ts0()}]   ✓ fallback ${model} answered — chat pinned to it`);
+            return text;
+          }
+        } catch (e2: any) {
+          console.error(`[${ts0()}]   ✗ fallback ${model} failed: ${e2?.message || e2}`);
+        }
+      }
+    }
+
+    if (/insufficient|balance|quota|credit|402/i.test(String(e?.message || e))) {
+      return `❌ AI nema kredita na modelu \`${getChatProviderModel(chatId)}\`, a rezervni modeli nisu odgovorili. Proveri stanje ili /model da prebaciš.`;
+    }
     return `❌ AI greška: ${e?.message || 'Nepoznata greška'}. Probaj /help.`;
   } finally {
     unregisterTask(chatId, runEntry);
   }
+}
+
+/** The model id currently bound to a chat (for logging + fallback skip). */
+function getChatProviderModel(chatId: string): string {
+  return chatModelIds.get(String(chatId)) ?? DEFAULT_CHAT_MODEL;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1490,6 +1617,7 @@ async function handleCommand(chatId: number, text: string, from: string): Promis
 
     const newProvider = createProvider({ model: newModel, temperature: 0.7, maxTokens: CHAT_MAX_TOKENS });
     chatProviders.set(String(chatId), newProvider);
+    chatModelIds.set(String(chatId), newModel);
 
     console.log(`[${ts()}] 🔄 Chat ${chatId} switched model: ${newModel} (${newProvider.name})`);
     return `✅ Switched to ${newModel}${tierHint}`;

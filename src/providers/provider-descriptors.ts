@@ -216,6 +216,12 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     baseUrl: 'https://tokenhub.tencentmaas.com/v1', baseUrlEnv: ['TENCENT_BASE_URL'],
   },
   {
+    family: 'inception', displayName: 'Inception',
+    prefixes: ['inception/'], apiKeyEnv: ['INCEPTION_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.inceptionlabs.ai/v1', baseUrlEnv: ['INCEPTION_BASE_URL'],
+  },
+  {
     family: 'gmi', displayName: 'GMI Cloud',
     prefixes: ['gmi/'], apiKeyEnv: ['GMI_API_KEY'],
     transport: 'openai-compatible',
@@ -299,6 +305,13 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     baseUrl: 'https://api.sambanova.ai/v1', baseUrlEnv: ['SAMBANOVA_BASE_URL'],
   },
   {
+    family: 'nebius', displayName: 'Nebius AI Studio',
+    prefixes: ['nebius/'],
+    apiKeyEnv: ['NEBIUS_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.studio.nebius.ai/v1', baseUrlEnv: ['NEBIUS_BASE_URL'],
+  },
+  {
     family: 'mistral', displayName: 'Mistral AI',
     prefixes: ['mistral/'],
     barePrefixes: ['codestral-', 'mistral-', 'pixtral-', 'open-mistral-'],
@@ -328,7 +341,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     prefixes: ['ollama/', 'ollama:'],
     staticApiKey: 'ollama',
     transport: 'openai-compatible',
-    localBaseUrl: { env: 'OLLAMA_BASE_URL', fallback: 'http://localhost:11434/v1' },
+    localBaseUrl: { env: 'OLLAMA_BASE_URL', fallback: 'http://127.0.0.1:11434/v1' },
     excludeFromReverseMap: true,
   },
   {
@@ -336,7 +349,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     prefixes: ['local/', 'lmstudio/'],
     staticApiKey: 'lm-studio',
     transport: 'openai-compatible',
-    localBaseUrl: { env: 'LMSTUDIO_BASE_URL', fallback: 'http://localhost:1234/v1' },
+    localBaseUrl: { env: 'LMSTUDIO_BASE_URL', fallback: 'http://127.0.0.1:1234/v1' },
     excludeFromReverseMap: true,
   },
   {
@@ -344,7 +357,7 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     prefixes: ['local-profile/'],
     staticApiKey: 'ollama',
     transport: 'openai-compatible',
-    baseUrl: 'http://localhost:11434/v1',
+    baseUrl: 'http://127.0.0.1:11434/v1',
     excludeFromReverseMap: true,
   },
 

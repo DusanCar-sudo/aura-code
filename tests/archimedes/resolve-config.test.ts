@@ -59,7 +59,7 @@ describe('resolveArchimedesConfig — auto-detection', () => {
     expect(config!.backend).toBe('lmstudio');
     expect(config!.modelName).toBe('granite');
     expect(reason).toContain('LM Studio');
-    expect(resolveEndpoint(config!).baseUrl).toBe('http://localhost:1234/v1');
+    expect(resolveEndpoint(config!).baseUrl).toBe('http://127.0.0.1:1234/v1');
   });
 
   it('still finds an Ollama model when only Ollama is running', async () => {
@@ -72,7 +72,7 @@ describe('resolveArchimedesConfig — auto-detection', () => {
     expect(config!.backend).toBe('ollama');
     expect(config!.modelName).toBe('kolibri:latest');
     expect(reason).toContain('Ollama');
-    expect(resolveEndpoint(config!).baseUrl).toBe('http://localhost:11434/v1');
+    expect(resolveEndpoint(config!).baseUrl).toBe('http://127.0.0.1:11434/v1');
   });
 
   it('prefers an already-loaded LM Studio model over a cold Ollama one', async () => {
@@ -151,7 +151,7 @@ describe('resolveArchimedesConfig — explicit modelName', () => {
       modelName: 'granite',
       backend: 'lmstudio',
     });
-    expect(resolveEndpoint(config!).baseUrl).toBe('http://localhost:1234/v1');
+    expect(resolveEndpoint(config!).baseUrl).toBe('http://127.0.0.1:1234/v1');
   });
 
   it('honours a custom lmstudioBaseUrl', async () => {
@@ -165,7 +165,7 @@ describe('resolveArchimedesConfig — explicit modelName', () => {
   it('keeps an unprefixed id on Ollama, as before LM Studio was supported', async () => {
     const { config, reason } = await resolveArchimedesConfig({ modelName: 'qwen2.5-coder:1.5b' });
     expect(config!.modelName).toBe('qwen2.5-coder:1.5b');
-    expect(resolveEndpoint(config!).baseUrl).toBe('http://localhost:11434/v1');
+    expect(resolveEndpoint(config!).baseUrl).toBe('http://127.0.0.1:11434/v1');
     expect(reason).toContain('Ollama');
   });
 });

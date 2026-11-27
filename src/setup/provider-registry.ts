@@ -110,10 +110,16 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     envKey: 'OPENROUTER_API_KEY',
     signupUrl: 'https://openrouter.ai/keys',
     models: [
-      { id: 'openrouter/google/gemini-2.0-flash-lite-001:free', label: 'Gemini 2.0 Flash Lite (free)', speed: 'Fast · free', contextWindow: 1_000_000 },
+      // Free ids verified live 2026-11-05 (all answered, all support tools).
+      // The four previously listed here had been retired by OpenRouter, so
+      // /models advertised models that could only fail.
+      { id: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free', label: 'Nemotron 3 Ultra 550B (free)', speed: 'Powerful · free · 1M', contextWindow: 1_000_000 },
+      { id: 'openrouter/nvidia/nemotron-3.5-super-vl:free', label: 'Nemotron 3.5 Super VL (free)', speed: 'Fast · free · 1M', contextWindow: 1_000_000 },
+      { id: 'openrouter/cohere/north-mini-code:free', label: 'North Mini Code (free)', speed: 'Code · free', contextWindow: 256_000 },
+      { id: 'openrouter/dots-studio/dots-3-note-preview:free', label: 'Dots 3 Note (free)', speed: 'Fast · free', contextWindow: 512_000 },
+      { id: 'openrouter/recursive/flint-v1.0:free', label: 'Flint v1.0 (free)', speed: 'Fast · free', contextWindow: 262_144 },
+      { id: 'openrouter/nvidia/nemotron-3.5-lightning:free', label: 'Nemotron 3.5 Lightning (free)', speed: 'Fast · free · 1M', contextWindow: 1_000_000 },
       { id: 'openrouter/meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (free)', speed: 'Powerful · free', contextWindow: 128_000 },
-      { id: 'openrouter/deepseek/deepseek-r1:free', label: 'DeepSeek R1 (free)', speed: 'Reasoning · free', contextWindow: 128_000 },
-      { id: 'openrouter/qwen/qwen-2.5-coder-32b-instruct:free', label: 'Qwen 2.5 Coder 32B (free)', speed: 'Code · free', contextWindow: 32_768 },
       { id: 'openrouter/auto', label: 'Auto (best available)', speed: 'Auto', contextWindow: 128_000 },
     ],
   },
@@ -329,6 +335,16 @@ export const PROVIDER_REGISTRY: ProviderEntry[] = [
     models: [
       { id: 'hunyuan-large', label: 'Hunyuan Large', speed: 'Powerful · MoE', contextWindow: 32_768 },
       { id: 'hunyuan-standard', label: 'Hunyuan Standard', speed: 'Balanced · 32k', contextWindow: 32_768 },
+    ],
+  },
+  {
+    name: 'Inception',
+    baseUrl: 'https://api.inceptionlabs.ai/v1',
+    envKey: 'INCEPTION_API_KEY',
+    signupUrl: 'https://platform.inceptionlabs.ai/',
+    models: [
+      { id: 'mercury-3', label: 'Mercury 3', speed: 'Diffusion · fast', contextWindow: 1_000_000 },
+      { id: 'mercury-2.5', label: 'Mercury 2.5', speed: 'Diffusion · fast', contextWindow: 260_000 },
     ],
   },
   {

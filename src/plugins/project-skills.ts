@@ -109,7 +109,20 @@ export function loadProjectSkills(projectRoot: string): ProjectSkill[] {
  */
 export function formatSkillCatalog(skills: ProjectSkill[]): string {
   if (skills.length === 0) return '';
-  const rows = skills.map(s => `- ${s.name} — ${s.description}\n  ${s.path}`).join('\n');
+  // Hard cap: an oversized skills install (home directory with hundreds of
+  // Claude skills) once produced a ~38k-char catalog and blew small-model
+  // context windows on the first turn. Keep the largest budget any model
+  // should pay for routing; loadProjectSkills sorts by name, so the cut is
+  // deterministic — later skills just don't get routed.
+  const MAX_CATALOG_CHARS = 6000;
+  const rows: string[] = [];
+  let used = 0;
+  for (const s of skills) {
+    const row = `- ${s.name} — ${s.description}\n  ${s.path}`;
+    if (used + row.length > MAX_CATALOG_CHARS) break;
+    rows.push(row);
+    used += row.length;
+  }
   return `\n\n## Available skills
 These are instruction sets installed in this project. Each line is a name, what
 it covers, and the file holding the instructions. The bodies are NOT included

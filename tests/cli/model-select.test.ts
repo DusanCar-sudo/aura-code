@@ -5,6 +5,7 @@ import {
   buildModelRows,
   modelIdForNumber,
   modelCount,
+  customRouteId,
 } from '../../src/cli/model-select.js';
 
 describe('isProviderChange', () => {
@@ -104,5 +105,19 @@ describe('cross-provider key resolution (Bug 1 regression)', () => {
       if (prevOpenAI === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = prevOpenAI;
       if (prevZhipu === undefined) delete process.env.ZHIPU_API_KEY; else process.env.ZHIPU_API_KEY = prevZhipu;
     }
+  });
+});
+
+describe('customRouteId', () => {
+  const th = { prefixes: ['th/'] };
+  it('adds the provider prefix to a bare id so it routes to that provider', () => {
+    expect(customRouteId(th, 'deepseek-v4.1-flash')).toBe('th/deepseek-v4.1-flash');
+  });
+  it('leaves an already-prefixed id alone', () => {
+    expect(customRouteId(th, 'th/deepseek-v4-pro')).toBe('th/deepseek-v4-pro');
+    expect(customRouteId(th, 'TH/deepseek-v4-pro')).toBe('TH/deepseek-v4-pro');
+  });
+  it('leaves ids alone when the provider declares no prefix', () => {
+    expect(customRouteId({ prefixes: [] }, 'x')).toBe('x');
   });
 });

@@ -38,6 +38,14 @@
  */
 export const DEFAULT_STREAM_IDLE_MS = 60_000;
 
+/**
+ * First-chunk budget for local backends (LM Studio, Ollama). A small model on
+ * CPU can spend minutes in prompt prefill — and a reasoning model more in
+ * unstreamed thinking — before the first byte, so 60s declared healthy local
+ * runs stalled. Gaps after the first chunk keep the normal idle budget.
+ */
+export const LOCAL_FIRST_CHUNK_MS = 300_000;
+
 /** Smallest honoured override. Below this, normal generation pauses would trip. */
 const MIN_STREAM_IDLE_MS = 5_000;
 
@@ -82,9 +90,9 @@ export function isStreamStalled(e: unknown): e is StreamStalledError {
  */
 export async function* withIdleTimeout<T>(
   source: AsyncIterable<T>,
-  opts: { idleMs: number; onStall?: () => void },
+  opts: { idleMs: number; firstChunkMs?: number; onStall?: () => void },
 ): AsyncGenerator<T> {
-  const { idleMs, onStall } = opts;
+  const { idleMs, firstChunkMs, onStall } = opts;
   if (idleMs <= 0) {
     yield* source;
     return;
@@ -95,8 +103,9 @@ export async function* withIdleTimeout<T>(
 
   for (;;) {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = received === 0 && firstChunkMs ? firstChunkMs : idleMs;
     const idle = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new StreamStalledError(idleMs, received)), idleMs);
+      timer = setTimeout(() => reject(new StreamStalledError(budget, received)), budget);
     });
 
     let step: IteratorResult<T>;

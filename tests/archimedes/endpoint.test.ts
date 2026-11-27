@@ -52,16 +52,25 @@ function jsonOnce(body: unknown, ok = true): void {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('normalizeV1', () => {
   it('appends /v1 to a bare host:port', () => {
-    expect(normalizeV1('http://localhost:1234')).toBe('http://localhost:1234/v1');
+    expect(normalizeV1('http://localhost:1234')).toBe('http://127.0.0.1:1234/v1');
   });
 
   it('leaves an existing /v1 alone', () => {
-    expect(normalizeV1('http://localhost:1234/v1')).toBe('http://localhost:1234/v1');
+    expect(normalizeV1('http://localhost:1234/v1')).toBe('http://127.0.0.1:1234/v1');
   });
 
   it('strips trailing slashes before deciding', () => {
-    expect(normalizeV1('http://localhost:1234/')).toBe('http://localhost:1234/v1');
-    expect(normalizeV1('http://localhost:1234/v1/')).toBe('http://localhost:1234/v1');
+    expect(normalizeV1('http://localhost:1234/')).toBe('http://127.0.0.1:1234/v1');
+    expect(normalizeV1('http://localhost:1234/v1/')).toBe('http://127.0.0.1:1234/v1');
+  });
+
+  it('rewrites localhost to IPv4, where both local servers listen', () => {
+    expect(normalizeV1('http://localhost:11434/v1')).toBe('http://127.0.0.1:11434/v1');
+    expect(normalizeV1('http://localhost:1234')).toBe('http://127.0.0.1:1234/v1');
+  });
+
+  it('leaves non-local hosts alone', () => {
+    expect(normalizeV1('http://192.168.1.9:1234/v1')).toBe('http://192.168.1.9:1234/v1');
   });
 
   it('returns empty string for empty input', () => {
@@ -147,7 +156,7 @@ describe('resolveEndpoint', () => {
   it('infers LM Studio from a modelName prefix', () => {
     const ep = resolveEndpoint({ ...baseConfig, modelName: 'lmstudio/granite' });
     expect(ep.backend).toBe('lmstudio');
-    expect(ep.baseUrl).toBe('http://localhost:1234/v1');
+    expect(ep.baseUrl).toBe('http://127.0.0.1:1234/v1');
     expect(ep.apiKey).toBe('lm-studio');
     expect(ep.label).toBe('LM Studio');
   });
@@ -181,7 +190,7 @@ describe('resolveEndpoint', () => {
 
   it('does not let the LM Studio URL leak into the Ollama endpoint', () => {
     const ep = resolveEndpoint({ ...baseConfig, backend: 'ollama' });
-    expect(ep.baseUrl).toBe('http://localhost:11434/v1');
+    expect(ep.baseUrl).toBe('http://127.0.0.1:11434/v1');
   });
 });
 
@@ -197,7 +206,7 @@ describe('applyModelOverride', () => {
     const out = applyModelOverride(detected, 'lmstudio/qwen/qwen3-1.7b');
     expect(out.backend).toBe('lmstudio');
     expect(out.modelName).toBe('qwen/qwen3-1.7b');
-    expect(resolveEndpoint(out).baseUrl).toBe('http://localhost:1234/v1');
+    expect(resolveEndpoint(out).baseUrl).toBe('http://127.0.0.1:1234/v1');
   });
 
   it('keeps the existing backend when the override is unprefixed', () => {
@@ -216,7 +225,7 @@ describe('isEndpointAvailable', () => {
     jsonOnce({ data: [] });
     const ep = resolveEndpoint({ ...baseConfig, backend: 'lmstudio' });
     expect(await isEndpointAvailable(ep)).toBe(true);
-    expect(mockFetch.mock.calls[0][0]).toBe('http://localhost:1234/v1/models');
+    expect(mockFetch.mock.calls[0][0]).toBe('http://127.0.0.1:1234/v1/models');
   });
 
   it('returns false when the server is down', async () => {
@@ -294,7 +303,7 @@ describe('listLMStudioModels', () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
     jsonOnce({ data: [{ id: 'granite' }, { id: 'qwen/qwen3-1.7b' }] });
     const models = await listLMStudioModels('http://localhost:1234/v1');
-    expect(mockFetch.mock.calls[1][0]).toBe('http://localhost:1234/v1/models');
+    expect(mockFetch.mock.calls[1][0]).toBe('http://127.0.0.1:1234/v1/models');
     expect(models.map(m => m.name)).toEqual(['granite', 'qwen/qwen3-1.7b']);
     expect(models.every(m => m.loaded === false)).toBe(true);
   });

@@ -96,3 +96,47 @@ describe('authErrorHint', () => {
     expect(authErrorHint({ model: 'kimi/kimi-k3' }, undefined)).toBeUndefined();
   });
 });
+
+describe('OpenAICompatibleProvider DashScope thinking toggle', () => {
+  /** The `enable_thinking` field the provider will actually put on the wire. */
+  const thinking = (config: Record<string, unknown>) => {
+    const p = new OpenAICompatibleProvider({ apiKey: 'k', ...config } as never) as unknown as {
+      thinkingFields(): Record<string, boolean>;
+    };
+    return p.thinkingFields();
+  };
+
+  const INTL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+  const CN = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+
+  it('turns thinking on for hybrid qwen3 models on DashScope', () => {
+    // The bug this guards against: DashScope ignores `reasoning_effort`, so
+    // without `enable_thinking` the hybrid qwen3 line answers in one shot —
+    // the main source of its confabulation on multi-step work.
+    expect(thinking({ model: 'qwen3-max', baseUrl: INTL })).toEqual({ enable_thinking: true });
+    expect(thinking({ model: 'qwen3-plus', baseUrl: CN })).toEqual({ enable_thinking: true });
+    expect(thinking({ model: 'qwen3.8-max', baseUrl: INTL })).toEqual({ enable_thinking: true });
+  });
+
+  it('honours an explicit effort rung, and `none` turns thinking off', () => {
+    expect(thinking({ model: 'qwen3-max', baseUrl: INTL, reasoningEffort: 'high' }))
+      .toEqual({ enable_thinking: true });
+    expect(thinking({ model: 'qwen3-max', baseUrl: INTL, reasoningEffort: 'none' }))
+      .toEqual({ enable_thinking: false });
+  });
+
+  it('sends nothing to non-hybrid models — DashScope 400s on the field there', () => {
+    for (const model of ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen-long',
+      'qwen3-coder-plus', 'qwen2.5-72b-instruct']) {
+      expect(thinking({ model, baseUrl: INTL })).toEqual({});
+    }
+  });
+
+  it('sends nothing off DashScope, even for a qwen3 id', () => {
+    // `enable_thinking` is DashScope-only; OpenAI, DeepSeek and local servers
+    // would see an unknown field.
+    expect(thinking({ model: 'qwen3-max', baseUrl: 'https://api.openai.com/v1' })).toEqual({});
+    expect(thinking({ model: 'qwen3-max', baseUrl: 'http://localhost:11434/v1' })).toEqual({});
+    expect(thinking({ model: 'qwen3-max' })).toEqual({});
+  });
+});

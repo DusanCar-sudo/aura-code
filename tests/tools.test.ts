@@ -99,6 +99,20 @@ describe('writeFile', () => {
     writeFile({ path: 'deep/nested/dir/a.txt', content: 'x' }, tmpDir);
     expect(fs.existsSync(path.join(tmpDir, 'deep/nested/dir/a.txt'))).toBe(true);
   });
+
+  it('rejects a degenerate repetition-loop write without touching the file', () => {
+    // The real corruption shape: helpers, then a junk line of repeated tokens.
+    const junk = 'x '.repeat(60) + `exit \${EXIT_CODE:-9} `.repeat(24);
+    const result = writeFile({ path: 'broken.sh', content: `#!/bin/bash\n${junk}\n}` }, tmpDir);
+    expect(result).toContain('corrupted write');
+    expect(fs.existsSync(path.join(tmpDir, 'broken.sh'))).toBe(false);
+  });
+
+  it('accepts a normal long script with repeated flags on short lines', () => {
+    const lines = Array.from({ length: 80 }, (_, i) => `curl --include --silent https://example.com/${i}`);
+    const result = writeFile({ path: 'ok.sh', content: lines.join('\n') }, tmpDir);
+    expect(result).toContain('Created');
+  });
 });
 
 describe('runShell', () => {

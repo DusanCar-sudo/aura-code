@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import type { Episode } from './types.js';
 import { shouldFineTune } from './competence.js';
 
@@ -32,15 +33,33 @@ export const episodeStore = {
   },
 
   /**
-   * First 8 characters of the base64 encoding of `projectRoot`.
+   * Stable per-project namespace: the first 16 hex characters of SHA-256.
+   *
+   * The old implementation took the first 8 characters of the path's base64
+   * encoding. That is a prefix, not a hash, so every path starting with the
+   * same 6 bytes collided — all `/mnt/bigdata/...` projects shared one
+   * directory and pooled their competence data.
    */
   projectHash(projectRoot: string): string {
+    return createHash('sha256').update(projectRoot, 'utf8').digest('hex').slice(0, 16);
+  },
+
+  /**
+   * The pre-fix directory name (first 8 base64 characters). Kept read-only so
+   * existing episode history is not lost; new writes always use projectHash().
+   */
+  legacyProjectHash(projectRoot: string): string {
     return Buffer.from(projectRoot, 'utf8').toString('base64').slice(0, 8);
   },
 
   /** Directory containing all episodes for a project. */
   projectDir(projectRoot: string): string {
     return path.join(this.defaultDir(), this.projectHash(projectRoot));
+  },
+
+  /** Old, collision-prone episode directory for a project. */
+  legacyProjectDir(projectRoot: string): string {
+    return path.join(this.defaultDir(), this.legacyProjectHash(projectRoot));
   },
 
   /** Full path to one episode file. */
@@ -62,36 +81,52 @@ export const episodeStore = {
 
   /**
    * Loads episodes for a project, newest first.
+   *
+   * Reads the new SHA-256 directory, then the old base64-prefix directory.
+   * Legacy entries are admitted only when their `projectRoot` matches exactly,
+   * because several projects used to share one legacy directory; entries
+   * written before `projectRoot` was recorded cannot be attributed safely and
+   * are skipped rather than assigned to the wrong project.
+   *
    * Never throws — returns `[]` on missing dir or parse errors.
    */
-  async loadEpisodes(projectRoot: string, limit?: number): Promise<Episode[]> {
-    try {
-      const dir = this.projectDir(projectRoot);
+  loadEpisodesSync(projectRoot: string, limit?: number): Episode[] {
+    const readDir = (dir: string, requireProjectRoot: boolean): Episode[] => {
       if (!fs.existsSync(dir)) return [];
-
-      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
       const episodes: Episode[] = [];
-
-      for (const file of files) {
-        const raw = await fs.promises.readFile(path.join(dir, file), 'utf8');
+      for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.json'))) {
         try {
-          const parsed = JSON.parse(raw) as Episode;
-          if (parsed?.id && typeof parsed.timestamp === 'number') {
-            episodes.push(parsed);
+          const parsed = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')) as Episode;
+          if (!parsed?.id || typeof parsed.timestamp !== 'number') continue;
+          if (requireProjectRoot && path.normalize(parsed.projectRoot ?? '') !== path.normalize(projectRoot)) {
+            continue;
           }
+          episodes.push(parsed);
         } catch {
           /* skip corrupt file */
         }
       }
+      return episodes;
+    };
 
-      episodes.sort((a, b) => b.timestamp - a.timestamp);
-      if (limit !== undefined && limit > 0) {
-        return episodes.slice(0, limit);
+    try {
+      const byId = new Map<string, Episode>();
+      // Current namespace wins over a legacy duplicate of the same episode.
+      for (const ep of readDir(this.projectDir(projectRoot), false)) byId.set(ep.id, ep);
+      for (const ep of readDir(this.legacyProjectDir(projectRoot), true)) {
+        if (!byId.has(ep.id)) byId.set(ep.id, ep);
       }
+
+      const episodes = [...byId.values()].sort((a, b) => b.timestamp - a.timestamp);
+      if (limit !== undefined && limit > 0) return episodes.slice(0, limit);
       return episodes;
     } catch {
       return [];
     }
+  },
+
+  async loadEpisodes(projectRoot: string, limit?: number): Promise<Episode[]> {
+    return this.loadEpisodesSync(projectRoot, limit);
   },
 
   /**
@@ -144,5 +179,6 @@ export const episodeStore = {
 // Named re-exports (callers may import functions directly)
 export const saveEpisode = episodeStore.saveEpisode.bind(episodeStore);
 export const loadEpisodes = episodeStore.loadEpisodes.bind(episodeStore);
+export const loadEpisodesSync = episodeStore.loadEpisodesSync.bind(episodeStore);
 export const deleteEpisode = episodeStore.deleteEpisode.bind(episodeStore);
 export const getEpisodeStats = episodeStore.getEpisodeStats.bind(episodeStore);

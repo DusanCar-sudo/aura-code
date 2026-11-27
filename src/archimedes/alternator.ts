@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { HistoryMessage, LLMProvider } from '../providers/types.js';
-import { OpenAICompatibleProvider } from '../providers/openai-compatible.js';
+import { OpenAICompatibleProvider, type StreamStats } from '../providers/openai-compatible.js';
+import { LOCAL_FIRST_CHUNK_MS } from '../providers/stream-timeout.js';
 import { createProvider } from '../providers/factory.js';
 import { runAgentLoop, type LoopResult } from '../agent/loop.js';
 import type { ProjectContext } from '../agent/context.js';
@@ -15,7 +16,9 @@ import type {
   Episode,
   ArchimedesConfig,
   TaskCategory,
+  VerifierVerdict,
 } from './types.js';
+import { DEFAULT_ARCHIMEDES_CONFIG } from './types.js';
 import { assessCompetence, shouldFineTune, derivePatternKey } from './competence.js';
 import { resolveEndpoint, wireModelName } from './endpoint.js';
 import { episodeStore } from './episode-capture.js';
@@ -185,6 +188,72 @@ function isNonEmptyResult(text: string | undefined): boolean {
 }
 
 /**
+ * Fuses the session's abort signal with the Archimedes deadline. Avoids
+ * AbortSignal.any so this keeps working on Node versions without it, and
+ * returns a disposer that removes the listeners.
+ */
+function combineAbortSignals(signals: Array<AbortSignal | undefined>): {
+  signal?: AbortSignal;
+  dispose: () => void;
+} {
+  const active = signals.filter((s): s is AbortSignal => s !== undefined);
+  if (active.length === 0) return { dispose: () => {} };
+  if (active.length === 1) return { signal: active[0], dispose: () => {} };
+
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  for (const signal of active) {
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const signal of active) signal.removeEventListener('abort', onAbort);
+    },
+  };
+}
+
+/**
+ * Derives the aura-learn enrichment fields from the winning loop run:
+ * files written/edited, whether tests ran and their outcome, and the git diff.
+ * Every step is best-effort — learning data must never fail the task.
+ */
+export async function episodeLearningFields(
+  loopResult: LoopResult | undefined,
+  projectRoot: string,
+  reviewerReason: string | undefined,
+): Promise<Pick<Episode, 'filesTouched' | 'diff' | 'testResult' | 'reviewerReason'>> {
+  const fields: Pick<Episode, 'filesTouched' | 'diff' | 'testResult' | 'reviewerReason'> = {};
+  if (reviewerReason) fields.reviewerReason = reviewerReason;
+  if (!loopResult) return fields;
+
+  const touched = new Set<string>();
+  let testsRan = false;
+  for (const call of loopResult.toolCallLog) {
+    if ((call.name === 'edit_file' || call.name === 'write_file') && typeof call.input.path === 'string') {
+      touched.add(call.input.path);
+    }
+    if (call.name === 'run_tests') testsRan = true;
+  }
+  if (touched.size > 0) fields.filesTouched = [...touched].sort();
+  if (testsRan) fields.testResult = loopResult.success ? 'pass' : 'fail';
+
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const { stdout } = await promisify(execFile)('git', ['diff'], { cwd: projectRoot, maxBuffer: 32 * 1024 * 1024 });
+    if (stdout.trim()) fields.diff = stdout;
+  } catch {
+    /* not a git repo or git missing — diff is optional */
+  }
+  return fields;
+}
+
+/**
  * Checks whether the configured local endpoint (Ollama or LM Studio) responds.
  * Both serve an OpenAI-compatible `/v1/models`, so one probe covers either.
  * Never throws.
@@ -207,8 +276,11 @@ async function isLocalBackendAvailable(config: ArchimedesConfig): Promise<boolea
 }
 
 interface ArchimedesVerification {
-  valid: boolean;
+  verdict: VerifierVerdict;
+  /** Reject reason, or why the reply could not be parsed. Empty on accept/unreachable. */
   reason: string;
+  /** Set only for 'unreachable': the call failed, so this is not a judgement of the answer. */
+  error?: string;
   /** Real usage reported by the verifier call, when the provider reports it. */
   usage?: { inputTokens: number; outputTokens: number };
 }
@@ -268,13 +340,25 @@ function summarizeToolActivity(history: HistoryMessage[], answer?: string): stri
 /**
  * Cheap correctness gate on Archimedes's answer: one `complete()` call to the large
  * model with no tools and no history — deliberately NOT a full agent loop.
- * Fail-safe: any verification error counts as invalid (escalate), never as
- * silent trust.
+ * Fail-safe: only 'accept' passes; reject, abstain and unreachable all
+ * escalate, never silent trust.
  *
  * Verification rubric branches by task mode (retrieval vs design):
  * - Retrieval tasks: strict tool-evidence corroboration (original behavior)
  * - Design tasks: factual premises still strict, recommendations judged on coherence/relevance
  */
+/**
+ * Strict parse of the verifier's one-line reply. Only an exact "VALID" accepts;
+ * "VALIDATION FAILED", "VALID\nbut…" or prose abstain instead of passing.
+ */
+export function parseVerifierReply(raw: string): { verdict: VerifierVerdict; reason: string } {
+  const text = raw.trim();
+  if (/^VALID\.?$/i.test(text)) return { verdict: 'accept', reason: '' };
+  const invalid = /^INVALID\b:?\s*([\s\S]*)$/i.exec(text);
+  if (invalid) return { verdict: 'reject', reason: invalid[1].trim() || 'failed verification' };
+  return { verdict: 'abstain', reason: text ? `unparseable verifier reply: ${text.slice(0, 120)}` : 'empty verifier reply' };
+}
+
 export async function verifyArchimedesAnswer(
   task: string,
   answer: string,
@@ -293,14 +377,26 @@ export async function verifyArchimedesAnswer(
     `Archimedes's final answer:`,
     answer,
     ``,
-    `Does this answer correctly and completely address the task?`,
-    `Critically: check the answer against the tool results above for`,
-    `direct contradictions — for example, if a tool result says a`,
+    `Apply three gates; mark INVALID if ANY of them fails:`,
+    `GATE 1 — CONTRADICTION: check the answer against the tool results`,
+    `above for direct contradictions — if a tool result says a`,
     `function/file/symbol was not found, but the answer describes it`,
     `in detail as if it exists, that is a fabrication and must be`,
     `marked INVALID regardless of how complete or well-written the`,
     `answer looks.`,
-    `Reply with exactly one line: either "VALID" or "INVALID: <short reason>".`,
+    `GATE 2 — COMPLETENESS: every part or sub-question of the task`,
+    `must be answered. If the task asks "what does X do and why", both`,
+    `the what and the why must be present. Partial coverage, an answer`,
+    `that stops after the first sub-part, or an answer padded with`,
+    `restatement instead of substance is INVALID.`,
+    `GATE 3 — SPECIFICITY: the answer must be grounded in concrete`,
+    `evidence (file names, function names, values, numbers, quoted`,
+    `behavior from tool results). Generic prose, hedging without`,
+    `resolution, or answers that could have been written without`,
+    `reading the tools are INVALID.`,
+    `A short answer can be VALID only if it fully and specifically`,
+    `answers every part of the task; length alone is not the test.`,
+    `Reply with exactly one line: either "VALID" or "INVALID: <short reason naming the failed gate>".`,
   ].join('\n') : [
     `Task: ${task}`,
     ``,
@@ -348,19 +444,15 @@ export async function verifyArchimedesAnswer(
           inputTokens: countText(systemMsg) + countText(prompt),
           outputTokens: countText(text),
         };
-    if (text.toUpperCase().startsWith('VALID')) {
-      return { valid: true, reason: '', usage };
-    }
-    const reason = text.replace(/^INVALID:?\s*/i, '') || 'failed verification';
-    return { valid: false, reason, usage };
+    return { ...parseVerifierReply(text), usage };
   } catch (e) {
-    return { valid: false, reason: `verification error: ${String(e)}` };
+    return { verdict: 'unreachable', reason: '', error: String(e) };
   }
 }
 
 function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProvider {
   const endpoint = resolveEndpoint(config);
-  return new OpenAICompatibleProvider(
+  const provider = new OpenAICompatibleProvider(
     {
       model: wireModelName(config),
       baseUrl: endpoint.baseUrl,
@@ -368,6 +460,21 @@ function buildArchimedesProvider(config: ArchimedesConfig): OpenAICompatibleProv
     },
     `Archimedes (${endpoint.label})`,
   );
+  // Every Archimedes backend is local (resolveEndpoint returns LM Studio or Ollama).
+  provider.firstChunkMs = LOCAL_FIRST_CHUNK_MS;
+  return provider;
+}
+
+/** One line per small-model call: time to first token, throughput, and how much of the wait was prefill vs reasoning. */
+export function formatSmallCallStats(s: StreamStats): string {
+  const genMs = s.totalMs - s.firstChunkMs;
+  const tps = s.outputTokens && genMs > 0 ? (s.outputTokens / (genMs / 1000)).toFixed(1) : '?';
+  const answer = s.firstAnswerMs === undefined ? 'none' : `${(s.firstAnswerMs / 1000).toFixed(1)}s`;
+  const split = s.reasoningTokens !== undefined && s.outputTokens !== undefined
+    ? `reasoning=${s.reasoningTokens}tok content=${s.outputTokens - s.reasoningTokens}tok`
+    : `reasoning=${s.reasoningChars}ch`;
+  return `[archimedes] prompt=${s.promptTokens ?? '?'}tok ttft=${(s.firstChunkMs / 1000).toFixed(1)}s ` +
+    `first-answer=${answer} out=${s.outputTokens ?? '?'}tok ${tps} tok/s ${split} total=${(s.totalMs / 1000).toFixed(1)}s`;
 }
 
 /**
@@ -489,6 +596,8 @@ export class ArchimedesAlternator {
     let largeUsage: CostModelUsage | undefined;
     let verifierTokens = { input: 0, output: 0 };
     let verifierCalled = false;
+    let verifierVerdict: VerifierVerdict | undefined;
+    let verifierError: string | undefined;
     const noteVerification = (v: ArchimedesVerification): void => {
       if (v.usage) {
         verifierTokens.input += v.usage.inputTokens;
@@ -500,6 +609,9 @@ export class ArchimedesAlternator {
     // call isn't blind to what Archimedes already tried. Never fed back into the
     // Episode — only into the large model's task text for this run.
     let archimedesFailureContext: string | undefined;
+    // Why verification rejected an answer — recorded on the Episode so aura-learn
+    // can use the rejection reason as signal, not just the escalation fact.
+    let reviewerReason: string | undefined;
 
     // Steering read by the Archimedes attempt is replayed if that attempt is
     // discarded — see recordingSteeringProxy.
@@ -557,8 +669,24 @@ export class ArchimedesAlternator {
           archimedesAttempted = true;
           this.display.success(`Trying Archimedes (${wireModelName(archimedesConfig)} on ${endpoint.label})…`);
 
+          const deadlineMs = archimedesConfig.deadlineMs
+            ?? DEFAULT_ARCHIMEDES_CONFIG.deadlineMs
+            ?? 180_000;
+          const deadlineController = new AbortController();
+          const deadlineTimer = setTimeout(() => deadlineController.abort(), deadlineMs);
+          const combinedAbort = combineAbortSignals([
+            this.opts.abortSignal,
+            deadlineController.signal,
+          ]);
+          let timedOut = false;
+
           try {
             const archimedesProvider = buildArchimedesProvider(archimedesConfig);
+            archimedesProvider.abortSignal = combinedAbort.signal;
+            archimedesProvider.onFirstChunk = (ms) => this.display.success(
+              `Archimedes: first token after ${(ms / 1000).toFixed(1)}s — generating…`,
+            );
+            archimedesProvider.onStreamStats = (s) => this.display.success(formatSmallCallStats(s));
             const loopResult = await runAgentLoop({
               provider: archimedesProvider,
               task,
@@ -573,7 +701,7 @@ export class ArchimedesAlternator {
               maxTurns: Math.min(this.opts.maxTurns ?? 15, 15),
               confirmFn: this.opts.confirmFn,
               initialHistory: this.opts.initialHistory,
-              abortSignal: this.opts.abortSignal,
+              abortSignal: combinedAbort.signal,
               steering: steering.proxy,
               healthTracker: this.opts.healthTracker,
               allowedTools: ARCHIMEDES_TOOLS,
@@ -589,7 +717,11 @@ export class ArchimedesAlternator {
               tokensOut: loopResult.usage.outputTokens,
             };
 
-            if (isNonEmptyResult(archimedesOutput) && loopResult.success) {
+            // The outer abort could also be the user's :stop — only a deadline
+            // hit gets the timeout explanation.
+            timedOut = deadlineController.signal.aborted && !this.opts.abortSignal?.aborted;
+
+            if (!timedOut && isNonEmptyResult(archimedesOutput) && loopResult.success) {
               const verification = await verifyArchimedesAnswer(
                 task,
                 archimedesOutput!,
@@ -597,15 +729,19 @@ export class ArchimedesAlternator {
                 verifierProvider,
               );
               noteVerification(verification);
-              if (verification.valid) {
+              verifierVerdict = verification.verdict;
+              verifierError = verification.error;
+              const verifyNote = verification.reason || `verifier unreachable: ${verification.error}`;
+              if (verification.verdict === 'accept') {
                 archimedesSucceeded = true;
                 usedArchimedes = true;
                 result = archimedesOutput!;
                 finalLoopResult = loopResult;
                 this.display.success('Archimedes handled the task without escalation.');
               } else {
+                reviewerReason = verification.reason || undefined;
                 archimedesFailureContext = [
-                  `Archimedes's answer failed verification: ${verification.reason}`,
+                  `Archimedes's answer failed verification: ${verifyNote}`,
                   ``,
                   `Archimedes's tool activity:`,
                   summarizeToolActivity(loopResult.history, archimedesOutput),
@@ -614,24 +750,38 @@ export class ArchimedesAlternator {
                   archimedesOutput!,
                 ].join('\n');
                 this.display.warning(
-                  `Archimedes's answer failed verification (${verification.reason}) — escalating.`,
+                  `Archimedes's answer failed verification (${verifyNote}) — escalating.`,
                 );
               }
             } else {
+              const deadlineNote = `Archimedes exceeded its ${(deadlineMs / 1000).toFixed(0)}s deadline`;
               archimedesFailureContext = [
-                loopResult.success
-                  ? `Archimedes produced no usable output.`
-                  : `Archimedes did not complete the task (${loopResult.summary}).`,
+                timedOut
+                  ? `${deadlineNote} — the local model was too slow to finish a turn.`
+                  : loopResult.success
+                    ? `Archimedes produced no usable output.`
+                    : `Archimedes did not complete the task (${loopResult.summary}).`,
                 ``,
                 `Archimedes's tool activity:`,
                 summarizeToolActivity(loopResult.history),
               ].join('\n');
-              this.display.warning('Archimedes did not produce a usable result — escalating.');
+              this.display.warning(
+                timedOut
+                  ? `${deadlineNote} — escalating to the large model.`
+                  : 'Archimedes did not produce a usable result — escalating.',
+              );
             }
           } catch (e) {
-            this.display.warning(`Archimedes error: ${String(e)} — escalating.`);
-            archimedesOutput = archimedesOutput ?? `Error: ${String(e)}`;
-            archimedesFailureContext = `Archimedes errored before producing output: ${String(e)}`;
+            const timedOutNow = deadlineController.signal.aborted && !this.opts.abortSignal?.aborted;
+            const reason = timedOutNow
+              ? `Archimedes exceeded its ${(deadlineMs / 1000).toFixed(0)}s deadline`
+              : `Archimedes error: ${String(e)}`;
+            this.display.warning(`${reason} — escalating.`);
+            archimedesOutput = archimedesOutput ?? `Error: ${reason}`;
+            archimedesFailureContext = `${reason} before producing output.`;
+          } finally {
+            clearTimeout(deadlineTimer);
+            combinedAbort.dispose();
           }
         }
       }
@@ -698,9 +848,10 @@ export class ArchimedesAlternator {
             );
             noteVerification(largeModelVerification);
 
-            if (!largeModelVerification.valid) {
+            if (largeModelVerification.verdict !== 'accept') {
+              reviewerReason = largeModelVerification.reason || largeModelVerification.error;
               this.display.warning(
-                `Large model answer failed verification (${largeModelVerification.reason}) — checking council escalation…`,
+                `Large model answer failed verification (${reviewerReason}) — checking council escalation…`,
               );
 
               // Rough estimate: 5 panel agents × 6 turns × 2k tokens + synthesis × 2k = ~62k tokens
@@ -729,7 +880,7 @@ export class ArchimedesAlternator {
                   // Gap 5: Pass the failed attempt so council agents don't repeat
                   // the same factual errors that got the large model rejected.
                   const failedAttemptContext = [
-                    `A previous attempt at this task failed verification: ${largeModelVerification.reason}`,
+                    `A previous attempt at this task failed verification: ${reviewerReason}`,
                     ``,
                     `Previous attempt's tool activity:`,
                     summarizeToolActivity(loopResult.history),
@@ -773,7 +924,7 @@ export class ArchimedesAlternator {
                     );
                     noteVerification(councilVerification);
 
-                    if (councilVerification.valid) {
+                    if (councilVerification.verdict === 'accept') {
                       result = councilAnswer;
                       finalLoopResult = {
                         ...loopResult,
@@ -821,10 +972,20 @@ export class ArchimedesAlternator {
       },
       durationMs: Date.now() - startMs,
       taskCategory,
+      ...(await episodeLearningFields(finalLoopResult, projectRoot, reviewerReason)),
+      ...(verifierVerdict ? { verifierVerdict } : {}),
+      ...(verifierError ? { verifierError } : {}),
     };
 
     try {
-      await episodeStore.saveEpisode(projectRoot, episode);
+      // Per-project learning opt-out: .aura.json `learning.exclude` produces
+      // zero episodes for this project. Checked at save so routing still runs.
+      const { loadProjectConfig } = await import('../config/project-config.js');
+      if (loadProjectConfig(projectRoot).learning?.exclude) {
+        this.display.warning(`Learning capture disabled for this project (learning.exclude) — episode not saved.`);
+      } else {
+        await episodeStore.saveEpisode(projectRoot, episode);
+      }
     } catch (e) {
       this.display.warning(`Failed to save episode: ${String(e)}`);
     }

@@ -30,6 +30,12 @@ jobs:
       - name: Install PDF text extraction
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
+      # screen_encode.py shells out to ImageMagick's `convert` (PIL as
+      # fallback), and the runner has neither — same class of gap as
+      # poppler-utils above.
+      - name: Install ImageMagick + PIL
+        run: sudo apt-get install -y imagemagick python3-pil
+
       - name: Install dependencies
         run: npm ci
 

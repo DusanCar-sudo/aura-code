@@ -54,9 +54,10 @@ export function imageToLogical(x: number, y: number, g: CaptureGeometry): Point 
   }
   const sx = g.sourceWidth / g.width;
   const sy = g.sourceHeight / g.height;
+  // Last addressable pixel is size-1; the absolute device's range is 0..size-1.
   return {
-    x: clamp(Math.round(x * sx), 0, g.sourceWidth),
-    y: clamp(Math.round(y * sy), 0, g.sourceHeight),
+    x: clamp(Math.round(x * sx), 0, g.sourceWidth - 1),
+    y: clamp(Math.round(y * sy), 0, g.sourceHeight - 1),
   };
 }
 

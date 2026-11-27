@@ -253,6 +253,10 @@ export function useAura(settings: Settings) {
       case M.turnStarted:
         setBusy(true);
         setError(null);
+        // A first turn runs before the session is saved to disk, so the
+        // sidebar still shows the previous conversation as #1. Refreshing
+        // here picks up the live session the engine now knows about.
+        refreshConversationsRef.current();
         break;
       case M.turnDelta:
         if (typeof p.text === 'string') appendDelta(p.text);

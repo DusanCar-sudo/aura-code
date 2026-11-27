@@ -72,6 +72,33 @@ describe('saveEpisode & loadEpisodes', () => {
     expect(loaded[0]).toEqual(episode);
   });
 
+  it('reads legacy episodes for this project and skips colliding projects', async () => {
+    const legacyDir = episodeStore.legacyProjectDir(projectRoot);
+    fs.mkdirSync(legacyDir, { recursive: true });
+
+    const mine = makeEpisode({ id: 'ep-legacy-mine', projectRoot });
+    const other = makeEpisode({ id: 'ep-legacy-other', projectRoot: '/mnt/bigdata/other-project' });
+    fs.writeFileSync(path.join(legacyDir, 'a.json'), JSON.stringify(mine));
+    fs.writeFileSync(path.join(legacyDir, 'b.json'), JSON.stringify(other));
+
+    const loaded = await loadEpisodes(projectRoot);
+    expect(loaded.map(e => e.id)).toEqual(['ep-legacy-mine']);
+  });
+
+  it('prefers the new namespace when a legacy episode has the same id', async () => {
+    const legacyDir = episodeStore.legacyProjectDir(projectRoot);
+    fs.mkdirSync(legacyDir, { recursive: true });
+    const legacy = makeEpisode({ id: 'ep-duplicate', projectRoot, task: 'legacy copy' });
+    fs.writeFileSync(path.join(legacyDir, 'dup.json'), JSON.stringify(legacy));
+
+    const current = makeEpisode({ id: 'ep-duplicate', projectRoot, task: 'current copy' });
+    await saveEpisode(projectRoot, current);
+
+    const loaded = await loadEpisodes(projectRoot);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].task).toBe('current copy');
+  });
+
   it('loadEpisodes returns empty array when no episodes exist', async () => {
     const loaded = await loadEpisodes(projectRoot);
     expect(loaded).toEqual([]);
@@ -427,12 +454,18 @@ describe('episodeStore — projectHash', () => {
   it('produces different hashes for different projectRoots', () => {
     const h1 = episodeStore.projectHash('/projects/my-app');
     const h2 = episodeStore.projectHash('/opt/other-app');
-    // Short base64 is prefix-sensitive; these paths differ early enough
     expect(h1).not.toBe(h2);
   });
 
-  it('hash is exactly 8 characters', () => {
+  it('separates projects that share a long path prefix', () => {
+    // Regression: the old first-8-base64 schema gave every /mnt/bigdata/...
+    // project the same directory (L21udC9i), pooling competence data.
+    expect(episodeStore.projectHash('/mnt/bigdata/aura'))
+      .not.toBe(episodeStore.projectHash('/mnt/bigdata/Aura_Benchmark'));
+  });
+
+  it('hash is exactly 16 hex characters', () => {
     const h = episodeStore.projectHash('/any/project/root');
-    expect(h.length).toBe(8);
+    expect(h).toMatch(/^[0-9a-f]{16}$/);
   });
 });

@@ -47,6 +47,10 @@ function safeConfig(config: ArchimedesConfig): ArchimedesConfig {
     epsilonProbeRate: clamp01(
       config?.epsilonProbeRate ?? DEFAULT_ARCHIMEDES_CONFIG.epsilonProbeRate,
     ),
+    deadlineMs: Math.max(
+      1,
+      config?.deadlineMs ?? DEFAULT_ARCHIMEDES_CONFIG.deadlineMs ?? 180_000,
+    ),
     // Like `backend`, this must survive normalisation — dropping it would
     // silently hand verification back to the model that wrote the answer.
     ...(config?.verifierModel ? { verifierModel: config.verifierModel } : {}),

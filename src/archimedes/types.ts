@@ -75,6 +75,13 @@ export interface ArchimedesConfig {
    */
   epsilonProbeRate: number;
   /**
+   * Hard wall-clock budget for the whole Archimedes attempt, including every
+   * turn of its read-only agent loop. Without this a stalled local model can
+   * hold the session open indefinitely; the small attempt is aborted and the
+   * task escalates to the large model. Defaults to 5 minutes.
+   */
+  deadlineMs?: number;
+  /**
    * Model that verifies answers, when it should not be the model that wrote
    * them. Omitted (the default) keeps the long-standing behaviour: the large
    * model verifies, including on the escalation and council paths where it is
@@ -97,6 +104,7 @@ export const DEFAULT_ARCHIMEDES_CONFIG: ArchimedesConfig = {
   minAttempts: 3,
   enabled: true,
   epsilonProbeRate: 0.05,
+  deadlineMs: 180_000,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,7 +145,22 @@ export interface Episode {
   durationMs: number;
   /** Task category assigned by the router or orchestrator. */
   taskCategory: TaskCategory;
+  /** Files written or edited during the episode, from the tool call log. */
+  filesTouched?: string[];
+  /** Git diff of the working tree after the episode (best-effort; may be absent). */
+  diff?: string;
+  /** Whether tests ran during the episode and how they ended. */
+  testResult?: 'pass' | 'fail' | 'none';
+  /** Why verification rejected an answer (the escalation trigger). */
+  reviewerReason?: string;
+  /** Typed verdict the verifier gave the small model's answer, when it was verified. */
+  verifierVerdict?: VerifierVerdict;
+  /** Verifier call failure (timeout, provider error) — kept apart from rejects. */
+  verifierError?: string;
 }
+
+/** accept/reject come from a parsed reply; abstain = unparseable reply; unreachable = the call failed. */
+export type VerifierVerdict = 'accept' | 'reject' | 'abstain' | 'unreachable';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Alternation decision

@@ -30,6 +30,7 @@ import pkg from '../../package.json';
 import { runAgentLoop } from '../agent/loop.js';
 import { PermissionSystem } from '../safety/permissions.js';
 import { findDeviceByToken, touchDevice, redeemPairingCode } from './devices.js';
+import { registerInferenceRoutes } from './inference.js';
 import {
   pickLanAddress, ensureLanCert, shortFingerprint, tailscaleAddress, tailscaleDnsName,
 } from './lan.js';
@@ -570,6 +571,14 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     // conversation instead of a single shared one.
     (req as express.Request & { auraClient?: ClientIdentity }).auraClient = who;
     next();
+  });
+
+  // Aura Inference Gateway — OpenAI-compatible endpoint over the provider
+  // layer, behind the auth gate above. `aura-1` resolves to whatever model
+  // this server was started with.
+  registerInferenceRoutes(app, {
+    defaultModel: opts.model,
+    create: (config: ProviderConfig) => createProvider(config),
   });
 
   function clientOf(req: express.Request): ClientIdentity {
@@ -1635,11 +1644,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         type: string; task?: string; model?: string; id?: string; approved?: boolean;
       };
       try { msg = JSON.parse(raw.toString()); } catch { return; }
-      console.log('[diag] ws message', msg.kind, (msg as any).method, msg.type); // TEMP DIAGNOSTIC
 
       if (msg.kind === 'req' || msg.kind === 'res' || msg.kind === 'evt') {
         await protocol.handle(msg as unknown as Frame);
-        console.log('[diag] protocol.handle returned'); // TEMP DIAGNOSTIC
         return;
       }
 

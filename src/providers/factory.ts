@@ -597,6 +597,11 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'tencent/hunyuan-large',    name: 'Hunyuan Large',    provider: 'Tencent TokenHub', speed: 'Powerful · MoE' },
   { id: 'tencent/hunyuan-standard', name: 'Hunyuan Standard', provider: 'Tencent TokenHub', speed: 'Balanced · 32k' },
 
+  // ── Inception (Mercury diffusion LLMs) ───────────────────────────────────
+  { id: 'inception/mercury-3',   name: 'Mercury 3',   provider: 'Inception', speed: 'Diffusion · 1M ctx · ~1000 tok/s' },
+  { id: 'inception/mercury-2.5', name: 'Mercury 2.5', provider: 'Inception', speed: 'Diffusion · 260k ctx' },
+  { id: 'inception/mercury-2',   name: 'Mercury 2',   provider: 'Inception', speed: 'Diffusion · 128k ctx' },
+
   // ── GMI Cloud ────────────────────────────────────────────────────────────
   { id: 'gmi/deepseek-ai/deepseek-r1', name: 'DeepSeek R1 (GMI)', provider: 'GMI Cloud', speed: 'Reasoning · direct' },
   { id: 'gmi/deepseek-ai/deepseek-v3', name: 'DeepSeek V3 (GMI)', provider: 'GMI Cloud', speed: 'Powerful · direct' },
@@ -656,6 +661,13 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'sambanova/DeepSeek-R1-Distill-Llama-70B',    name: 'DeepSeek R1 70B (SambaNova free)', provider: 'SambaNova', speed: 'Reasoning · free' },
   { id: 'sambanova/Meta-Llama-3.1-405B-Instruct',     name: 'Llama 3.1 405B (SambaNova free)', provider: 'SambaNova', speed: 'Powerful · free' },
 
+  // ── Nebius AI Studio ─────────────────────────────────────────────────────
+  { id: 'nebius/Meta-Llama-3.3-70B-Instruct',      name: 'Llama 3.3 70B (Nebius)', provider: 'Nebius', speed: 'Fast · free tier' },
+  { id: 'nebius/Meta-Llama-3.1-405B-Instruct',     name: 'Llama 3.1 405B (Nebius)', provider: 'Nebius', speed: 'Powerful · free tier' },
+  { id: 'nebius/DeepSeek-R1',                      name: 'DeepSeek R1 (Nebius)',   provider: 'Nebius', speed: 'Reasoning · free tier' },
+  { id: 'nebius/DeepSeek-R1-Distill-Llama-70B',    name: 'DeepSeek R1 70B (Nebius)', provider: 'Nebius', speed: 'Reasoning · fast' },
+  { id: 'nebius/Qwen2.5-Coder-32B-Instruct',       name: 'Qwen 2.5 Coder 32B (Nebius)', provider: 'Nebius', speed: 'Code · 32k' },
+
   // ── Mistral AI ───────────────────────────────────────────────────────────
   { id: 'mistral/codestral-latest',                   name: 'Codestral Latest',     provider: 'Mistral AI', speed: 'Code · fast' },
   { id: 'mistral/mistral-large-latest',               name: 'Mistral Large Latest', provider: 'Mistral AI', speed: 'Powerful · flagship' },
@@ -700,7 +712,7 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
 const LIVE_PREFERRED_PROVIDERS = new Set([
   'Anthropic', 'OpenAI', 'Google', 'OpenRouter', 'DeepSeek', 'Qwen', 'MiniMax',
   'Kimi', 'Groq', 'NVIDIA', 'StepFun', 'Fireworks AI', 'FPT Cloud AI', 'BytePlus ModelArk', 'Upstage',
-  'Arcee AI', 'Tencent TokenHub', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
+  'Arcee AI', 'Tencent TokenHub', 'Inception', 'GMI Cloud', 'Kilo Code', 'Alibaba', 'Hugging Face',
   'Xiaomi MiMo', 'Zhipu', 'Cerebras', 'SambaNova', 'Mistral AI', 'Together AI', 'Cohere',
 ]);
 

@@ -56,6 +56,21 @@ describe('withIdleTimeout', () => {
     }
   });
 
+  it('gives the first chunk its own budget, then reverts to idleMs', async () => {
+    // First chunk after 100ms survives a 60ms idle budget because firstChunkMs is 300ms.
+    async function* slowStart(): AsyncGenerator<string> {
+      await sleep(100); yield 'a';
+      yield 'b';
+      await sleep(60_000); yield 'never';
+    }
+    try {
+      await collect(withIdleTimeout(slowStart(), { idleMs: 60, firstChunkMs: 300 }));
+      throw new Error('should have stalled');
+    } catch (e) {
+      expect((e as StreamStalledError).chunksReceived).toBe(2);
+    }
+  });
+
   it('is per-gap, not a total-duration cap', async () => {
     // 6 chunks x 30ms = 180ms total, well past idleMs, but no single gap is.
     const out = await collect(withIdleTimeout(source(['a', 'b', 'c', 'd', 'e', 'f'], 30), { idleMs: 90 }));

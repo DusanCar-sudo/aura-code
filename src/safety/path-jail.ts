@@ -8,8 +8,11 @@ import * as path from 'path';
  * resolves and reads/writes freely with the user's full privileges.
  */
 export class PathJailError extends Error {
-  constructor(public readonly inputPath: string) {
-    super(`Path escapes the project root: ${inputPath}`);
+  constructor(public readonly inputPath: string, root?: string) {
+    // Naming the root lets a model fix a guessed absolute path instead of retrying it.
+    super(root
+      ? `Path escapes the project root (${root}): ${inputPath}. Use a path relative to the project root.`
+      : `Path escapes the project root: ${inputPath}`);
     this.name = 'PathJailError';
   }
 }
@@ -52,7 +55,7 @@ export function resolveInRoot(root: string, inputPath: string): string {
   const escapes = rel === '..'
     || rel.startsWith('..' + path.sep)
     || path.isAbsolute(rel);
-  if (escapes) throw new PathJailError(inputPath);
+  if (escapes) throw new PathJailError(inputPath, realRoot);
 
   return candidate;
 }

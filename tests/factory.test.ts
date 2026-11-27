@@ -217,7 +217,7 @@ describe('createProvider — local backend base URLs', () => {
 
   it('defaults LM Studio to port 1234', () => {
     const p = createProvider({ model: 'lmstudio/granite' });
-    expect(baseUrlOf(p)).toBe('http://localhost:1234/v1');
+    expect(baseUrlOf(p)).toBe('http://127.0.0.1:1234/v1');
     expect(p.model).toBe('granite');
   });
 

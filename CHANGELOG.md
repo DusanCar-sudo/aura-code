@@ -1,3 +1,10 @@
+## [0.20.8] — 2026-11-27
+
+### Added
+
+- Merged the `fix/archimedes-activation` line back into master: Archimedes verify gates (contradiction, completeness, specificity), Nebius AI Studio provider family, live-model probing, agent specialization, Google model filter and registry-consistency coverage.
+- Version numbering continues from npm (0.20.7); 0.20.3–0.20.5 were local builds from a stale base and never shipped.
+
 # Changelog
 
 All notable changes to Aura Code are documented here.
