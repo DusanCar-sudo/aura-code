@@ -661,6 +661,13 @@ export const KNOWN_MODELS: { id: string; name: string; provider: string; speed: 
   { id: 'sambanova/DeepSeek-R1-Distill-Llama-70B',    name: 'DeepSeek R1 70B (SambaNova free)', provider: 'SambaNova', speed: 'Reasoning · free' },
   { id: 'sambanova/Meta-Llama-3.1-405B-Instruct',     name: 'Llama 3.1 405B (SambaNova free)', provider: 'SambaNova', speed: 'Powerful · free' },
 
+  // ── Nebius AI Studio ─────────────────────────────────────────────────────
+  { id: 'nebius/Meta-Llama-3.3-70B-Instruct',      name: 'Llama 3.3 70B (Nebius)', provider: 'Nebius', speed: 'Fast · free tier' },
+  { id: 'nebius/Meta-Llama-3.1-405B-Instruct',     name: 'Llama 3.1 405B (Nebius)', provider: 'Nebius', speed: 'Powerful · free tier' },
+  { id: 'nebius/DeepSeek-R1',                      name: 'DeepSeek R1 (Nebius)',   provider: 'Nebius', speed: 'Reasoning · free tier' },
+  { id: 'nebius/DeepSeek-R1-Distill-Llama-70B',    name: 'DeepSeek R1 70B (Nebius)', provider: 'Nebius', speed: 'Reasoning · fast' },
+  { id: 'nebius/Qwen2.5-Coder-32B-Instruct',       name: 'Qwen 2.5 Coder 32B (Nebius)', provider: 'Nebius', speed: 'Code · 32k' },
+
   // ── Mistral AI ───────────────────────────────────────────────────────────
   { id: 'mistral/codestral-latest',                   name: 'Codestral Latest',     provider: 'Mistral AI', speed: 'Code · fast' },
   { id: 'mistral/mistral-large-latest',               name: 'Mistral Large Latest', provider: 'Mistral AI', speed: 'Powerful · flagship' },

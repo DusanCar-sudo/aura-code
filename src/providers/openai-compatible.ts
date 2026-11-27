@@ -34,6 +34,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private frequencyPenalty: number;
   private presencePenalty: number;
   private reasoningEffort?: string;
+  /** DashScope hybrid-thinking toggle (qwen3 on compatible-mode); see thinkingFields(). */
+  private enableThinking?: boolean;
   /** Overrides the stall budget for the first chunk only; see LOCAL_FIRST_CHUNK_MS. */
   firstChunkMs?: number;
   /** Called once per completed stream with where its time went. */
@@ -68,6 +70,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.reasoningEffort = requested
       ? clampEffort(requested, { model: config.model, baseUrl: config.baseUrl })
       : deriveProviderName(config) === 'Zhipu' ? 'high' : undefined;
+    // DashScope's hybrid qwen3 models think only when told: the OpenAI-shaped
+    // `reasoning_effort` above is ignored there, and without `enable_thinking`
+    // the model answers in one shot — the main source of its confabulation on
+    // multi-step work. An explicit effort rung wins; `none` turns it off.
+    // Read the raw request, not the clamped field: `none` folds to `low` on
+    // every non-DeepSeek endpoint, which would read as "think".
+    this.enableThinking = dashscopeThinking(config, requested);
     // A few endpoints pin these to one value and 400 on anything else, so the
     // policy wins over both the caller's choice and Aura's default: there is
     // no useful sense in which a request that cannot be sent honours it. See
@@ -105,6 +114,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
    * `frequency_penalty: 0` is noise on every endpoint that does support it,
    * since zero is already the default.
    */
+  /**
+   * DashScope's thinking toggle, as a request field — omitted entirely when
+   * the target is not a DashScope hybrid model. `enable_thinking` is a
+   * DashScope-only parameter: sending it to OpenAI, DeepSeek or a local
+   * server would be an unknown field, so it is gated on the endpoint, not
+   * just the model name.
+   */
+  private thinkingFields(): Record<string, boolean> {
+    return this.enableThinking === undefined ? {} : { enable_thinking: this.enableThinking };
+  }
+
   private penaltyFields(): Record<string, number> {
     return {
       ...(this.frequencyPenalty ? { frequency_penalty: this.frequencyPenalty } : {}),
@@ -130,6 +150,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // own benchmarks) before writing any visible content. "high" keeps useful
       // reasoning for code quality while roughly halving that token burn.
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
+      ...this.thinkingFields(),
     } as OpenAI.ChatCompletionCreateParamsNonStreaming, { signal: this.abortSignal }));
     return fromOpenAIResponse(response);
   }
@@ -220,6 +241,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       stream: true,
       stream_options: { include_usage: true },
       ...(this.reasoningEffort ? { reasoning_effort: this.reasoningEffort } : {}),
+      ...this.thinkingFields(),
     } as OpenAI.ChatCompletionCreateParamsStreaming, { signal: controller.signal }));
     const stream = withIdleTimeout(rawStream, {
       idleMs: streamIdleMs(),
@@ -538,6 +560,35 @@ export function readCacheStats(
 }
 
 // -- Auto-resolution helpers --------------------------------------------------
+
+const DASHSCOPE_HOSTS = ['dashscope-intl.aliyuncs.com', 'dashscope.aliyuncs.com'];
+
+/** True when the request goes to Alibaba's DashScope compatible-mode endpoint. */
+function isDashScope(config: ProviderConfig): boolean {
+  const url = (config.baseUrl ?? '').toLowerCase();
+  return DASHSCOPE_HOSTS.some(h => url.includes(h));
+}
+
+/**
+ * Whether a DashScope hybrid-thinking model should think on this request.
+ *
+ * Only the qwen3 line is hybrid: qwen2.5, qwen-max/plus/turbo/long and the
+ * coder models are plain instruct models, and DashScope 400s on
+ * `enable_thinking` for those — so the field is sent only for qwen3 ids.
+ * An explicit effort rung means "think" (the rung itself is ignored by
+ * DashScope, but the user's intent is not); `none` means "don't". With no
+ * effort set, thinking stays on — that is the whole point of the hybrid
+ * line, and the non-thinking path is where the confabulation comes from.
+ */
+function dashscopeThinking(config: ProviderConfig, effort: string | undefined): boolean | undefined {
+  if (!isDashScope(config)) return undefined;
+  const model = config.model.trim().toLowerCase();
+  if (!/^qwen3([-.]|$)/.test(model)) return undefined;
+  // The coder line is instruct-only: DashScope 400s on `enable_thinking`
+  // there, so it stays off the wire even though the id starts with qwen3.
+  if (model.includes('coder')) return undefined;
+  return effort !== 'none';
+}
 
 function deriveProviderName(config: ProviderConfig): string {
   const m = config.model.toLowerCase();

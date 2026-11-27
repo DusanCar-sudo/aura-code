@@ -88,24 +88,68 @@ async function fetchOpenAIModels(): Promise<ModelEntry[]> {
   }
 }
 
+/**
+ * Suffixes for AI Studio models that technically answer generateContent but are
+ * not conversational: media generators (image/TTS/music), live/bidi audio
+ * streams, embeddings, and robotics/computer-use models. Offering these as
+ * chat models makes /model accept a switch that fails on first use.
+ */
+const GOOGLE_NON_CHAT_SUFFIX =
+  /(?:^|[-/])(?:image|tts|native-audio|live|transcribe|music|embedding|aqa|robotics|computer-use|lyria|nano-banana|deep-research|veo|imagen)(?:[-/]|$)/i;
+
+/**
+ * Fetch the Google AI Studio catalog.
+ *
+ * Two things this must get right:
+ *   1. Page through `nextPageToken` — the endpoint defaults to 50 entries and
+ *      AI Studio now serves 60+, so the newest models silently never appeared.
+ *   2. Filter by `supportedGenerationMethods` including `generateContent` and
+ *      drop non-conversational variants; the raw list is ~40% embeddings,
+ *      live-audio and image models that cannot be used for chat.
+ *
+ * Returns bare ids (no `gemini/` prefix) — callers add their own prefix.
+ */
+async function fetchGoogleModelIds(apiKey: string): Promise<{ id: string; name: string }[]> {
+  const out: { id: string; name: string }[] = [];
+  const seen = new Set<string>();
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < 10; page++) {
+    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('pageSize', '200');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+    const resp = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!resp.ok) break;
+
+    const data = (await resp.json()) as {
+      models?: { name: string; displayName?: string; supportedGenerationMethods?: string[] }[];
+      nextPageToken?: string;
+    };
+
+    for (const m of data.models ?? []) {
+      if (!m.supportedGenerationMethods?.includes('generateContent')) continue;
+      const id = m.name.replace(/^models\//, '');
+      if (seen.has(id)) continue;
+      if (GOOGLE_NON_CHAT_SUFFIX.test(id)) continue;
+      seen.add(id);
+      out.push({ id, name: m.displayName ?? id });
+    }
+
+    if (!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+
+  return out;
+}
+
 async function fetchGoogleModels(): Promise<ModelEntry[]> {
-  const apiKey = getApiKey('GOOGLE_API_KEY');
+  const apiKey = getApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY');
   if (!apiKey) return [];
   try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-    );
-    if (!resp.ok) return [];
-    const data = (await resp.json()) as {
-      models: { name: string; displayName?: string; supportedGenerationMethods?: string[] }[];
-    };
-    return data.models
-      .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-      .map((m) => {
-        const id = m.name.replace(/^models\//, '');
-        return { id, name: m.displayName ?? id, provider: 'Google', speed: 'Live' };
-      })
+    return (await fetchGoogleModelIds(apiKey))
+      .map((m) => ({ id: m.id, name: m.name, provider: 'Google', speed: 'Live' }))
       .sort((a, b) => a.id.localeCompare(b.id));
   } catch {
     return [];
@@ -322,17 +366,11 @@ export async function fetchLiveModels(providerId: string): Promise<LiveModel[]> 
       }
 
       case 'gemini': {
-        const key = getApiKey('GOOGLE_API_KEY');
+        const key = getApiKey('GOOGLE_API_KEY', 'GEMINI_API_KEY');
         if (!key) return [];
-        const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
-          { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-        );
-        if (!r.ok) return [];
-        const d = await r.json() as { models?: { name: string; displayName?: string }[] };
-        return (d.models ?? []).map(m => ({
-          id: `gemini/${m.name.replace('models/', '')}`,
-          name: m.displayName ?? m.name,
+        return (await fetchGoogleModelIds(key)).map(m => ({
+          id: `gemini/${m.id}`,
+          name: m.name,
         }));
       }
 

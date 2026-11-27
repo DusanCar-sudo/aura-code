@@ -305,6 +305,13 @@ export const PROVIDER_DESCRIPTORS: ProviderDescriptor[] = [
     baseUrl: 'https://api.sambanova.ai/v1', baseUrlEnv: ['SAMBANOVA_BASE_URL'],
   },
   {
+    family: 'nebius', displayName: 'Nebius AI Studio',
+    prefixes: ['nebius/'],
+    apiKeyEnv: ['NEBIUS_API_KEY'],
+    transport: 'openai-compatible',
+    baseUrl: 'https://api.studio.nebius.ai/v1', baseUrlEnv: ['NEBIUS_BASE_URL'],
+  },
+  {
     family: 'mistral', displayName: 'Mistral AI',
     prefixes: ['mistral/'],
     barePrefixes: ['codestral-', 'mistral-', 'pixtral-', 'open-mistral-'],
