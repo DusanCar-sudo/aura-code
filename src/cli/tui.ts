@@ -33,8 +33,10 @@ import { gradient, gradientStopFor, TEXT, TEXT_DIM, BG_HEX, CHROME_DIM, RUBY_ACC
 import { onThemeChange } from './theme.js';
 import { PALETTE_COMMANDS, filterCommands, renderPalette, slashSuggestions, type PaletteCommand } from './command-palette.js';
 import { renderMarkdown } from './markdown.js';
-import { readClipboardSync } from '../tools/clipboard.js';
+import { readClipboardSync, readClipboardMediaSync } from '../tools/clipboard.js';
 import { tokenHex } from './diamond.js';
+import { extractAllImagePastePaths } from './image-utils.js';
+import { basename } from 'path';
 
 const ACCENT = CHROME;
 const RUBY = RUBY_ACCENT;
@@ -971,15 +973,29 @@ function copySelection(): void {
  */
 function pasteFromClipboard(): void {
   const raw = readClipboardSync();
+  const text = raw != null ? raw.replace(/\r\n?/g, '\n').replace(/\n$/, '') : '';
+  if (text) {
+    if (scrollMode) exitScrollMode();   // the paste belongs in the input, not the pager
+    commitPaste(text);
+    return;
+  }
+  const media = typeof readClipboardMediaSync === 'function' ? readClipboardMediaSync() : null;
+  if (media) {
+    if (scrollMode) exitScrollMode();
+    if (media.kind === 'image') {
+      commitImageAttachment([media.path]);
+    } else {
+      commitPaste(media.paths.join('\n'));
+    }
+    return;
+  }
   if (raw == null) {
-    selToast = 'no clipboard utility (install xclip, xsel, or wl-clipboard)';
+    selToast = process.platform === 'win32'
+      ? 'clipboard read failed (PowerShell Get-Clipboard)'
+      : 'no clipboard utility (install xclip, xsel, or wl-clipboard)';
     if (scrollMode) renderScrollView(); else drawPromptBottom();
     return;
   }
-  const text = raw.replace(/\r\n?/g, '\n').replace(/\n$/, '');
-  if (!text) return;
-  if (scrollMode) exitScrollMode();   // the paste belongs in the input, not the pager
-  commitPaste(text);
 }
 
 /**
@@ -1011,11 +1027,12 @@ function handleMouse(button: number, col: number, row: number, pressed: boolean)
   // Right button — the classic terminal right-click, restored. Aura runs on
   // the alternate screen and does its own line selection (see the note on
   // `selecting`), so the terminal's own right-click menu operates on an empty
-  // native selection and is useless here. Context-aware: with a scroll-mode
-  // selection it copies, otherwise it pastes the clipboard into the input.
+  // native selection and is useless here. Context-aware: an untouched
+  // scroll-mode selection copies (drag then right-click = copy); a selection
+  // that was already copied, or no selection at all, pastes into the input.
   if (btn === 2) {
     if (!pressed || motion) return;   // act on the press, ignore drag/release
-    if (scrollMode && selectionRange() !== null) {
+    if (scrollMode && selectionRange() !== null && !selToast) {
       copySelection();
     } else {
       pasteFromClipboard();
@@ -1179,23 +1196,77 @@ const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
 const PASTE_INLINE_MAX = 80; // single-line pastes up to this length insert literally
 const PASTE_PLACEHOLDER_RE = /\[Pasted #(\d+) \+?\d+ (?:lines|chars)\]/g;
+const IMAGE_PLACEHOLDER_RE = /\[Image #(\d+): [^\]]+\]/g;
 
 let pasteCollecting = false;
 let pasteAccum = '';
 let pasteCounter = 0;
 const pastes = new Map<number, string>();
+let imageCounter = 0;
+const attachedImages = new Map<number, string>();
 
 function pastePlaceholder(id: number, text: string): string {
   const lines = text.split('\n').length;
   return lines > 1 ? `[Pasted #${id} +${lines} lines]` : `[Pasted #${id} +${text.length} chars]`;
 }
 
+function imagePlaceholder(id: number, filePath: string): string {
+  const name = basename(filePath).replace(/[\[\]]/g, '');
+  return `[Image #${id}: ${name}]`;
+}
+
 export function expandPastes(line: string): string {
   return line.replace(PASTE_PLACEHOLDER_RE, (m, id) => pastes.get(Number(id)) ?? m);
 }
 
+function extractAttachedImagesFromLine(line: string): { text: string; imagePaths: string[] } {
+  const imagePaths: string[] = [];
+  const seen = new Set<string>();
+  const text = line.replace(IMAGE_PLACEHOLDER_RE, (m, id) => {
+    const path = attachedImages.get(Number(id));
+    if (!path) return m;
+    if (!seen.has(path)) {
+      seen.add(path);
+      imagePaths.push(path);
+    }
+    return '';
+  });
+  return { text: text.replace(/\s{2,}/g, ' ').trim(), imagePaths };
+}
+
 function clearPastes(): void {
   pastes.clear();
+  attachedImages.clear();
+}
+
+function insertIntoPrompt(snippet: string): void {
+  inputBuffer = inputBuffer.slice(0, cursorPos) + snippet + inputBuffer.slice(cursorPos);
+  cursorPos += snippet.length;
+  if (fullscreenPrompt && pendingInput) rawWrite(snippet);
+  drawPromptBottom();
+}
+
+function commitImageAttachment(imagePaths: string[], trailingPaths: string[] = []): void {
+  if (overlay !== 'none') {
+    const joined = [...imagePaths, ...trailingPaths].join(' ');
+    overlayQuery += joined;
+    overlaySelected = 0;
+    drawPromptBottom();
+    return;
+  }
+  const chips: string[] = [];
+  for (const p of imagePaths) {
+    imageCounter++;
+    attachedImages.set(imageCounter, p);
+    chips.push(imagePlaceholder(imageCounter, p));
+  }
+  for (const p of trailingPaths) chips.push(p);
+  const needsLeadingSpace = cursorPos > 0 && !/\s$/.test(inputBuffer.slice(0, cursorPos));
+  const snippet = (needsLeadingSpace ? ' ' : '') + chips.join(' ') + ' ';
+  selToast = imagePaths.length === 1
+    ? `attached ${basename(imagePaths[0]!)}`
+    : `attached ${imagePaths.length} images`;
+  insertIntoPrompt(snippet);
 }
 
 function commitPaste(raw: string): void {
@@ -1207,6 +1278,11 @@ function commitPaste(raw: string): void {
     drawPromptBottom();
     return;
   }
+  const detected = extractAllImagePastePaths(text);
+  if (detected) {
+    commitImageAttachment(detected.imagePaths, detected.otherPaths);
+    return;
+  }
   let insert: string;
   if (!text.includes('\n') && text.length <= PASTE_INLINE_MAX) {
     insert = text;
@@ -1215,10 +1291,7 @@ function commitPaste(raw: string): void {
     pastes.set(pasteCounter, text);
     insert = pastePlaceholder(pasteCounter, text);
   }
-  inputBuffer = inputBuffer.slice(0, cursorPos) + insert + inputBuffer.slice(cursorPos);
-  cursorPos += insert.length;
-  if (fullscreenPrompt && pendingInput) rawWrite(insert);
-  drawPromptBottom();
+  insertIntoPrompt(insert);
 }
 
 export function askConfirm(message: string): Promise<boolean> {
@@ -1356,14 +1429,18 @@ function handleChar(ch: string): void {
       demoteBanner();
       echoUserLine(line);
     }
-    const expanded = expandPastes(line);
+    const expandedWithChips = expandPastes(line);
+    const { text: cleanText, imagePaths } = extractAttachedImagesFromLine(expandedWithChips);
+    const submittedText = imagePaths.length > 0 ? cleanText : expandedWithChips;
     recordInputLine(line);
     inputBuffer = '';
     cursorPos = 0;
     clearPastes();
     endRecall();
     drawPromptBottom();
-    if (expanded && onEnter) onEnter(expanded);
+    if ((submittedText || imagePaths.length > 0) && onEnter) {
+      onEnter(submittedText, imagePaths.length > 0 ? imagePaths : undefined);
+    }
     return;
   }
 
@@ -1377,13 +1454,18 @@ function handleChar(ch: string): void {
       return;
     }
     if (cursorPos > 0) {
-      // Delete a paste placeholder atomically when the cursor sits right after it.
+      // Delete a paste/image placeholder atomically when the cursor sits right after it.
       const before = inputBuffer.slice(0, cursorPos);
-      const tail = /\[Pasted #(\d+) \+?\d+ (?:lines|chars)\]$/.exec(before);
-      if (tail) {
-        pastes.delete(Number(tail[1]));
-        inputBuffer = before.slice(0, -tail[0].length) + inputBuffer.slice(cursorPos);
-        cursorPos -= tail[0].length;
+      const pasteTail = /\[Pasted #(\d+) \+?\d+ (?:lines|chars)\]$/.exec(before);
+      const imgTail = pasteTail ? null : /\[Image #(\d+): [^\]]+\] ?$/.exec(before);
+      if (pasteTail) {
+        pastes.delete(Number(pasteTail[1]));
+        inputBuffer = before.slice(0, -pasteTail[0].length) + inputBuffer.slice(cursorPos);
+        cursorPos -= pasteTail[0].length;
+      } else if (imgTail) {
+        attachedImages.delete(Number(imgTail[1]));
+        inputBuffer = before.slice(0, -imgTail[0].length) + inputBuffer.slice(cursorPos);
+        cursorPos -= imgTail[0].length;
       } else {
         inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
         cursorPos--;
@@ -1474,6 +1556,11 @@ function handleKey(key: string): void {
       return;
     }
   }
+
+  // Ctrl+V — paste from the system clipboard (text, file URIs, or image).
+  // Before Ctrl+P/overlay gates: a paste belongs in the input box wherever
+  // the view happens to be.
+  if (key === '\x16') { pasteFromClipboard(); return; }
 
   // Ctrl+P — command palette (0x10)
   if (key === '\x10') { openOverlay('palette'); return; }
@@ -1699,11 +1786,11 @@ export function stopInput(): void {
   process.stdin.pause();
 }
 
-let onEnter: ((line: string) => void) | null = null;
+let onEnter: ((line: string, attachedImages?: string[]) => void) | null = null;
 let onStop: (() => void) | null = null;
 let currentAbort: AbortController | null = null;
 
-export function setCallbacks(opts: { onEnter: (line: string) => void; onStop?: () => void }): void {
+export function setCallbacks(opts: { onEnter: (line: string, attachedImages?: string[]) => void; onStop?: () => void }): void {
   onEnter = opts.onEnter;
   onStop = opts.onStop ?? null;
 }

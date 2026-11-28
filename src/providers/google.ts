@@ -111,12 +111,24 @@ function toGoogleTool(t: ToolDefinition): FunctionDeclaration {
 
 interface GoogleContent { role: 'user' | 'model'; parts: Part[] }
 
+function toGoogleImagePart(dataUri: string): Part | null {
+  const match = /^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/s.exec(dataUri);
+  if (!match) return null;
+  return { inlineData: { mimeType: match[1]!, data: match[2]! } };
+}
+
 function toGoogleHistory(history: HistoryMessage[]): { contents: GoogleContent[] } {
   const contents: GoogleContent[] = [];
 
   for (const msg of history) {
     if (msg.role === 'user') {
-      contents.push({ role: 'user', parts: [{ text: msg.content }] });
+      const imgParts = (msg.images ?? [])
+        .map(toGoogleImagePart)
+        .filter((p): p is Part => p !== null);
+      contents.push({
+        role: 'user',
+        parts: [...imgParts, { text: msg.content }],
+      });
     } else if (msg.role === 'assistant') {
       const parts: Part[] = [];
       if ((msg as any).googleParts && (msg as any).googleParts.length > 0) {

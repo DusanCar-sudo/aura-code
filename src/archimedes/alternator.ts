@@ -559,7 +559,7 @@ export class ArchimedesAlternator {
    * Runs a task through Archimedes and/or the large model, persists an episode, and
    * returns the final output. Never throws — failures escalate to the large model.
    */
-  async run(task: string): Promise<AlternatorRunResult> {
+  async run(task: string, images?: string[]): Promise<AlternatorRunResult> {
     const startMs = Date.now();
     const { archimedesConfig, largeModelProvider, projectRoot, context } = this.opts;
 
@@ -707,6 +707,7 @@ export class ArchimedesAlternator {
               allowedTools: ARCHIMEDES_TOOLS,
               maxRepetitionsPerTool: 3,
               toolResultMaxChars: 1_500,
+              ...(images && images.length > 0 ? { images } : {}),
             });
 
             archimedesTokens = loopResult.usage.totalTokens;
@@ -821,6 +822,7 @@ export class ArchimedesAlternator {
             abortSignal: this.opts.abortSignal,
             steering: this.opts.steering,
             healthTracker: this.opts.healthTracker,
+            ...(images && images.length > 0 ? { images } : {}),
           });
           largeModelTokens = loopResult.usage.totalTokens;
           largeModelOutput = loopResult.summary;

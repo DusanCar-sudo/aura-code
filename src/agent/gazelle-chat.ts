@@ -56,7 +56,7 @@ export interface GazelleTurn {
 export interface GazelleChat {
   /** Live conversation — grows with every respond(). */
   readonly history: HistoryMessage[];
-  respond(userText: string): Promise<GazelleTurn>;
+  respond(userText: string, images?: string[]): Promise<GazelleTurn>;
   totals(): { inputTokens: number; outputTokens: number; messages: number };
   /** One-line token summary, as :stats and session end print it. */
   statsLine(): string;
@@ -90,9 +90,13 @@ export function createGazelleChat(opts: GazelleChatOptions): GazelleChat {
     }
   };
 
-  const respond = async (userText: string): Promise<GazelleTurn> => {
+  const respond = async (userText: string, images?: string[]): Promise<GazelleTurn> => {
     const provider = resolveProvider();
-    history.push({ role: 'user', content: userText });
+    history.push({
+      role: 'user',
+      content: userText,
+      ...(images && images.length > 0 ? { images } : {}),
+    });
     maybeCompact(provider.model);
     display.agentThinking();
 

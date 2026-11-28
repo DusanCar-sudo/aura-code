@@ -205,12 +205,35 @@ function toAnthropicTool(t: ToolDefinition): Anthropic.Tool {
   };
 }
 
+function toAnthropicImageBlock(dataUri: string): Anthropic.ImageBlockParam | null {
+  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,(.+)$/s.exec(dataUri);
+  if (!match) return null;
+  return {
+    type: 'image',
+    source: {
+      type: 'base64',
+      media_type: match[1] as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+      data: match[2]!,
+    },
+  };
+}
+
 export function toAnthropicMessages(history: HistoryMessage[]): Anthropic.MessageParam[] {
   const out: Anthropic.MessageParam[] = [];
 
   for (const msg of history) {
     if (msg.role === 'user') {
-      out.push({ role: 'user', content: msg.content });
+      const imageBlocks = (msg.images ?? [])
+        .map(toAnthropicImageBlock)
+        .filter((b): b is Anthropic.ImageBlockParam => b !== null);
+      if (imageBlocks.length > 0) {
+        out.push({
+          role: 'user',
+          content: [...imageBlocks, { type: 'text', text: msg.content }],
+        });
+      } else {
+        out.push({ role: 'user', content: msg.content });
+      }
     } else if (msg.role === 'assistant') {
       const content: Anthropic.ContentBlockParam[] = [];
       if (msg.content) {
@@ -223,12 +246,19 @@ export function toAnthropicMessages(history: HistoryMessage[]): Anthropic.Messag
     } else if (msg.role === 'tool_result') {
       out.push({
         role: 'user',
-        content: msg.results.map(r => ({
-          type: 'tool_result' as const,
-          tool_use_id: r.id,
-          content: r.content,
-          is_error: r.isError,
-        })),
+        content: msg.results.map(r => {
+          const imgBlocks = (r.images ?? [])
+            .map(toAnthropicImageBlock)
+            .filter((b): b is Anthropic.ImageBlockParam => b !== null);
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: r.id,
+            content: imgBlocks.length > 0
+              ? [{ type: 'text' as const, text: r.content }, ...imgBlocks]
+              : r.content,
+            is_error: r.isError,
+          };
+        }),
       });
     }
   }

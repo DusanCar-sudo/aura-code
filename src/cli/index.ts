@@ -136,7 +136,7 @@ import { getContextWindow } from '../providers/factory.js';
 import { runTuner, type TunerIO } from './context-tuner.js';
 import { runDoctor, formatDoctorReport } from '../doctor/index.js';
 import { HELP_TEXT } from './help-data.js';
-import { loadImages, looksVisionCapable } from './image-utils.js';
+import { loadImages, looksVisionCapable, extractImagePathsFromPrompt } from './image-utils.js';
 
 /**
  * Feed raw keypresses to the context tuner. The caller must have released
@@ -1547,6 +1547,14 @@ async function main() {
   }
   if (activeChatHistory.length > 0) {
     writeOutput(chalk.hex(TEXT_DIM_HEX)('  Continuing session with ' + Math.floor(activeChatHistory.length / 2) + ' prior turns.'));
+    const recentMsgs = activeChatHistory.filter(
+      (m): m is { role: 'user' | 'assistant'; content: string } =>
+        (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim().length > 0,
+    );
+    for (const m of recentMsgs.slice(-4)) {
+      const preview = m.content.trim().split(/\r?\n/)[0]!.slice(0, 140);
+      writeOutput(m.role === 'user' ? chalk.hex(TEXT_DIM_HEX)(`  > ${preview}`) : chalk.hex(FAINT_HEX)(`    ${preview}`));
+    }
   }
 
   // Buffer for :btw and :stop typed during the agent loop
@@ -1558,7 +1566,7 @@ let abortController: AbortController | null = null;
   let steeringInbox: SteeringInbox | null = null;
 
   setCallbacks({
-    onEnter(line: string) {
+    onEnter(line: string, attachedImagePaths?: string[]) {
       if (abortController && !abortController.signal.aborted) {
         const cmd = line.trim();
         if (cmd === ':stop' || cmd === ':cancel') {
@@ -1575,13 +1583,13 @@ let abortController: AbortController | null = null;
         // rival one. Commands are excluded: a `:` line is REPL machinery, and
         // most of it (:model, :new, :compact) mutates state the running loop
         // is holding, so it waits for the run to end the way it always has.
-        if (steeringInbox && !cmd.startsWith(':') && toColonForm(cmd) === cmd) {
+        if (steeringInbox && !attachedImagePaths?.length && !cmd.startsWith(':') && toColonForm(cmd) === cmd) {
           steeringInbox.post(cmd);
           writeOutput(chalk.hex(TERRACOTTA_HEX)('  ↳ queued — Aura picks this up on the next turn.'));
           return;
         }
       }
-      processLine(line);
+      processLine(line, attachedImagePaths);
     },
     onStop() {
       if (abortController) abortController?.abort();
@@ -1668,7 +1676,7 @@ let abortController: AbortController | null = null;
   };
 
   /** One lean conversational turn, in place of the whole agent loop. */
-  const runGazelleTurn = async (input: string): Promise<void> => {
+  const runGazelleTurn = async (input: string, images?: string[]): Promise<void> => {
     const chat = gazelleChat;
     if (!chat) { enterMode('coder'); return; }
     if (gazelleTurnInFlight) {
@@ -1679,7 +1687,7 @@ let abortController: AbortController | null = null;
     gazelleTurnInFlight = true;
     let turn;
     try {
-      turn = await chat.respond(input);
+      turn = await chat.respond(input, images);
     } finally {
       gazelleTurnInFlight = false;
     }
@@ -1721,7 +1729,7 @@ let abortController: AbortController | null = null;
     }
   };
 
-  async function processLine(input: string) {
+  async function processLine(input: string, attachedImagePaths: string[] = []) {
     const replCtx = {
       rl: null,
       ctx, display: tuiDisplay,
@@ -1739,48 +1747,71 @@ let abortController: AbortController | null = null;
       mode: replMode,
     };
 
-    // Check for REPL commands
-    const cmdResult = await handleReplCommand(toColonForm(input), replCtx);
-    if (!cmdResult.handled && looksLikeCommand(input)) {
-      // A `:` line is REPL machinery by definition (see the steering note in
-      // setCallbacks), so one no command claims is a typo or a guess — and
-      // sending it to the model as a task is the worst possible answer: it
-      // burns a provider round-trip researching the word "stats". Name the
-      // miss and point at the list instead.
-      writeOutput(ERR(
-        `  ✗ Unknown command: ${input.trim().split(/\s+/)[0]}` +
-        ` — /help lists everything.`,
-      ));
-      return;
-    }
-    if (cmdResult.handled) {
-      if (cmdResult.sessionReplaced) sessionEpoch++;
-      if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
-      if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
-      if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
-      if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
-      if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
-      if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
-      if (cmdResult.newTurnsOverride !== undefined) turnsOverride = cmdResult.newTurnsOverride;
-      if (cmdResult.newComputerUse !== undefined || cmdResult.statusChanged) refreshStatusLine();
-      // Must come after newHistory: entering gazelle seeds its chat from the
-      // current history, and :resume/:new arrive as a command result too.
-      if (cmdResult.newMode !== undefined) {
-        enterMode(cmdResult.newMode);
-      } else if (cmdResult.newHistory !== undefined && replMode === 'gazelle') {
-        // :new, :resume, :clear-history and :compact all replace the REPL's
-        // history. The live chat holds its own copy, so without re-seeding it
-        // would keep answering from the conversation the user just discarded.
-        gazelleChat = makeGazelleChat();
+    // Check for REPL commands (never when attached images came along cleanly)
+    if (attachedImagePaths.length === 0) {
+      const cmdResult = await handleReplCommand(toColonForm(input), replCtx);
+      if (!cmdResult.handled && looksLikeCommand(input)) {
+        // A `:` line is REPL machinery by definition (see the steering note in
+        // setCallbacks), so one no command claims is a typo or a guess — and
+        // sending it to the model as a task is the worst possible answer: it
+        // burns a provider round-trip researching the word "stats". Name the
+        // miss and point at the list instead.
+        writeOutput(ERR(
+          `  ✗ Unknown command: ${input.trim().split(/\s+/)[0]}` +
+          ` — /help lists everything.`,
+        ));
+        return;
       }
-      if (activeChatId) setChatId(activeChatId);
-      // A command that produced work — `:catchthis run` hands back a recorded
-      // procedure — falls through as if the user had typed it, so replay uses
-      // exactly the same path, budget and verification as any other task
-      // rather than a private one that drifts from it.
-      if (cmdResult.runTask) input = cmdResult.runTask;
-      else return;
+      if (cmdResult.handled) {
+        if (cmdResult.sessionReplaced) sessionEpoch++;
+        if (cmdResult.newChatId !== undefined) activeChatId = cmdResult.newChatId;
+        if (cmdResult.newHistory !== undefined) activeChatHistory = cmdResult.newHistory;
+        if (cmdResult.newTitle !== undefined) activeChatTitle = cmdResult.newTitle;
+        if (cmdResult.newArchimedesOverride !== undefined) archimedesOverride = cmdResult.newArchimedesOverride;
+        if (cmdResult.newArchimedesModelOverride !== undefined) archimedesModelOverride = cmdResult.newArchimedesModelOverride;
+        if (cmdResult.newSmall1Override !== undefined) small1Override = cmdResult.newSmall1Override;
+        if (cmdResult.newTurnsOverride !== undefined) turnsOverride = cmdResult.newTurnsOverride;
+        if (cmdResult.newComputerUse !== undefined || cmdResult.statusChanged) refreshStatusLine();
+        // Must come after newHistory: entering gazelle seeds its chat from the
+        // current history, and :resume/:new arrive as a command result too.
+        if (cmdResult.newMode !== undefined) {
+          enterMode(cmdResult.newMode);
+        } else if (cmdResult.newHistory !== undefined && replMode === 'gazelle') {
+          // :new, :resume, :clear-history and :compact all replace the REPL's
+          // history. The live chat holds its own copy, so without re-seeding it
+          // would keep answering from the conversation the user just discarded.
+          gazelleChat = makeGazelleChat();
+        }
+        if (activeChatId) setChatId(activeChatId);
+        // A command that produced work — `:catchthis run` hands back a recorded
+        // procedure — falls through as if the user had typed it, so replay uses
+        // exactly the same path, budget and verification as any other task
+        // rather than a private one that drifts from it.
+        if (cmdResult.runTask) input = cmdResult.runTask;
+        else return;
+      }
     }
+
+    // Collect attached images from Ctrl+V / drag-and-drop placeholders plus
+    // any raw/quoted image file paths inside the submitted text.
+    const detectedPromptImages = extractImagePathsFromPrompt(input, ctx.root);
+    const allImagePaths = [...new Set([...attachedImagePaths, ...detectedPromptImages])];
+    let loadedImages: string[] = [];
+    if (allImagePaths.length > 0) {
+      const { images, warnings } = loadImages(allImagePaths);
+      loadedImages = images;
+      for (const w of warnings) tuiDisplay.warning(w);
+      const activeModel = runtimeConfig.model ?? resolved.model ?? '';
+      if (loadedImages.length > 0 && activeModel && !looksVisionCapable(activeModel)) {
+        tuiDisplay.warning(
+          `Model "${activeModel}" may not support image input. Sending anyway — switch with :model if needed.`,
+        );
+      }
+      if (loadedImages.length > 0 && !input.trim()) {
+        input = `Analyze the attached image(s): ${allImagePaths.map(p => path.basename(p)).join(', ')}`;
+      }
+    }
+    const imageOpts = loadedImages.length > 0 ? { images: loadedImages } : {};
 
     // In gazelle mode a plain line is conversation, not a task — none of the
     // coder-path machinery below (verification, Archimedes, tools) applies.
@@ -1793,7 +1824,7 @@ let abortController: AbortController | null = null;
         return;
       }
       try {
-        await runGazelleTurn(input);
+        await runGazelleTurn(input, loadedImages.length > 0 ? loadedImages : undefined);
       } catch (err) {
         const msg = err instanceof Error ? (err.stack || err.message) : String(err);
         writeOutput(ERR('  ✗ Unhandled error: ' + msg));
@@ -1867,6 +1898,7 @@ let abortController: AbortController | null = null;
             },
             sessionPath,
             healthTracker,
+            ...imageOpts,
           },
           config: { enabled: true, maxRetries, testCommand },
           projectRoot: ctx.root,
@@ -1893,6 +1925,7 @@ let abortController: AbortController | null = null;
             abortSignal,
             steering,
             healthTracker,
+            ...imageOpts,
           });
         } else {
           tuiDisplay.success(reason);
@@ -1911,7 +1944,7 @@ let abortController: AbortController | null = null;
             forceArchimedes: small1Override,
             maxTurns: effectiveMaxTurns,
           });
-          const altResult = await alternator.run(input);
+          const altResult = await alternator.run(input, loadedImages.length > 0 ? loadedImages : undefined);
           result = altResult.loopResult;
         }
       } else {
@@ -1929,6 +1962,7 @@ let abortController: AbortController | null = null;
           abortSignal,
           steering,
           healthTracker,
+          ...imageOpts,
         });
       }
     } catch (err) {
